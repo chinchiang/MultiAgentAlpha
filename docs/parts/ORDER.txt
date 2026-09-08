@@ -1,0 +1,17 @@
+00_cover.md
+01_executive.md
+02_background.md
+03_architecture.md
+04a_dimensions.md
+04b_scoring_bias.md
+05_workflow.md
+06_risks.md
+07_comparison.md
+08_practice.md
+09_limits.md
+10_governance.md
+A_sources.md
+B_gaps.md
+C_glossary.md
+D_maturity.md
+E_prompts.md
