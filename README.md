@@ -6,7 +6,7 @@ decide the outcome.
 
 This repository contains two things:
 
-1. **The research report** (正體中文, GSMD series): `docs/GSMD-RPT-2026-0908-TBD_多模型多代理資安審查.md`
+1. **The research report** (正體中文, GSMD series): `docs/GSMD-RPT-2026-0908-01_多模型多代理資安審查.md`
    with an online single-file HTML edition next to it. It covers the architecture, the scoring
    method, the data-credibility model, the bias catalogue and its mitigations, a comparison of
    commercial and academic alternatives, deployment for a multinational ODM/EMS (including the

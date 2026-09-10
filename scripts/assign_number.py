@@ -29,8 +29,8 @@ def tracked_text_files() -> list[Path]:
         p = ROOT / rel
         if any(part in SKIP for part in p.parts) or p.suffix.lower() not in TEXT_EXT:
             continue
-        if p.name.startswith(PLACEHOLDER):
-            continue  # the generated report files are rebuilt, not edited
+        if p.name.startswith(PLACEHOLDER) or p.name == "assign_number.py":
+            continue  # generated report files are rebuilt; this script must keep the placeholder constant
         files.append(p)
     return files
 

@@ -3,7 +3,7 @@
 類別：repo 化與維護
 
 ```
-你在一個 Git repo 中。請把 docs/ 下的 GSMD-RPT-2026-0908-TBD_多模型多代理資安審查.md 建立成可持續維護的文件結構：
+你在一個 Git repo 中。請把 docs/ 下的 GSMD-RPT-2026-0908-01_多模型多代理資安審查.md 建立成可持續維護的文件結構：
 
 1. 把報告拆成 docs/parts/ 下每部一個 Markdown 檔（若已存在則核對一致），並提供 scripts/build_report.py 把它們串接成單一檔案；串接順序寫在 docs/parts/ORDER.txt。
 2. 建立 docs/CHANGELOG.md，記錄本次為 v0.1.0，欄位：日期、版本、變更摘要、變更者、查證狀態（引用了幾項、缺口幾項）。

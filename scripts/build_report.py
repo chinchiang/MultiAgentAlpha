@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PARTS = ROOT / "docs" / "parts"
-OUT = ROOT / "docs" / "GSMD-RPT-2026-0908-TBD_多模型多代理資安審查.md"
+OUT = ROOT / "docs" / "GSMD-RPT-2026-0908-01_多模型多代理資安審查.md"
 
 
 def build() -> Path:

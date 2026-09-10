@@ -14,8 +14,8 @@ from pathlib import Path
 import markdown
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "docs" / "GSMD-RPT-2026-0908-TBD_多模型多代理資安審查.md"
-OUT = ROOT / "docs" / "GSMD-RPT-2026-0908-TBD_多模型多代理資安審查.html"
+SRC = ROOT / "docs" / "GSMD-RPT-2026-0908-01_多模型多代理資安審查.md"
+OUT = ROOT / "docs" / "GSMD-RPT-2026-0908-01_多模型多代理資安審查.html"
 
 CSS = """
 :root{--bg:#f5f6f8;--fg:#1b1f26;--muted:#5b6370;--line:#d5d9e0;--panel:#ffffff;--accent:#2b5d8c;--accent-soft:#e4edf6;--code:#eef1f5;--mark:#ffe58a;--ok:#2f7d4f;--warn:#a2620f;--bad:#b23a3a}
@@ -105,9 +105,9 @@ def build() -> Path:
     title = "多模型多代理資安審查"
     page = f"""<title>{html.escape(title)}</title>
 <style>{CSS}</style>
-<div class="topbar"><button id="menu" aria-label="目次">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-TBD</span></div>
+<div class="topbar"><button id="menu" aria-label="目次">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-01</span></div>
 <div class="layout">
-<nav><p class="brand">GSMD-RPT-2026-0908-TBD · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits"></div><ol id="toc"></ol></nav>
+<nav><p class="brand">GSMD-RPT-2026-0908-01 · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits"></div><ol id="toc"></ol></nav>
 <main>{body}</main>
 </div>
 <script>{JS}</script>
