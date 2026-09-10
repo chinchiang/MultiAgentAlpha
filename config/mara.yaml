@@ -1,0 +1,44 @@
+# MARA configuration. Three heterogeneous families by default.
+# Source code is only ever sent to models whose data_residency is on_prem or vendor_api_zdr.
+models:
+  - name: claude-reviewer
+    family: anthropic
+    provider: anthropic
+    model: claude-opus-5
+    api_key_env: ANTHROPIC_API_KEY
+    data_residency: vendor_api_zdr      # requires a ZDR agreement with Anthropic; Fable-class models are NOT ZDR-eligible
+    weight: 1.0
+  - name: deepseek-reviewer
+    family: deepseek
+    provider: openai_compatible
+    model: deepseek-v3.2                # self-hosted weights on vLLM/NIM only; never the vendor API
+    base_url: http://vllm-deepseek.internal:8000/v1
+    api_key_env: DEEPSEEK_LOCAL_KEY
+    data_residency: on_prem
+    weight: 1.0
+  - name: nemotron-reviewer
+    family: nemotron
+    provider: openai_compatible
+    model: nvidia/nemotron-3-super      # NVIDIA NIM, OpenAI-compatible endpoint
+    base_url: http://nim-nemotron.internal:8000/v1
+    api_key_env: NIM_LOCAL_KEY
+    data_residency: on_prem
+    weight: 1.0
+
+roles:
+  reviewers: [claude-reviewer, deepseek-reviewer, nemotron-reviewer]
+  skeptic: nemotron-reviewer            # the pipeline still re-assigns per finding so skeptic family != finder family
+  redteam: deepseek-reviewer
+  judges: [claude-reviewer, deepseek-reviewer, nemotron-reviewer]
+
+dimensions: [architecture, vulnerabilities, xss, csp, authn_authz, dependencies, github_actions, secrets, input_validation, error_handling, supply_chain]
+
+gate:
+  block_on_tiers: [A, B]
+  block_on_severity: [High, Critical]
+  min_dimension_score: 60
+  accept_threshold: 0.6
+  human_threshold_alpha: 0.4
+
+allow_source_code_to_non_on_prem: false
+require_family_diversity: true

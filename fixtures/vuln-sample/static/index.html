@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head>
+  <title>Order dashboard</title>
+  <script src="https://cdn.example-cdn.com/lib/angular.min.js"></script>
+</head>
+<body>
+  <div id="greeting"></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    document.getElementById("greeting").innerHTML = "Welcome " + params.get("name");
+    fetch("/api/orders").then(r => r.json()).then(o => { eval(o.render); });
+  </script>
+</body>
+</html>

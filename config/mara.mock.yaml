@@ -1,0 +1,13 @@
+# Offline configuration: three mock "families" so the whole pipeline runs without any API.
+models:
+  - { name: mock-a, family: anthropic, provider: mock, model: mock-anthropic, data_residency: on_prem }
+  - { name: mock-d, family: deepseek,  provider: mock, model: mock-deepseek,  data_residency: on_prem }
+  - { name: mock-n, family: nemotron,  provider: mock, model: mock-nemotron,  data_residency: on_prem }
+roles:
+  reviewers: [mock-a, mock-d, mock-n]
+  skeptic: mock-n
+  redteam: mock-d
+  judges: [mock-a, mock-d, mock-n]
+gate: { block_on_tiers: [A, B], block_on_severity: [High, Critical], min_dimension_score: 60, accept_threshold: 0.6, human_threshold_alpha: 0.4 }
+allow_source_code_to_non_on_prem: false
+require_family_diversity: true

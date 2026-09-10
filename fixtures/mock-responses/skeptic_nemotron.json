@@ -1,0 +1,24 @@
+{
+ "default": {
+  "verdict": "stands",
+  "reason": "Searched for sanitizers, decorators and middleware on this path; none found.",
+  "sanitizer_or_control": ""
+ },
+ "by_claim": {
+  "profile query": {
+   "verdict": "refuted",
+   "reason": "The profile query uses a parameterised placeholder (?, (user_id,)); no concatenation exists at the cited line.",
+   "sanitizer_or_control": "app.py:41 parameterised sqlite3 query"
+  },
+  "open redirect": {
+   "verdict": "weakened",
+   "reason": "Flask redirect accepts absolute URLs, but the value only reaches redirect after a successful login; impact limited to phishing.",
+   "sanitizer_or_control": ""
+  },
+  "flask unpinned": {
+   "verdict": "weakened",
+   "reason": "Unpinned but no known vulnerable range can be asserted without a scanner.",
+   "sanitizer_or_control": ""
+  }
+ }
+}

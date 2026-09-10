@@ -1,0 +1,100 @@
+{
+ "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+ "version": "2.1.0",
+ "runs": [
+  {
+   "tool": {
+    "driver": {
+     "name": "semgrep",
+     "version": "0.0.0",
+     "rules": [
+      {
+       "id": "python.flask.security.injection.tainted-sql-string",
+       "properties": {
+        "tags": [
+         "CWE-89",
+         "OWASP-A05:2025"
+        ]
+       }
+      },
+      {
+       "id": "python.flask.security.audit.render-template-string",
+       "properties": {
+        "tags": [
+         "CWE-79"
+        ]
+       }
+      },
+      {
+       "id": "python.flask.security.audit.debug-enabled",
+       "properties": {
+        "tags": [
+         "CWE-215"
+        ]
+       }
+      }
+     ]
+    }
+   },
+   "results": [
+    {
+     "ruleId": "python.flask.security.injection.tainted-sql-string",
+     "level": "error",
+     "message": {
+      "text": "Detected user input used to manually construct a SQL string"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py"
+        },
+        "region": {
+         "startLine": 32
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "python.flask.security.audit.render-template-string",
+     "level": "warning",
+     "message": {
+      "text": "render_template_string with concatenated input"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py"
+        },
+        "region": {
+         "startLine": 26
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "python.flask.security.audit.debug-enabled",
+     "level": "warning",
+     "message": {
+      "text": "Flask debug mode enabled"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py"
+        },
+        "region": {
+         "startLine": 74
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

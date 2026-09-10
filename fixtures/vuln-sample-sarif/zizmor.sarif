@@ -1,0 +1,106 @@
+{
+ "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+ "version": "2.1.0",
+ "runs": [
+  {
+   "tool": {
+    "driver": {
+     "name": "zizmor",
+     "version": "0.0.0",
+     "rules": [
+      {
+       "id": "dangerous-triggers"
+      },
+      {
+       "id": "template-injection"
+      },
+      {
+       "id": "unpinned-uses"
+      },
+      {
+       "id": "excessive-permissions"
+      }
+     ]
+    }
+   },
+   "results": [
+    {
+     "ruleId": "dangerous-triggers",
+     "level": "error",
+     "message": {
+      "text": "pull_request_target with PR head checkout"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ".github/workflows/deploy.yml"
+        },
+        "region": {
+         "startLine": 12
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "template-injection",
+     "level": "error",
+     "message": {
+      "text": "code injection via template expansion"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ".github/workflows/deploy.yml"
+        },
+        "region": {
+         "startLine": 14
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "unpinned-uses",
+     "level": "warning",
+     "message": {
+      "text": "unpinned action reference"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ".github/workflows/deploy.yml"
+        },
+        "region": {
+         "startLine": 15
+        }
+       }
+      }
+     ]
+    },
+    {
+     "ruleId": "excessive-permissions",
+     "level": "warning",
+     "message": {
+      "text": "write-all permissions"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ".github/workflows/deploy.yml"
+        },
+        "region": {
+         "startLine": 5
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

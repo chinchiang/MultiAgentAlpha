@@ -1,0 +1,232 @@
+{
+ "default": {
+  "verdict": "needs_human",
+  "severity_band": "Medium",
+  "reason": "Evidence insufficient to decide."
+ },
+ "by_claim": {
+  "SQL injection": {
+   "verdict": "true_positive",
+   "severity_band": "Critical",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Unparameterised SQL": {
+   "verdict": "true_positive",
+   "severity_band": "Critical",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "token": {
+   "verdict": "true_positive",
+   "severity_band": "Critical",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "AWS": {
+   "verdict": "true_positive",
+   "severity_band": "Critical",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Pwn": {
+   "verdict": "true_positive",
+   "severity_band": "Critical",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "pull_request_target": {
+   "verdict": "true_positive",
+   "severity_band": "Critical",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Checkout of PR": {
+   "verdict": "true_positive",
+   "severity_band": "Critical",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "title": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Untrusted github": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "XSS": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "innerHTML": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "eval": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "traceback": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Stack trace": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "log": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Content-Security-Policy": {
+   "verdict": "true_positive",
+   "severity_band": "Low",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "CSP": {
+   "verdict": "true_positive",
+   "severity_band": "Low",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "AngularJS": {
+   "verdict": "true_positive",
+   "severity_band": "Low",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "curl": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "install script": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "latest": {
+   "verdict": "true_positive",
+   "severity_band": "Low",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "order_id": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "README": {
+   "verdict": "true_positive",
+   "severity_band": "Low",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "prompt injection": {
+   "verdict": "true_positive",
+   "severity_band": "Low",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "IDOR": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "object level": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "per-object": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "cookie": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Passwords compared": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "requests": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "flask-secure": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Unknown package": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "X-Admin": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "admin": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Header-based": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Placeholder": {
+   "verdict": "true_positive",
+   "severity_band": "Low",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "@main": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "mutable": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "write-all": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "debug": {
+   "verdict": "true_positive",
+   "severity_band": "High",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "Subresource": {
+   "verdict": "true_positive",
+   "severity_band": "Medium",
+   "reason": "Quoted code supports the claim; skeptic found no control."
+  },
+  "profile query": {
+   "verdict": "false_positive",
+   "severity_band": "None",
+   "reason": "Cited line uses a parameterised query; the quote does not appear in the file."
+  },
+  "Open redirect": {
+   "verdict": "true_positive",
+   "severity_band": "Low",
+   "reason": "Unvalidated redirect target."
+  },
+  "flask unpinned": {
+   "verdict": "needs_human",
+   "severity_band": "Low",
+   "reason": "Needs scanner confirmation."
+  }
+ },
+ "flip_on_reverse": [
+  "Open redirect"
+ ]
+}

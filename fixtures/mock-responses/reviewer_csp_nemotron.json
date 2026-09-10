@@ -1,0 +1,23 @@
+{
+ "findings": [
+  {
+   "title": "Missing CSP; inline script and eval() would be blocked by a strict policy",
+   "cwe": "CWE-1021",
+   "standard_refs": [
+    "ASVS 5.0 V3.4"
+   ],
+   "provenance": [
+    {
+     "file": "static/index.html",
+     "line": 1,
+     "quote": "<!doctype html>"
+    }
+   ],
+   "reachability": "conditional",
+   "reachability_argument": "Handler is a public Flask route reachable without authentication.",
+   "exploit_sketch": "Attacker supplies crafted input to the public endpoint.",
+   "cvss4_vector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:L/UI:P/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+   "model_confidence": 0.8
+  }
+ ]
+}

@@ -1,0 +1,48 @@
+{
+ "default": {
+  "exploitable": "yes",
+  "preconditions": "Network access to the application; no account needed."
+ },
+ "by_claim": {
+  "IDOR": {
+   "exploitable": "conditional",
+   "preconditions": "Any valid session cookie; ids are sequential integers."
+  },
+  "object level": {
+   "exploitable": "conditional",
+   "preconditions": "Any valid session cookie."
+  },
+  "per-object": {
+   "exploitable": "conditional",
+   "preconditions": "Any valid session cookie."
+  },
+  "open redirect": {
+   "exploitable": "conditional",
+   "preconditions": "Victim must log in through an attacker-supplied link."
+  },
+  "requests": {
+   "exploitable": "unknown",
+   "preconditions": "Depends on which requests APIs are used; scanner confirmation required."
+  },
+  "flask unpinned": {
+   "exploitable": "unknown",
+   "preconditions": "None demonstrable."
+  },
+  "pull_request_target": {
+   "exploitable": "yes",
+   "preconditions": "Ability to open a pull request from a fork."
+  },
+  "Pwn request": {
+   "exploitable": "yes",
+   "preconditions": "Ability to open a pull request from a fork."
+  },
+  "title": {
+   "exploitable": "yes",
+   "preconditions": "Ability to open a pull request with a crafted title."
+  },
+  "traceback": {
+   "exploitable": "yes",
+   "preconditions": "Trigger any unhandled exception, e.g. malformed order id."
+  }
+ }
+}

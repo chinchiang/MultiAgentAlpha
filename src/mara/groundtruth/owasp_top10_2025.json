@@ -1,0 +1,16 @@
+{
+  "_source": "OWASP Top 10:2025 category list verified from the official repository file manifest https://github.com/OWASP/Top10/tree/master/2025/docs/en on 2026-09-08. Do not trust blog copies: several list the categories in the wrong order.",
+  "categories": {
+    "A01": "Broken Access Control",
+    "A02": "Security Misconfiguration",
+    "A03": "Software Supply Chain Failures",
+    "A04": "Cryptographic Failures",
+    "A05": "Injection",
+    "A06": "Insecure Design",
+    "A07": "Authentication Failures",
+    "A08": "Software or Data Integrity Failures",
+    "A09": "Security Logging and Alerting Failures",
+    "A10": "Mishandling of Exceptional Conditions"
+  },
+  "a10_cwes": [209, 215, 234, 235, 248, 252, 274, 280, 369, 390, 391, 394, 396, 397, 460, 476, 478, 484, 550, 636, 703, 754, 755, 756]
+}

@@ -1,0 +1,22 @@
+{
+  "_source": "OWASP ASVS 5.0.0 (May 2025), chapter/section list transcribed from the official CSV at https://github.com/OWASP/ASVS/tree/master/5.0 ; verified 2026-09-08. NOTE: ASVS 5.0 has no V1 'Architecture' chapter; architecture lives in V15.",
+  "version": "5.0.0",
+  "chapters": {
+    "1": {"title": "Encoding and Sanitization", "sections": {"1": "Encoding and Sanitization Architecture", "2": "Injection Prevention", "3": "Sanitization", "4": "Memory, String, and Unmanaged Code", "5": "Safe Deserialization"}},
+    "2": {"title": "Validation and Business Logic", "sections": {"1": "Validation and Business Logic Documentation", "2": "Input Validation", "3": "Business Logic Security", "4": "Anti-automation"}},
+    "3": {"title": "Web Frontend Security", "sections": {"1": "Web Frontend Security Documentation", "2": "Unintended Content Interpretation", "3": "Cookie Setup", "4": "Browser Security Mechanism Headers", "5": "Browser Origin Separation", "6": "External Resource Integrity", "7": "Other Browser Security Considerations"}},
+    "4": {"title": "API and Web Service", "sections": {"1": "Generic Web Service Security", "2": "HTTP Message Structure, Semantics, and Validation", "3": "GraphQL", "4": "WebSocket"}},
+    "5": {"title": "File Handling", "sections": {"1": "File Handling Documentation", "2": "File Upload and Content", "3": "File Storage", "4": "File Download"}},
+    "6": {"title": "Authentication", "sections": {"1": "Authentication Documentation", "2": "Password Security", "3": "General Authentication Security", "4": "Authentication Factor Lifecycle and Recovery", "5": "General Multi-factor authentication requirements", "6": "Out-of-Band authentication mechanisms", "7": "Cryptographic authentication mechanism", "8": "Authentication with an Identity Provider"}},
+    "7": {"title": "Session Management", "sections": {"1": "Session Management Documentation", "2": "Fundamental Session Management Security", "3": "Session Timeout", "4": "Session Termination", "5": "Defenses Against Session Abuse", "6": "Federated Re-authentication"}},
+    "8": {"title": "Authorization", "sections": {"1": "Authorization Documentation", "2": "General Authorization Design", "3": "Operation Level Authorization", "4": "Other Authorization Considerations"}},
+    "9": {"title": "Self-contained Tokens", "sections": {"1": "Token source and integrity", "2": "Token content"}},
+    "10": {"title": "OAuth and OIDC", "sections": {"1": "Generic OAuth and OIDC security", "2": "OAuth Client", "3": "OAuth Resource Server", "4": "OAuth Authorization Server", "5": "OIDC Client", "6": "OpenID Provider", "7": "Consent Management"}},
+    "11": {"title": "Cryptography", "sections": {"1": "Cryptographic Inventory and Documentation", "2": "Secure Cryptography Implementation", "3": "Encryption Algorithms", "4": "Hashing and Hash-based Functions", "5": "Random Values", "6": "Public Key Cryptography", "7": "In-Use Data Cryptography"}},
+    "12": {"title": "Secure Communication", "sections": {"1": "General TLS Security Guidance", "2": "HTTPS Communication with External Facing Services", "3": "General Service to Service Communication Security"}},
+    "13": {"title": "Configuration", "sections": {"1": "Configuration Documentation", "2": "Backend Communication Configuration", "3": "Secret Management", "4": "Unintended Information Leakage"}},
+    "14": {"title": "Data Protection", "sections": {"1": "Data Protection Documentation", "2": "General Data Protection", "3": "Client-side Data Protection"}},
+    "15": {"title": "Secure Coding and Architecture", "sections": {"1": "Secure Coding and Architecture Documentation", "2": "Security Architecture and Dependencies", "3": "Defensive Coding", "4": "Safe Concurrency"}},
+    "16": {"title": "Security Logging and Error Handling", "sections": {"1": "Security Logging Documentation", "2": "General Logging", "3": "Security Events", "4": "Log Protection", "5": "Error Handling"}}
+  }
+}
