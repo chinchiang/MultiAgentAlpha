@@ -1,0 +1,93 @@
+{
+ "sample": "s2-express-notes",
+ "labels": [
+  {
+   "dimension": "architecture",
+   "cwe": "CWE-285",
+   "file": "server.js",
+   "line": 12,
+   "quote": "return { userId: req.headers[\"x-user\"] || \"anon\", role: \"admin\" };",
+   "title": "Placeholder authorize grants admin"
+  },
+  {
+   "dimension": "secrets",
+   "cwe": "CWE-798",
+   "file": "server.js",
+   "line": 7,
+   "quote": "const JWT_SECRET = \"changeme-super-secret-jwt-key-2026\";",
+   "title": "Hard-coded JWT secret"
+  },
+  {
+   "dimension": "xss",
+   "cwe": "CWE-79",
+   "file": "server.js",
+   "line": 17,
+   "quote": "res.send(`<h1>${note ? note.title : \"not found\"}</h1><div>${note ? note.body : \"\"}</div>`);",
+   "title": "Stored XSS in note rendering"
+  },
+  {
+   "dimension": "vulnerabilities",
+   "cwe": "CWE-78",
+   "file": "server.js",
+   "line": 23,
+   "quote": "exec(`mail -s \"shared note\" ${email} < /dev/null`, (err) => {",
+   "title": "Command injection via email"
+  },
+  {
+   "dimension": "error_handling",
+   "cwe": "CWE-209",
+   "file": "server.js",
+   "line": 24,
+   "quote": "if (err) return res.status(500).send(err.stack);",
+   "title": "Stack trace to client"
+  },
+  {
+   "dimension": "secrets",
+   "cwe": "CWE-200",
+   "file": "server.js",
+   "line": 30,
+   "quote": "res.json({ notes, secret: JWT_SECRET });",
+   "title": "Secret exposed on admin endpoint"
+  },
+  {
+   "dimension": "dependencies",
+   "cwe": "CWE-1395",
+   "file": "package.json",
+   "line": 5,
+   "quote": "\"lodash\": \"4.17.4\",",
+   "title": "Outdated lodash"
+  },
+  {
+   "dimension": "dependencies",
+   "cwe": "CWE-829",
+   "file": "package.json",
+   "line": 6,
+   "quote": "\"jsonwebtoken-utils-pro\": \"^1.0.0\"",
+   "title": "Suspicious package name"
+  },
+  {
+   "dimension": "supply_chain",
+   "cwe": "CWE-829",
+   "file": "package.json",
+   "line": 8,
+   "quote": "\"scripts\": { \"postinstall\": \"node setup.js\" }",
+   "title": "Install script in manifest"
+  },
+  {
+   "dimension": "xss",
+   "cwe": "CWE-79",
+   "file": "public/index.html",
+   "line": 7,
+   "quote": "document.getElementById(\"out\").innerHTML = p.get(\"msg\");",
+   "title": "DOM XSS via innerHTML"
+  },
+  {
+   "dimension": "csp",
+   "cwe": "CWE-829",
+   "file": "public/index.html",
+   "line": 4,
+   "quote": "<script src=\"https://cdn.example-cdn.com/angular/1.8/angular.min.js\"></script>",
+   "title": "AngularJS from CDN, no CSP"
+  }
+ ]
+}

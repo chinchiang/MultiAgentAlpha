@@ -1,0 +1,9 @@
+<!doctype html>
+<html><body>
+<div id="out"></div>
+<script src="https://cdn.example-cdn.com/angular/1.8/angular.min.js"></script>
+<script>
+  const p = new URLSearchParams(location.search);
+  document.getElementById("out").innerHTML = p.get("msg");
+</script>
+</body></html>

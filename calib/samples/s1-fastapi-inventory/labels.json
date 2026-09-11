@@ -1,0 +1,85 @@
+{
+ "sample": "s1-fastapi-inventory",
+ "labels": [
+  {
+   "dimension": "architecture",
+   "cwe": "CWE-285",
+   "file": "main.py",
+   "line": 15,
+   "quote": "return True",
+   "title": "Placeholder is_admin always returns True"
+  },
+  {
+   "dimension": "secrets",
+   "cwe": "CWE-798",
+   "file": "main.py",
+   "line": 9,
+   "quote": "ADMIN_TOKEN = \"sk-live-9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c\"  # rotate later",
+   "title": "Hard-coded admin token"
+  },
+  {
+   "dimension": "vulnerabilities",
+   "cwe": "CWE-89",
+   "file": "main.py",
+   "line": 21,
+   "quote": "cur.execute(f\"SELECT name, qty FROM items WHERE name LIKE '%{q}%'\")",
+   "title": "SQL injection via f-string"
+  },
+  {
+   "dimension": "vulnerabilities",
+   "cwe": "CWE-89",
+   "file": "main.py",
+   "line": 31,
+   "quote": "cur.execute(\"DELETE FROM items WHERE id = \" + item_id)",
+   "title": "SQL injection via concatenation"
+  },
+  {
+   "dimension": "xss",
+   "cwe": "CWE-79",
+   "file": "main.py",
+   "line": 23,
+   "quote": "return \"<ul>\" + \"\".join(f\"<li>{name}: {qty}</li>\" for name, qty in rows) + f\"</ul><p>Query: {q}</p>\"",
+   "title": "Reflected XSS in search results"
+  },
+  {
+   "dimension": "input_validation",
+   "cwe": "CWE-22",
+   "file": "main.py",
+   "line": 39,
+   "quote": "with open(\"/srv/exports/\" + path, \"w\") as fh:",
+   "title": "Path traversal in export path"
+  },
+  {
+   "dimension": "error_handling",
+   "cwe": "CWE-209",
+   "file": "main.py",
+   "line": 47,
+   "quote": "return HTMLResponse(\"<pre>\" + traceback.format_exc() + \"</pre>\", status_code=500)",
+   "title": "Traceback returned to client"
+  },
+  {
+   "dimension": "dependencies",
+   "cwe": "CWE-1395",
+   "file": "requirements.txt",
+   "line": 2,
+   "quote": "uvicorn==0.12.0",
+   "title": "Outdated uvicorn"
+  },
+  {
+   "dimension": "dependencies",
+   "cwe": "CWE-829",
+   "file": "requirements.txt",
+   "line": 3,
+   "quote": "fastapi-auth-easy",
+   "title": "Suspicious package name"
+  },
+  {
+   "dimension": "supply_chain",
+   "cwe": "CWE-494",
+   "file": "Dockerfile",
+   "line": 2,
+   "quote": "RUN curl -fsSL https://get.example-cli.dev/install | bash",
+   "title": "curl | bash installer"
+  }
+ ]
+}

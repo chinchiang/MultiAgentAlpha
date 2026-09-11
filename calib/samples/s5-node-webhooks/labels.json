@@ -1,0 +1,77 @@
+{
+ "sample": "s5-node-webhooks",
+ "labels": [
+  {
+   "dimension": "secrets",
+   "cwe": "CWE-798",
+   "file": "index.js",
+   "line": 4,
+   "quote": "const WEBHOOK_SECRET = \"whsec_4f9a1c2b3d4e5f60718293a4b5c6d7e8\";",
+   "title": "Hard-coded webhook secret"
+  },
+  {
+   "dimension": "secrets",
+   "cwe": "CWE-312",
+   "file": "index.js",
+   "line": 5,
+   "quote": "const AWS_SECRET_ACCESS_KEY = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\";",
+   "title": "AWS secret in source"
+  },
+  {
+   "dimension": "authn_authz",
+   "cwe": "CWE-347",
+   "file": "index.js",
+   "line": 9,
+   "quote": "return true;",
+   "title": "Signature verification disabled"
+  },
+  {
+   "dimension": "vulnerabilities",
+   "cwe": "CWE-94",
+   "file": "index.js",
+   "line": 18,
+   "quote": "const handler = new Function(\"evt\", evt.script || \"return 0\");",
+   "title": "Code injection via new Function"
+  },
+  {
+   "dimension": "secrets",
+   "cwe": "CWE-532",
+   "file": "index.js",
+   "line": 20,
+   "quote": "console.log(\"event\", evt, \"key\", AWS_SECRET_ACCESS_KEY);",
+   "title": "Secret and event logged"
+  },
+  {
+   "dimension": "xss",
+   "cwe": "CWE-79",
+   "file": "index.js",
+   "line": 22,
+   "quote": "res.end(\"<p>ok \" + evt.customer + \"</p><pre>\" + result + \"</pre>\");",
+   "title": "Reflected XSS in response"
+  },
+  {
+   "dimension": "dependencies",
+   "cwe": "CWE-1395",
+   "file": "package.json",
+   "line": 3,
+   "quote": "\"dependencies\": { \"node-fetch\": \"2.6.0\" }",
+   "title": "Outdated node-fetch"
+  },
+  {
+   "dimension": "supply_chain",
+   "cwe": "CWE-494",
+   "file": "deploy.sh",
+   "line": 2,
+   "quote": "curl -s https://releases.example.io/agent-latest.tar.gz | tar xz -C /opt",
+   "title": "Unverified tarball piped to tar"
+  },
+  {
+   "dimension": "secrets",
+   "cwe": "CWE-798",
+   "file": "deploy.sh",
+   "line": 3,
+   "quote": "/opt/agent/install --token whsec_4f9a1c2b3d4e5f60718293a4b5c6d7e8",
+   "title": "Secret passed on the command line"
+  }
+ ]
+}
