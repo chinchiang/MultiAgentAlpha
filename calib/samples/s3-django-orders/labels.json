@@ -1,0 +1,101 @@
+{
+ "sample": "s3-django-orders",
+ "labels": [
+  {
+   "dimension": "authn_authz",
+   "cwe": "CWE-639",
+   "file": "orders/views.py",
+   "line": 13,
+   "quote": "order = Order.objects.get(pk=order_id)",
+   "title": "IDOR on order detail"
+  },
+  {
+   "dimension": "vulnerabilities",
+   "cwe": "CWE-502",
+   "file": "orders/views.py",
+   "line": 20,
+   "quote": "cart = pickle.loads(bytes.fromhex(blob))",
+   "title": "Insecure deserialization"
+  },
+  {
+   "dimension": "vulnerabilities",
+   "cwe": "CWE-352",
+   "file": "orders/views.py",
+   "line": 17,
+   "quote": "@csrf_exempt",
+   "title": "CSRF protection disabled"
+  },
+  {
+   "dimension": "secrets",
+   "cwe": "CWE-532",
+   "file": "orders/views.py",
+   "line": 27,
+   "quote": "log.info(\"login user=%s pw=%s\", user, pw)",
+   "title": "Password logged"
+  },
+  {
+   "dimension": "authn_authz",
+   "cwe": "CWE-798",
+   "file": "orders/views.py",
+   "line": 28,
+   "quote": "if user == \"admin\" and pw == \"admin123\":",
+   "title": "Hard-coded admin credential"
+  },
+  {
+   "dimension": "xss",
+   "cwe": "CWE-79",
+   "file": "orders/views.py",
+   "line": 34,
+   "quote": "return HttpResponse(\"<div class=banner>\" + request.GET.get(\"text\", \"\") + \"</div>\")",
+   "title": "Reflected XSS in banner"
+  },
+  {
+   "dimension": "github_actions",
+   "cwe": "CWE-829",
+   "file": ".github/workflows/ci.yml",
+   "line": 11,
+   "quote": "ref: ${{ github.event.pull_request.head.ref }}",
+   "title": "Pwn request via pull_request_target"
+  },
+  {
+   "dimension": "github_actions",
+   "cwe": "CWE-78",
+   "file": ".github/workflows/ci.yml",
+   "line": 12,
+   "quote": "- run: echo \"PR by ${{ github.event.pull_request.user.login }}: ${{ github.event.pull_request.body }}\"",
+   "title": "Script injection from PR body"
+  },
+  {
+   "dimension": "github_actions",
+   "cwe": "CWE-250",
+   "file": ".github/workflows/ci.yml",
+   "line": 4,
+   "quote": "permissions: write-all",
+   "title": "write-all permissions"
+  },
+  {
+   "dimension": "github_actions",
+   "cwe": "CWE-1357",
+   "file": ".github/workflows/ci.yml",
+   "line": 13,
+   "quote": "- uses: acme/deploy@master",
+   "title": "Unpinned action"
+  },
+  {
+   "dimension": "error_handling",
+   "cwe": "CWE-215",
+   "file": "settings.py",
+   "line": 1,
+   "quote": "DEBUG = True",
+   "title": "Debug enabled"
+  },
+  {
+   "dimension": "secrets",
+   "cwe": "CWE-798",
+   "file": "settings.py",
+   "line": 4,
+   "quote": "STRIPE_KEY = \"sk_live_51H8xJ2KzQ9wR7tY6uI5oP4aS3dF2gH1jK0lM\"",
+   "title": "Hard-coded Stripe key"
+  }
+ ]
+}

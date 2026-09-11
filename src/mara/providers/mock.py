@@ -22,6 +22,16 @@ class MockProvider(Provider):
         super().__init__(spec)
         self.fixtures = Path(fixtures_dir) if fixtures_dir else Path(__file__).resolve().parents[3] / "fixtures" / "mock-responses"
         self.calls: list[str] = []
+        self.labels: list[dict] | None = None
+        self.sample = ""
+
+    def bind_target(self, root) -> None:
+        from . import mock_labels
+
+        self.labels = mock_labels.load_labels(root)
+        self.sample = Path(root).name
+        if self.labels is not None:
+            mock_labels.remember_first_lines(root)
 
     def _load(self, name: str) -> dict | None:
         p = self.fixtures / f"{name}.json"
@@ -31,6 +41,8 @@ class MockProvider(Provider):
         self.calls.append(role)
         fam = self.spec.family.value
         kind, _, arg = role.partition(":")
+        if self.labels is not None:
+            return self._label_driven(kind, arg, fam, user)
         data = self._load(f"{kind}_{arg}_{fam}") if arg else None
         if data is None:
             data = self._load(f"{kind}_{fam}")
@@ -46,6 +58,28 @@ class MockProvider(Provider):
         if kind in ("skeptic", "redteam"):
             data = _resolve_by_title(data, user)
         return Completion(data=data, raw_text=json.dumps(data))
+
+
+def _label_driven_impl(self: MockProvider, kind: str, arg: str, fam: str, user: str) -> Completion:
+    from . import mock_labels
+
+    if kind == "reviewer":
+        data = mock_labels.reviewer_response(fam, arg, self.labels or [], self.sample)
+        if data is None:
+            return Completion(data=None, raw_text="", refused=True)
+        return Completion(data=data, raw_text=json.dumps(data))
+    if kind == "judge":
+        data = _resolve_judge(mock_labels.judge_rules(fam), user)
+    elif kind == "skeptic":
+        data = _resolve_by_title(mock_labels.SKEPTIC_RULES, user)
+    elif kind == "redteam":
+        data = _resolve_by_title(mock_labels.REDTEAM_RULES, user)
+    else:
+        data = {"items": []}
+    return Completion(data=data, raw_text=json.dumps(data))
+
+
+MockProvider._label_driven = _label_driven_impl
 
 
 def _parse_batch(user: str) -> list[dict]:

@@ -72,6 +72,12 @@ class Pipeline:
                 self.audit["reviewer_calls"] += 1
                 self.audit["reviewer_refusals"] += int(audit["refused"])
                 self.audit["canary_echoes"] += int(audit["canary_echoed"])
+                fam = prov.family.value
+                self.audit[f"reviewer_calls[{fam}]"] += 1
+                self.audit[f"reviewer_refusals[{fam}]"] += int(audit["refused"])
+                self.audit[f"canary_echoes[{fam}]"] += int(audit["canary_echoed"])
+                self.audit[f"findings_with_unverified_quotes[{fam}]"] += audit["unverified_quotes"]
+                self.audit[f"invalid_findings_dropped[{fam}]"] += audit["invalid"]
                 self.audit["invalid_findings_dropped"] += audit["invalid"]
                 self.audit["findings_with_unverified_quotes"] += audit["unverified_quotes"]
                 self.audit["input_tokens"] += audit["input_tokens"]
@@ -96,9 +102,14 @@ class Pipeline:
         for f in findings:
             p = f.provenance[0]
             match = None
+            f_ok = any(x.verified for x in f.provenance)
             for k in kept:
                 q = k.provenance[0]
-                if k.dimension == f.dimension and k.cwe == f.cwe and q.file == p.file and abs(q.line - p.line) <= 3:
+                k_ok = any(x.verified for x in k.provenance)
+                # never merge an unverified (possibly fabricated) finding into a verified one:
+                # it would inherit the verified finding's acceptance and hide the fabrication
+                if (k.dimension == f.dimension and k.cwe == f.cwe and q.file == p.file
+                        and abs(q.line - p.line) <= 3 and k_ok == f_ok):
                     match = k
                     break
             if match is None:
@@ -241,12 +252,15 @@ class Pipeline:
         target = Path(target).resolve()
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = build_context(target)
+        for prov in self.providers.values():
+            prov.bind_target(ctx.root)
         self._say(f"L1: {ctx.summary()}")
         tool_runs = self.run_tools(target, sarif_dir)
         tool_results = [r for run in tool_runs for r in run.results]
         tools_ran = {run.tool for run in tool_runs if run.ran}
         raw = self.run_reviewers(ctx)
         findings, finders = self.dedupe(raw)
+        findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
         self.audit["findings_raw"] = len(raw)
         self.audit["findings_deduped"] = len(findings)
         sk = self.run_skeptics(ctx, findings, finders)

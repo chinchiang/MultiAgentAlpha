@@ -30,6 +30,9 @@ class Provider(abc.ABC):
     def model(self) -> str:
         return self.spec.model
 
+    def bind_target(self, root) -> None:  # noqa: B027 - optional hook
+        """Called by the pipeline before a review; lets a provider know which repo is under review."""
+
     @abc.abstractmethod
     def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> Completion:
         """Return JSON matching `schema`. `role` is a hint ('reviewer:xss', 'judge', ...) for mocks/logging."""

@@ -62,6 +62,22 @@ zero-data-retention agreement, DeepSeek weights self-hosted on vLLM, Nemotron on
 DeepSeek vendor API is never used for source code. See the report, Part VIII, for the site-by-site
 deployment pattern and the separate handling of 上海／重慶.
 
+## Calibration (Appendix E, prompt 4)
+
+`calib/samples/` holds five labelled vibe-coded samples (51 labels). The loop runs offline with
+label-driven mock families and produces `docs/calibration-<date>.md` with per-family, per-CWE
+precision and recall, refusal and canary rates, judge-family agreement, a Dawid-Skene reliability
+estimate and suggested weights (never written to the config automatically):
+
+```bash
+for s in calib/samples/*/; do mara review "$s" --provider mock --out calib-out/$(basename "$s"); done
+python scripts/calibrate.py --mode mock
+```
+
+For a live run point the same commands at `config/mara.yaml` (three reachable family endpoints,
+ZDR enabled) and pass `--mode live`. `scripts/fetch_calib_corpora.sh` fetches OWASP Juice Shop
+and WebGoat; they need human-authored `labels.json` files before they count.
+
 ## Other commands
 
 ```bash
