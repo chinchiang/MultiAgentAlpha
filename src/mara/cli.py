@@ -64,10 +64,45 @@ def cvss(vector: str):
 
 
 @app.command()
-def check_config(config: Path = typer.Argument(Path("config/mara.yaml"))):
-    """Validate family-diversity and data-residency rules."""
-    cfg = load_config(config)
-    console.print(f"ok: {len(cfg.models)} models, families {sorted({m.family.value for m in cfg.models})}")
+def check_config(
+    config: Path = typer.Argument(Path("config/mara.yaml")),
+    as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
+):
+    """Evaluate every configuration policy (P1-P5) and exit non-zero if any fails."""
+    import yaml
+
+    from .config import GateConfig, MaraConfig, ModelSpec, RolesConfig
+    from .policy import evaluate_policies
+
+    raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+    try:
+        models = [ModelSpec.model_validate(m) for m in raw.get("models", [])]
+        roles = RolesConfig.model_validate(raw.get("roles", {}))
+        gate = GateConfig.model_validate(raw.get("gate", {}) or {})
+    except Exception as e:  # structural error: nothing to evaluate
+        console.print(f"[red]invalid config structure:[/red] {e}")
+        raise typer.Exit(code=1) from e
+    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate")}
+    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, **extra)
+    names = {m.name for m in models}
+    unknown = [n for n in [roles.skeptic, roles.redteam, *roles.reviewers, *roles.judges] if n not in names]
+    if unknown:
+        console.print(f"[red]roles reference unknown models:[/red] {sorted(set(unknown))}")
+        raise typer.Exit(code=1)
+    results = evaluate_policies(cfg)
+    if as_json:
+        console.print(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1))
+    else:
+        t = Table(title=f"MARA policy check · {config}")
+        for col in ("Policy", "Status", "Reason"):
+            t.add_column(col)
+        for r in results:
+            t.add_row(f"{r.id} {r.name}", "[green]PASS[/green]" if r.passed else "[red]FAIL[/red]", r.reason)
+        console.print(t)
+    failed = [r for r in results if not r.passed]
+    console.print(f"{len(results) - len(failed)}/{len(results)} policies pass; families {sorted({m.family.value for m in models})}")
+    if failed:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

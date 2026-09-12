@@ -1,0 +1,21 @@
+# Deliberately violates every policy; used by tests and as a demonstration of `mara check-config`.
+models:
+  - name: claude-fable
+    family: anthropic
+    provider: anthropic
+    model: claude-fable-5-1            # P1: Covered Model without authorization
+    data_residency: vendor_api_30d     # P5: not ZDR
+  - name: deepseek-cloud
+    family: deepseek
+    provider: openai_compatible
+    model: deepseek-chat
+    base_url: https://api.deepseek.com/v1   # P2: vendor API, source code would leave the perimeter
+    data_residency: unknown            # P5
+roles:
+  reviewers: [claude-fable, deepseek-cloud]   # P3: only two families and no reduced_panel_reason
+  skeptic: deepseek-cloud
+  redteam: claude-fable
+  judges: [claude-fable, deepseek-cloud]
+gate:
+  self_judge_discount: 0.8             # P4: > 0.5
+  human_threshold_alpha: 0.1           # P4: < 0.3

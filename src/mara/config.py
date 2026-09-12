@@ -34,9 +34,11 @@ class GateConfig(BaseModel):
     block_on_severity: list[str] = Field(default_factory=lambda: ["High", "Critical"])
     min_dimension_score: float = 60.0
     accept_threshold: float = Field(default=0.6, description="Weighted consensus needed to accept a finding")
-    human_threshold_alpha: float = Field(default=0.4, description="Krippendorff alpha below which -> human queue")
+    human_threshold_alpha: float = Field(default=0.4, ge=0.0, le=1.0, description="Krippendorff alpha below which -> human queue (policy P4: >= 0.3)")
     min_independent_judges: int = Field(default=2, description="If fewer non-finder families can judge, all judges vote")
-    self_judge_discount: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight multiplier for a judge voting on its own family's finding")
+    self_judge_discount: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Weight multiplier for a judge voting on its own family's finding (policy P4: <= 0.5)"
+    )
 
 
 class MaraConfig(BaseModel):
@@ -48,7 +50,14 @@ class MaraConfig(BaseModel):
         default=False,
         description="If false, any model without on_prem/vendor_api_zdr residency is refused source code",
     )
-    require_family_diversity: bool = True
+    require_family_diversity: bool = Field(default=True, description="Kept for compatibility; policy P3 now enforces the panel size")
+    anthropic_covered_models_authorized: bool = Field(
+        default=False, description="Policy P1: allow Fable/Mythos-class models only with a recorded authorization"
+    )
+    anthropic_covered_models_authorization_ref: str = Field(
+        default="", description="Policy P1: reference of the authorization (ticket, contract clause)"
+    )
+    reduced_panel_reason: str = Field(default="", description="Policy P3: why only two model families are available (e.g. PRC in-country pipeline)")
 
     def model_by_name(self, name: str) -> ModelSpec:
         for m in self.models:
@@ -66,23 +75,11 @@ class MaraConfig(BaseModel):
         for d in self.dimensions:
             if d not in DIMENSIONS:
                 raise ValueError(f"unknown dimension {d!r}")
-        if self.require_family_diversity:
-            fams = {self.model_by_name(n).family for n in self.roles.reviewers}
-            if len(fams) < 2:
-                raise ValueError("require_family_diversity: reviewers must span >=2 model families")
-            skeptic_fam = self.model_by_name(self.roles.skeptic).family
-            if skeptic_fam in fams and len(fams) == 1:
-                raise ValueError("skeptic must differ from the only reviewer family")
-            judge_fams = {self.model_by_name(n).family for n in self.roles.judges}
-            if len(judge_fams) < 2:
-                raise ValueError("require_family_diversity: judges must span >=2 model families")
-        if not self.allow_source_code_to_non_on_prem:
-            for m in self.models:
-                if m.provider != "mock" and m.data_residency not in ("on_prem", "vendor_api_zdr"):
-                    raise ValueError(
-                        f"model {m.name!r} has data_residency={m.data_residency!r}; source code may only be sent "
-                        "to on_prem or vendor_api_zdr models unless allow_source_code_to_non_on_prem is true"
-                    )
+        from .policy import evaluate_policies
+
+        failed = [r for r in evaluate_policies(self) if not r.passed]
+        if failed:
+            raise ValueError("configuration violates policy: " + " | ".join(f"{r.id} {r.name}: {r.reason}" for r in failed))
         return self
 
 

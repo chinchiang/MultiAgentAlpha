@@ -1,0 +1,25 @@
+# In-country pipeline for 上海／重慶 (report chapter 26, CN-1): two on-prem families, no cross-border model.
+# Passes the policies only because reduced_panel_reason is stated.
+models:
+  - name: deepseek-local
+    family: deepseek
+    provider: openai_compatible
+    model: deepseek-v3.2
+    base_url: http://10.20.30.40:8000/v1
+    api_key_env: DEEPSEEK_LOCAL_KEY
+    data_residency: on_prem
+  - name: nemotron-local
+    family: nemotron
+    provider: openai_compatible
+    model: nvidia/nemotron-3-super
+    base_url: http://nim-nemotron.internal:8000/v1
+    api_key_env: NIM_LOCAL_KEY
+    data_residency: on_prem
+roles:
+  reviewers: [deepseek-local, nemotron-local]
+  skeptic: nemotron-local
+  redteam: deepseek-local
+  judges: [deepseek-local, nemotron-local]
+gate:
+  human_threshold_alpha: 0.5           # tighter human queue to compensate for the smaller panel
+reduced_panel_reason: "中國廠區境內管線：Claude API 在境外，依 CSL/DSL/PIPL 不得跨境送原始碼"
