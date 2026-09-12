@@ -66,9 +66,14 @@ def test_g6_fails_on_the_seeded_fixture_workflow(tmp_path):
         assert needle in r.evidence
 
 
-def test_g12_passes_with_a_psirt_field(tmp_path):
+def test_g12_needs_an_enabled_narrow_psirt_block(tmp_path):
     cfg = tmp_path / "mara.yaml"
-    cfg.write_text("models: []\npsirt_webhook: https://psirt.example.internal/hook\n")
+    cfg.write_text("models: []\npsirt:\n  enabled: true\n  webhook_url: https://psirt.example.internal/hook\n  product: IPC-7000\n")
     assert check_g12(tmp_path, cfg).status == PASS
+    cfg.write_text("models: []\npsirt:\n  enabled: false\n  webhook_url: https://psirt.example.internal/hook\n")
+    assert check_g12(tmp_path, cfg).status == FAIL
+    cfg.write_text("models: []\npsirt:\n  enabled: true\n  webhook_url: http://psirt.example.internal/hook\n  product: IPC-7000\n  trigger_tiers: [A, C]\n")
+    r = check_g12(tmp_path, cfg)
+    assert r.status == FAIL and "https" in r.evidence and "過寬" in r.evidence
     cfg.write_text("models: []\n")
     assert check_g12(tmp_path, cfg).status == FAIL

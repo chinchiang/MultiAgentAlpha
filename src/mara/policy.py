@@ -127,7 +127,38 @@ def p5_data_residency(cfg: MaraConfig) -> PolicyResult:
     return PolicyResult("P5", "data-residency", True, "every non-mock model is on_prem or vendor_api_zdr")
 
 
-POLICIES = (p1_covered_models, p2_deepseek_on_prem, p3_panel_size, p4_gate_bounds, p5_data_residency)
+PSIRT_ALLOWED_TIERS = ("A", "B")
+PSIRT_ALLOWED_SEVERITIES = ("Critical", "High")
+
+
+def p6_psirt_scope(cfg: MaraConfig) -> PolicyResult:
+    """G-12: the PSIRT hand-off, when enabled, must be narrow (tier A/B, Critical/High) so review
+    false positives do not consume PSIRT judgement, must go over HTTPS, and must never carry an
+    inline secret."""
+    ps = cfg.psirt
+    if not ps.enabled:
+        return PolicyResult("P6", "psirt-scope", True, "PSIRT hand-off disabled (G-12 not yet wired; see governance check)")
+    problems = []
+    if not ps.webhook_url.lower().startswith("https://"):
+        problems.append(f"webhook_url must be https:// (got {ps.webhook_url!r})")
+    if not ps.product.strip():
+        problems.append("product identifier is empty")
+    if not ps.token_env.strip():
+        problems.append("token_env is empty; the bearer token must come from the environment")
+    bad_t = [x for x in ps.trigger_tiers if x not in PSIRT_ALLOWED_TIERS]
+    bad_s = [x for x in ps.trigger_severities if x not in PSIRT_ALLOWED_SEVERITIES]
+    if bad_t or not ps.trigger_tiers:
+        problems.append(f"trigger_tiers must be a non-empty subset of {list(PSIRT_ALLOWED_TIERS)} (got {ps.trigger_tiers})")
+    if bad_s or not ps.trigger_severities:
+        problems.append(f"trigger_severities must be a non-empty subset of {list(PSIRT_ALLOWED_SEVERITIES)} (got {ps.trigger_severities})")
+    if problems:
+        return PolicyResult("P6", "psirt-scope", False, "; ".join(problems))
+    return PolicyResult("P6", "psirt-scope", True,
+                        f"PSIRT hand-off for product {ps.product!r}: tiers {ps.trigger_tiers}, severities {ps.trigger_severities}, "
+                        f"token from ${ps.token_env}, {ps.early_warning_hours} h early warning")
+
+
+POLICIES = (p1_covered_models, p2_deepseek_on_prem, p3_panel_size, p4_gate_bounds, p5_data_residency, p6_psirt_scope)
 
 
 def evaluate_policies(cfg: MaraConfig) -> list[PolicyResult]:

@@ -288,11 +288,19 @@ class Pipeline:
             self.audit[f"judge_agreement[{k}]"] = v
         self.audit["tool_results_ingested"] = len(tool_results)
         self.audit["tools_ran"] = ",".join(sorted(tools_ran)) or "none"
-        return ReviewReport(
+        report = ReviewReport(
             target=str(target), generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"), provider_mode=mode,
             families_used=sorted({m.family.value for m in self.cfg.models}), findings=findings, skeptic=sk, redteam=rt,
             votes=votes, consensus=consensus, dimensions=dims, overall_score=overall, gate_passed=gate, bias_audit=dict(self.audit),
         )
+        # G-12: accepted tier-A Critical findings on a shipped product start the CRA Article 14 clock
+        from .report.psirt_out import build_notifications
+
+        report.psirt = build_notifications(report, self.cfg)
+        self.audit["psirt_notifications"] = len(report.psirt)
+        report.bias_audit["psirt_notifications"] = len(report.psirt)
+        self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")
+        return report
 
 
 def _per_finding_alpha(votes: list[JudgeVote]) -> float | None:

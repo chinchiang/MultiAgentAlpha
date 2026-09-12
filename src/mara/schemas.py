@@ -167,3 +167,4 @@ class ReviewReport(BaseModel):
     overall_score: float
     gate_passed: bool
     bias_audit: dict[str, float | int | str]
+    psirt: list[dict] = Field(default_factory=list, description="G-12: CRA Article 14 early-warning payloads for accepted tier-A Critical findings")

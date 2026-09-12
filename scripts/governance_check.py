@@ -343,10 +343,23 @@ def check_g11(root: Path, config_path: Path) -> CheckResult:
 
 def check_g12(root: Path, config_path: Path) -> CheckResult:
     raw = _raw_config(config_path)
-    keys = [k for k in raw if k.startswith("psirt")]
-    if keys:
-        return CheckResult("G-12", PASS, f"設定含 {keys}；A 級 Critical finding 可接入 PSIRT 通報流程")
-    return CheckResult("G-12", FAIL, "設定無 `psirt_webhook`／`psirt:` 區塊。需要：PSIRT 接入端點與只對 A 級 Critical 觸發的規則，對應 CRA 第 14 條 24 小時預警（2026-09-11 起適用）")
+    ps = raw.get("psirt")
+    if not isinstance(ps, dict):
+        return CheckResult("G-12", FAIL, "設定無 `psirt:` 區塊。需要：PSIRT 接入端點（https）、產品識別、只對 A 級 Critical 觸發的規則（政策 P6），對應 CRA 第 14 條 24 小時預警（2026-09-11 起適用）；見 `docs/psirt-integration.md`")
+    if not ps.get("enabled"):
+        return CheckResult("G-12", FAIL, "`psirt:` 區塊存在但 `enabled: false`。需要：填入 https 的 `webhook_url`、`product`，把 `enabled` 與 `shipped` 設為 true，token 放在 `token_env` 指定的環境變數；範例 `config/examples/psirt-enabled.yaml`")
+    problems = []
+    if not str(ps.get("webhook_url", "")).lower().startswith("https://"):
+        problems.append("webhook_url 非 https")
+    if not str(ps.get("product", "")).strip():
+        problems.append("product 為空")
+    tiers, sevs = ps.get("trigger_tiers", ["A"]), ps.get("trigger_severities", ["Critical"])
+    if not set(tiers) <= {"A", "B"} or not set(sevs) <= {"Critical", "High"}:
+        problems.append(f"觸發範圍過寬：tiers={tiers} severities={sevs}（G-12 只限 A 級 Critical，P6 允許到 B/High）")
+    if problems:
+        return CheckResult("G-12", FAIL, "；".join(problems))
+    return CheckResult("G-12", PASS, f"`psirt.enabled: true`，產品 {ps.get('product')!r}，webhook {ps.get('webhook_url')}，觸發 tiers={tiers} severities={sevs}，"
+                       f"{ps.get('early_warning_hours', 24)} h 預警；`src/mara/report/psirt_out.py` 在每次 review 產出 `out/psirt-notifications.json`")
 
 
 def check_g13(root: Path, today: dt.date) -> CheckResult:

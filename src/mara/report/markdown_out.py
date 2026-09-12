@@ -42,6 +42,15 @@ def render_markdown(r: ReviewReport) -> str:
         why = "provenance unverified" if c.tier.value == "D" and not any(p.verified for p in f.provenance) else (
             "skeptic refuted" if c.skeptic_refuted else f"consensus {c.weighted_score} below threshold")
         lines.append(f"- {f.id} · {f.title} · {f.source_family.value} · tier {c.tier.value} · {why}")
+    if r.psirt:
+        first = r.psirt[0]
+        lines += ["", "## PSIRT hand-off (EU CRA Article 14)", "",
+                  f"{len(r.psirt)} finding(s) meet the PSIRT trigger for product `{first['product']}`; "
+                  f"early warning due {first['deadlines']['early_warning_by']}.", ""]
+        for n in r.psirt:
+            cv, loc = n["cvss4"], n["location"]
+            lines.append(f"- {n['finding_id']} · {n['title']} · {n['cwe']} · CVSS {cv['score']} {cv['severity']} · tier {n['evidence_tier']}"
+                         f" · exploitable: {n['exploitable']} · `{loc['file']}:{loc['line']}`")
     lines += ["", "## Bias and integrity audit", ""]
     for k, v in r.bias_audit.items():
         lines.append(f"- {k}: {v}")

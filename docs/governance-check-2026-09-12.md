@@ -18,7 +18,7 @@
 | G-9 | 校準迴圈每季重跑（真實家族） | **失敗** | `docs/calibration-2026-09-11.md`（2026-09-11，mock 模式）。需要：90 天內以真實三家族執行的校準報告（`python scripts/calibrate.py --mode live`），含每家族每 CWE 的精確度與召回率、更新後的權重 | ISO/IEC 27001:2022 A.8.29；IEC 62443-4-1 SVV；ISO/IEC 23894 |
 | G-10 | 三階段導入：影子、建議、門檻阻擋 | **需人工** | 設定無 `rollout_phase`。需要：目前階段（shadow／advisory／blocking）、起訖日期、影子期結束時的基線報告與第一份校準報告 | ISO/IEC 27001:2022 A.8.25；IEC 62443-4-1 SM |
 | G-11 | 人工佇列接工單、裁決回寫校準集 | **失敗** | 人工佇列未接工單、裁決未回寫。需要：workflow 把 needs_human finding 建成帶標籤的 issue、`calib/decisions/` 的裁決格式與 `calibrate.py` 讀取、佇列超量時收緊門檻的規則 | ISO/IEC 27001:2022 A.8.29；IEC 62443-4-1 DM；NIST SSDF RV.1 |
-| G-12 | A 級 Critical 接入 PSIRT 的 CRA 第 14 條通報 | **失敗** | 設定無 `psirt_webhook`／`psirt:` 區塊。需要：PSIRT 接入端點與只對 A 級 Critical 觸發的規則，對應 CRA 第 14 條 24 小時預警（2026-09-11 起適用） | IEC 62443-4-1 DM, SUM；EU CRA Art. 14 |
+| G-12 | A 級 Critical 接入 PSIRT 的 CRA 第 14 條通報 | **失敗** | `psirt:` 區塊存在但 `enabled: false`。需要：填入 https 的 `webhook_url`、`product`，把 `enabled` 與 `shipped` 設為 true，token 放在 `token_env` 指定的環境變數；範例 `config/examples/psirt-enabled.yaml` | IEC 62443-4-1 DM, SUM；EU CRA Art. 14 |
 | G-13 | AI 素養訓練 | **失敗** | docs/ 下沒有 AI 素養訓練紀錄（training-*、ai-literacy-*、含「素養」）。需要：開發者、安全團隊、人工裁決者的訓練紀錄（證據層級、偏誤稽核、「通過不等於安全」），對應 EU AI Act 第 4 條 | EU AI Act Art. 4 |
 
 **摘要**：通過 4、失敗 6、需人工 3；結束碼 1。

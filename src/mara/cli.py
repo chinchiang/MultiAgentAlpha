@@ -26,6 +26,7 @@ def review(
     sarif_dir: Path | None = typer.Option(None, "--sarif-dir", help="Ingest pre-recorded L0 SARIF instead of running tools"),
     mock_fixtures: Path | None = typer.Option(None, "--mock-fixtures"),
     fail_on_gate: bool = typer.Option(False, "--fail-on-gate", help="Exit 2 when the gate blocks"),
+    notify_psirt: bool = typer.Option(False, "--notify-psirt", help="POST the CRA Article 14 payloads to the configured PSIRT webhook"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
     cfg_path = config
@@ -41,6 +42,13 @@ def review(
     write_markdown(report, out / "report.md")
     (out / "report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
     (out / "pipeline.log").write_text("\n".join(pipe.log) + "\n", encoding="utf-8")
+    if cfg.psirt.enabled:
+        from .report.psirt_out import send_psirt, write_psirt
+
+        write_psirt(report.psirt, out / "psirt-notifications.json")
+        if notify_psirt and report.psirt:
+            for s in send_psirt(report.psirt, cfg):
+                console.print(f"PSIRT {s['finding_id']}: HTTP {s['status_code']} {'ok' if s['ok'] else 'FAILED'}")
 
     t = Table(title=f"MARA · {target} · overall {report.overall_score}/100 · gate {'PASSED' if report.gate_passed else 'BLOCKED'}")
     for col in ("Dimension", "Score", "Accepted", "Rejected", "Human", "Tool"):
@@ -49,7 +57,8 @@ def review(
         t.add_row(DIMENSION_LABELS[d.dimension], str(d.score), str(d.accepted_findings), str(d.rejected_findings),
                   str(d.human_queue), "yes" if d.tool_ran else "no")
     console.print(t)
-    console.print(f"[bold]wrote[/bold] {out/'report.sarif'}, {out/'report.md'}, {out/'report.json'}")
+    console.print(f"[bold]wrote[/bold] {out/'report.sarif'}, {out/'report.md'}, {out/'report.json'}"
+                  + (f", {out/'psirt-notifications.json'} ({len(report.psirt)} PSIRT payload(s))" if cfg.psirt.enabled else ""))
     if fail_on_gate and not report.gate_passed:
         raise typer.Exit(code=2)
 
@@ -71,7 +80,7 @@ def check_config(
     """Evaluate every configuration policy (P1-P5) and exit non-zero if any fails."""
     import yaml
 
-    from .config import GateConfig, MaraConfig, ModelSpec, RolesConfig
+    from .config import GateConfig, MaraConfig, ModelSpec, PsirtConfig, RolesConfig
     from .policy import evaluate_policies
 
     raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
@@ -79,11 +88,12 @@ def check_config(
         models = [ModelSpec.model_validate(m) for m in raw.get("models", [])]
         roles = RolesConfig.model_validate(raw.get("roles", {}))
         gate = GateConfig.model_validate(raw.get("gate", {}) or {})
+        psirt = PsirtConfig.model_validate(raw.get("psirt", {}) or {})
     except Exception as e:  # structural error: nothing to evaluate
         console.print(f"[red]invalid config structure:[/red] {e}")
         raise typer.Exit(code=1) from e
-    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate")}
-    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, **extra)
+    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate", "psirt")}
+    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, psirt=psirt, **extra)
     names = {m.name for m in models}
     unknown = [n for n in [roles.skeptic, roles.redteam, *roles.reviewers, *roles.judges] if n not in names]
     if unknown:
