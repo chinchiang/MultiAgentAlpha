@@ -89,6 +89,17 @@ class MlBomConfig(BaseModel):
     certificate_oidc_issuer: str = Field(default="", description="Expected OIDC issuer for cosign verify-blob (keyless)")
 
 
+class TrainingConfig(BaseModel):
+    """G-13 (EU AI Act Article 4): the people operating the pipeline hold a valid AI-literacy
+    record in training/records.yaml. Human-queue decisions taken by someone without a valid
+    adjudicator record are recorded but not applied to calibration."""
+
+    register_file: str = Field(default="training/records.yaml", description="Written by scripts/training_register.py")
+    require_trained_adjudicator: bool = Field(default=True, description="Calibration applies only decisions by trained adjudicators")
+    required_roles: list[str] = Field(default_factory=lambda: ["developer", "security", "adjudicator"],
+                                      description="Roles that must each have a valid record for governance check G-13")
+
+
 class MaraConfig(BaseModel):
     models: list[ModelSpec]
     roles: RolesConfig
@@ -109,6 +120,7 @@ class MaraConfig(BaseModel):
     psirt: PsirtConfig = Field(default_factory=PsirtConfig, description="G-12: PSIRT / CRA Article 14 hand-off")
     human_queue: HumanQueueConfig = Field(default_factory=HumanQueueConfig, description="G-11: ticketed human queue with decision write-back")
     ml_bom: MlBomConfig = Field(default_factory=MlBomConfig, description="G-7: ML-BOM for the self-hosted model weights")
+    training: TrainingConfig = Field(default_factory=TrainingConfig, description="G-13: AI-literacy training register")
 
     def model_by_name(self, name: str) -> ModelSpec:
         for m in self.models:

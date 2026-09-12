@@ -143,9 +143,10 @@ makes the script exit non-zero. `.github/workflows/governance.yml` runs it every
 the table to a `governance-check` tracking issue. `docs/governance-check-2026-09-12.md` is the
 first run: G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
 calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) failed
-on that first run; G-1, G-4 and G-10 need human evidence. G-7, G-11 and G-12 have since been implemented:
-G-11 passes, G-12 passes once `psirt.enabled` is set with a real endpoint, G-7 passes once the
-platform team has hashed and signed the weights (`docs/ml-bom.md`).
+on that first run; G-1, G-4 and G-10 need human evidence. G-7, G-11, G-12 and G-13 have since been
+implemented: G-11 passes, G-12 passes once `psirt.enabled` is set with a real endpoint, G-7 passes
+once the platform team has hashed and signed the weights (`docs/ml-bom.md`), G-13 passes once one
+person per role holds a valid training record (`docs/ai-literacy-training.md`).
 
 ## PSIRT hand-off (governance item G-12)
 
@@ -172,6 +173,19 @@ once `ml_bom.required` is true and a self-hosted model has no complete component
 are pending in this repository: it hosts no weights and the registry hashes could not be fetched
 from the authoring environment, so governance check G-7 stays red and says exactly what is missing.
 See `docs/ml-bom.md`.
+
+## AI-literacy training (governance item G-13)
+
+EU AI Act Article 4 requires the people operating the pipeline to be AI-literate.
+`training/curriculum.md` is the half-day module (evidence tiers, the bias audit, "a pass is not a
+proof of security", deciding tickets, prompt injection through code), `training/quiz.yaml` the
+knowledge check, `training/records.yaml` the register written by `scripts/training_register.py`
+(`assess` grades the quiz and records a pass; `add` records an instructor-led session; `check`
+reports coverage per role and expiries). Records are keyed by GitHub login: the human-queue sync
+records who applied each decision label and whether they hold a valid adjudicator record, and
+calibration applies only trained adjudicators' decisions while
+`training.require_trained_adjudicator` is true. The register is empty in this repository, so
+governance check G-13 fails naming the three roles. See `docs/ai-literacy-training.md`.
 
 ## Human queue (governance item G-11)
 

@@ -98,6 +98,9 @@ if args[:2] == ["issue", "list"]:
 elif args[:2] == ["issue", "create"]:
     body = open(args[args.index("--body-file") + 1]).read()
     state.setdefault("open", []).append({{"number": 100 + len(state.get("open", [])), "body": body, "labels": []}})
+elif args[:1] == ["api"]:
+    number = args[1].rsplit("/", 2)[-2]
+    print(json.dumps(state.get("events", {{}}).get(number, [])))
 json.dump(state, open(state_path, "w"))
 ''')
     script.chmod(script.stat().st_mode | stat.S_IXUSR)
@@ -112,7 +115,10 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
     state = {"open": [{"number": 7, "body": body_existing, "labels": []}],
              "closed": [{"number": 8, "body": body_closed, "labels": [{"name": "mara-human-queue"}, {"name": "decision:true-positive"}],
                          "closedAt": "2026-09-12T08:00:00Z", "url": "https://example/8"},
-                        {"number": 9, "body": hq.MARKER.format(key="cccccccccccc"), "labels": [{"name": "mara-human-queue"}], "closedAt": "x", "url": "u"}]}
+                        {"number": 9, "body": hq.MARKER.format(key="cccccccccccc"), "labels": [{"name": "mara-human-queue"}], "closedAt": "x", "url": "u"}],
+             "events": {"8": [{"event": "labeled", "label": {"name": "mara-human-queue"}, "actor": {"login": "bot"}},
+                              {"event": "labeled", "label": {"name": "decision:true-positive"}, "actor": {"login": "alice"}},
+                              {"event": "closed", "actor": {"login": "alice"}}]}}
     _fake_gh(tmp_path, state)
     monkeypatch.setenv("PATH", str(tmp_path / "bin") + os.pathsep + os.environ["PATH"])
     monkeypatch.chdir(tmp_path)
@@ -134,11 +140,25 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
     new = st["open"][-1]
     assert hq.MARKER.format(key="dddddddddddd") in new["body"] and "Skeptic (nemotron)" in new["body"] and "anthropic [forward]" in new["body"]
     assert not list(tmp_path.glob(".mara-hq-*.md"))
-    written, open_count = hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "decisions", tmp_path / "decisions" / "backlog.json", dry_run=False)
+    register = tmp_path / "records.yaml"
+    register.write_text("curriculum_version: '2026-09'\nvalidity_days: 365\npass_mark: 0.8\nrecords: []\n", encoding="utf-8")
+    written, open_count = hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "decisions", tmp_path / "decisions" / "backlog.json",
+                                            dry_run=False, register=register)
     assert (written, open_count) == (1, 2)
     rec = json.loads((tmp_path / "decisions" / "bbbbbbbbbbbb.json").read_text())
+    checked_on = rec.pop("training_checked_on")
     assert rec == {"key": "bbbbbbbbbbbb", "decision": "true_positive", "issue": 8, "url": "https://example/8", "decided_at": "2026-09-12T08:00:00Z",
-                   "target": "/t/x", "finding_id": "F-0002", "cwe": "CWE-79", "file": "app.py", "line": 26}
+                   "target": "/t/x", "finding_id": "F-0002", "cwe": "CWE-79", "file": "app.py", "line": 26,
+                   "decided_by": "alice", "adjudicator_trained": False}
+    # once alice holds a valid adjudicator record the same decision is marked trained (G-13)
+    import datetime as dt
+
+    register.write_text("curriculum_version: '2026-09'\nvalidity_days: 365\npass_mark: 0.8\nrecords:\n"
+                        f"  - {{person: alice, role: adjudicator, curriculum_version: '2026-09', date: {checked_on}, assessor: quiz, evidence: quiz}}\n",
+                        encoding="utf-8")
+    assert dt.date.fromisoformat(checked_on)
+    hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "decisions", tmp_path / "decisions" / "backlog.json", dry_run=False, register=register)
+    assert json.loads((tmp_path / "decisions" / "bbbbbbbbbbbb.json").read_text())["adjudicator_trained"] is True
     assert json.loads((tmp_path / "decisions" / "backlog.json").read_text())["open"] == 2
     # a closed ticket without a decision label writes nothing
     assert not (tmp_path / "decisions" / "cccccccccccc.json").exists()
@@ -147,11 +167,20 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
 def test_calibration_uses_true_positive_decisions_as_labels(tmp_path):
     import calibrate
 
-    decisions = [{"key": "k", "decision": "true_positive", "target": "/x/calib/samples/s9", "file": "app.py", "line": 26, "cwe": "CWE-79", "issue": 3},
-                 {"key": "k2", "decision": "false_positive", "target": "/x/calib/samples/s9", "file": "app.py", "line": 50, "cwe": "CWE-22", "issue": 4},
-                 {"key": "k3", "decision": "true_positive", "target": "/x/calib/samples/other", "file": "a.py", "line": 1, "cwe": "CWE-1", "issue": 5}]
+    decisions = [{"key": "k", "decision": "true_positive", "target": "/x/calib/samples/s9", "file": "app.py", "line": 26, "cwe": "CWE-79", "issue": 3,
+                  "decided_by": "alice", "adjudicator_trained": True},
+                 {"key": "k2", "decision": "false_positive", "target": "/x/calib/samples/s9", "file": "app.py", "line": 50, "cwe": "CWE-22", "issue": 4,
+                  "decided_by": "alice", "adjudicator_trained": True},
+                 {"key": "k3", "decision": "true_positive", "target": "/x/calib/samples/other", "file": "a.py", "line": 1, "cwe": "CWE-1", "issue": 5,
+                  "decided_by": "alice", "adjudicator_trained": True},
+                 {"key": "k4", "decision": "true_positive", "target": "/x/calib/samples/s9", "file": "app.py", "line": 80, "cwe": "CWE-89", "issue": 6,
+                  "decided_by": "mallory", "adjudicator_trained": False}]
+    calibrate.SKIPPED_UNTRAINED.clear()
     labels, applied = calibrate.apply_decisions("s9", {"target": "/x/calib/samples/s9"}, [], decisions)
     assert applied == 2 and len(labels) == 1 and labels[0]["source"] == "human_decision" and labels[0]["cwe"] == "CWE-79"
+    assert calibrate.SKIPPED_UNTRAINED == ["s9: ticket #6 by mallory"]  # G-13: untrained adjudicator's decision not applied
+    labels, applied = calibrate.apply_decisions("s9", {"target": "/x/calib/samples/s9"}, [], decisions, require_trained=False)
+    assert applied == 3 and len(labels) == 2
     d = tmp_path / "decisions"
     d.mkdir()
     (d / "k.json").write_text(json.dumps(decisions[0]))

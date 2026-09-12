@@ -382,15 +382,39 @@ def check_g12(root: Path, config_path: Path) -> CheckResult:
                        f"{ps.get('early_warning_hours', 24)} h 預警；`src/mara/report/psirt_out.py` 在每次 review 產出 `out/psirt-notifications.json`")
 
 
-def check_g13(root: Path, today: dt.date) -> CheckResult:
-    hits = [p for p in (root / "docs").glob("*") if re.search(r"training|ai-literacy|素養|訓練", p.name, re.I)]
-    if hits:
-        dated = _dated_files(root / "docs", [p.name for p in hits], today)
-        fresh = [f"`docs/{p.name}`（{d}）" for p, d, age in dated if age <= 365]
-        if fresh:
-            return CheckResult("G-13", PASS, "；".join(fresh))
-        return CheckResult("G-13", FAIL, f"找到 {', '.join(f'`docs/{p.name}`' for p in hits)} 但無一年內的日期")
-    return CheckResult("G-13", FAIL, "docs/ 下沒有 AI 素養訓練紀錄（training-*、ai-literacy-*、含「素養」）。需要：開發者、安全團隊、人工裁決者的訓練紀錄（證據層級、偏誤稽核、「通過不等於安全」），對應 EU AI Act 第 4 條")
+def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> CheckResult:
+    from mara.training import ROLES, load_register
+
+    need = ("需要：每個角色（developer、security、adjudicator）至少一人在一年內完成 `training/curriculum.md` 的訓練並以 "
+            "`scripts/training_register.py assess`／`add` 寫入 `training/records.yaml`；人工裁決者必須有有效的 adjudicator 紀錄，否則其裁決不進校準")
+    curriculum = root / "training" / "curriculum.md"
+    register_path = root / "training" / "records.yaml"
+    raw = _raw_config(config_path) if config_path else {}
+    roles = tuple((raw.get("training") or {}).get("required_roles") or ROLES)
+    if not curriculum.exists():
+        return CheckResult("G-13", FAIL, f"沒有課程 `training/curriculum.md`（證據層級、偏誤稽核、「通過不等於安全」、人工裁決）。{need}")
+    if not register_path.exists():
+        return CheckResult("G-13", FAIL, f"有課程但沒有訓練登錄簿 `training/records.yaml`。{need}")
+    try:
+        reg = load_register(register_path)
+    except (OSError, ValueError) as e:
+        return CheckResult("G-13", FAIL, f"`training/records.yaml` 無法讀取：{e}。{need}")
+    ev = [f"課程 `training/curriculum.md` 版本 {reg.curriculum_version}，紀錄有效 {reg.validity_days} 天，共 {len(reg.records)} 筆"]
+    missing = []
+    for role in roles:
+        recs = reg.valid(today, role)
+        if recs:
+            ev.append(f"{role}：{len(recs)} 筆有效（{', '.join(sorted({r.person for r in recs}))}）")
+        else:
+            missing.append(role)
+    expiring = reg.expiring(today)
+    if expiring:
+        ev.append("30 天內到期：" + ", ".join(f"{r.person}/{r.role} {r.expires}" for r in expiring))
+    if (raw.get("training") or {}).get("require_trained_adjudicator", True):
+        ev.append("`training.require_trained_adjudicator: true`（未受訓者的裁決不進校準）")
+    if missing:
+        return CheckResult("G-13", FAIL, f"以下角色沒有有效的訓練紀錄：{', '.join(missing)}。已有：{'；'.join(ev)}。{need}")
+    return CheckResult("G-13", PASS, "；".join(ev))
 
 
 def run_all(root: Path, config_path: Path, today: dt.date | None = None) -> list[CheckResult]:
@@ -398,7 +422,7 @@ def run_all(root: Path, config_path: Path, today: dt.date | None = None) -> list
     return [
         check_g1(root), check_g2(root, config_path), check_g3(root, config_path), check_g4(root), check_g5(root), check_g6(root),
         check_g7(root, config_path), check_g8(root, today), check_g9(root, today), check_g10(root, config_path),
-        check_g11(root, config_path), check_g12(root, config_path), check_g13(root, today),
+        check_g11(root, config_path), check_g12(root, config_path), check_g13(root, today, config_path),
     ]
 
 

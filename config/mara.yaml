@@ -102,3 +102,15 @@ ml_bom:
   bundle: sbom/ml-bom.cdx.json.sigstore.json
   certificate_identity: ""            # keyless signer identity expected by cosign verify-blob
   certificate_oidc_issuer: ""         # e.g. https://token.actions.githubusercontent.com
+
+# G-13: AI-literacy training (EU AI Act Article 4). training/curriculum.md is the half-day module,
+# training/quiz.yaml the knowledge check, training/records.yaml the register written by
+# scripts/training_register.py (one record per person, role and curriculum version, valid 365 days).
+# The human-queue sync records who applied each decision label and whether that person holds a valid
+# adjudicator record; with require_trained_adjudicator, calibration applies only trained adjudicators'
+# decisions. The register is empty in this repository, so governance check G-13 fails until people
+# have been trained. See docs/ai-literacy-training.md.
+training:
+  register_file: training/records.yaml
+  require_trained_adjudicator: true
+  required_roles: [developer, security, adjudicator]

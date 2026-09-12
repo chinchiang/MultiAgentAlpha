@@ -1,0 +1,21 @@
+# AI-literacy training register (governance item G-13, EU AI Act Article 4).
+# One record per person, role and curriculum version, written by scripts/training_register.py
+# (`assess` after passing the quiz in training/quiz.yaml, or `add` for an instructor-led session).
+# Nothing here is edited by hand; the record is the evidence governance check G-13 reads.
+#
+#   person              GitHub login (the identity the human queue sees when a decision label is applied)
+#   role                developer | security | adjudicator (training/curriculum.md, section 0)
+#   curriculum_version  must equal the version below; a new curriculum version invalidates old records
+#   date / expires      expires = date + validity_days; an expired record no longer counts
+#   score               quiz score (fraction), or null for an instructor-led session
+#   assessor            "quiz" or the instructor's login
+#   evidence            ticket, calendar entry or attendance list reference
+#
+# This register is EMPTY: no training has taken place yet, and no record is invented. Governance
+# check G-13 therefore fails naming the roles without a valid record; the human-queue sync marks
+# every decision as taken by an untrained adjudicator and calibration ignores those decisions while
+# training.require_trained_adjudicator is true.
+curriculum_version: "2026-09"
+validity_days: 365
+pass_mark: 0.8
+records: []

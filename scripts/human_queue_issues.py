@@ -110,11 +110,46 @@ def create_tickets(queue_path: Path, repo: str, label: str, dry_run: bool) -> tu
     return created, skipped
 
 
-def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Path, dry_run: bool) -> tuple[int, int]:
+def decision_actor(repo: str, number: int) -> str:
+    """GitHub login of whoever applied the (last) decision:* label, from the issue's timeline events."""
+    try:
+        events = json.loads(gh(["api", f"repos/{repo}/issues/{number}/events", "--paginate"]) or "[]")
+    except GhError:
+        return ""
+    actor = ""
+    for ev in events:
+        if ev.get("event") == "labeled" and str((ev.get("label") or {}).get("name", "")).startswith("decision:"):
+            actor = (ev.get("actor") or {}).get("login", "") or actor
+    return actor
+
+
+def _load_register(register: Path | None):
+    if register is None or not register.exists():
+        return None
+    sys.path.insert(0, str(ROOT / "src"))
+    from mara.training import load_register
+
+    try:
+        return load_register(register)
+    except (OSError, ValueError):
+        return None
+
+
+def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Path, dry_run: bool,
+                   register: Path | None = None) -> tuple[int, int]:
+    """Closed tickets with a decision label become calib/decisions/<key>.json. Each record names who
+    applied the label and whether that person holds a valid adjudicator training record (G-13);
+    calibration applies only trained adjudicators' decisions when the config requires it."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from mara.training import is_trained
+
     closed = json.loads(gh(["issue", "list", "--repo", repo, "--label", label, "--state", "closed", "--limit", "500",
                             "--json", "number,body,labels,closedAt,url"]) or "[]")
     decisions_dir.mkdir(parents=True, exist_ok=True)
+    reg = _load_register(register)
+    today = dt.date.today()
     written = 0
+    untrained = []
     for issue in closed:
         m = MARKER_RE.search(issue.get("body") or "")
         if not m:
@@ -127,15 +162,23 @@ def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Pat
         key = m.group(1)
         meta = re.search(r"target `([^`]*)` · finding (F-\d+)", issue.get("body") or "")
         loc = re.search(r"· (CWE-\d+) · `([^`:]+):(\d+)`", issue.get("body") or "")
+        actor = decision_actor(repo, issue["number"])
+        trained = is_trained(reg, actor, "adjudicator", today)
+        if not trained:
+            untrained.append(f"#{issue['number']} by {actor or 'unknown'}")
         record = {"key": key, "decision": decision, "issue": issue["number"], "url": issue.get("url"), "decided_at": issue.get("closedAt"),
                   "target": meta.group(1) if meta else "", "finding_id": meta.group(2) if meta else "",
-                  "cwe": loc.group(1) if loc else "", "file": loc.group(2) if loc else "", "line": int(loc.group(3)) if loc else 0}
+                  "cwe": loc.group(1) if loc else "", "file": loc.group(2) if loc else "", "line": int(loc.group(3)) if loc else 0,
+                  "decided_by": actor, "adjudicator_trained": trained, "training_checked_on": today.isoformat()}
         path = decisions_dir / f"{key}.json"
         if dry_run:
             print(f"  [dry-run] would write {path}: {decision}")
         else:
             path.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         written += 1
+    if untrained:
+        print(f"  WARNING: {len(untrained)} decision(s) by adjudicators without a valid training record (G-13): {', '.join(untrained)}; "
+              "calibration will not apply them while training.require_trained_adjudicator is true")
     open_count = len(open_tickets(repo, label))
     backlog = {"open": open_count, "updated_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"), "label": label, "repo": repo}
     if dry_run:
@@ -154,6 +197,8 @@ def main() -> int:
     ap.add_argument("--decisions-dir", type=Path, default=ROOT / "calib" / "decisions")
     ap.add_argument("--backlog-file", type=Path, default=ROOT / "calib" / "decisions" / "backlog.json")
     ap.add_argument("--sync-decisions", action="store_true")
+    ap.add_argument("--register", type=Path, default=ROOT / "training" / "records.yaml",
+                    help="AI-literacy register (G-13); decisions by people without a valid adjudicator record are flagged")
     ap.add_argument("--dry-run", action="store_true", help="print the gh commands instead of running the mutating ones")
     args = ap.parse_args()
     try:
@@ -161,7 +206,7 @@ def main() -> int:
             created, skipped = create_tickets(args.queue, args.repo, args.label, args.dry_run)
             print(f"tickets: {created} created, {skipped} already open")
         if args.sync_decisions:
-            written, open_count = sync_decisions(args.repo, args.label, args.decisions_dir, args.backlog_file, args.dry_run)
+            written, open_count = sync_decisions(args.repo, args.label, args.decisions_dir, args.backlog_file, args.dry_run, args.register)
             print(f"decisions: {written} written to {args.decisions_dir}; open backlog {open_count}")
         if not args.queue and not args.sync_decisions:
             ap.error("give --queue and/or --sync-decisions")
