@@ -19,7 +19,7 @@
 | G-10 | 三階段導入：影子、建議、門檻阻擋 | **需人工** | 設定無 `rollout_phase`。需要：目前階段（shadow／advisory／blocking）、起訖日期、影子期結束時的基線報告與第一份校準報告 | ISO/IEC 27001:2022 A.8.25；IEC 62443-4-1 SM |
 | G-11 | 人工佇列接工單、裁決回寫校準集 | **通過** | `calib/decisions/` 存在；設定有 `human_queue` 區塊；`.github/workflows/mara-review.yml` 含人工佇列的工單整合 | ISO/IEC 27001:2022 A.8.29；IEC 62443-4-1 DM；NIST SSDF RV.1 |
 | G-12 | A 級 Critical 接入 PSIRT 的 CRA 第 14 條通報 | **失敗** | `psirt:` 區塊存在但 `enabled: false`。需要：填入 https 的 `webhook_url`、`product`，把 `enabled` 與 `shipped` 設為 true，token 放在 `token_env` 指定的環境變數；範例 `config/examples/psirt-enabled.yaml` | IEC 62443-4-1 DM, SUM；EU CRA Art. 14 |
-| G-13 | AI 素養訓練 | **失敗** | docs/ 下沒有 AI 素養訓練紀錄（training-*、ai-literacy-*、含「素養」）。需要：開發者、安全團隊、人工裁決者的訓練紀錄（證據層級、偏誤稽核、「通過不等於安全」），對應 EU AI Act 第 4 條 | EU AI Act Art. 4 |
+| G-13 | AI 素養訓練 | **失敗** | 以下角色沒有有效的訓練紀錄：developer, security, adjudicator。已有：課程 `training/curriculum.md` 版本 2026-09，紀錄有效 365 天，共 0 筆；`training.require_trained_adjudicator: true`（未受訓者的裁決不進校準）。需要：每個角色（developer、security、adjudicator）至少一人在一年內完成 `training/curriculum.md` 的訓練並以 `scripts/training_register.py assess`／`add` 寫入 `training/records.yaml`；人工裁決者必須有有效的 adjudicator 紀錄，否則其裁決不進校準 | EU AI Act Art. 4 |
 
 **摘要**：通過 5、失敗 5、需人工 3；結束碼 1。
 

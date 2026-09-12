@@ -41,14 +41,20 @@ def load_decisions(decisions_dir: Path) -> list[dict]:
     return out
 
 
-def apply_decisions(sample: str, report: dict, labels: list[dict], decisions: list[dict]) -> tuple[list[dict], int]:
-    """true_positive decisions on this sample's target become extra labels; returns (labels, applied)."""
+def apply_decisions(sample: str, report: dict, labels: list[dict], decisions: list[dict],
+                    require_trained: bool = True) -> tuple[list[dict], int]:
+    """true_positive decisions on this sample's target become extra labels; returns (labels, applied).
+    With require_trained (G-13), a decision whose adjudicator held no valid training record when it
+    was synced is skipped and counted in SKIPPED_UNTRAINED."""
     target = report.get("target", "")
     applied = 0
     labels = list(labels)
     for d in decisions:
         d_target = str(d.get("target", "")).rstrip("/")
         if not (d_target == target.rstrip("/") or d_target.endswith("/" + sample)):
+            continue
+        if require_trained and not d.get("adjudicator_trained"):
+            SKIPPED_UNTRAINED.append(f"{sample}: ticket #{d.get('issue')} by {d.get('decided_by') or 'unknown'}")
             continue
         if d["decision"] == "true_positive" and not any(_match({"provenance": [{"file": d["file"], "line": d["line"]}], "cwe": d["cwe"]}, lab) for lab in labels):
             labels.append({"dimension": "", "cwe": d["cwe"], "file": d["file"], "line": int(d["line"]), "quote": "",
@@ -59,9 +65,23 @@ def apply_decisions(sample: str, report: dict, labels: list[dict], decisions: li
     return labels, applied
 
 
-def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = None) -> list[tuple[str, dict, list[dict]]]:
+SKIPPED_UNTRAINED: list[str] = []
+
+
+def _require_trained() -> bool:
+    try:
+        import yaml
+
+        raw = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8")) or {}
+        return bool((raw.get("training") or {}).get("require_trained_adjudicator", True))
+    except (OSError, ValueError):
+        return True
+
+
+def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = None, require_trained: bool | None = None) -> list[tuple[str, dict, list[dict]]]:
     runs = []
     decisions = load_decisions(decisions_dir or (ROOT / "calib" / "decisions"))
+    require_trained = _require_trained() if require_trained is None else require_trained
     for rep in sorted(out_dir.glob("*/report.json")):
         sample = rep.parent.name
         labels_path = samples_dir / sample / "labels.json"
@@ -69,10 +89,12 @@ def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = Non
             labels_path = ROOT / "fixtures" / "vuln-sample" / "labels.json"
         labels = json.loads(labels_path.read_text(encoding="utf-8"))["labels"] if labels_path.exists() else []
         report = json.loads(rep.read_text(encoding="utf-8"))
-        labels, applied = apply_decisions(sample, report, labels, decisions)
+        labels, applied = apply_decisions(sample, report, labels, decisions, require_trained)
         if applied:
             print(f"{sample}: {applied} human decision(s) applied")
         runs.append((sample, report, labels))
+    if SKIPPED_UNTRAINED:
+        print(f"G-13: {len(SKIPPED_UNTRAINED)} decision(s) by untrained adjudicators not applied: {'; '.join(SKIPPED_UNTRAINED)}")
     return runs
 
 
