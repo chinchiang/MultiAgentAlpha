@@ -69,3 +69,21 @@ psirt:
   early_warning_hours: 24
   notification_hours: 72
   final_report_days: 14
+
+# G-11: human queue. Findings the pipeline will not decide on its own (judge majority says needs_human,
+# Krippendorff alpha below gate.human_threshold_alpha, or tier C at High+ severity) become HumanQueueItems
+# with the full un-blinded context (finders, skeptic, red team, every judge vote) in out/human_queue.md/json.
+# scripts/human_queue_issues.py turns them into GitHub issues (one per stable key, label below) and brings
+# the decisions on closed tickets back into calib/decisions/, which scripts/calibrate.py reads as labels.
+# When calib/decisions/backlog.json says more tickets are open than backlog_limit, the pipeline tightens:
+# the alpha threshold rises by tighten_alpha_step and tier C stops being queued. It never loosens.
+# See docs/human-queue.md.
+human_queue:
+  enabled: true
+  ticketing: github_issues            # none | github_issues
+  label: mara-human-queue
+  backlog_limit: 20                   # open tickets above this tighten the gate
+  backlog_file: calib/decisions/backlog.json
+  tighten_alpha_step: 0.1
+  tighten_exclude_tier_c: true
+  queue_tier_c_min_severity: High     # High | Critical: tier C findings at or above this are queued

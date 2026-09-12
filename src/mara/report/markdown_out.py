@@ -42,6 +42,13 @@ def render_markdown(r: ReviewReport) -> str:
         why = "provenance unverified" if c.tier.value == "D" and not any(p.verified for p in f.provenance) else (
             "skeptic refuted" if c.skeptic_refuted else f"consensus {c.weighted_score} below threshold")
         lines.append(f"- {f.id} · {f.title} · {f.source_family.value} · tier {c.tier.value} · {why}")
+    lines += ["", "## Human queue", ""]
+    if r.human_queue:
+        lines.append(f"{len(r.human_queue)} finding(s) need a human decision (see `human_queue.md`; tickets carry label from config):")
+        for it in r.human_queue:
+            lines.append(f"- {it.finding_id} · {it.title} · {', '.join(it.reasons)} · tier {it.tier} · {it.cvss4_severity} · key `{it.key}`")
+    else:
+        lines.append("_Empty._")
     if r.psirt:
         first = r.psirt[0]
         lines += ["", "## PSIRT hand-off (EU CRA Article 14)", "",

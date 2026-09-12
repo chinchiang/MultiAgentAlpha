@@ -39,7 +39,9 @@ def test_hardened_workflow_has_no_critical_or_high():
     assert not inv.pull_request_target, "a comment mentioning pull_request_target must not count as a trigger"
     assert not inv.head_checkout_lines
     assert inv.top_permissions == "{}"
-    assert set(inv.job_permissions) == {"deterministic-tools", "tests-and-mock-review"}
+    assert set(inv.job_permissions) == {"deterministic-tools", "tests-and-mock-review", "human-queue"}
+    assert "write" not in inv.job_permissions["deterministic-tools"] and "write" not in inv.job_permissions["tests-and-mock-review"]
+    assert inv.job_permissions["human-queue"] == "{contents: read, issues: write}"   # the only write scope, G-11 tickets
     assert inv.uses and all(u.kind == "sha" for u in inv.uses)
     assert not inv.run_interpolations
     assert SEVERITY_ORDER.index(inv.severity) >= SEVERITY_ORDER.index("Medium")
