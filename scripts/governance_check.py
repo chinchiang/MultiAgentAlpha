@@ -1,0 +1,414 @@
+"""Executable compliance checks for governance items G-1 to G-13 (Appendix E prompt 8).
+
+Each item from Part X of the report becomes one check against this repository and its
+configuration. A check is PASS or FAIL when it can be decided from files alone, and MANUAL when
+it cannot; a MANUAL row says exactly which evidence a human has to produce. Every row carries
+the evidence it looked at and the standard clauses from the report's section 25.4 table.
+
+Exit status is 1 when any check FAILS (MANUAL rows never fail the run).
+
+  python scripts/governance_check.py --out docs/governance-check-<date>.md
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import re
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from actions_inventory import inventory_workflow  # noqa: E402
+
+PASS, FAIL, MANUAL = "PASS", "FAIL", "MANUAL"
+STATUS_ZH = {PASS: "通過", FAIL: "失敗", MANUAL: "需人工"}
+FRESH_DAYS = 90
+DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+COVERED_MARKERS = ("fable", "mythos")
+ALLOWED_RESIDENCY = {"on_prem", "vendor_api_zdr"}
+# Part X, section 25.4 對應總表
+STANDARDS = {
+    "G-1": "ISO/IEC 27001:2022 A.8.25, A.8.29；IEC 62443-4-1 SVV；NIST SSDF PW.7, PW.8",
+    "G-2": "NIST AI 600-1（Harmful Bias and Homogenization）；ISO/IEC 42001",
+    "G-3": "ISO/IEC 27001:2022 A.5.19–5.21*, A.8.10；Anthropic 資料保留條款",
+    "G-4": "ISO/IEC 27001:2022 A.5.20*；NIST CSF 2.0 GV.SC",
+    "G-5": "ISO/IEC 27001:2022 A.8.8*；IEC 62443-4-1 SM-9；NIST SP 800-204D；SLSA v1.2",
+    "G-6": "ISO/IEC 27001:2022 A.8.32*；IEC 62443-4-1 SM；OpenSSF Scorecard；GitHub SHA-pinning 政策",
+    "G-7": "ISO/IEC 27001:2022 A.5.21*；IEC 62443-4-1 SM-9；EU CRA Annex I Part II (1)；CycloneDX 1.6+",
+    "G-8": "IEC 62443-4-1 SVV；NIST AI 600-1（Information Security）；OWASP Agentic Top 10",
+    "G-9": "ISO/IEC 27001:2022 A.8.29；IEC 62443-4-1 SVV；ISO/IEC 23894",
+    "G-10": "ISO/IEC 27001:2022 A.8.25；IEC 62443-4-1 SM",
+    "G-11": "ISO/IEC 27001:2022 A.8.29；IEC 62443-4-1 DM；NIST SSDF RV.1",
+    "G-12": "IEC 62443-4-1 DM, SUM；EU CRA Art. 14",
+    "G-13": "EU AI Act Art. 4",
+}
+TITLES = {
+    "G-1": "自動審查定義為安全測試的一部分，而非取代",
+    "G-2": "家族數不低於三、反序 pass 不關閉、judge 不見分數",
+    "G-3": "資料主權規則寫進設定檔驗證",
+    "G-4": "模型可抽換性作為採購條件（冷備家族）",
+    "G-5": "L0 工具固定版本並簽章驗證",
+    "G-6": "審查 workflow 套用 SHA pinning 與 pull_request 限制",
+    "G-7": "模型權重納入 SBOM（ML-BOM）並簽章",
+    "G-8": "每季 garak 與 CyberSecEval 測試",
+    "G-9": "校準迴圈每季重跑（真實家族）",
+    "G-10": "三階段導入：影子、建議、門檻阻擋",
+    "G-11": "人工佇列接工單、裁決回寫校準集",
+    "G-12": "A 級 Critical 接入 PSIRT 的 CRA 第 14 條通報",
+    "G-13": "AI 素養訓練",
+}
+
+
+@dataclass
+class CheckResult:
+    id: str
+    status: str
+    evidence: str
+
+    @property
+    def title(self) -> str:
+        return TITLES[self.id]
+
+    @property
+    def standards(self) -> str:
+        return STANDARDS[self.id]
+
+
+# ----------------------------------------------------------------------------- helpers
+
+
+def _dated_files(directory: Path, patterns: list[str], today: dt.date) -> list[tuple[Path, dt.date, int]]:
+    """Files whose name matches one of the glob patterns and carries a YYYY-MM-DD; with age in days."""
+    out = []
+    for pat in patterns:
+        for p in directory.glob(pat):
+            m = DATE_RE.search(p.name)
+            if not m:
+                continue
+            try:
+                d = dt.date.fromisoformat(m.group(1))
+            except ValueError:
+                continue
+            out.append((p, d, (today - d).days))
+    return sorted(out, key=lambda x: x[1], reverse=True)
+
+
+def _raw_config(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+# ----------------------------------------------------------------------------- checks
+
+
+def check_g1(root: Path) -> CheckResult:
+    hits = [p for p in (root / "docs").glob("*") if re.search(r"policy|政策", p.name, re.I)]
+    if hits:
+        return CheckResult("G-1", MANUAL, f"找到 {', '.join(f'`docs/{p.name}`' for p in hits)}；需人工確認它由 PSO 核定並寫明「自動審查不取代人工安全測試」")
+    return CheckResult("G-1", MANUAL, "docs/ 下沒有政策文件（檔名含 policy／政策）。需要：PSO 簽署的政策文件，明定 MARA 審查是 A.8.29 安全測試的一部分、通過不等於免除人工測試")
+
+
+def check_g2(root: Path, config_path: Path) -> CheckResult:
+    from mara.bias.blinding import blind_finding
+    from mara.config import load_config
+    from mara.policy import evaluate_policies
+    from mara.schemas import Finding, ModelFamily, Provenance
+
+    problems, evidence = [], []
+    cfg = load_config(config_path)
+    rev = {cfg.model_by_name(n).family.value for n in cfg.roles.reviewers}
+    jud = {cfg.model_by_name(n).family.value for n in cfg.roles.judges}
+    evidence.append(f"`{config_path.relative_to(root)}`：reviewer 家族 {sorted(rev)}，judge 家族 {sorted(jud)}")
+    if len(rev) < 3:
+        problems.append(f"reviewer 家族數 {len(rev)} < 3")
+    if len(jud) < 3:
+        problems.append(f"judge 家族數 {len(jud)} < 3")
+    pipeline = (root / "src/mara/pipeline.py").read_text(encoding="utf-8")
+    config_src = (root / "src/mara/config.py").read_text(encoding="utf-8")
+    if 'run_judge(prov, rev, "reverse"' in pipeline:
+        evidence.append("`src/mara/pipeline.py` 對每個 judge 執行 forward 與 reverse 兩個 pass")
+    else:
+        problems.append("pipeline.py 找不到 reverse pass 的呼叫")
+    flags = re.findall(r"(skip_reverse|reverse_pass|single_pass|disable_reverse)\w*", pipeline + config_src)
+    if flags:
+        problems.append(f"存在可關閉反序 pass 的旗標：{sorted(set(flags))}")
+    else:
+        evidence.append("pipeline.py 與 config.py 無任何可關閉反序 pass 的旗標")
+    f = Finding(id="F-0001", dimension="xss", title="t", cwe="CWE-79", provenance=[Provenance(file="a.py", line=1, quote="abc")],
+                reachability_argument="r", exploit_sketch="e", cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+                model_confidence=0.9, source_family=ModelFamily("anthropic"), source_model="m")
+    view = blind_finding(f, None)
+    leaked = [k for k in ("source_family", "source_model", "model_confidence", "cvss4_vector", "cvss4_score", "weight") if k in json.dumps(view)]
+    if leaked:
+        problems.append(f"judge 視圖洩漏欄位 {leaked}")
+    else:
+        evidence.append(f"`bias/blinding.py::blind_finding` 輸出鍵 {sorted(view)}，不含身分、信心、CVSS")
+    pol = {r.id: r for r in evaluate_policies(cfg)}
+    for pid in ("P3", "P4"):
+        if pid in pol:
+            evidence.append(f"政策 {pid} {pol[pid].name}：{'PASS' if pol[pid].passed else 'FAIL'}（{pol[pid].reason}）")
+            if not pol[pid].passed:
+                problems.append(f"政策 {pid} 失敗")
+    return CheckResult("G-2", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + "；".join(evidence))
+
+
+def check_g3(root: Path, config_path: Path) -> CheckResult:
+    from mara.config import load_config
+
+    cfg = load_config(config_path)
+    problems, rows = [], []
+    for m in cfg.models:
+        res = getattr(m, "data_residency", None)
+        res = getattr(res, "value", res)
+        rows.append(f"{m.name}={m.provider}/{m.model}/{res}")
+        if m.provider != "mock" and res not in ALLOWED_RESIDENCY:
+            problems.append(f"{m.name} 的 data_residency={res} 不在 {sorted(ALLOWED_RESIDENCY)}")
+        if any(k in m.model.lower() for k in COVERED_MARKERS):
+            problems.append(f"{m.name} 使用 Fable/Mythos 級模型 {m.model}")
+    ev = f"`{config_path.relative_to(root)}` 模型：{', '.join(rows)}；`src/mara/policy.py` P1/P2/P5 在載入時強制"
+    return CheckResult("G-3", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + ev)
+
+
+def check_g4(root: Path) -> CheckResult:
+    hits = []
+    for p in list((root / "config").glob("*.y*ml")) + list((root / "config" / "examples").glob("*.y*ml")):
+        text = p.read_text(encoding="utf-8").lower()
+        fams = [k for k in ("llama", "mistral", "qwen") if k in text]
+        if fams:
+            hits.append(f"`{p.relative_to(root)}`（{', '.join(fams)}）")
+    if hits:
+        return CheckResult("G-4", MANUAL, f"找到含替代家族的設定：{'; '.join(hits)}；需人工確認冷備已部署且有一週內換模演練紀錄")
+    return CheckResult("G-4", MANUAL, "config/ 下沒有 Llama/Mistral/Qwen 冷備家族的設定。需要：冷備設定檔（可通過 `mara check-config`）、部署證明、換模演練（一週內完成）的紀錄")
+
+
+def check_g5(root: Path) -> CheckResult:
+    lock_path = root / "tools" / "versions.lock"
+    if not lock_path.is_file():
+        return CheckResult("G-5", FAIL, "`tools/versions.lock` 不存在。需要：每個 L0 工具的版本、URL、SHA-256 與簽章驗證方式（見 prompt 7）")
+    lock = yaml.safe_load(lock_path.read_text(encoding="utf-8")) or {}
+    problems, ev = [], []
+    for name, t in (lock.get("tools") or {}).items():
+        if t.get("kind") == "pip":
+            req = root / t.get("requirements", "")
+            n = req.read_text(encoding="utf-8").count("--hash=sha256:") if req.is_file() else 0
+            (ev if n else problems).append(f"{name} pip 鎖定 {n} 個 wheel hash" if n else f"{name} 的 requirements 無 hash")
+            continue
+        sha = str(t.get("sha256", ""))
+        method = (t.get("verify") or {}).get("method", "")
+        if not re.fullmatch(r"[0-9a-f]{64}", sha):
+            problems.append(f"{name} 無合法 SHA-256")
+        elif not method:
+            problems.append(f"{name} 無 verify.method")
+        else:
+            ev.append(f"{name} {t.get('version')} sha256 {sha[:12]}… {method}")
+    manifest = root / ".mara-tools" / "manifest.json"
+    if manifest.is_file():
+        m = json.loads(manifest.read_text(encoding="utf-8")).get("tools", {})
+        ev.append("manifest：" + ", ".join(f"{k}={'signed' if v.get('signature_verified') else 'hash-only'}" for k, v in m.items()))
+    ev.append("CI `deterministic-tools` job 以 `scripts/install_tools.py` 安裝並驗證")
+    return CheckResult("G-5", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + "；".join(ev))
+
+
+def _perm_readonly(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value in ("read-all",)
+    if isinstance(value, dict):
+        return all(v in ("read", "none") for v in value.values())
+    return False
+
+
+def check_g6(root: Path, workflows_dir: Path | None = None) -> CheckResult:
+    wdir = workflows_dir or (root / ".github" / "workflows")
+    files = sorted(p for p in wdir.glob("*.y*ml")) if wdir.is_dir() else []
+    if not files:
+        return CheckResult("G-6", FAIL, f"`{wdir}` 下沒有 workflow")
+    problems, ev = [], []
+    for p in files:
+        inv = inventory_workflow(p, root if p.is_relative_to(root) else p.parents[2])
+        rel = inv.path
+        non_sha = [f"第 {u.line} 行 `{u.raw}`" for u in inv.uses if u.kind in ("tag", "branch", "unknown")]
+        if non_sha:
+            problems.append(f"`{rel}` 非 SHA 引用：{'，'.join(non_sha)}")
+        if inv.pull_request_target:
+            problems.append(f"`{rel}` 使用 pull_request_target")
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as e:
+            problems.append(f"`{rel}` 不是合法 YAML：{str(e).splitlines()[0]}")
+            continue
+        top = doc.get("permissions", None)
+        if "permissions" not in doc:
+            problems.append(f"`{rel}` 缺頂層 permissions")
+        elif not (top == {} or _perm_readonly(top)):
+            problems.append(f"`{rel}` 頂層 permissions 非空也非只讀：{top}")
+        writes = []
+        for job, spec in (doc.get("jobs") or {}).items():
+            jp = (spec or {}).get("permissions")
+            if jp == "write-all" or (isinstance(jp, dict) and any(jp.get(k) == "write" for k in ("contents", "packages", "actions", "id-token"))):
+                problems.append(f"`{rel}` job {job} 的 permissions 過寬：{jp}")
+            elif isinstance(jp, dict) and any(v == "write" for v in jp.values()):
+                writes.append(f"{job}:{','.join(k for k, v in jp.items() if v == 'write')}")
+        ev.append(f"`{rel}`：{len(inv.uses)} 個 uses 全為 SHA" if not non_sha else f"`{rel}`：{len(inv.uses)} 個 uses")
+        if writes:
+            ev.append(f"`{rel}` job 層 write 權限（允許）：{'; '.join(writes)}")
+    return CheckResult("G-6", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + "；".join(ev))
+
+
+def check_g7(root: Path, config_path: Path) -> CheckResult:
+    cands = list((root / "sbom").glob("*.json")) + list(root.glob("*.cdx.json")) + list(root.glob("bom.json"))
+    boms = []
+    for p in cands:
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if d.get("bomFormat") == "CycloneDX":
+            boms.append((p, d))
+    raw = _raw_config(config_path)
+    self_hosted = sorted({m.get("family", "?") for m in raw.get("models", []) if m.get("provider") == "openai_compatible"})
+    if not boms:
+        return CheckResult("G-7", FAIL, f"找不到 CycloneDX ML-BOM（`sbom/*.json`、`*.cdx.json`、`bom.json`）。設定中的自架家族 {self_hosted} 的權重需要 `type: machine-learning-model` 元件、來源、雜湊與簽章（cosign 或 NGC）")
+    problems, ev = [], []
+    for p, d in boms:
+        comps = [c for c in d.get("components", []) if c.get("type") == "machine-learning-model"]
+        if not comps:
+            problems.append(f"`{p.relative_to(root)}` 沒有 machine-learning-model 元件")
+        for c in comps:
+            if not c.get("hashes"):
+                problems.append(f"`{p.relative_to(root)}` 的 {c.get('name')} 無 hashes")
+            else:
+                ev.append(f"{c.get('name')}@{c.get('version', '?')} hashes {len(c['hashes'])}")
+    return CheckResult("G-7", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + "；".join(ev))
+
+
+def check_g8(root: Path, today: dt.date) -> CheckResult:
+    files = _dated_files(root / "docs", ["garak-*", "cyberseceval-*", "cybersec-eval-*"], today)
+    fresh = [(p, d, age) for p, d, age in files if age <= FRESH_DAYS]
+    if fresh:
+        return CheckResult("G-8", PASS, "；".join(f"`docs/{p.name}`（{d}，{age} 天前）" for p, d, age in fresh))
+    stale = "；".join(f"`docs/{p.name}`（{age} 天前）" for p, d, age in files) or "無任何 garak／CyberSecEval 報告"
+    return CheckResult("G-8", FAIL, f"{stale}。需要：{FRESH_DAYS} 天內對三個家族執行 garak 與 CyberSecEval 4（Prompt Injection、False Refusal Rate）的報告，檔名含日期")
+
+
+def check_g9(root: Path, today: dt.date) -> CheckResult:
+    files = _dated_files(root / "docs", ["calibration-*.md"], today)
+    fresh, mock_only = [], []
+    for p, d, age in files:
+        if age > FRESH_DAYS:
+            continue
+        head = p.read_text(encoding="utf-8")[:600]
+        if re.search(r"執行模式[:：]\s*\**mock", head) or "mode `mock`" in head:
+            mock_only.append(f"`docs/{p.name}`（{d}，mock 模式）")
+        else:
+            fresh.append(f"`docs/{p.name}`（{d}，{age} 天前）")
+    if fresh:
+        return CheckResult("G-9", PASS, "；".join(fresh))
+    detail = "；".join(mock_only) if mock_only else (f"最新校準報告 {files[0][2]} 天前" if files else "無校準報告")
+    return CheckResult("G-9", FAIL, f"{detail}。需要：{FRESH_DAYS} 天內以真實三家族執行的校準報告（`python scripts/calibrate.py --mode live`），含每家族每 CWE 的精確度與召回率、更新後的權重")
+
+
+def check_g10(root: Path, config_path: Path) -> CheckResult:
+    raw = _raw_config(config_path)
+    phase = raw.get("rollout_phase") or raw.get("rollout", {}).get("phase") if isinstance(raw.get("rollout"), dict) else raw.get("rollout_phase")
+    if phase:
+        return CheckResult("G-10", MANUAL, f"設定宣告 rollout_phase={phase}；需人工確認階段起訖日期與影子期基線報告（誤報率、每 PR finding 數、佇列長度、token 成本）")
+    return CheckResult("G-10", MANUAL, "設定無 `rollout_phase`。需要：目前階段（shadow／advisory／blocking）、起訖日期、影子期結束時的基線報告與第一份校準報告")
+
+
+def check_g11(root: Path, config_path: Path) -> CheckResult:
+    raw = _raw_config(config_path)
+    ev = []
+    if (root / "calib" / "decisions").is_dir():
+        ev.append("`calib/decisions/` 存在")
+    if raw.get("human_queue"):
+        ev.append("設定有 `human_queue` 區塊")
+    for p in (root / ".github" / "workflows").glob("*.y*ml"):
+        text = p.read_text(encoding="utf-8")
+        # only a workflow that names the human queue counts; the governance tracking issue is not one
+        if re.search(r"human[_-]queue", text):
+            ev.append(f"`{p.relative_to(root)}` 含人工佇列的工單整合")
+    if len(ev) >= 2:
+        return CheckResult("G-11", PASS, "；".join(ev))
+    return CheckResult("G-11", FAIL, (("已有：" + "；".join(ev) + "。") if ev else "") + "人工佇列未接工單、裁決未回寫。需要：workflow 把 needs_human finding 建成帶標籤的 issue、`calib/decisions/` 的裁決格式與 `calibrate.py` 讀取、佇列超量時收緊門檻的規則")
+
+
+def check_g12(root: Path, config_path: Path) -> CheckResult:
+    raw = _raw_config(config_path)
+    keys = [k for k in raw if k.startswith("psirt")]
+    if keys:
+        return CheckResult("G-12", PASS, f"設定含 {keys}；A 級 Critical finding 可接入 PSIRT 通報流程")
+    return CheckResult("G-12", FAIL, "設定無 `psirt_webhook`／`psirt:` 區塊。需要：PSIRT 接入端點與只對 A 級 Critical 觸發的規則，對應 CRA 第 14 條 24 小時預警（2026-09-11 起適用）")
+
+
+def check_g13(root: Path, today: dt.date) -> CheckResult:
+    hits = [p for p in (root / "docs").glob("*") if re.search(r"training|ai-literacy|素養|訓練", p.name, re.I)]
+    if hits:
+        dated = _dated_files(root / "docs", [p.name for p in hits], today)
+        fresh = [f"`docs/{p.name}`（{d}）" for p, d, age in dated if age <= 365]
+        if fresh:
+            return CheckResult("G-13", PASS, "；".join(fresh))
+        return CheckResult("G-13", FAIL, f"找到 {', '.join(f'`docs/{p.name}`' for p in hits)} 但無一年內的日期")
+    return CheckResult("G-13", FAIL, "docs/ 下沒有 AI 素養訓練紀錄（training-*、ai-literacy-*、含「素養」）。需要：開發者、安全團隊、人工裁決者的訓練紀錄（證據層級、偏誤稽核、「通過不等於安全」），對應 EU AI Act 第 4 條")
+
+
+def run_all(root: Path, config_path: Path, today: dt.date | None = None) -> list[CheckResult]:
+    today = today or dt.date.today()
+    return [
+        check_g1(root), check_g2(root, config_path), check_g3(root, config_path), check_g4(root), check_g5(root), check_g6(root),
+        check_g7(root, config_path), check_g8(root, today), check_g9(root, today), check_g10(root, config_path),
+        check_g11(root, config_path), check_g12(root, config_path), check_g13(root, today),
+    ]
+
+
+# ----------------------------------------------------------------------------- output
+
+
+def render(results: list[CheckResult], *, root: Path, config_path: Path, date: str) -> str:
+    counts = {s: sum(r.status == s for r in results) for s in (PASS, FAIL, MANUAL)}
+    L = [f"# 治理合規檢查（{date}）", "",
+         "依附錄 E 的 prompt 8，對報告第十部治理建議 G-1 到 G-13 做可自動判定的檢查。本檔由 `scripts/governance_check.py` 產生；"
+         "「需人工」表示無法從檔案判定，該列的證據欄寫明需要什麼證據。任一「失敗」使腳本以非零結束。", "",
+         f"- 掃描根目錄：`{root.name}/`；設定檔：`{config_path.relative_to(root) if config_path.is_relative_to(root) else config_path}`；報告與紀錄的新鮮度門檻：{FRESH_DAYS} 天。",
+         "- 標準條文取自報告第 25.4 節對應總表；標 * 者的 ISO 控制項標題尚未對照正本（附錄 B）。", "",
+         "| 建議 | 內容 | 狀態 | 證據 | 對應標準條文 |", "|---|---|---|---|---|"]
+    for r in results:
+        evidence = r.evidence.replace("|", "\\|")
+        L.append(f"| {r.id} | {r.title} | **{STATUS_ZH[r.status]}** | {evidence} | {r.standards} |")
+    L += ["", f"**摘要**：通過 {counts[PASS]}、失敗 {counts[FAIL]}、需人工 {counts[MANUAL]}；結束碼 {1 if counts[FAIL] else 0}。", ""]
+    return "\n".join(L)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--root", type=Path, default=ROOT)
+    ap.add_argument("--config", type=Path, default=None, help="default: <root>/config/mara.yaml")
+    ap.add_argument("--out", type=Path)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--date", default=dt.date.today().isoformat())
+    args = ap.parse_args()
+    root = args.root.resolve()
+    config_path = (args.config or root / "config" / "mara.yaml").resolve()
+    results = run_all(root, config_path, dt.date.fromisoformat(args.date))
+    if args.json:
+        text = json.dumps([{"id": r.id, "title": r.title, "status": r.status, "evidence": r.evidence, "standards": r.standards} for r in results],
+                          ensure_ascii=False, indent=1)
+    else:
+        text = render(results, root=root, config_path=config_path, date=args.date)
+    if args.out:
+        args.out.write_text(text + "\n", encoding="utf-8")
+        print(f"wrote {args.out}")
+    print(text if not args.out else "\n".join(f"{r.id:5s} {STATUS_ZH[r.status]}" for r in results))
+    return 1 if any(r.status == FAIL for r in results) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,53 @@
+# Weekly governance compliance check (Appendix E prompt 8): runs scripts/governance_check.py against
+# G-1..G-13 and posts the Markdown table to a tracking issue. Same hardening as mara-review.yml:
+# schedule/workflow_dispatch only, permissions declared per job (issues: write is the one write this
+# job needs, to post the result), every action pinned to a full SHA, no github.event.* in run: steps.
+name: governance-check
+on:
+  schedule:
+    - cron: "0 1 * * 1"   # Mondays 01:00 UTC
+  workflow_dispatch:
+permissions: {}
+
+jobs:
+  governance:
+    name: G-1..G-13 compliance check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
+          python3 -m pip install --quiet --disable-pip-version-check -e .
+      - name: Run the governance checks
+        id: check
+        run: |
+          set +e
+          python3 scripts/governance_check.py --out governance-check.md
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+      - name: Post the result to the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh label create governance-check --force --color 5319e7 --description "Weekly G-1..G-13 compliance check" --repo "$REPO"
+          existing=$(gh issue list --repo "$REPO" --label governance-check --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body-file governance-check.md
+          else
+            gh issue create --repo "$REPO" --label governance-check --title "Governance compliance check (G-1..G-13)" --body-file governance-check.md
+          fi
+      - name: Fail the run if any check failed
+        env:
+          RC: ${{ steps.check.outputs.rc }}
+        run: |
+          echo "governance_check.py exit code: $RC"
+          test "$RC" = "0"
