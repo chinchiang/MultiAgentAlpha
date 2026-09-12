@@ -126,7 +126,13 @@ def check_publisher_checksums(name: str, asset_name: str, expected: str, checksu
         raise InstallError(f"{name}: publisher checksum {listed} differs from the pinned {expected} for {asset_name}")
 
 
-def need_tool(bin_dir: Path, tool: str, method: str, name: str) -> Path:
+def need_tool(bin_dir: Path, tool: str, method: str, name: str, self_artifact: Path | None = None) -> Path:
+    """Locate the verifier binary. A verifier verifying its own release (cosign checking cosign's bundle,
+    slsa-verifier checking its own provenance) uses the freshly downloaded, SHA-256-checked artifact,
+    because it is not installed yet at that point."""
+    if self_artifact is not None and name == tool:
+        self_artifact.chmod(self_artifact.stat().st_mode | stat.S_IXUSR)
+        return self_artifact
     p = bin_dir / tool
     if p.is_file() and os.access(p, os.X_OK):
         return p
@@ -141,7 +147,7 @@ def verify_signature(name: str, spec: dict, artifact: Path, bin_dir: Path, cache
     v = spec["verify"]
     method = v["method"]
     if method == "cosign-keyless":
-        cosign = need_tool(bin_dir, "cosign", method, name)
+        cosign = need_tool(bin_dir, "cosign", method, name, self_artifact=artifact)
         bundle = download(v["bundle_url"], cache / f"{name}.sigstore.json")
         cp = run([str(cosign), "verify-blob", "--bundle", str(bundle), "--certificate-oidc-issuer", v["oidc_issuer"],
                   "--certificate-identity-regexp", v["certificate_identity_regexp"], str(artifact)])
@@ -149,7 +155,7 @@ def verify_signature(name: str, spec: dict, artifact: Path, bin_dir: Path, cache
             raise InstallError(f"{name}: cosign keyless verification FAILED\n{cp.stderr.strip()[-1500:]}")
         return f"cosign-keyless identity~{v['certificate_identity_regexp']} issuer={v['oidc_issuer']}"
     if method == "slsa-provenance":
-        verifier = need_tool(bin_dir, "slsa-verifier", method, name)
+        verifier = need_tool(bin_dir, "slsa-verifier", method, name, self_artifact=artifact)
         prov = download(v["provenance_url"], cache / f"{name}.intoto.jsonl")
         cp = run([str(verifier), "verify-artifact", str(artifact), "--provenance-path", str(prov),
                   "--source-uri", v["source_uri"], "--source-tag", v["source_tag"]])

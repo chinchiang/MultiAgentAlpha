@@ -134,3 +134,44 @@ def test_runner_only_executes_pinned_tools(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(mt / "bin") + os.pathsep + os.environ["PATH"])
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "empty"))
     assert runner.tool_path("zizmor") is None
+
+
+def test_verifier_verifies_its_own_release_with_the_downloaded_artifact(tmp_path):
+    """cosign is not installed when its own bundle is checked (the CI failure on PR #6): the
+    freshly downloaded artifact must act as the verifier, and later tools must use bin/cosign."""
+    src = tmp_path / "src"
+    src.mkdir()
+    log = tmp_path / "calls.log"
+    fake_cosign = f"#!/bin/sh\necho \"$0 $@\" >> {log}\nexit 0\n".encode()
+    (src / "cosign-linux-amd64").write_bytes(fake_cosign)
+    (src / "bundle.json").write_text("{}")
+    other = _fake_tool("echo other")
+    (src / "other").write_bytes(other)
+    lock = {"schema": 1, "tools": {
+        "cosign": {"role": "verifier", "version": "9", "kind": "binary", "url": f"file://{src / 'cosign-linux-amd64'}", "sha256": _sha(fake_cosign),
+                   "verify": {"method": "cosign-keyless", "bundle_url": f"file://{src / 'bundle.json'}", "oidc_issuer": "i", "certificate_identity_regexp": "r"}},
+        "other": {"version": "1", "kind": "binary", "url": f"file://{src / 'other'}", "sha256": _sha(other),
+                  "verify": {"method": "cosign-keyless", "bundle_url": f"file://{src / 'bundle.json'}", "oidc_issuer": "i", "certificate_identity_regexp": "r"}},
+    }}
+    dest = tmp_path / "mt"
+    manifest = install(lock, install_dir=dest)
+    assert manifest["tools"]["cosign"]["signature_verified"] and manifest["tools"]["other"]["signature_verified"]
+    calls = log.read_text().splitlines()
+    assert len(calls) == 2
+    assert calls[0].startswith(str(dest / "cache" / "cosign-linux-amd64")), "self-verification must use the downloaded artifact"
+    assert calls[1].startswith(str(dest / "bin" / "cosign")), "later tools must use the installed verifier"
+    assert "verify-blob" in calls[1] and "--certificate-identity-regexp r" in calls[1]
+
+
+def test_failed_signature_verification_aborts(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    bad_cosign = b"#!/bin/sh\necho nope >&2\nexit 1\n"
+    (src / "cosign-linux-amd64").write_bytes(bad_cosign)
+    (src / "bundle.json").write_text("{}")
+    lock = {"schema": 1, "tools": {"cosign": {"role": "verifier", "version": "9", "kind": "binary", "url": f"file://{src / 'cosign-linux-amd64'}",
+                                              "sha256": _sha(bad_cosign), "verify": {"method": "cosign-keyless", "bundle_url": f"file://{src / 'bundle.json'}",
+                                                                                     "oidc_issuer": "i", "certificate_identity_regexp": "r"}}}}
+    with pytest.raises(InstallError, match="cosign keyless verification FAILED"):
+        install(lock, install_dir=tmp_path / "mt")
+    assert not (tmp_path / "mt" / "bin" / "cosign").exists()
