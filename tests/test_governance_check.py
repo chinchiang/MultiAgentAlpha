@@ -1,0 +1,74 @@
+"""Appendix E prompt 8: the governance checker's verdicts on this repository, plus unit checks that
+each decidable rule flips with the evidence it looks at. No network."""
+
+import datetime as dt
+import shutil
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from governance_check import FAIL, MANUAL, PASS, check_g6, check_g8, check_g9, check_g12, render, run_all  # noqa: E402
+
+TODAY = dt.date(2026, 9, 12)
+
+
+@pytest.fixture(scope="module")
+def results():
+    return {r.id: r for r in run_all(ROOT, ROOT / "config" / "mara.yaml", TODAY)}
+
+
+def test_every_item_has_a_verdict_and_evidence(results):
+    assert sorted(results) == [f"G-{i}" for i in range(1, 14)] or len(results) == 13
+    for r in results.values():
+        assert r.status in (PASS, FAIL, MANUAL) and r.evidence.strip() and r.standards
+
+
+def test_verdicts_on_this_repository(results):
+    assert {k: results[k].status for k in ("G-2", "G-3", "G-5", "G-6")} == {"G-2": PASS, "G-3": PASS, "G-5": PASS, "G-6": PASS}
+    assert {k: results[k].status for k in ("G-7", "G-8", "G-11", "G-12", "G-13")} == dict.fromkeys(("G-7", "G-8", "G-11", "G-12", "G-13"), FAIL)
+    assert results["G-9"].status == FAIL and "mock" in results["G-9"].evidence
+    assert {k: results[k].status for k in ("G-1", "G-4", "G-10")} == dict.fromkeys(("G-1", "G-4", "G-10"), MANUAL)
+
+
+def test_render_has_thirteen_rows_and_nonzero_exit_signal(results):
+    md = render(list(results.values()), root=ROOT, config_path=ROOT / "config" / "mara.yaml", date="2026-09-12")
+    rows = [ln for ln in md.splitlines() if ln.startswith("| G-")]
+    assert len(rows) == 13 and all(ln.count("|") == 6 for ln in rows)
+    assert "結束碼 1" in md
+
+
+def test_g8_and_g9_freshness(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    assert check_g8(tmp_path, TODAY).status == FAIL
+    (docs / "garak-2026-05-01.md").write_text("old")
+    assert check_g8(tmp_path, TODAY).status == FAIL
+    (docs / "cyberseceval-2026-08-20.md").write_text("fresh")
+    assert check_g8(tmp_path, TODAY).status == PASS
+    (docs / "calibration-2026-09-01.md").write_text("# 校準\n\n執行模式：**mock**。\n")
+    r = check_g9(tmp_path, TODAY)
+    assert r.status == FAIL and "mock" in r.evidence
+    (docs / "calibration-2026-09-05.md").write_text("# 校準\n\n執行模式：**live**。\n")
+    assert check_g9(tmp_path, TODAY).status == PASS
+
+
+def test_g6_fails_on_the_seeded_fixture_workflow(tmp_path):
+    src = ROOT / "fixtures" / "vuln-sample" / ".github" / "workflows"
+    dst = tmp_path / ".github" / "workflows"
+    shutil.copytree(src, dst)
+    r = check_g6(tmp_path)
+    assert r.status == FAIL
+    for needle in ("非 SHA", "pull_request_target", "permissions"):
+        assert needle in r.evidence
+
+
+def test_g12_passes_with_a_psirt_field(tmp_path):
+    cfg = tmp_path / "mara.yaml"
+    cfg.write_text("models: []\npsirt_webhook: https://psirt.example.internal/hook\n")
+    assert check_g12(tmp_path, cfg).status == PASS
+    cfg.write_text("models: []\n")
+    assert check_g12(tmp_path, cfg).status == FAIL

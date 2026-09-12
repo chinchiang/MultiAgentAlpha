@@ -131,6 +131,18 @@ PATH is never consulted. `docs/tools-provenance.md` records source, licence, wha
 proves and the remaining gaps (gitleaks and semgrep publish no signature). CI installs and verifies
 the whole set on every run.
 
+## Governance checks (Appendix E, prompt 8)
+
+`python scripts/governance_check.py --out docs/governance-check-<date>.md` turns the report's
+governance items G-1 to G-13 into checks against this repository and `config/mara.yaml`: each row
+is PASS, FAIL or MANUAL (undecidable from files, with the evidence a human must produce), carries
+the evidence it looked at and the standard clauses from the report's section 25.4, and any FAIL
+makes the script exit non-zero. `.github/workflows/governance.yml` runs it every Monday and posts
+the table to a `governance-check` tracking issue. `docs/governance-check-2026-09-12.md` is the
+first run: G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
+calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) fail
+on the current state; G-1, G-4 and G-10 need human evidence.
+
 ## Other commands
 
 ```bash
