@@ -5,7 +5,7 @@ from closed issues that carry `decision:true-positive` or `decision:false-positi
 
 ```json
 {
-  "key": "3f9c2a1b7d4e",            # sha256(file:line:cwe)[:12], the same key the pipeline puts in human_queue.json
+  "key": "<12 hex chars>",           # sha256(file:line:cwe)[:12], the same key the pipeline puts in human_queue.json
   "decision": "true_positive",      # or false_positive
   "issue": 42, "url": "https://github.com/.../issues/42", "decided_at": "2026-09-12T08:00:00Z",
   "target": "/path/reviewed", "finding_id": "F-0007", "cwe": "CWE-89", "file": "app.py", "line": 32
