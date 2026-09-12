@@ -1,5 +1,7 @@
 # Known false positives, one gitleaks fingerprint per line (commit:file:rule:line).
-# The commit stays in history, so the fingerprint must stay here; the file itself was fixed in the next commit.
-# calib/decisions/README.md carried the doc placeholder "key": "3f9c2a1b7d4e" (a sha256 prefix example, not a secret);
-# generic-api-key matched it on PR #9. Reworded to "<12 hex chars>" in dbf91e8.
+# A commit stays in history, so its fingerprint stays here even after the file was fixed.
+# 9d54cb1: calib/decisions/README.md showed an example decision key (a 12-character sha256 prefix, not a
+#   secret) that generic-api-key matched on PR #9; the example now reads "<12 hex chars>" (dbf91e8).
+# 637a7ac: the first version of this file repeated that example inside a comment and matched the same rule.
 9d54cb1746391340717b3a8b360ff912b3670293:calib/decisions/README.md:generic-api-key:8
+637a7accc112c27625d7b4f565f66aa14381f168:.gitleaksignore:generic-api-key:3
