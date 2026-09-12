@@ -1,4 +1,4 @@
-"""Policy-as-code for the MARA configuration (Appendix E, prompt 6; governance G-2, G-3).
+"""Policy-as-code for the MARA configuration (Appendix E, prompt 6; governance G-2, G-3, G-7, G-12).
 
 Every policy is evaluated independently so `mara check-config` can list all violations at
 once; `MaraConfig` then refuses to load when any policy fails. Policies are pure functions of
@@ -158,7 +158,39 @@ def p6_psirt_scope(cfg: MaraConfig) -> PolicyResult:
                         f"token from ${ps.token_env}, {ps.early_warning_hours} h early warning")
 
 
-POLICIES = (p1_covered_models, p2_deepseek_on_prem, p3_panel_size, p4_gate_bounds, p5_data_residency, p6_psirt_scope)
+def p7_ml_bom(cfg: MaraConfig) -> PolicyResult:
+    """G-7: every self-hosted (openai_compatible) model must be a complete machine-learning-model
+    component in the CycloneDX ML-BOM (safetensors-only per-file SHA-256, licence, source, signature
+    method), and the BOM must be signed when require_signature is set. Reads the BOM file, never
+    the network. Until ml_bom.required is true the policy only reports."""
+    from pathlib import Path
+
+    from .mlbom import STATUS_COMPLETE, status_for_config
+
+    mb = cfg.ml_bom
+    statuses = status_for_config(cfg)
+    if not statuses:
+        return PolicyResult("P7", "ml-bom", True, "no self-hosted model configured; nothing to list in an ML-BOM")
+    complete = [n for n, s in statuses.items() if s.status == STATUS_COMPLETE]
+    summary = "; ".join(f"{n}({s.model_id}) {s.status}" for n, s in statuses.items())
+    if not mb.required:
+        return PolicyResult("P7", "ml-bom", True,
+                            f"not required yet; {len(complete)}/{len(statuses)} self-hosted models have a complete component in {mb.path}: {summary}")
+    problems = [f"{n}({s.model_id}): " + "; ".join(s.problems) for n, s in statuses.items() if s.status != STATUS_COMPLETE]
+    if mb.require_signature:
+        if not mb.bundle.strip():
+            problems.append("require_signature is set but ml_bom.bundle is empty")
+        elif not Path(mb.bundle).exists():
+            problems.append(f"signature bundle {mb.bundle} not found")
+        if not mb.certificate_identity.strip() or not mb.certificate_oidc_issuer.strip():
+            problems.append("require_signature needs certificate_identity and certificate_oidc_issuer for keyless verification")
+    if problems:
+        return PolicyResult("P7", "ml-bom", False, "; ".join(problems))
+    sig = f", signature bundle {mb.bundle}" if mb.require_signature else ""
+    return PolicyResult("P7", "ml-bom", True, f"{len(complete)}/{len(statuses)} self-hosted models complete in {mb.path}{sig}: {summary}")
+
+
+POLICIES = (p1_covered_models, p2_deepseek_on_prem, p3_panel_size, p4_gate_bounds, p5_data_residency, p6_psirt_scope, p7_ml_bom)
 
 
 def evaluate_policies(cfg: MaraConfig) -> list[PolicyResult]:

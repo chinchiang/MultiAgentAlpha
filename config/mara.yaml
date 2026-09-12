@@ -50,6 +50,7 @@ require_family_diversity: true
 #   P4 gate-bounds      self_judge_discount <= 0.5, human_threshold_alpha >= 0.3
 #   P5 data-residency   non-mock models must be on_prem or vendor_api_zdr
 #   P6 psirt-scope      when the PSIRT hand-off is enabled: https webhook, product set, token from env, tiers within A/B, severities within Critical/High
+#   P7 ml-bom           when ml_bom.required: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature)
 anthropic_covered_models_authorized: false
 anthropic_covered_models_authorization_ref: ""
 reduced_panel_reason: ""
@@ -87,3 +88,17 @@ human_queue:
   tighten_alpha_step: 0.1
   tighten_exclude_tier_c: true
   queue_tier_c_min_severity: High     # High | Critical: tier C findings at or above this are queued
+
+# G-7: ML-BOM for the self-hosted weights. sbom/models.yaml is the manifest the platform team fills
+# (source, licence, per-file SHA-256 of the safetensors weights, signature); scripts/ml_bom.py builds
+# sbom/ml-bom.cdx.json from it, verifies a weights directory against it and checks the cosign bundle.
+# Policy P7 enforces it once `required` is true; until then check-config and the review report only
+# show each self-hosted model's BOM status (both are PENDING in this repository: no weights here, and
+# the registry hashes could not be fetched). See docs/ml-bom.md.
+ml_bom:
+  required: false
+  path: sbom/ml-bom.cdx.json
+  require_signature: false
+  bundle: sbom/ml-bom.cdx.json.sigstore.json
+  certificate_identity: ""            # keyless signer identity expected by cosign verify-blob
+  certificate_oidc_issuer: ""         # e.g. https://token.actions.githubusercontent.com

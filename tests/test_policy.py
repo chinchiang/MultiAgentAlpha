@@ -107,6 +107,6 @@ def test_check_config_lists_every_violation(root):
     assert res.output.count("FAIL") == 5
     ok = runner.invoke(app, ["check-config", str(root / "config" / "mara.yaml")])
     assert ok.exit_code == 0, ok.output
-    assert "6/6 policies pass" in ok.output
+    assert "7/7 policies pass" in ok.output
     js = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml"), "--json"])
     assert js.exit_code == 1 and '"passed": false' in js.output

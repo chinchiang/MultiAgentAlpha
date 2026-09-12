@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.5", "markdown>=3.6"]
+dev = ["pytest>=8.0", "ruff>=0.5", "markdown>=3.6", "jsonschema>=4.18"]
 
 [project.scripts]
 mara = "mara.cli:app"
@@ -28,7 +28,7 @@ mara = "mara.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-mara = ["prompts/*.md", "groundtruth/*.json", "scoring/*.json"]
+mara = ["prompts/*.md", "groundtruth/*.json", "groundtruth/cyclonedx/*.json", "scoring/*.json"]
 
 [tool.ruff]
 line-length = 150

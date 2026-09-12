@@ -75,6 +75,20 @@ class HumanQueueConfig(BaseModel):
     queue_tier_c_min_severity: Literal["High", "Critical"] = Field(default="High", description="Tier C findings at or above this severity are queued")
 
 
+class MlBomConfig(BaseModel):
+    """G-7: the self-hosted model weights are inference dependencies and must be listed in a
+    CycloneDX 1.6 ML-BOM (source, licence, safetensors-only per-file SHA-256, signature). Policy P7
+    enforces it once `required` is true; until then `mara check-config` and the review report only
+    show each self-hosted model's BOM status."""
+
+    required: bool = Field(default=False, description="Policy P7: every self-hosted model must have a complete ML-BOM component")
+    path: str = Field(default="sbom/ml-bom.cdx.json", description="Built by scripts/ml_bom.py from sbom/models.yaml")
+    require_signature: bool = Field(default=False, description="Policy P7: the BOM must come with a Sigstore bundle (cosign sign-blob --bundle)")
+    bundle: str = Field(default="", description="Path of the Sigstore bundle for the BOM")
+    certificate_identity: str = Field(default="", description="Expected signer identity for cosign verify-blob (keyless)")
+    certificate_oidc_issuer: str = Field(default="", description="Expected OIDC issuer for cosign verify-blob (keyless)")
+
+
 class MaraConfig(BaseModel):
     models: list[ModelSpec]
     roles: RolesConfig
@@ -94,6 +108,7 @@ class MaraConfig(BaseModel):
     reduced_panel_reason: str = Field(default="", description="Policy P3: why only two model families are available (e.g. PRC in-country pipeline)")
     psirt: PsirtConfig = Field(default_factory=PsirtConfig, description="G-12: PSIRT / CRA Article 14 hand-off")
     human_queue: HumanQueueConfig = Field(default_factory=HumanQueueConfig, description="G-11: ticketed human queue with decision write-back")
+    ml_bom: MlBomConfig = Field(default_factory=MlBomConfig, description="G-7: ML-BOM for the self-hosted model weights")
 
     def model_by_name(self, name: str) -> ModelSpec:
         for m in self.models:

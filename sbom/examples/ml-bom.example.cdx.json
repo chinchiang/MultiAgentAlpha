@@ -1,0 +1,169 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:8d7c6b5a-4f3e-4d2c-9b1a-0e9f8d7c6b5a",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-12T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "mara",
+          "version": "0.1.0",
+          "description": "scripts/ml_bom.py (governance item G-7)"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "mara",
+      "name": "mara",
+      "version": "0.1.0",
+      "description": "Multi-Agent Review Architecture; the self-hosted models below are its inference dependencies"
+    },
+    "properties": [
+      {
+        "name": "mara:bom-kind",
+        "value": "ML-BOM"
+      },
+      {
+        "name": "mara:weights-format-policy",
+        "value": "safetensors-only"
+      },
+      {
+        "name": "mara:example",
+        "value": "true"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "machine-learning-model",
+      "bom-ref": "model:example/model-7b",
+      "name": "example-model",
+      "version": "7b-synthetic",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "892fc912d77b08795d7cf74e819855136a1130c9f73ec719471ade7b85c60b10"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://huggingface.co/example/model-7b",
+          "comment": "huggingface revision 0000000"
+        }
+      ],
+      "modelCard": {
+        "modelParameters": {
+          "architectureFamily": "Example",
+          "modelArchitecture": "ExampleForCausalLM"
+        }
+      },
+      "properties": [
+        {
+          "name": "mara:model-id",
+          "value": "example/model-7b"
+        },
+        {
+          "name": "mara:family",
+          "value": "deepseek"
+        },
+        {
+          "name": "mara:format",
+          "value": "safetensors"
+        },
+        {
+          "name": "mara:serving",
+          "value": "vllm"
+        },
+        {
+          "name": "mara:signature",
+          "value": "cosign-keyless"
+        },
+        {
+          "name": "mara:status",
+          "value": "complete"
+        },
+        {
+          "name": "mara:file-count",
+          "value": "2"
+        },
+        {
+          "name": "mara:signature-identity",
+          "value": "platform-team@example.internal"
+        },
+        {
+          "name": "mara:signature-issuer",
+          "value": "https://token.actions.githubusercontent.com"
+        },
+        {
+          "name": "mara:signature-bundle",
+          "value": "sbom/examples/ml-bom.example.cdx.json.sigstore.json"
+        },
+        {
+          "name": "mara:note",
+          "value": "SYNTHETIC EXAMPLE: hashes are of two tiny stand-in files, not of real weights; used by config/examples/ml-bom-required.yaml"
+        }
+      ],
+      "components": [
+        {
+          "type": "file",
+          "bom-ref": "model:example/model-7b/config.json",
+          "name": "config.json",
+          "hashes": [
+            {
+              "alg": "SHA-256",
+              "content": "8a3fb49c773f494cd58e8c5fe5c79dcbedc90b222dc3edb049a9f7ff490f52c2"
+            }
+          ],
+          "properties": [
+            {
+              "name": "mara:size",
+              "value": "90"
+            }
+          ]
+        },
+        {
+          "type": "file",
+          "bom-ref": "model:example/model-7b/model-00001-of-00001.safetensors",
+          "name": "model-00001-of-00001.safetensors",
+          "hashes": [
+            {
+              "alg": "SHA-256",
+              "content": "ba1d472c37a5ffc710003544d4bf1760abb6d35a102739621eff1b04c317e75d"
+            }
+          ],
+          "properties": [
+            {
+              "name": "mara:size",
+              "value": "2176"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "mara",
+      "dependsOn": [
+        "model:example/model-7b"
+      ]
+    },
+    {
+      "ref": "model:example/model-7b",
+      "dependsOn": []
+    }
+  ]
+}

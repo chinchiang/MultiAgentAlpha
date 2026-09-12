@@ -102,6 +102,8 @@ jobs:
         run: |
           mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out
           test -s out/report.sarif
+      - name: ML-BOM validates against CycloneDX 1.6 and matches its manifest (G-7)
+        run: python3 scripts/ml_bom.py validate --bom sbom/ml-bom.cdx.json --manifest sbom/models.yaml
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mara-report
