@@ -93,6 +93,15 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 
 `config/examples/violating.yaml` breaks all five and is what the tests run against.
 
+## Gap assessment (Appendix E, prompt 3)
+
+`docs/assessment-2026-09-12.md` scores this repository's review process against the 60-question
+questionnaire in `docs/appendix-d-maturity.md`, with a file-level evidence cell on every row,
+per-layer totals, the two lowest questions per layer mapped to governance items G-1 to G-13, and a
+separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <file>` checks the
+acceptance criteria (all 60 rows scored with evidence, layer sums consistent, CN rows present) and
+`tests/test_assessment.py` runs the same check in CI.
+
 ## Other commands
 
 ```bash
