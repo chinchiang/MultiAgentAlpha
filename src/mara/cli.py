@@ -25,7 +25,7 @@ def review(
     out: Path = typer.Option(Path("out"), "--out", "-o"),
     sarif_dir: Path | None = typer.Option(None, "--sarif-dir", help="Ingest pre-recorded L0 SARIF instead of running tools"),
     mock_fixtures: Path | None = typer.Option(None, "--mock-fixtures"),
-    fail_on_gate: bool = typer.Option(False, "--fail-on-gate", help="Exit 2 when the gate blocks"),
+    fail_on_gate: bool = typer.Option(False, "--fail-on-gate", help="Exit 2 when the gate blocks (implied by rollout.phase: blocking)"),
     notify_psirt: bool = typer.Option(False, "--notify-psirt", help="POST the CRA Article 14 payloads to the configured PSIRT webhook"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
@@ -64,7 +64,10 @@ def review(
     console.print(f"[bold]wrote[/bold] {out/'report.sarif'}, {out/'report.md'}, {out/'report.json'}"
                   + (f", {out/'human_queue.md'} ({len(report.human_queue)} item(s))" if cfg.human_queue.enabled else "")
                   + (f", {out/'psirt-notifications.json'} ({len(report.psirt)} PSIRT payload(s))" if cfg.psirt.enabled else ""))
-    if fail_on_gate and not report.gate_passed:
+    phase = cfg.rollout.phase
+    if not report.gate_passed and phase != "blocking":
+        console.print(f"rollout phase [bold]{phase}[/bold]: the gate would have blocked; result recorded, merge not enforced (G-10)")
+    if not report.gate_passed and (fail_on_gate or phase == "blocking"):
         raise typer.Exit(code=2)
 
 
@@ -85,7 +88,7 @@ def check_config(
     """Evaluate every configuration policy (P1-P7) and exit non-zero if any fails."""
     import yaml
 
-    from .config import GateConfig, MaraConfig, MlBomConfig, ModelSpec, PsirtConfig, RolesConfig
+    from .config import GateConfig, MaraConfig, MlBomConfig, ModelSpec, PsirtConfig, RolesConfig, RolloutConfig
     from .policy import evaluate_policies
 
     raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
@@ -95,11 +98,12 @@ def check_config(
         gate = GateConfig.model_validate(raw.get("gate", {}) or {})
         psirt = PsirtConfig.model_validate(raw.get("psirt", {}) or {})
         ml_bom = MlBomConfig.model_validate(raw.get("ml_bom", {}) or {})
+        rollout = RolloutConfig.model_validate(raw.get("rollout", {}) or {})
     except Exception as e:  # structural error: nothing to evaluate
         console.print(f"[red]invalid config structure:[/red] {e}")
         raise typer.Exit(code=1) from e
-    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate", "psirt", "ml_bom")}
-    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, psirt=psirt, ml_bom=ml_bom, **extra)
+    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate", "psirt", "ml_bom", "rollout")}
+    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, psirt=psirt, ml_bom=ml_bom, rollout=rollout, **extra)
     names = {m.name for m in models}
     unknown = [n for n in [roles.skeptic, roles.redteam, *roles.reviewers, *roles.judges] if n not in names]
     if unknown:

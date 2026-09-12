@@ -1,0 +1,20 @@
+# Model-swap drill register (governance item G-4: any model family replaceable within a week
+# without changing the process). One entry per drill, appended by
+# `python3 scripts/model_swap_drill.py record ...` (a live swap on the real endpoints) or
+# `... rehearse ...` (a mock rehearsal of the standby configuration; it proves the process is
+# unchanged but does NOT satisfy G-4, which needs a live drill).
+#
+#   date              YYYY-MM-DD the drill finished
+#   kind              live | rehearsal
+#   replaced_family   the production family taken out (anthropic | deepseek | nemotron)
+#   standby_family    the family that took its place (llama | mistral | qwen)
+#   config            the standby configuration used (config/examples/standby-for-<family>.yaml)
+#   duration_hours    from the decision to swap until the pipeline reviewed a real PR on the standby
+#   outcome           pass | fail
+#   performed_by      GitHub login
+#   evidence          ticket, run URL or change record
+#
+# Governance check G-4 passes when every production family has a standby configuration that loads
+# through the policies and a live drill within the last 365 days that passed in 168 hours or less.
+# This register is EMPTY: no drill has been run, and none is invented.
+drills: []

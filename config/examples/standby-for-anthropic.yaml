@@ -1,0 +1,15 @@
+# Cold standby for the anthropic family (G-4): a self-hosted Mistral endpoint takes over the reviewer
+# and judge seats Claude holds in config/mara.yaml, so the panel stays at three families with no
+# cross-border model at all; nothing else changes. Passes P1-P7. Confirm the served model id against
+# the standby deployment before a live drill and record the drill in ops/model-swap-drills.yaml.
+standby_for: anthropic
+models:
+  - { name: mistral-reviewer,  family: mistral,   provider: openai_compatible, model: mistral-instruct,       base_url: http://vllm-mistral.internal:8000/v1, api_key_env: MISTRAL_LOCAL_KEY, data_residency: on_prem }
+  - { name: deepseek-reviewer, family: deepseek,  provider: openai_compatible, model: deepseek-v3.2,          base_url: http://vllm-deepseek.internal:8000/v1, api_key_env: DEEPSEEK_LOCAL_KEY, data_residency: on_prem }
+  - { name: nemotron-reviewer, family: nemotron,  provider: openai_compatible, model: nvidia/nemotron-3-super, base_url: http://nim-nemotron.internal:8000/v1, api_key_env: NIM_LOCAL_KEY, data_residency: on_prem }
+roles:
+  reviewers: [mistral-reviewer, deepseek-reviewer, nemotron-reviewer]
+  skeptic: nemotron-reviewer
+  redteam: deepseek-reviewer
+  judges: [mistral-reviewer, deepseek-reviewer, nemotron-reviewer]
+gate: { block_on_tiers: [A, B], block_on_severity: [High, Critical], min_dimension_score: 60, accept_threshold: 0.6, human_threshold_alpha: 0.4 }

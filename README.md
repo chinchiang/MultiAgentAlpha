@@ -143,10 +143,12 @@ makes the script exit non-zero. `.github/workflows/governance.yml` runs it every
 the table to a `governance-check` tracking issue. `docs/governance-check-2026-09-12.md` is the
 first run: G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
 calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) failed
-on that first run; G-1, G-4 and G-10 need human evidence. G-7, G-11, G-12 and G-13 have since been
-implemented: G-11 passes, G-12 passes once `psirt.enabled` is set with a real endpoint, G-7 passes
-once the platform team has hashed and signed the weights (`docs/ml-bom.md`), G-13 passes once one
-person per role holds a valid training record (`docs/ai-literacy-training.md`).
+on that first run; G-1, G-4 and G-10 needed human evidence. Since then every item has a mechanism
+and is machine-decidable: G-11 passes; G-12 passes once `psirt.enabled` is set with a real endpoint;
+G-7 once the platform team has hashed and signed the weights (`docs/ml-bom.md`); G-13 once one
+person per role holds a valid training record (`docs/ai-literacy-training.md`); G-1, G-4 and G-10
+once the policy is approved, live swap drills are recorded and the rollout has started
+(`docs/governance-templates.md`). Nothing is marked passed before the fact.
 
 ## PSIRT hand-off (governance item G-12)
 
@@ -173,6 +175,19 @@ once `ml_bom.required` is true and a self-hosted model has no complete component
 are pending in this repository: it hosts no weights and the registry hashes could not be fetched
 from the authoring environment, so governance check G-7 stays red and says exactly what is missing.
 See `docs/ml-bom.md`.
+
+## Policy, cold standby and rollout templates (governance items G-1, G-4, G-10)
+
+The three items that needed a human now have machine-readable templates, so the weekly check
+decides and says what is missing: `docs/policy/mara-review-policy.md` (front matter with
+`status`/`approved_by`/`approved_on`/`review_by` and six marked mandatory statements; shipped as a
+draft), `config/examples/standby-for-<family>.yaml` plus `ops/model-swap-drills.yaml` and
+`scripts/model_swap_drill.py` (`rehearse` proves the process is unchanged on a mock panel, `record`
+logs a live swap timed from decision to first real PR; shipped empty), and `rollout:` in
+`config/mara.yaml` with `scripts/rollout_phase.py` (`status`, `baseline`, `advance`). The rollout
+phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking`. All three fail
+today for the stated reasons: the policy awaits PSO approval, no live drill has run, the rollout
+has not started. See `docs/governance-templates.md`.
 
 ## AI-literacy training (governance item G-13)
 

@@ -108,11 +108,21 @@ def _raw_config(path: Path) -> dict:
 # ----------------------------------------------------------------------------- checks
 
 
-def check_g1(root: Path) -> CheckResult:
-    hits = [p for p in (root / "docs").glob("*") if re.search(r"policy|政策", p.name, re.I)]
-    if hits:
-        return CheckResult("G-1", MANUAL, f"找到 {', '.join(f'`docs/{p.name}`' for p in hits)}；需人工確認它由 PSO 核定並寫明「自動審查不取代人工安全測試」")
-    return CheckResult("G-1", MANUAL, "docs/ 下沒有政策文件（檔名含 policy／政策）。需要：PSO 簽署的政策文件，明定 MARA 審查是 A.8.29 安全測試的一部分、通過不等於免除人工測試")
+def check_g1(root: Path, today: dt.date | None = None) -> CheckResult:
+    from mara.govdocs import POLICY_STATEMENTS, policy_status
+
+    today = today or dt.date.today()
+    path = root / "docs" / "policy" / "mara-review-policy.md"
+    st = policy_status(path, today)
+    if st.state == "missing":
+        return CheckResult("G-1", FAIL, "沒有政策文件 `docs/policy/mara-review-policy.md`。需要：以樣板建立，六條條文（S1 審查是 A.8.29 安全測試的一部分、"
+                           "S2 通過不等於免除人工測試、S3 處理義務、S4 人工裁決、S5 資料駐留、S6 例外）有內容，PSO 核定後填 status/approved_by/approved_on")
+    have = "、".join(f"{k} {POLICY_STATEMENTS[k]}" for k, ok in st.statements.items() if ok)
+    if st.ok:
+        return CheckResult("G-1", PASS, f"`docs/policy/mara-review-policy.md` v{st.meta.get('version', '?')} 由 {st.meta.get('approved_by')} 於 "
+                           f"{st.meta.get('approved_on')} 核定（複審 {st.meta.get('review_by') or '未定'}）；條文 {have}")
+    return CheckResult("G-1", FAIL, f"政策文件存在但{'（草案）' if st.state == 'draft' else ''}未達標：{'；'.join(st.problems)}。已有條文：{have or '無'}。"
+                       "需要：PSO 核定後在 front matter 填 `status: approved`、`approved_by`、`approved_on`、`review_by`")
 
 
 def check_g2(root: Path, config_path: Path) -> CheckResult:
@@ -176,16 +186,30 @@ def check_g3(root: Path, config_path: Path) -> CheckResult:
     return CheckResult("G-3", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + ev)
 
 
-def check_g4(root: Path) -> CheckResult:
-    hits = []
-    for p in list((root / "config").glob("*.y*ml")) + list((root / "config" / "examples").glob("*.y*ml")):
-        text = p.read_text(encoding="utf-8").lower()
-        fams = [k for k in ("llama", "mistral", "qwen") if k in text]
-        if fams:
-            hits.append(f"`{p.relative_to(root)}`（{', '.join(fams)}）")
-    if hits:
-        return CheckResult("G-4", MANUAL, f"找到含替代家族的設定：{'; '.join(hits)}；需人工確認冷備已部署且有一週內換模演練紀錄")
-    return CheckResult("G-4", MANUAL, "config/ 下沒有 Llama/Mistral/Qwen 冷備家族的設定。需要：冷備設定檔（可通過 `mara check-config`）、部署證明、換模演練（一週內完成）的紀錄")
+def check_g4(root: Path, config_path: Path | None = None, today: dt.date | None = None) -> CheckResult:
+    from mara.config import load_config
+    from mara.govdocs import DRILL_MAX_HOURS, drill_status
+
+    today = today or dt.date.today()
+    cfg = load_config(config_path or root / "config" / "mara.yaml")
+    statuses = drill_status(cfg, root, today)
+    if not statuses:
+        return CheckResult("G-4", PASS, "設定中沒有非 mock 的模型家族")
+    ev, problems = [], []
+    for st in statuses:
+        if st.config_ok:
+            ev.append(f"{st.family}→{st.standby_family} `{st.standby_config}` 可載入")
+        else:
+            problems.append(f"{st.family}：冷備設定{st.config_problem}")
+        if st.drill_ok and st.drill:
+            ev.append(f"{st.family} 換模演練 {st.drill.date} {st.drill.duration_hours:g} h 通過（{st.drill.performed_by}，{st.drill.evidence}）")
+        else:
+            problems.append(f"{st.family}：{st.drill_problem}")
+    need = (f"需要：每個生產家族一份 `config/examples/standby-for-<family>.yaml`（通過 `mara check-config`）與一年內完成、"
+            f"{DRILL_MAX_HOURS} 小時內通過的實地換模演練，以 `scripts/model_swap_drill.py record` 寫入 `ops/model-swap-drills.yaml`")
+    if problems:
+        return CheckResult("G-4", FAIL, "；".join(problems) + "。已有：" + ("；".join(ev) or "無") + "。" + need)
+    return CheckResult("G-4", PASS, "；".join(ev))
 
 
 def check_g5(root: Path) -> CheckResult:
@@ -336,12 +360,23 @@ def check_g9(root: Path, today: dt.date) -> CheckResult:
     return CheckResult("G-9", FAIL, f"{detail}。需要：{FRESH_DAYS} 天內以真實三家族執行的校準報告（`python scripts/calibrate.py --mode live`），含每家族每 CWE 的精確度與召回率、更新後的權重")
 
 
-def check_g10(root: Path, config_path: Path) -> CheckResult:
-    raw = _raw_config(config_path)
-    phase = raw.get("rollout_phase") or raw.get("rollout", {}).get("phase") if isinstance(raw.get("rollout"), dict) else raw.get("rollout_phase")
-    if phase:
-        return CheckResult("G-10", MANUAL, f"設定宣告 rollout_phase={phase}；需人工確認階段起訖日期與影子期基線報告（誤報率、每 PR finding 數、佇列長度、token 成本）")
-    return CheckResult("G-10", MANUAL, "設定無 `rollout_phase`。需要：目前階段（shadow／advisory／blocking）、起訖日期、影子期結束時的基線報告與第一份校準報告")
+def check_g10(root: Path, config_path: Path, today: dt.date | None = None) -> CheckResult:
+    from mara.config import load_config
+    from mara.govdocs import rollout_status
+
+    today = today or dt.date.today()
+    cfg = load_config(config_path)
+    st = rollout_status(cfg, root, today)
+    ev = [f"`rollout.phase: {st.phase}`"]
+    if st.days_in_phase is not None:
+        ev.append(f"自 {cfg.rollout.started_on} 起 {st.days_in_phase} 天" + (f"（預定 {st.due} 前進入下一階段）" if st.due else ""))
+    if cfg.rollout.baseline_report:
+        ev.append(f"基線報告 `{cfg.rollout.baseline_report}`")
+    ev += list(st.notes)
+    if st.ok:
+        return CheckResult("G-10", PASS, "；".join(ev))
+    return CheckResult("G-10", FAIL, "；".join(st.problems) + "。已有：" + "；".join(ev)
+                       + "。需要：`rollout.phase`（shadow→advisory→blocking）、`started_on`、影子期結束時的基線報告（`scripts/rollout_phase.py baseline`）")
 
 
 def check_g11(root: Path, config_path: Path) -> CheckResult:
@@ -420,8 +455,8 @@ def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> Ch
 def run_all(root: Path, config_path: Path, today: dt.date | None = None) -> list[CheckResult]:
     today = today or dt.date.today()
     return [
-        check_g1(root), check_g2(root, config_path), check_g3(root, config_path), check_g4(root), check_g5(root), check_g6(root),
-        check_g7(root, config_path), check_g8(root, today), check_g9(root, today), check_g10(root, config_path),
+        check_g1(root, today), check_g2(root, config_path), check_g3(root, config_path), check_g4(root, config_path, today), check_g5(root), check_g6(root),
+        check_g7(root, config_path), check_g8(root, today), check_g9(root, today), check_g10(root, config_path, today),
         check_g11(root, config_path), check_g12(root, config_path), check_g13(root, today, config_path),
     ]
 
