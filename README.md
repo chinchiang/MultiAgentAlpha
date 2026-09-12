@@ -102,6 +102,18 @@ separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <fil
 acceptance criteria (all 60 rows scored with evidence, layer sums consistent, CN rows present) and
 `tests/test_assessment.py` runs the same check in CI.
 
+## Actions inventory (Appendix E, prompt 5)
+
+`scripts/actions_inventory.py [root] --out docs/actions-inventory-<date>.md` inventories every
+`.github/workflows/*.yml` in the tree without modifying anything: triggers, `pull_request_target`,
+PR-head checkouts, top-level and job-level permissions, every `uses:` by reference kind, `run:`
+interpolation of attacker-controlled contexts, cache keys built from untrusted refs, a severity
+per report section 10.7 (Critical rows first), suggested full SHAs for every non-SHA reference
+(via `git ls-remote`; `--offline` to skip), a check that each SHA pin still matches its tag
+comment, and zizmor's SARIF when zizmor is on the PATH. Files that are not valid YAML are still
+inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run;
+its section 6 adds what the CI logs showed that the static inventory cannot.
+
 ## Other commands
 
 ```bash
