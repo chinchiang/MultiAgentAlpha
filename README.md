@@ -80,7 +80,7 @@ and WebGoat; they need human-authored `labels.json` files before they count.
 
 ## Policies enforced by the config
 
-`mara check-config <yaml>` evaluates five policies and exits non-zero if any fails; `MaraConfig`
+`mara check-config <yaml>` evaluates six policies and exits non-zero if any fails; `MaraConfig`
 refuses to load a violating file, so the pipeline cannot run outside policy:
 
 | Policy | Rule |
@@ -90,8 +90,9 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 | P3 panel-size | reviewers and judges each span at least three model families; exactly two only with a stated `reduced_panel_reason` (see `config/examples/prc-site.yaml`) |
 | P4 gate-bounds | `gate.self_judge_discount` at most 0.5, `gate.human_threshold_alpha` at least 0.3 |
 | P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr` unless `allow_source_code_to_non_on_prem` is set |
+| P6 psirt-scope | when the PSIRT hand-off is enabled: HTTPS webhook, product set, token from the environment, trigger tiers within A/B and severities within Critical/High |
 
-`config/examples/violating.yaml` breaks all five and is what the tests run against.
+`config/examples/violating.yaml` breaks the first five and is what the tests run against.
 
 ## Gap assessment (Appendix E, prompt 3)
 
@@ -142,6 +143,18 @@ the table to a `governance-check` tracking issue. `docs/governance-check-2026-09
 first run: G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
 calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) fail
 on the current state; G-1, G-4 and G-10 need human evidence.
+
+## PSIRT hand-off (governance item G-12)
+
+With `psirt.enabled: true` and `psirt.shipped: true` in the config, every accepted finding in the
+configured tiers and severities (default: tier A, Critical) is written to
+`out/psirt-notifications.json` as an EU CRA Article 14 early-warning payload carrying the evidence
+chain and the 24 h / 72 h / 14 d deadlines counted from the review; `mara review --notify-psirt`
+POSTs them to the PSIRT webhook with a bearer token from the environment. Policy P6 keeps the
+trigger narrow (tiers within A/B, severities within Critical/High, HTTPS, no inline secret).
+Whether a vulnerability is actively exploited, the legal trigger of Article 14, remains the
+PSIRT's determination. See `docs/psirt-integration.md`; `config/examples/psirt-enabled.yaml` is a
+complete example.
 
 ## Other commands
 

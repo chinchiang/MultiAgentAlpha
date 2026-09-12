@@ -49,6 +49,23 @@ require_family_diversity: true
 #   P3 panel-size       reviewers and judges each span >= 3 families (2 only with reduced_panel_reason)
 #   P4 gate-bounds      self_judge_discount <= 0.5, human_threshold_alpha >= 0.3
 #   P5 data-residency   non-mock models must be on_prem or vendor_api_zdr
+#   P6 psirt-scope      when the PSIRT hand-off is enabled: https webhook, product set, token from env, tiers within A/B, severities within Critical/High
 anthropic_covered_models_authorized: false
 anthropic_covered_models_authorization_ref: ""
 reduced_panel_reason: ""
+
+# G-12: PSIRT hand-off (EU CRA Article 14). When enabled and the reviewed target is a shipped product,
+# every accepted finding matching trigger_tiers × trigger_severities is written to out/psirt-notifications.json
+# with the 24 h / 72 h / 14 d deadlines counted from the review, and POSTed with `mara review --notify-psirt`.
+# See docs/psirt-integration.md and config/examples/psirt-enabled.yaml.
+psirt:
+  enabled: false
+  webhook_url: ""                     # https://psirt.example.internal/api/intake
+  token_env: PSIRT_WEBHOOK_TOKEN      # bearer token is read from this environment variable, never written here
+  product: ""                         # product / component identifier the reviewed code ships in
+  shipped: false                      # only shipped products start the Article 14 clock
+  trigger_tiers: [A]                  # policy P6: subset of [A, B]
+  trigger_severities: [Critical]      # policy P6: subset of [Critical, High]
+  early_warning_hours: 24
+  notification_hours: 72
+  final_report_days: 14

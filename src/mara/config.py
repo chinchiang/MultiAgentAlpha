@@ -41,6 +41,25 @@ class GateConfig(BaseModel):
     )
 
 
+class PsirtConfig(BaseModel):
+    """G-12: hand accepted tier-A Critical findings on a shipped product to the PSIRT so the
+    EU CRA Article 14 clocks (24 h early warning, 72 h notification, 14 d final report) start
+    from the review, not from someone reading the report."""
+
+    enabled: bool = False
+    webhook_url: str = Field(default="", description="HTTPS endpoint of the PSIRT intake (ticketing or SOAR)")
+    token_env: str = Field(default="PSIRT_WEBHOOK_TOKEN", description="Environment variable holding the bearer token; never inline")
+    product: str = Field(default="", description="Product or component identifier the reviewed code ships in")
+    shipped: bool = Field(default=False, description="True when the reviewed target is (part of) a shipped product")
+    trigger_tiers: list[str] = Field(default_factory=lambda: ["A"], description="Only these evidence tiers notify (policy P6: subset of A, B)")
+    trigger_severities: list[str] = Field(
+        default_factory=lambda: ["Critical"], description="Only these CVSS severities notify (policy P6: subset of Critical, High)"
+    )
+    early_warning_hours: int = Field(default=24, ge=1, le=24)
+    notification_hours: int = Field(default=72, ge=1, le=72)
+    final_report_days: int = Field(default=14, ge=1, le=14)
+
+
 class MaraConfig(BaseModel):
     models: list[ModelSpec]
     roles: RolesConfig
@@ -58,6 +77,7 @@ class MaraConfig(BaseModel):
         default="", description="Policy P1: reference of the authorization (ticket, contract clause)"
     )
     reduced_panel_reason: str = Field(default="", description="Policy P3: why only two model families are available (e.g. PRC in-country pipeline)")
+    psirt: PsirtConfig = Field(default_factory=PsirtConfig, description="G-12: PSIRT / CRA Article 14 hand-off")
 
     def model_by_name(self, name: str) -> ModelSpec:
         for m in self.models:

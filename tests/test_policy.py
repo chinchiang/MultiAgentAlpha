@@ -102,11 +102,11 @@ def test_check_config_lists_every_violation(root):
     runner = CliRunner()
     res = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml")])
     assert res.exit_code == 1, res.output
-    for pid in ("P1", "P2", "P3", "P4", "P5"):
+    for pid in ("P1", "P2", "P3", "P4", "P5", "P6"):
         assert pid in res.output, f"{pid} missing from output:\n{res.output}"
     assert res.output.count("FAIL") == 5
     ok = runner.invoke(app, ["check-config", str(root / "config" / "mara.yaml")])
     assert ok.exit_code == 0, ok.output
-    assert "5/5 policies pass" in ok.output
+    assert "6/6 policies pass" in ok.output
     js = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml"), "--json"])
     assert js.exit_code == 1 and '"passed": false' in js.output
