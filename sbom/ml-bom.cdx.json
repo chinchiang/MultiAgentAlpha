@@ -1,0 +1,191 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:66667297-c670-4838-bc3a-1972556ba22b",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-09-12T07:57:48Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "mara",
+          "version": "0.1.0",
+          "description": "scripts/ml_bom.py (governance item G-7)"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "mara",
+      "name": "mara",
+      "version": "0.1.0",
+      "description": "Multi-Agent Review Architecture; the self-hosted models below are its inference dependencies"
+    },
+    "properties": [
+      {
+        "name": "mara:bom-kind",
+        "value": "ML-BOM"
+      },
+      {
+        "name": "mara:weights-format-policy",
+        "value": "safetensors-only"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "machine-learning-model",
+      "bom-ref": "model:deepseek-v3.2",
+      "name": "DeepSeek-V3.2",
+      "version": "3.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "url": "https://github.com/deepseek-ai/DeepSeek-V3.2/blob/main/LICENSE"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://huggingface.co/deepseek-ai/DeepSeek-V3.2",
+          "comment": "huggingface"
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/deepseek-ai/DeepSeek-V3.2"
+        },
+        {
+          "type": "license",
+          "url": "https://github.com/deepseek-ai/DeepSeek-V3.2/blob/main/LICENSE"
+        }
+      ],
+      "modelCard": {
+        "modelParameters": {
+          "architectureFamily": "DeepSeek-V3 mixture-of-experts with DeepSeek Sparse Attention"
+        }
+      },
+      "properties": [
+        {
+          "name": "mara:model-id",
+          "value": "deepseek-v3.2"
+        },
+        {
+          "name": "mara:family",
+          "value": "deepseek"
+        },
+        {
+          "name": "mara:format",
+          "value": "safetensors"
+        },
+        {
+          "name": "mara:serving",
+          "value": "vllm"
+        },
+        {
+          "name": "mara:signature",
+          "value": "cosign-keyless"
+        },
+        {
+          "name": "mara:status",
+          "value": "pending"
+        },
+        {
+          "name": "mara:file-count",
+          "value": "0"
+        },
+        {
+          "name": "mara:signature-bundle",
+          "value": "sbom/ml-bom.cdx.json.sigstore.json"
+        },
+        {
+          "name": "mara:note",
+          "value": "PENDING. Weights must be downloaded from the official source only and loaded as safetensors; report Appendix B (A78): the formal source of the DeepSeek V4 weights could not be confirmed, so V3.2 is the only DeepSeek release with a verified source. Policy P2 keeps this model on-prem."
+        }
+      ]
+    },
+    {
+      "type": "machine-learning-model",
+      "bom-ref": "model:nvidia/nemotron-3-super",
+      "name": "NVIDIA Nemotron 3 Super",
+      "version": "3",
+      "licenses": [
+        {
+          "license": {
+            "name": "NVIDIA Open Model License"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://huggingface.co/nvidia",
+          "comment": "ngc"
+        }
+      ],
+      "modelCard": {
+        "modelParameters": {
+          "architectureFamily": "Nemotron 3 (hybrid Mamba-Transformer mixture-of-experts)"
+        }
+      },
+      "properties": [
+        {
+          "name": "mara:model-id",
+          "value": "nvidia/nemotron-3-super"
+        },
+        {
+          "name": "mara:family",
+          "value": "nemotron"
+        },
+        {
+          "name": "mara:format",
+          "value": "safetensors"
+        },
+        {
+          "name": "mara:serving",
+          "value": "nim"
+        },
+        {
+          "name": "mara:signature",
+          "value": "ngc"
+        },
+        {
+          "name": "mara:status",
+          "value": "pending"
+        },
+        {
+          "name": "mara:file-count",
+          "value": "0"
+        },
+        {
+          "name": "mara:signature-bundle",
+          "value": "sbom/ml-bom.cdx.json.sigstore.json"
+        },
+        {
+          "name": "mara:note",
+          "value": "PENDING. The licence text and the exact NGC/Hugging Face repository were not read during the research (report Appendix B, B-gap-9); record them here together with the hashes."
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "mara",
+      "dependsOn": [
+        "model:deepseek-v3.2",
+        "model:nvidia/nemotron-3-super"
+      ]
+    },
+    {
+      "ref": "model:deepseek-v3.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "model:nvidia/nemotron-3-super",
+      "dependsOn": []
+    }
+  ]
+}

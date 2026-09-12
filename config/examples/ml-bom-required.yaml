@@ -1,0 +1,21 @@
+# Example: policy P7 enforced. The single self-hosted model must have a complete component in the
+# ML-BOM; here it points at the synthetic example BOM (real hashes of two stand-in files, not real
+# weights) so `mara check-config config/examples/ml-bom-required.yaml` passes P1-P7.
+# With config/mara.yaml (both production models pending) the same setting would fail P7.
+models:
+  - { name: claude-reviewer,   family: anthropic, provider: anthropic,         model: claude-opus-5,      api_key_env: ANTHROPIC_API_KEY, data_residency: vendor_api_zdr }
+  - { name: deepseek-reviewer, family: deepseek,  provider: openai_compatible, model: example/model-7b,   base_url: http://vllm-deepseek.internal:8000/v1, api_key_env: DEEPSEEK_LOCAL_KEY, data_residency: on_prem }
+  - { name: nemotron-reviewer, family: nemotron,  provider: mock,              model: mock-nemotron }
+roles:
+  reviewers: [claude-reviewer, deepseek-reviewer, nemotron-reviewer]
+  skeptic: nemotron-reviewer
+  redteam: deepseek-reviewer
+  judges: [claude-reviewer, deepseek-reviewer, nemotron-reviewer]
+gate: { block_on_tiers: [A, B], block_on_severity: [High, Critical], min_dimension_score: 60, accept_threshold: 0.6, human_threshold_alpha: 0.4 }
+ml_bom:
+  required: true
+  path: sbom/examples/ml-bom.example.cdx.json
+  require_signature: false             # set true once `cosign sign-blob --bundle` has produced the bundle below
+  bundle: sbom/examples/ml-bom.example.cdx.json.sigstore.json
+  certificate_identity: platform-team@example.internal
+  certificate_oidc_issuer: https://token.actions.githubusercontent.com

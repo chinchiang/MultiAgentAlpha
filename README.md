@@ -91,6 +91,7 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 | P4 gate-bounds | `gate.self_judge_discount` at most 0.5, `gate.human_threshold_alpha` at least 0.3 |
 | P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr` unless `allow_source_code_to_non_on_prem` is set |
 | P6 psirt-scope | when the PSIRT hand-off is enabled: HTTPS webhook, product set, token from the environment, trigger tiers within A/B and severities within Critical/High |
+| P7 ml-bom | when `ml_bom.required`: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature method), signed when `require_signature` |
 
 `config/examples/violating.yaml` breaks the first five and is what the tests run against.
 
@@ -142,8 +143,9 @@ makes the script exit non-zero. `.github/workflows/governance.yml` runs it every
 the table to a `governance-check` tracking issue. `docs/governance-check-2026-09-12.md` is the
 first run: G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
 calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) failed
-on that first run; G-1, G-4 and G-10 need human evidence. G-11 and G-12 have since been implemented:
-G-11 passes, G-12 passes once `psirt.enabled` is set with a real endpoint.
+on that first run; G-1, G-4 and G-10 need human evidence. G-7, G-11 and G-12 have since been implemented:
+G-11 passes, G-12 passes once `psirt.enabled` is set with a real endpoint, G-7 passes once the
+platform team has hashed and signed the weights (`docs/ml-bom.md`).
 
 ## PSIRT hand-off (governance item G-12)
 
@@ -156,6 +158,20 @@ trigger narrow (tiers within A/B, severities within Critical/High, HTTPS, no inl
 Whether a vulnerability is actively exploited, the legal trigger of Article 14, remains the
 PSIRT's determination. See `docs/psirt-integration.md`; `config/examples/psirt-enabled.yaml` is a
 complete example.
+
+## ML-BOM for the self-hosted weights (governance item G-7)
+
+The weights served by the on-prem DeepSeek and Nemotron endpoints are inference dependencies, so
+they are listed in a CycloneDX 1.6 ML-BOM. `sbom/models.yaml` is the manifest the platform team
+fills (official source, licence, per-file SHA-256 of the safetensors weights, signature method);
+`scripts/ml_bom.py` hashes a weights directory (pickle checkpoints are refused), builds
+`sbom/ml-bom.cdx.json`, validates it against the vendored schema, re-verifies a directory on the
+inference host and checks the cosign bundle with the locked cosign. Policy P7 refuses the config
+once `ml_bom.required` is true and a self-hosted model has no complete component; until then
+`mara check-config` and the review report show each model's BOM status. Both production entries
+are pending in this repository: it hosts no weights and the registry hashes could not be fetched
+from the authoring environment, so governance check G-7 stays red and says exactly what is missing.
+See `docs/ml-bom.md`.
 
 ## Human queue (governance item G-11)
 

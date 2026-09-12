@@ -58,8 +58,18 @@ def render_markdown(r: ReviewReport) -> str:
             cv, loc = n["cvss4"], n["location"]
             lines.append(f"- {n['finding_id']} · {n['title']} · {n['cwe']} · CVSS {cv['score']} {cv['severity']} · tier {n['evidence_tier']}"
                          f" · exploitable: {n['exploitable']} · `{loc['file']}:{loc['line']}`")
+    ml_bom = r.bias_audit.get("ml_bom") or {}
+    lines += ["", "## Model provenance (ML-BOM, G-7)", ""]
+    if ml_bom:
+        for name, v in ml_bom.items():
+            detail = f" {v['component']}@{v['version']} sha256 {v['sha256'][:12]}" if v.get("status") == "complete" else ""
+            lines.append(f"- {name} (`{v['model_id']}`): {v['status']}{detail}")
+    else:
+        lines.append("_No self-hosted model in this configuration._")
     lines += ["", "## Bias and integrity audit", ""]
     for k, v in r.bias_audit.items():
+        if k == "ml_bom":
+            continue
         lines.append(f"- {k}: {v}")
     return "\n".join(lines) + "\n"
 

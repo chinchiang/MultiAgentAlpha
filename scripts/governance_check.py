@@ -264,30 +264,50 @@ def check_g6(root: Path, workflows_dir: Path | None = None) -> CheckResult:
 
 
 def check_g7(root: Path, config_path: Path) -> CheckResult:
-    cands = list((root / "sbom").glob("*.json")) + list(root.glob("*.cdx.json")) + list(root.glob("bom.json"))
+    from mara.mlbom import component_problems, load_bom, ml_components, props
+
+    raw = _raw_config(config_path)
+    self_hosted = [(m.get("name", "?"), m.get("model", "?")) for m in raw.get("models", []) if m.get("provider") == "openai_compatible"]
+    cands = sorted((root / "sbom").glob("*.cdx.json")) + ([root / "bom.json"] if (root / "bom.json").exists() else [])
+    comps: dict[str, dict] = {}
     boms = []
     for p in cands:
         try:
-            d = json.loads(p.read_text(encoding="utf-8"))
+            comps.update(ml_components(load_bom(p)))
+            boms.append(p)
         except (OSError, ValueError):
             continue
-        if d.get("bomFormat") == "CycloneDX":
-            boms.append((p, d))
-    raw = _raw_config(config_path)
-    self_hosted = sorted({m.get("family", "?") for m in raw.get("models", []) if m.get("provider") == "openai_compatible"})
+    if not self_hosted:
+        return CheckResult("G-7", PASS, "設定中沒有自架模型，ML-BOM 無需列出權重")
+    need = ("需要：平台團隊只從官方來源下載權重，在下載主機執行 `scripts/ml_bom.py hash-dir … --write-manifest sbom/models.yaml`（或貼上 registry 的 sha256），"
+            "`ml_bom.py build` 產生 BOM，以 `cosign sign-blob --bundle` 簽章後提交，並把 `ml_bom.required` 設為 true 讓政策 P7 強制")
     if not boms:
-        return CheckResult("G-7", FAIL, f"找不到 CycloneDX ML-BOM（`sbom/*.json`、`*.cdx.json`、`bom.json`）。設定中的自架家族 {self_hosted} 的權重需要 `type: machine-learning-model` 元件、來源、雜湊與簽章（cosign 或 NGC）")
-    problems, ev = [], []
-    for p, d in boms:
-        comps = [c for c in d.get("components", []) if c.get("type") == "machine-learning-model"]
-        if not comps:
-            problems.append(f"`{p.relative_to(root)}` 沒有 machine-learning-model 元件")
-        for c in comps:
-            if not c.get("hashes"):
-                problems.append(f"`{p.relative_to(root)}` 的 {c.get('name')} 無 hashes")
-            else:
-                ev.append(f"{c.get('name')}@{c.get('version', '?')} hashes {len(c['hashes'])}")
-    return CheckResult("G-7", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + "；".join(ev))
+        return CheckResult("G-7", FAIL, f"找不到 CycloneDX ML-BOM（`sbom/*.cdx.json`、`bom.json`）。自架模型 {[m for _, m in self_hosted]} 的權重未列冊。{need}")
+    ev = [f"`{p.relative_to(root)}`" for p in boms]
+    if (root / "sbom" / "models.yaml").exists():
+        ev.append("manifest `sbom/models.yaml`")
+    problems = []
+    for name, model_id in self_hosted:
+        c = comps.get(model_id)
+        if c is None:
+            problems.append(f"`{model_id}`（{name}）在 ML-BOM 中沒有 machine-learning-model 元件")
+            continue
+        pr = component_problems(c)
+        if pr:
+            problems.append(f"`{model_id}`（{name}）元件不完整：{'；'.join(pr)}")
+        else:
+            digest = next((h["content"] for h in c.get("hashes", []) if h.get("alg") == "SHA-256"), "")
+            ev.append(f"`{model_id}` {c.get('name')}@{c.get('version')} SHA-256 {digest[:12]}… {props(c).get('file-count', '?')} 檔，簽章 {props(c).get('signature')}")
+    ml = raw.get("ml_bom") or {}
+    if ml.get("required"):
+        ev.append("`ml_bom.required: true`（政策 P7 強制）")
+        if ml.get("require_signature") and not (root / str(ml.get("bundle", ""))).exists():
+            problems.append(f"`ml_bom.require_signature` 已開但簽章 bundle `{ml.get('bundle')}` 不存在")
+    else:
+        ev.append("`ml_bom.required: false`（P7 尚未強制）")
+    if problems:
+        return CheckResult("G-7", FAIL, "；".join(problems) + "。已有：" + "；".join(ev) + "。" + need)
+    return CheckResult("G-7", PASS, "；".join(ev))
 
 
 def check_g8(root: Path, today: dt.date) -> CheckResult:

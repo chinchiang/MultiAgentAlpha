@@ -82,10 +82,10 @@ def check_config(
     config: Path = typer.Argument(Path("config/mara.yaml")),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
 ):
-    """Evaluate every configuration policy (P1-P5) and exit non-zero if any fails."""
+    """Evaluate every configuration policy (P1-P7) and exit non-zero if any fails."""
     import yaml
 
-    from .config import GateConfig, MaraConfig, ModelSpec, PsirtConfig, RolesConfig
+    from .config import GateConfig, MaraConfig, MlBomConfig, ModelSpec, PsirtConfig, RolesConfig
     from .policy import evaluate_policies
 
     raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
@@ -94,11 +94,12 @@ def check_config(
         roles = RolesConfig.model_validate(raw.get("roles", {}))
         gate = GateConfig.model_validate(raw.get("gate", {}) or {})
         psirt = PsirtConfig.model_validate(raw.get("psirt", {}) or {})
+        ml_bom = MlBomConfig.model_validate(raw.get("ml_bom", {}) or {})
     except Exception as e:  # structural error: nothing to evaluate
         console.print(f"[red]invalid config structure:[/red] {e}")
         raise typer.Exit(code=1) from e
-    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate", "psirt")}
-    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, psirt=psirt, **extra)
+    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate", "psirt", "ml_bom")}
+    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, psirt=psirt, ml_bom=ml_bom, **extra)
     names = {m.name for m in models}
     unknown = [n for n in [roles.skeptic, roles.redteam, *roles.reviewers, *roles.judges] if n not in names]
     if unknown:

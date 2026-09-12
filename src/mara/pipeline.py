@@ -47,6 +47,9 @@ class Pipeline:
 
         self.backlog = read_backlog(cfg)
         self.human_alpha_threshold, self.exclude_tier_c, self.queue_tightened = tightening(cfg, self.backlog)
+        from .mlbom import status_for_config
+
+        self.ml_bom_status = status_for_config(cfg)
 
     # ------------------------------------------------------------------ helpers
     def _p(self, name: str) -> Provider:
@@ -315,6 +318,13 @@ class Pipeline:
         report.psirt = build_notifications(report, self.cfg)
         self.audit["psirt_notifications"] = len(report.psirt)
         report.bias_audit["psirt_notifications"] = len(report.psirt)
+        # G-7: which self-hosted weights the report was produced with, as the ML-BOM knows them
+        ml_bom = {n: {"model_id": st.model_id, "status": st.status, "component": st.component_name,
+                      "version": st.component_version, "sha256": st.digest} for n, st in self.ml_bom_status.items()}
+        self.audit["ml_bom"] = ml_bom
+        report.bias_audit["ml_bom"] = ml_bom
+        if ml_bom:
+            self.log("L0: ML-BOM: " + ", ".join(f"{n} {v['status']}" for n, v in ml_bom.items()))
         self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")
         return report
 

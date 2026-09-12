@@ -198,6 +198,6 @@ class ReviewReport(BaseModel):
     dimensions: list[DimensionScore]
     overall_score: float
     gate_passed: bool
-    bias_audit: dict[str, float | int | str]
+    bias_audit: dict[str, float | int | str | dict]
     psirt: list[dict] = Field(default_factory=list, description="G-12: CRA Article 14 early-warning payloads for accepted tier-A Critical findings")
     human_queue: list[HumanQueueItem] = Field(default_factory=list, description="G-11: findings that need a human decision, with full context")
