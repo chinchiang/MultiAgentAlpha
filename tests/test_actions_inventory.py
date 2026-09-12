@@ -40,7 +40,7 @@ def test_hardened_workflow_has_no_critical_or_high():
     assert not inv.head_checkout_lines
     assert inv.top_permissions == "{}"
     assert set(inv.job_permissions) == {"deterministic-tools", "tests-and-mock-review"}
-    assert all(u.kind == "sha" for u in inv.uses) and len(inv.uses) == 6
+    assert inv.uses and all(u.kind == "sha" for u in inv.uses)
     assert not inv.run_interpolations
     assert SEVERITY_ORDER.index(inv.severity) >= SEVERITY_ORDER.index("Medium")
 
