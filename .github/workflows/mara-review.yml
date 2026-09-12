@@ -9,6 +9,8 @@
 #     inventory found gitleaks had crashed with 403 on every PR while the job stayed green)
 #   - zizmor audits only the real workflows under .github/workflows; the seeded fixture workflow is audited in a
 #     separate step whose findings must match the pre-recorded fixtures/vuln-sample-sarif/zizmor.sarif
+#   - L0 tool binaries come only from tools/versions.lock via scripts/install_tools.py (SHA-256 + publisher
+#     signature/provenance verified); nothing is taken from PATH or installed unpinned
 #   - live model calls are NOT made in CI by default; the pipeline runs in mock mode unless MARA_LIVE=1 is set by a trusted branch
 name: mara-review
 on:
@@ -35,11 +37,19 @@ jobs:
           inputs: .github/workflows
           advanced-security: false
           annotations: true
+      - name: Install pinned, verified L0 tools (tools/versions.lock)
+        # SHA-256 for every asset, then the publisher's signature/provenance: cosign keyless (trivy, cosign),
+        # SLSA provenance (osv-scanner, slsa-verifier), GitHub attestation via gh (zizmor), publisher
+        # checksums (gitleaks), pip --require-hashes (semgrep). Any failure fails the job. See docs/tools-provenance.md.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # gh attestation verify
+        run: |
+          python3 scripts/install_tools.py
+          cat .mara-tools/manifest.json
       - name: zizmor must trip on the seeded fixture exactly as pre-recorded
         run: |
-          python3 -m pip install --quiet zizmor==1.30.1
           set +e
-          (cd fixtures/vuln-sample && zizmor --no-progress --offline --format sarif .) > fixture-zizmor.sarif
+          (cd fixtures/vuln-sample && ../../.mara-tools/bin/zizmor --no-progress --offline --format sarif .) > fixture-zizmor.sarif
           echo "zizmor exit code on the fixture: $?"
           set -e
           python3 - <<'PY'

@@ -118,6 +118,19 @@ seeded fixture match `fixtures/vuln-sample-sarif/zizmor.sarif` (now produced by 
 no longer hides a crashed or leaking gitleaks run behind `continue-on-error` (`.gitleaks.toml`
 allowlists the seeded secrets under `fixtures/` and `calib/samples/`).
 
+## Pinned, verified L0 tools (Appendix E, prompt 7)
+
+`tools/versions.lock` pins every deterministic tool (gitleaks, osv-scanner, zizmor, trivy, semgrep,
+plus the verifiers cosign and slsa-verifier) by exact version, download URL and SHA-256, and names
+the strongest verification the publisher offers. `python scripts/install_tools.py` downloads each
+asset, checks the SHA-256 (never skippable), runs the publisher-side check — cosign keyless bundle,
+SLSA provenance, GitHub attestation, publisher checksum file, or `pip --require-hashes` for semgrep —
+and installs into `.mara-tools/bin`, writing `.mara-tools/manifest.json`. Any mismatch aborts.
+`mara/tools/runner.py` executes tools only from that directory and reports "not installed" otherwise;
+PATH is never consulted. `docs/tools-provenance.md` records source, licence, what each verification
+proves and the remaining gaps (gitleaks and semgrep publish no signature). CI installs and verifies
+the whole set on every run.
+
 ## Other commands
 
 ```bash
