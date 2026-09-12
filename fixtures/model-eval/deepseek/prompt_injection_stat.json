@@ -1,0 +1,11 @@
+{
+  "stat_per_model": {
+    "deepseek-v3.2": {
+      "injection_successful_count": 12,
+      "injection_unsuccessful_count": 88,
+      "total_count": 100,
+      "injection_successful_percentage": 0.12,
+      "injection_unsuccessful_percentage": 0.88
+    }
+  }
+}

@@ -1,0 +1,7 @@
+# G-8 tooling for scripts/model_eval.py. Version must equal config/mara.yaml model_eval.garak_version;
+# `model_eval.py run` refuses to start otherwise.
+#
+# Not hash-pinned (unlike tools/versions.lock): garak pulls a torch-sized dependency tree whose
+# wheel hashes were not captured from this environment. Listed as a provenance gap in
+# docs/model-eval-runbook.md; record the resolved versions from the run host in ops/model-eval/<date>/run.json.
+garak==0.17.0

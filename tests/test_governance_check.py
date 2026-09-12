@@ -44,17 +44,24 @@ def test_render_has_thirteen_rows_and_nonzero_exit_signal(results):
 
 
 def test_g8_and_g9_freshness(tmp_path):
+    """G-8/G-9 need dated reports within 90 days whose front matter says mode: live (a bare dated
+    file, or a legacy body line, is never enough; the detailed rules are in tests/test_model_eval.py)."""
     docs = tmp_path / "docs"
     docs.mkdir()
+    live = "---\nmode: live\nfamilies: []\n---\n# x\n"
     assert check_g8(tmp_path, TODAY).status == FAIL
-    (docs / "garak-2026-05-01.md").write_text("old")
-    assert check_g8(tmp_path, TODAY).status == FAIL
-    (docs / "cyberseceval-2026-08-20.md").write_text("fresh")
+    (docs / "garak-2026-05-01.md").write_text(live)
+    (docs / "cyberseceval-2026-05-01.md").write_text(live)
+    assert check_g8(tmp_path, TODAY).status == FAIL, "older than 90 days"
+    (docs / "garak-2026-08-20.md").write_text("fresh but no front matter")
+    (docs / "cyberseceval-2026-08-20.md").write_text(live)
+    assert check_g8(tmp_path, TODAY).status == FAIL, "garak report not marked live"
+    (docs / "garak-2026-08-20.md").write_text(live)
     assert check_g8(tmp_path, TODAY).status == PASS
     (docs / "calibration-2026-09-01.md").write_text("# 校準\n\n執行模式：**mock**。\n")
     r = check_g9(tmp_path, TODAY)
     assert r.status == FAIL and "mock" in r.evidence
-    (docs / "calibration-2026-09-05.md").write_text("# 校準\n\n執行模式：**live**。\n")
+    (docs / "calibration-2026-09-05.md").write_text("---\nmode: live\nfamilies: []\nprovider_modes: [live]\nlabels: 3\n---\n# 校準\n")
     assert check_g9(tmp_path, TODAY).status == PASS
 
 

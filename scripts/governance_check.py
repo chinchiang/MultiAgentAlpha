@@ -334,30 +334,84 @@ def check_g7(root: Path, config_path: Path) -> CheckResult:
     return CheckResult("G-7", PASS, "；".join(ev))
 
 
-def check_g8(root: Path, today: dt.date) -> CheckResult:
-    files = _dated_files(root / "docs", ["garak-*", "cyberseceval-*", "cybersec-eval-*"], today)
-    fresh = [(p, d, age) for p, d, age in files if age <= FRESH_DAYS]
-    if fresh:
-        return CheckResult("G-8", PASS, "；".join(f"`docs/{p.name}`（{d}，{age} 天前）" for p, d, age in fresh))
-    stale = "；".join(f"`docs/{p.name}`（{age} 天前）" for p, d, age in files) or "無任何 garak／CyberSecEval 報告"
-    return CheckResult("G-8", FAIL, f"{stale}。需要：{FRESH_DAYS} 天內對三個家族執行 garak 與 CyberSecEval 4（Prompt Injection、False Refusal Rate）的報告，檔名含日期")
+def _production_families(config_path: Path) -> list[str]:
+    raw = _raw_config(config_path)
+    return sorted({m.get("family", "?") for m in raw.get("models", []) if m.get("provider") != "mock"})
 
 
-def check_g9(root: Path, today: dt.date) -> CheckResult:
+def _fresh_live_report(root: Path, pattern: str, today: dt.date, families: list[str]) -> tuple[list[str], list[str]]:
+    """(evidence for a fresh live report covering the families, problems otherwise)."""
+    from mara.govdocs import read_front_matter
+
+    files = _dated_files(root / "docs", [pattern], today)
+    problems, ev = [], []
+    for p, d, age in files:
+        if age > FRESH_DAYS:
+            problems.append(f"`docs/{p.name}` 已 {age} 天（> {FRESH_DAYS}）")
+            continue
+        meta, _ = read_front_matter(p)
+        mode = str(meta.get("mode", "")).lower()
+        covered = set(meta.get("families") or [])
+        missing = [f for f in families if f not in covered]
+        if mode != "live":
+            problems.append(f"`docs/{p.name}`（{d}）mode 為 {mode or '未標示'}，不是 live")
+        elif missing:
+            problems.append(f"`docs/{p.name}`（{d}）未涵蓋家族 {missing}")
+        else:
+            ev.append(f"`docs/{p.name}`（{d}，{age} 天前，live，家族 {sorted(covered)}）")
+            break
+    if not files:
+        problems.append(f"沒有 `docs/{pattern}`")
+    return ev, ([] if ev else problems)
+
+
+def check_g8(root: Path, today: dt.date, config_path: Path | None = None) -> CheckResult:
+    families = _production_families(config_path) if config_path else []
+    ev_g, pr_g = _fresh_live_report(root, "garak-*.md", today, families)
+    ev_c, pr_c = _fresh_live_report(root, "cyberseceval-*.md", today, families)
+    need = (f"需要：{FRESH_DAYS} 天內用 `scripts/model_eval.py run` 對 {families or '三個家族'} 執行 garak 與 CyberSecEval 4"
+            "（prompt-injection、mitre-frr），`report --mode live` 產生 `docs/garak-<date>.md` 與 `docs/cyberseceval-<date>.md`；見 `docs/model-eval-runbook.md`")
+    if ev_g and ev_c:
+        summary = ""
+        try:
+            from mara.model_eval import latest_summary
+
+            s = latest_summary(root)
+            if s:
+                summary = "；判定 " + ", ".join(f"{f} {v['verdict'].get('overall')}" for f, v in s["families"].items())
+        except Exception:  # pragma: no cover
+            summary = ""
+        return CheckResult("G-8", PASS, "；".join(ev_g + ev_c) + summary)
+    return CheckResult("G-8", FAIL, "；".join(pr_g + pr_c) + "。" + need)
+
+
+def check_g9(root: Path, today: dt.date, config_path: Path | None = None) -> CheckResult:
+    from mara.govdocs import read_front_matter
+
+    families = _production_families(config_path) if config_path else []
     files = _dated_files(root / "docs", ["calibration-*.md"], today)
-    fresh, mock_only = [], []
+    fresh, rejected = [], []
     for p, d, age in files:
         if age > FRESH_DAYS:
             continue
-        head = p.read_text(encoding="utf-8")[:600]
-        if re.search(r"執行模式[:：]\s*\**mock", head) or "mode `mock`" in head:
-            mock_only.append(f"`docs/{p.name}`（{d}，mock 模式）")
-        else:
-            fresh.append(f"`docs/{p.name}`（{d}，{age} 天前）")
+        meta, body = read_front_matter(p)
+        head = body[:600] if meta else p.read_text(encoding="utf-8")[:600]
+        mode = str(meta.get("mode", "")).lower() if meta else ("mock" if re.search(r"執行模式[:：]\s*\**mock", head) else "")
+        if mode != "live":
+            rejected.append(f"`docs/{p.name}`（{d}，{mode or 'mode 未標示'}）")
+            continue
+        covered = set(meta.get("families") or [])
+        missing = [f for f in families if f not in covered]
+        if missing or "live" not in (meta.get("provider_modes") or ["live"]):
+            rejected.append(f"`docs/{p.name}`（{d}，未涵蓋 {missing or meta.get('provider_modes')}）")
+            continue
+        fresh.append(f"`docs/{p.name}`（{d}，{age} 天前，live，家族 {sorted(covered)}，{meta.get('labels', '?')} 個標籤）")
     if fresh:
         return CheckResult("G-9", PASS, "；".join(fresh))
-    detail = "；".join(mock_only) if mock_only else (f"最新校準報告 {files[0][2]} 天前" if files else "無校準報告")
-    return CheckResult("G-9", FAIL, f"{detail}。需要：{FRESH_DAYS} 天內以真實三家族執行的校準報告（`python scripts/calibrate.py --mode live`），含每家族每 CWE 的精確度與召回率、更新後的權重")
+    detail = "；".join(rejected) if rejected else (f"最新校準報告 {files[0][2]} 天前" if files else "無校準報告")
+    return CheckResult("G-9", FAIL, f"{detail}。需要：{FRESH_DAYS} 天內以真實家族 {families or ''} 執行 "
+                       "`scripts/calibration_run.py --mode live`（check-config → 每個樣本 mara review → calibrate --mode live），"
+                       "報告 front matter 的 mode 為 live 且 families 涵蓋設定中的家族")
 
 
 def check_g10(root: Path, config_path: Path, today: dt.date | None = None) -> CheckResult:
@@ -456,7 +510,7 @@ def run_all(root: Path, config_path: Path, today: dt.date | None = None) -> list
     today = today or dt.date.today()
     return [
         check_g1(root, today), check_g2(root, config_path), check_g3(root, config_path), check_g4(root, config_path, today), check_g5(root), check_g6(root),
-        check_g7(root, config_path), check_g8(root, today), check_g9(root, today), check_g10(root, config_path, today),
+        check_g7(root, config_path), check_g8(root, today, config_path), check_g9(root, today, config_path), check_g10(root, config_path, today),
         check_g11(root, config_path), check_g12(root, config_path), check_g13(root, today, config_path),
     ]
 

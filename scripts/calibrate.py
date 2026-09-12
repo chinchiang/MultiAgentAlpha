@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -204,7 +205,26 @@ def dawid_skene(runs, iters: int = 30):
     return rel, len(items)
 
 
-def suggest_weights(stats, rel, families):
+def load_model_eval() -> dict | None:
+    """G-8: latest calib/model-eval-<date>.json (garak / CyberSecEval verdicts per family)."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from mara.model_eval import latest_summary
+
+    return latest_summary(ROOT)
+
+
+def _penalty() -> float:
+    try:
+        import yaml
+
+        raw = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8")) or {}
+        return float((raw.get("model_eval") or {}).get("weight_penalty_on_fail", 0.8))
+    except (OSError, ValueError):
+        return 0.8
+
+
+def suggest_weights(stats, rel, families, model_eval: dict | None = None, penalty: float | None = None):
+    penalty = _penalty() if penalty is None else penalty
     out = {}
     for fam in families:
         tp = sum(c["tp"] for c in stats[fam].values())
@@ -216,13 +236,29 @@ def suggest_weights(stats, rel, families):
         supervised = 0.5 + f1  # 0.5..1.5
         unsup = rel.get(fam, 0.5) * 2  # 0..2
         w = max(0.2, min(2.0, round(0.6 * supervised + 0.4 * unsup, 2)))
-        out[fam] = {"precision": prec, "recall": recall, "f1": f1, "n_labels": tp + fn, "ds_reliability": rel.get(fam), "weight": w}
+        verdict = ((model_eval or {}).get("families", {}).get(fam) or {}).get("verdict", {}).get("overall", "none")
+        penalised = verdict == "fail"
+        if penalised:
+            w = max(0.2, round(w * penalty, 2))
+        out[fam] = {"precision": prec, "recall": recall, "f1": f1, "n_labels": tp + fn, "ds_reliability": rel.get(fam), "weight": w,
+                    "model_eval": verdict, "penalised": penalised}
     return out
 
 
-def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mode: str) -> str:
-    today = dt.date.today().isoformat()
-    L = [f"# 第一次校準報告（{today}）", "",
+def front_matter(mode: str, date: str, families, runs, model_eval: dict | None) -> str:
+    import yaml
+
+    meta = {"report": "calibration", "date": date, "mode": mode, "families": list(families),
+            "samples": [s for s, _, _ in runs], "labels": sum(len(labs) for _, _, labs in runs),
+            "provider_modes": sorted({rep.get("provider_mode", "?") for _, rep, _ in runs}),
+            "model_eval": (model_eval or {}).get("date"), "governance": "G-9"}
+    return "---\n" + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True) + "---\n"
+
+
+def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mode: str, date: str | None = None,
+           model_eval: dict | None = None) -> str:
+    today = date or dt.date.today().isoformat()
+    L = [front_matter(mode, today, families, runs, model_eval), f"# 校準報告（{today}）", "",
          f"執行模式：**{mode}**。" + (" 本次以 mock 家族跑通校準迴圈，數字只驗證方法，不代表任何真實模型。" if mode == "mock" else ""),
          f"樣本：{', '.join(s for s, _, _ in runs)}（共 {sum(len(labs) for _, _, labs in runs)} 個標籤）。", "",
          "## 1. 每家族每 CWE 的精確度與召回率", ""]
@@ -246,16 +282,37 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
           "## 4. Dawid-Skene 無監督可靠度（僅用投票，不看標籤）", "", f"項目數 {n_items}", "", "| 家族 | 可靠度 |", "|---|---:|"]
     for fam, v in sorted(rel.items()):
         L.append(f"| {fam} | {v:.3f} |")
-    L += ["", "## 5. 建議家族權重（0.2–2.0；0.6×監督 F1 + 0.4×DS 可靠度）", "",
-          "| 家族 | precision | recall | F1 | DS 可靠度 | 建議權重 | 標籤數 |", "|---|---:|---:|---:|---:|---:|---:|"]
+    L += ["", "## 5. 建議家族權重（0.2–2.0；0.6×監督 F1 + 0.4×DS 可靠度；G-8 未達門檻者再乘以懲罰係數）", "",
+          "| 家族 | precision | recall | F1 | DS 可靠度 | G-8 評測 | 建議權重 | 標籤數 |", "|---|---:|---:|---:|---:|---|---:|---:|"]
     for fam in families:
         w = weights[fam]
-        L.append(f"| {fam} | {w['precision']:.2f} | {w['recall']:.2f} | {w['f1']:.2f} | {w['ds_reliability'] if w['ds_reliability'] is not None else 'n/a'} | **{w['weight']}** | {w['n_labels']} |")
-    L += ["", "權重未自動寫入 `config/mara.yaml`；採用與否由人決定。標籤數低於 30 的家族權重只能視為方向，不能視為量測。", "",
-          "## 6. 如何重跑（真實模型）", "", "```bash",
-          "mara check-config config/mara.yaml   # 三個家族端點可達、ZDR 已啟用",
-          "for s in calib/samples/*/; do mara review \"$s\" --config config/mara.yaml --out calib-out/$(basename $s); done",
-          "python scripts/calibrate.py --mode live", "```", ""]
+        ev = w.get("model_eval", "none") + ("（已懲罰）" if w.get("penalised") else "")
+        L.append(f"| {fam} | {w['precision']:.2f} | {w['recall']:.2f} | {w['f1']:.2f} | "
+                 f"{w['ds_reliability'] if w['ds_reliability'] is not None else 'n/a'} | {ev} | **{w['weight']}** | {w['n_labels']} |")
+    L += ["", "權重未自動寫入 `config/mara.yaml`；採用與否由人決定。標籤數低於 30 的家族權重只能視為方向，不能視為量測。", ""]
+    L += ["## 6. 模型紅隊評測（G-8：garak 與 CyberSecEval 4）", ""]
+    if model_eval:
+        th = model_eval.get("thresholds", {})
+        L += [f"最近一次：{model_eval['date']}（mode {model_eval['mode']}，garak {model_eval.get('garak_version')}，"
+              f"CyberSecEval {model_eval.get('cyberseceval_ref')}）。門檻：garak pass rate ≥ {th.get('garak_pass_rate_min')}、"
+              f"注入成功率 ≤ {th.get('prompt_injection_success_max')}、FRR ≤ {th.get('false_refusal_max')}。", "",
+              "| 家族 | garak pass rate | 注入成功率 | FRR | 判定 |", "|---|---:|---:|---:|---|"]
+        for fam, f in model_eval.get("families", {}).items():
+            v = f.get("verdict", {})
+            cells = ["n/a" if v.get(k, {}).get("value") is None else f"{v[k]['value']:.3f}"
+                     for k in ("garak_pass_rate", "prompt_injection_success", "false_refusal")]
+            L.append(f"| {fam} | {cells[0]} | {cells[1]} | {cells[2]} | {v.get('overall', 'missing')} |")
+        if model_eval.get("mode") != "live":
+            L += ["", "**該評測不是對真實端點的執行結果（mode ≠ live），不滿足 G-8；權重懲罰仍依其判定套用以示範機制。**"]
+    else:
+        L.append("尚無 `calib/model-eval-<date>.json`：G-8 從未執行，權重未受評測結果調整。")
+    L += ["", "## 7. Alternative Annotator Test（無監督「不採納」的驗收門檻）", "",
+          "報告第 15.3 節與 G-9 要求以 Alternative Annotator Test 證明管線的判斷在統計上可替代人類標註者，才允許無監督的「不採納」。"
+          "該檢定需要每個項目至少兩位獨立的人工標註者；本 repo 的標籤集只有一份標籤，裁決登錄簿（G-11）每張工單只有一位裁決者。"
+          "**目前無法計算；在取得第二位獨立標註前，管線的所有「不採納」都應被人工抽查。**", ""]
+    L += ["## 8. 如何重跑（真實模型）", "", "```bash",
+          "python3 scripts/calibration_run.py --mode live --config config/mara.yaml   # check-config → mara review 每個樣本 → calibrate --mode live",
+          "```", ""]
     return "\n".join(L)
 
 
@@ -265,17 +322,25 @@ def main() -> int:
     ap.add_argument("--samples-dir", default="calib/samples")
     ap.add_argument("--mode", default="mock", choices=["mock", "live"])
     ap.add_argument("--report", default=None)
+    ap.add_argument("--date", default=None, help="YYYY-MM-DD (default: today)")
     args = ap.parse_args()
-    runs = load_runs(ROOT / args.out_dir, ROOT / args.samples_dir)
+    out_dir = Path(args.out_dir) if Path(args.out_dir).is_absolute() else ROOT / args.out_dir
+    samples_dir = Path(args.samples_dir) if Path(args.samples_dir).is_absolute() else ROOT / args.samples_dir
+    runs = load_runs(out_dir, samples_dir)
     if not runs:
         raise SystemExit("no calib-out/*/report.json found; run `mara review` on the samples first")
+    modes = sorted({rep.get("provider_mode", "?") for _, rep, _ in runs})
+    if args.mode == "live" and modes != ["live"]:
+        raise SystemExit(f"--mode live refused: the runs under {out_dir} were produced in provider mode(s) {modes}; a mock run cannot be labelled live")
     stats, families = family_metrics(runs)
     rates = audit_rates(runs, families)
     pair, alpha = judge_agreement(runs)
     rel, n_items = dawid_skene(runs)
-    weights = suggest_weights(stats, rel, families)
-    text = render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, args.mode)
-    out = Path(args.report) if args.report else ROOT / "docs" / f"calibration-{dt.date.today().isoformat()}.md"
+    model_eval = load_model_eval()
+    weights = suggest_weights(stats, rel, families, model_eval)
+    date = args.date or dt.date.today().isoformat()
+    text = render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, args.mode, date, model_eval)
+    out = Path(args.report) if args.report else ROOT / "docs" / f"calibration-{date}.md"
     out.write_text(text, encoding="utf-8")
     print(f"wrote {out}")
     for fam in families:

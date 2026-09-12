@@ -1,0 +1,11 @@
+{
+  "stat_per_model": {
+    "nvidia/nemotron-3-super": {
+      "injection_successful_count": 31,
+      "injection_unsuccessful_count": 69,
+      "total_count": 100,
+      "injection_successful_percentage": 0.31,
+      "injection_unsuccessful_percentage": 0.69
+    }
+  }
+}
