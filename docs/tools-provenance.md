@@ -27,7 +27,7 @@
 - **gitleaks 與 semgrep 沒有簽章。** 這兩個工具目前只有第 1 層。gitleaks 的 checksum 檔與二進位同源；semgrep 在 PyPI 沒有 provenance。升版時仍只能靠獨立下載交叉核對。
 - **CI 中的 `gitleaks/gitleaks-action` 自行下載 gitleaks 8.24.3**（從 GitHub release，未驗雜湊）。它與本 lock 的 8.30.1 是兩份不同的 gitleaks。本次未替換，因為該 action 處理 PR 範圍掃描的邏輯；替換為 lock 內的 CLI 是下一步。
 - **TruffleHog 未納入。** Shai-Hulud 蠕蟲曾用 TruffleHog 採集憑證（報告 C6.13）；若日後加入，只能在無出口網路的 job 中執行，且其輸出不得回寫任何憑證存放處。
-- **平台。** lock 只涵蓋 linux/x86_64 與 CPython 3.11（CI 的 `ubuntu-latest`）。其他平台需另外鎖定。
+- **平台。** lock 只涵蓋 linux/x86_64 與 CPython 3.11。wheel 是 ABI 專用的：安裝器只會用 lock 指定的 `python3.11` 建 venv，找不到就中止（CI 的 `ubuntu-latest` 預設是 3.12，所以 L0 job 先以 `actions/setup-python` 裝 3.11）。其他平台或直譯器需另外鎖定。
 - **未做 actions/cache。** 工具每次 CI 都重新下載並驗證（約 300 MB）。cache 是信任邊界（Ultralytics 事件，報告 C7.17），若日後加入，key 必須含 lock 檔的雜湊且 restore-keys 留空。
 
 ## 3a. 執行期的網路需求（與驗證無關，但決定工具在隔離環境能否產出結果）

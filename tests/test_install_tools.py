@@ -17,7 +17,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from install_tools import InstallError, install, load_lock  # noqa: E402
+from install_tools import InstallError, install, load_lock, python_for_pip  # noqa: E402
 
 from mara.tools import runner  # noqa: E402
 
@@ -175,3 +175,12 @@ def test_failed_signature_verification_aborts(tmp_path):
     with pytest.raises(InstallError, match="cosign keyless verification FAILED"):
         install(lock, install_dir=tmp_path / "mt")
     assert not (tmp_path / "mt" / "bin" / "cosign").exists()
+
+
+def test_pip_lock_requires_the_locked_interpreter():
+    """CI runners default to another CPython; wheels are ABI-specific so the hash lock only holds for
+    the interpreter it was generated with (the second CI failure on PR #6)."""
+    here = f"{sys.version_info.major}.{sys.version_info.minor}"
+    assert python_for_pip({"platform": {"python": here}}) == Path(sys.executable)
+    with pytest.raises(InstallError, match="CPython 9.9"):
+        python_for_pip({"platform": {"python": "9.9"}})

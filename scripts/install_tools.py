@@ -29,7 +29,6 @@ import sys
 import tarfile
 import urllib.error
 import urllib.request
-import venv
 from pathlib import Path
 
 import yaml
@@ -227,7 +226,21 @@ def install_binary_or_archive(name: str, spec: dict, *, bin_dir: Path, cache: Pa
             "verified_by": verified_by, "signature_verified": signature_verified, "path": str(target)}
 
 
-def install_pip(name: str, spec: dict, *, install_dir: Path, bin_dir: Path) -> dict:
+def python_for_pip(lock: dict) -> Path:
+    """The interpreter the wheel hashes were locked for (lock platform.python). Wheels are ABI-specific,
+    so pip under any other CPython would resolve different files and the hash check would fail."""
+    want = str(lock.get("platform", {}).get("python", "3.11"))
+    if f"{sys.version_info.major}.{sys.version_info.minor}" == want:
+        return Path(sys.executable)
+    found = shutil.which(f"python{want}")
+    if found:
+        return Path(found)
+    raise InstallError(f"the pip-locked tools need CPython {want} (lock platform.python) but only "
+                       f"{sys.version.split()[0]} is available and python{want} is not on PATH; "
+                       "install it (CI: actions/setup-python) or relock for the interpreter you run")
+
+
+def install_pip(name: str, spec: dict, *, install_dir: Path, bin_dir: Path, python: Path) -> dict:
     req = (ROOT / spec["requirements"]).resolve()
     if not req.is_file():
         raise InstallError(f"{name}: requirements file {req} missing")
@@ -238,10 +251,12 @@ def install_pip(name: str, spec: dict, *, install_dir: Path, bin_dir: Path) -> d
     if not pin:
         raise InstallError(f"{name}: {req.name} does not pin {name}=={spec['version']}")
     venv_dir = install_dir / f"{name}-venv"
-    print(f"[{name}] {spec['version']}: creating venv {venv_dir} and installing with --require-hashes")
-    venv.EnvBuilder(with_pip=True, clear=True).create(venv_dir)
-    pip = venv_dir / "bin" / "pip"
-    cp = run([str(pip), "install", "--quiet", "--disable-pip-version-check", "--require-hashes", "--only-binary=:all:", "-r", str(req)])
+    print(f"[{name}] {spec['version']}: creating venv {venv_dir} with {python} and installing with --require-hashes")
+    cp = run([str(python), "-m", "venv", "--clear", str(venv_dir)])
+    if cp.returncode != 0:
+        raise InstallError(f"{name}: could not create venv with {python}\n{cp.stderr.strip()[-800:]}")
+    pip = [str(venv_dir / "bin" / "python"), "-m", "pip"]
+    cp = run(pip + ["install", "--quiet", "--disable-pip-version-check", "--require-hashes", "--only-binary=:all:", "-r", str(req)])
     if cp.returncode != 0:
         shutil.rmtree(venv_dir, ignore_errors=True)
         raise InstallError(f"{name}: pip --require-hashes install FAILED\n{(cp.stderr or cp.stdout).strip()[-2000:]}")
@@ -270,10 +285,12 @@ def install(lock: dict, *, install_dir: Path, only: list[str] | None = None, no_
     names.sort(key=lambda n: (tools[n].get("role") != "verifier", list(tools).index(n)))
     manifest_path = install_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {"tools": {}}
+    python = python_for_pip(lock) if any(tools[n]["kind"] == "pip" for n in names) else None
     for n in names:
         spec = tools[n]
         if spec["kind"] == "pip":
-            entry = install_pip(n, spec, install_dir=install_dir, bin_dir=bin_dir)
+            assert python is not None
+            entry = install_pip(n, spec, install_dir=install_dir, bin_dir=bin_dir, python=python)
         else:
             entry = install_binary_or_archive(n, spec, bin_dir=bin_dir, cache=cache, no_signature_check=no_signature_check)
         entry["installed_at"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
