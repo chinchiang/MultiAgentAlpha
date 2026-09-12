@@ -1,0 +1,15 @@
+# Cold standby for the nemotron family (G-4): a self-hosted Mistral endpoint takes over the reviewer,
+# skeptic and judge seats Nemotron holds in config/mara.yaml; nothing else changes. Passes P1-P7.
+# Confirm the served model id against the standby deployment before a live drill and record the drill
+# in ops/model-swap-drills.yaml.
+standby_for: nemotron
+models:
+  - { name: claude-reviewer,   family: anthropic, provider: anthropic,         model: claude-opus-5,    api_key_env: ANTHROPIC_API_KEY, data_residency: vendor_api_zdr }
+  - { name: deepseek-reviewer, family: deepseek,  provider: openai_compatible, model: deepseek-v3.2,    base_url: http://vllm-deepseek.internal:8000/v1, api_key_env: DEEPSEEK_LOCAL_KEY, data_residency: on_prem }
+  - { name: mistral-reviewer,  family: mistral,   provider: openai_compatible, model: mistral-instruct, base_url: http://vllm-mistral.internal:8000/v1, api_key_env: MISTRAL_LOCAL_KEY, data_residency: on_prem }
+roles:
+  reviewers: [claude-reviewer, deepseek-reviewer, mistral-reviewer]
+  skeptic: mistral-reviewer
+  redteam: deepseek-reviewer
+  judges: [claude-reviewer, deepseek-reviewer, mistral-reviewer]
+gate: { block_on_tiers: [A, B], block_on_severity: [High, Critical], min_dimension_score: 60, accept_threshold: 0.6, human_threshold_alpha: 0.4 }

@@ -114,3 +114,17 @@ training:
   register_file: training/records.yaml
   require_trained_adjudicator: true
   required_roles: [developer, security, adjudicator]
+
+
+# G-10: three-phase rollout (report section 15.4): shadow (2 months, gate recorded never enforced),
+# advisory (3 months, blocking findings marked), blocking (from month 6, `mara review` exits 2 on a
+# blocked gate). Set phase: shadow and started_on on the day the pipeline first runs on real pull
+# requests; `scripts/rollout_phase.py baseline` produces the shadow-phase baseline report and
+# `advance` checks the preconditions for the next phase. Governance check G-10 fails while
+# not_started. See docs/governance-templates.md.
+rollout:
+  phase: not_started
+  started_on: ""
+  shadow_months: 2
+  advisory_months: 3
+  baseline_report: ""                 # docs/rollout-baseline-<date>.md

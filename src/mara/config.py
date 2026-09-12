@@ -100,6 +100,19 @@ class TrainingConfig(BaseModel):
                                       description="Roles that must each have a valid record for governance check G-13")
 
 
+class RolloutConfig(BaseModel):
+    """G-10: three-phase rollout (report section 15.4). shadow: the pipeline runs and records, the
+    gate never blocks; advisory: blocking findings are marked, not enforced; blocking: `mara review`
+    exits 2 when the gate blocks. Governance check G-10 checks the phase against its dates and the
+    shadow-phase baseline report."""
+
+    phase: Literal["not_started", "shadow", "advisory", "blocking"] = "not_started"
+    started_on: str = Field(default="", description="YYYY-MM-DD the current phase started")
+    shadow_months: int = Field(default=2, ge=1)
+    advisory_months: int = Field(default=3, ge=1)
+    baseline_report: str = Field(default="", description="docs/rollout-baseline-<date>.md produced at the end of the shadow phase")
+
+
 class MaraConfig(BaseModel):
     models: list[ModelSpec]
     roles: RolesConfig
@@ -121,6 +134,7 @@ class MaraConfig(BaseModel):
     human_queue: HumanQueueConfig = Field(default_factory=HumanQueueConfig, description="G-11: ticketed human queue with decision write-back")
     ml_bom: MlBomConfig = Field(default_factory=MlBomConfig, description="G-7: ML-BOM for the self-hosted model weights")
     training: TrainingConfig = Field(default_factory=TrainingConfig, description="G-13: AI-literacy training register")
+    rollout: RolloutConfig = Field(default_factory=RolloutConfig, description="G-10: rollout phase (shadow / advisory / blocking)")
 
     def model_by_name(self, name: str) -> ModelSpec:
         for m in self.models:

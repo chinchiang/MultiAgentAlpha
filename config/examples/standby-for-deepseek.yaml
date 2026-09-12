@@ -1,0 +1,15 @@
+# Cold standby for the deepseek family (G-4): a self-hosted Llama endpoint takes over the reviewer,
+# red-team and judge seats DeepSeek holds in config/mara.yaml; nothing else changes. Passes P1-P7.
+# `served_model` must match the model id the standby vLLM deployment exposes; confirm it against the
+# deployment before a live drill and record the drill in ops/model-swap-drills.yaml.
+standby_for: deepseek
+models:
+  - { name: claude-reviewer,   family: anthropic, provider: anthropic,         model: claude-opus-5,           api_key_env: ANTHROPIC_API_KEY, data_residency: vendor_api_zdr }
+  - { name: llama-reviewer,    family: llama,     provider: openai_compatible, model: llama-4-instruct,        base_url: http://vllm-llama.internal:8000/v1, api_key_env: LLAMA_LOCAL_KEY, data_residency: on_prem }
+  - { name: nemotron-reviewer, family: nemotron,  provider: openai_compatible, model: nvidia/nemotron-3-super, base_url: http://nim-nemotron.internal:8000/v1, api_key_env: NIM_LOCAL_KEY, data_residency: on_prem }
+roles:
+  reviewers: [claude-reviewer, llama-reviewer, nemotron-reviewer]
+  skeptic: nemotron-reviewer
+  redteam: llama-reviewer
+  judges: [claude-reviewer, llama-reviewer, nemotron-reviewer]
+gate: { block_on_tiers: [A, B], block_on_severity: [High, Critical], min_dimension_score: 60, accept_threshold: 0.6, human_threshold_alpha: 0.4 }

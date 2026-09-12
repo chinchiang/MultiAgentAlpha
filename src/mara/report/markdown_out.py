@@ -10,7 +10,9 @@ def render_markdown(r: ReviewReport) -> str:
     cons = {c.finding_id: c for c in r.consensus}
     lines = [f"# MARA review: `{r.target}`", "",
              f"Generated {r.generated_at} · mode `{r.provider_mode}` · families {', '.join(r.families_used)}", "",
-             f"**Overall score {r.overall_score}/100 · gate {'PASSED' if r.gate_passed else 'BLOCKED'}**", "",
+             f"**Overall score {r.overall_score}/100 · gate {'PASSED' if r.gate_passed else 'BLOCKED'}**"
+             + (f" · rollout phase `{r.bias_audit['rollout_phase']}`" if r.bias_audit.get("rollout_phase") else "")
+             + (" (recorded, not enforced)" if r.bias_audit.get("rollout_phase") not in (None, "blocking") and not r.gate_passed else ""), "",
              "## Dimension scores", "", "| Dimension | Score | Accepted | Rejected | Human queue | Tool ran |", "|---|---:|---:|---:|---:|---|"]
     for d in r.dimensions:
         tool = "yes" if d.tool_ran else "no"

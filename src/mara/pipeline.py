@@ -323,6 +323,8 @@ class Pipeline:
                       "version": st.component_version, "sha256": st.digest} for n, st in self.ml_bom_status.items()}
         self.audit["ml_bom"] = ml_bom
         report.bias_audit["ml_bom"] = ml_bom
+        self.audit["rollout_phase"] = self.cfg.rollout.phase
+        report.bias_audit["rollout_phase"] = self.cfg.rollout.phase
         if ml_bom:
             self.log("L0: ML-BOM: " + ", ".join(f"{n} {v['status']}" for n, v in ml_bom.items()))
         self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")

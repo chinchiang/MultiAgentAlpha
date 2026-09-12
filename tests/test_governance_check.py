@@ -30,9 +30,10 @@ def test_every_item_has_a_verdict_and_evidence(results):
 def test_verdicts_on_this_repository(results):
     passing = ("G-2", "G-3", "G-5", "G-6", "G-11")
     assert {k: results[k].status for k in passing} == dict.fromkeys(passing, PASS)
-    assert {k: results[k].status for k in ("G-7", "G-8", "G-12", "G-13")} == dict.fromkeys(("G-7", "G-8", "G-12", "G-13"), FAIL)
+    failing = ("G-1", "G-4", "G-7", "G-8", "G-10", "G-12", "G-13")
+    assert {k: results[k].status for k in failing} == dict.fromkeys(failing, FAIL)
     assert results["G-9"].status == FAIL and "mock" in results["G-9"].evidence
-    assert {k: results[k].status for k in ("G-1", "G-4", "G-10")} == dict.fromkeys(("G-1", "G-4", "G-10"), MANUAL)
+    assert not [k for k, r in results.items() if r.status == MANUAL], "every item is machine-decidable now (templates for G-1, G-4, G-10)"
 
 
 def test_render_has_thirteen_rows_and_nonzero_exit_signal(results):

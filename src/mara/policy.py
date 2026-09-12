@@ -66,10 +66,15 @@ def p1_covered_models(cfg: MaraConfig) -> PolicyResult:
     )
 
 
+PRC_AFFILIATED = (ModelFamily.DEEPSEEK, ModelFamily.QWEN)
+
+
 def p2_deepseek_on_prem(cfg: MaraConfig) -> PolicyResult:
+    """PRC-affiliated families (DeepSeek, and Qwen when used as a cold standby) run only as
+    self-hosted weights on private endpoints; never the vendor API."""
     problems, notes = [], []
     for m in cfg.models:
-        if m.family != ModelFamily.DEEPSEEK:
+        if m.family not in PRC_AFFILIATED:
             continue
         if m.provider == "mock":
             notes.append(f"{m.name}: mock provider, exempt")
@@ -79,8 +84,8 @@ def p2_deepseek_on_prem(cfg: MaraConfig) -> PolicyResult:
             continue
         ok, why = _host_is_private(m.base_url or "")
         (notes if ok else problems).append(f"{m.name}: {why}")
-    if not any(m.family == ModelFamily.DEEPSEEK for m in cfg.models):
-        return PolicyResult("P2", "deepseek-on-prem", True, "no DeepSeek model configured")
+    if not any(m.family in PRC_AFFILIATED for m in cfg.models):
+        return PolicyResult("P2", "deepseek-on-prem", True, "no DeepSeek/Qwen model configured")
     if problems:
         return PolicyResult("P2", "deepseek-on-prem", False, "; ".join(problems))
     return PolicyResult("P2", "deepseek-on-prem", True, "; ".join(notes))

@@ -45,6 +45,9 @@ class ModelFamily(StrEnum):
     ANTHROPIC = "anthropic"
     DEEPSEEK = "deepseek"
     NEMOTRON = "nemotron"
+    LLAMA = "llama"        # cold-standby family (G-4): self-hosted Llama
+    MISTRAL = "mistral"    # cold-standby family (G-4): self-hosted Mistral
+    QWEN = "qwen"          # cold-standby family (G-4); PRC-affiliated, so policy P2 applies as for DeepSeek
     OTHER = "other"
     MOCK = "mock"
     TOOL = "tool"
