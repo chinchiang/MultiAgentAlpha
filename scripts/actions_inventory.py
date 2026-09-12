@@ -132,17 +132,17 @@ def classify_ref(action: str, ref: str) -> str:
 def _block_value(lines: list[str], i: int, indent: int) -> str:
     """Inline value on line i, or the indented block that follows it, flattened to one line."""
     m = re.match(r"^\s*[A-Za-z_\-]+:\s*(.*?)\s*$", lines[i])
-    inline = m.group(1) if m else ""
+    inline = (m.group(1) if m else "").split(" #", 1)[0].strip()
     if inline:
         return inline
     body = []
     for j in range(i + 1, len(lines)):
         ln = lines[j]
-        if not ln.strip():
+        if not ln.strip() or ln.lstrip().startswith("#"):
             continue
         if len(ln) - len(ln.lstrip(" ")) <= indent:
             break
-        body.append(ln.strip())
+        body.append(ln.split(" #", 1)[0].strip())
     return "{" + ", ".join(body) + "}" if body else "{}"
 
 

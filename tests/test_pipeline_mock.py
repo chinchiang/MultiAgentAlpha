@@ -97,3 +97,15 @@ def test_reports_render(mock_report):
     assert all(0 <= r["rank"] <= 100 for r in sarif["runs"][0]["results"])
     md = render_markdown(report)
     assert "## Accepted findings" in md and "## Bias and integrity audit" in md
+
+
+def test_tool_corroboration_matches_git_root_relative_paths(mock_report):
+    """zizmor run from the repo root reports fixtures/vuln-sample/.github/workflows/deploy.yml while the
+    finding says .github/workflows/deploy.yml; both must corroborate, and a leading dot must survive."""
+    from mara.pipeline import _norm_path
+
+    assert _norm_path("./.github/workflows/deploy.yml") == ".github/workflows/deploy.yml"
+    _, report = mock_report
+    _, cons = _accepted(report)
+    gha = [f for f in report.findings if f.dimension == "github_actions" and f.provenance[0].line in (12, 15, 16)]
+    assert gha and all(cons[f.id].tool_corroborated and cons[f.id].tier == EvidenceTier.A for f in gha)

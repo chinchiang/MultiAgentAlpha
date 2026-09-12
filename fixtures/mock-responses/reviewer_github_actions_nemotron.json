@@ -47,7 +47,7 @@
    "provenance": [
     {
      "file": ".github/workflows/deploy.yml",
-     "line": 15,
+     "line": 16,
      "quote": "- uses: some-org/deploy-action@main"
     }
    ],

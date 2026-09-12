@@ -112,7 +112,11 @@ per report section 10.7 (Critical rows first), suggested full SHAs for every non
 (via `git ls-remote`; `--offline` to skip), a check that each SHA pin still matches its tag
 comment, and zizmor's SARIF when zizmor is on the PATH. Files that are not valid YAML are still
 inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run;
-its section 6 adds what the CI logs showed that the static inventory cannot.
+its section 6 adds what the CI logs showed that the static inventory cannot, and the fixes that
+followed: CI now runs zizmor strictly on the real workflows, checks that zizmor's findings on the
+seeded fixture match `fixtures/vuln-sample-sarif/zizmor.sarif` (now produced by zizmor itself), and
+no longer hides a crashed or leaking gitleaks run behind `continue-on-error` (`.gitleaks.toml`
+allowlists the seeded secrets under `fixtures/` and `calib/samples/`).
 
 ## Other commands
 

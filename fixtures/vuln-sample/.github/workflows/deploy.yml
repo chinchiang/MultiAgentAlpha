@@ -11,7 +11,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Announce
-        run: echo "Building PR: ${{ github.event.pull_request.title }}"
+        run: |
+          echo "Building PR: ${{ github.event.pull_request.title }}"
       - uses: some-org/deploy-action@main
         env:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

@@ -21,12 +21,12 @@ def test_classify_ref():
 
 def test_seeded_fixture_is_critical_pwn_request():
     inv = inventory_workflow(ROOT / "fixtures/vuln-sample/.github/workflows/deploy.yml", ROOT)
-    assert inv.parse_error, "the seeded workflow is not valid YAML and the inventory must say so"
+    assert inv.parse_error is None, "the seeded workflow must be valid YAML so zizmor and GitHub can parse it"
     assert inv.pull_request_target
     assert inv.head_checkout_lines == [12]
     assert inv.top_permissions == "write-all"
-    assert [(u.line, u.kind) for u in inv.uses] == [(10, "tag"), (15, "branch")]
-    assert [(i.line, i.expression, i.untrusted) for i in inv.run_interpolations] == [(14, "github.event.pull_request.title", True)]
+    assert [(u.line, u.kind) for u in inv.uses] == [(10, "tag"), (16, "branch")]
+    assert [(i.line, i.expression, i.untrusted) for i in inv.run_interpolations] == [(15, "github.event.pull_request.title", True)]
     assert inv.severity == "Critical"
     texts = " ".join(t for _, t in inv.findings)
     assert "pwn request" in texts and "攻擊者可控" in texts
@@ -43,6 +43,16 @@ def test_hardened_workflow_has_no_critical_or_high():
     assert all(u.kind == "sha" for u in inv.uses) and len(inv.uses) == 6
     assert not inv.run_interpolations
     assert SEVERITY_ORDER.index(inv.severity) >= SEVERITY_ORDER.index("Medium")
+
+
+def test_invalid_yaml_is_flagged_but_still_inventoried(tmp_path):
+    wf = tmp_path / ".github" / "workflows" / "bad.yml"
+    wf.parent.mkdir(parents=True)
+    wf.write_text("on:\n  pull_request_target:\njobs:\n  a:\n    steps:\n      - run: echo \"x: ${{ github.event.pull_request.title }}\"\n", encoding="utf-8")
+    inv = inventory_workflow(wf, tmp_path)
+    assert inv.parse_error and "line 6" in inv.parse_error
+    assert inv.pull_request_target and inv.run_interpolations[0].untrusted
+    assert any(sev == "Medium" and "合法 YAML" in txt for sev, txt in inv.findings)
 
 
 def test_block_scalar_run_and_cache_key(tmp_path):

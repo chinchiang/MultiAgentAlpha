@@ -9,7 +9,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
-      - run: echo "PR by ${{ github.event.pull_request.user.login }}: ${{ github.event.pull_request.body }}"
+      - run: |
+          echo "PR by ${{ github.event.pull_request.user.login }}: ${{ github.event.pull_request.body }}"
       - uses: acme/deploy@master
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
