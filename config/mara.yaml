@@ -42,3 +42,13 @@ gate:
 
 allow_source_code_to_non_on_prem: false
 require_family_diversity: true
+
+# Policies enforced at load time (see src/mara/policy.py; `mara check-config` lists them):
+#   P1 covered-models   Fable/Mythos-class Anthropic models need an explicit authorization record
+#   P2 deepseek-on-prem DeepSeek only via openai_compatible on an RFC 1918 / .internal host; never *.deepseek.com
+#   P3 panel-size       reviewers and judges each span >= 3 families (2 only with reduced_panel_reason)
+#   P4 gate-bounds      self_judge_discount <= 0.5, human_threshold_alpha >= 0.3
+#   P5 data-residency   non-mock models must be on_prem or vendor_api_zdr
+anthropic_covered_models_authorized: false
+anthropic_covered_models_authorization_ref: ""
+reduced_panel_reason: ""

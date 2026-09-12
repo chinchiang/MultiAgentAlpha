@@ -78,6 +78,21 @@ For a live run point the same commands at `config/mara.yaml` (three reachable fa
 ZDR enabled) and pass `--mode live`. `scripts/fetch_calib_corpora.sh` fetches OWASP Juice Shop
 and WebGoat; they need human-authored `labels.json` files before they count.
 
+## Policies enforced by the config
+
+`mara check-config <yaml>` evaluates five policies and exits non-zero if any fails; `MaraConfig`
+refuses to load a violating file, so the pipeline cannot run outside policy:
+
+| Policy | Rule |
+|---|---|
+| P1 covered-models | Fable/Mythos-class Anthropic models (30-day retention, not ZDR-eligible) need `anthropic_covered_models_authorized: true` and an authorization reference |
+| P2 deepseek-on-prem | DeepSeek only through an OpenAI-compatible endpoint on an RFC 1918, loopback or `.internal` host; any `*.deepseek.com` URL is rejected |
+| P3 panel-size | reviewers and judges each span at least three model families; exactly two only with a stated `reduced_panel_reason` (see `config/examples/prc-site.yaml`) |
+| P4 gate-bounds | `gate.self_judge_discount` at most 0.5, `gate.human_threshold_alpha` at least 0.3 |
+| P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr` unless `allow_source_code_to_non_on_prem` is set |
+
+`config/examples/violating.yaml` breaks all five and is what the tests run against.
+
 ## Other commands
 
 ```bash
