@@ -112,6 +112,8 @@ def test_shipped_lock_is_well_formed():
             assert t["verify"]["method"] in {"cosign-keyless", "slsa-provenance", "github-attestation", "checksums-file"}, name
     req = (ROOT / lock["tools"]["semgrep"]["requirements"]).read_text()
     assert f"semgrep=={lock['tools']['semgrep']['version']}" in req and req.count("--hash=sha256:") >= 60
+    boot = (ROOT / "tools" / "bootstrap-requirements.txt").read_text()
+    assert boot.lower().count("pyyaml==") == 1 and "--hash=sha256:" in boot
 
 
 def test_runner_only_executes_pinned_tools(tmp_path, monkeypatch):

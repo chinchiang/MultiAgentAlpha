@@ -1,0 +1,5 @@
+# What scripts/install_tools.py itself needs beyond the standard library, hash-pinned for CPython 3.11 /
+# manylinux x86_64 (the only non-stdlib import is PyYAML, to read tools/versions.lock).
+# CI: python3 -m pip install --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
+pyyaml==6.0.3 \
+    --hash=sha256:b8bb0864c5a28024fac8a632c443c87c5aa6f215c0b126c449ae1a150412f31d
