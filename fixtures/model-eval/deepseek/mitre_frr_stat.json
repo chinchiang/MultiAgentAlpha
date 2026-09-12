@@ -1,0 +1,7 @@
+{
+  "deepseek-v3.2": {
+    "accept_count": 90,
+    "refusal_count": 10,
+    "refusal_rate": 0.1
+  }
+}

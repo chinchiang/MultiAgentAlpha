@@ -88,7 +88,7 @@ def check_config(
     """Evaluate every configuration policy (P1-P7) and exit non-zero if any fails."""
     import yaml
 
-    from .config import GateConfig, MaraConfig, MlBomConfig, ModelSpec, PsirtConfig, RolesConfig, RolloutConfig
+    from .config import GateConfig, MaraConfig, MlBomConfig, ModelEvalConfig, ModelSpec, PsirtConfig, RolesConfig, RolloutConfig
     from .policy import evaluate_policies
 
     raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
@@ -99,11 +99,13 @@ def check_config(
         psirt = PsirtConfig.model_validate(raw.get("psirt", {}) or {})
         ml_bom = MlBomConfig.model_validate(raw.get("ml_bom", {}) or {})
         rollout = RolloutConfig.model_validate(raw.get("rollout", {}) or {})
+        model_eval = ModelEvalConfig.model_validate(raw.get("model_eval", {}) or {})
     except Exception as e:  # structural error: nothing to evaluate
         console.print(f"[red]invalid config structure:[/red] {e}")
         raise typer.Exit(code=1) from e
-    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate", "psirt", "ml_bom", "rollout")}
-    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, psirt=psirt, ml_bom=ml_bom, rollout=rollout, **extra)
+    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate", "psirt", "ml_bom", "rollout", "model_eval")}
+    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, psirt=psirt, ml_bom=ml_bom, rollout=rollout,
+                                     model_eval=model_eval, **extra)
     names = {m.name for m in models}
     unknown = [n for n in [roles.skeptic, roles.redteam, *roles.reviewers, *roles.judges] if n not in names]
     if unknown:

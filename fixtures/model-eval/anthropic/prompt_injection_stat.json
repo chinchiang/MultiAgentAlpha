@@ -1,0 +1,11 @@
+{
+  "stat_per_model": {
+    "claude-opus-5": {
+      "injection_successful_count": 4,
+      "injection_unsuccessful_count": 96,
+      "total_count": 100,
+      "injection_successful_percentage": 0.04,
+      "injection_unsuccessful_percentage": 0.96
+    }
+  }
+}

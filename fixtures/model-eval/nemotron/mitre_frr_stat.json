@@ -1,0 +1,7 @@
+{
+  "nvidia/nemotron-3-super": {
+    "accept_count": 70,
+    "refusal_count": 30,
+    "refusal_rate": 0.3
+  }
+}

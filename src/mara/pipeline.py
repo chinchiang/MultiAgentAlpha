@@ -325,6 +325,12 @@ class Pipeline:
         report.bias_audit["ml_bom"] = ml_bom
         self.audit["rollout_phase"] = self.cfg.rollout.phase
         report.bias_audit["rollout_phase"] = self.cfg.rollout.phase
+        # G-8: latest red-team evaluation verdict per family (garak / CyberSecEval), 'none' until one has run
+        from .model_eval import family_eval_status
+
+        me = family_eval_status(Path.cwd(), sorted({m.family.value for m in self.cfg.models if m.provider != "mock"}))
+        self.audit["model_eval"] = me
+        report.bias_audit["model_eval"] = me
         if ml_bom:
             self.log("L0: ML-BOM: " + ", ".join(f"{n} {v['status']}" for n, v in ml_bom.items()))
         self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")

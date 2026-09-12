@@ -68,9 +68,16 @@ def render_markdown(r: ReviewReport) -> str:
             lines.append(f"- {name} (`{v['model_id']}`): {v['status']}{detail}")
     else:
         lines.append("_No self-hosted model in this configuration._")
+    me = r.bias_audit.get("model_eval") or {}
+    lines += ["", "## Model red-team evaluation (garak / CyberSecEval, G-8)", ""]
+    if me:
+        for fam, v in me.items():
+            lines.append(f"- {fam}: {v.get('status', 'none')}" + (f" ({v['date']}, {v['mode']})" if v.get("date") else " (no evaluation recorded)"))
+    else:
+        lines.append("_No non-mock model family in this configuration._")
     lines += ["", "## Bias and integrity audit", ""]
     for k, v in r.bias_audit.items():
-        if k == "ml_bom":
+        if k in ("ml_bom", "model_eval"):
             continue
         lines.append(f"- {k}: {v}")
     return "\n".join(lines) + "\n"

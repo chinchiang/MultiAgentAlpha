@@ -148,7 +148,9 @@ and is machine-decidable: G-11 passes; G-12 passes once `psirt.enabled` is set w
 G-7 once the platform team has hashed and signed the weights (`docs/ml-bom.md`); G-13 once one
 person per role holds a valid training record (`docs/ai-literacy-training.md`); G-1, G-4 and G-10
 once the policy is approved, live swap drills are recorded and the rollout has started
-(`docs/governance-templates.md`). Nothing is marked passed before the fact.
+(`docs/governance-templates.md`); G-8 and G-9 once the quarterly red-team evaluation and live
+calibration have run on a host with the endpoints (`docs/model-eval-runbook.md`). Nothing is
+marked passed before the fact.
 
 ## PSIRT hand-off (governance item G-12)
 
@@ -175,6 +177,22 @@ once `ml_bom.required` is true and a self-hosted model has no complete component
 are pending in this repository: it hosts no weights and the registry hashes could not be fetched
 from the authoring environment, so governance check G-7 stays red and says exactly what is missing.
 See `docs/ml-bom.md`.
+
+## Model red-team evaluation and live calibration (governance items G-8, G-9)
+
+`scripts/model_eval.py` turns the config into the exact garak (`openai.OpenAICompatible` or
+`anthropic` generator, probes from `model_eval.garak_probes`) and CyberSecEval 4
+(`prompt-injection`, `mitre-frr`) commands for every non-mock family, runs them on a host that
+reaches the endpoints (keys only from the environment), parses the tools' native outputs, applies
+the thresholds in `model_eval.thresholds` and writes `docs/garak-<date>.md`,
+`docs/cyberseceval-<date>.md` and `calib/model-eval-<date>.json`. Calibration multiplies a
+failing family's suggested weight by `weight_penalty_on_fail` and the review's bias audit shows
+the latest verdict per family. `scripts/calibration_run.py --mode live` runs the whole calibration
+loop (check-config, every sample, `calibrate.py --mode live`) and both scripts refuse to label
+mock or fixture-based output as live. Governance checks G-8 and G-9 read the reports' front
+matter (`mode: live`, families covering the config, within 90 days). Nothing has run here: no
+endpoint, no key, no garak; `fixtures/model-eval/` holds synthetic outputs for the parser tests.
+See `docs/model-eval-runbook.md`.
 
 ## Policy, cold standby and rollout templates (governance items G-1, G-4, G-10)
 
