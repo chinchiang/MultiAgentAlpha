@@ -308,10 +308,21 @@ def _per_finding_alpha(votes: list[JudgeVote]) -> float | None:
     return round((modal / len(votes) - 1 / 3) / (1 - 1 / 3), 3)  # chance-corrected for 3 categories
 
 
+def _norm_path(path: str) -> str:
+    """Forward slashes, no leading './' (str.lstrip('./') would also eat the dot of '.github')."""
+    path = path.replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return path
+
+
 def _tool_corroborates(f: Finding, tool_results: list[ToolResult]) -> bool:
     for t in tool_results:
         for p in f.provenance:
-            same_file = t.file.replace("\\", "/").lstrip("./") == p.file.lstrip("./")
+            # tools run from the git root report paths relative to it (e.g. zizmor emits
+            # fixtures/vuln-sample/.github/workflows/deploy.yml); the review target may be a subdirectory
+            tf, pf = _norm_path(t.file), _norm_path(p.file)
+            same_file = tf == pf or tf.endswith("/" + pf)
             if same_file and abs(t.line - p.line) <= 3:
                 if t.cwe is None or t.cwe.upper() == f.cwe.upper():
                     return True

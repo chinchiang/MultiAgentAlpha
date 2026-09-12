@@ -1,0 +1,16 @@
+# gitleaks configuration for CI secret scanning (gitleaks reads this file from the repo root).
+# The seeded secrets under fixtures/ and calib/samples/ are intentional review material; they are
+# exercised through the pre-recorded SARIF path (fixtures/vuln-sample-sarif) and the pipeline tests,
+# not through CI secret scanning, so they are allowlisted here. Everything else is scanned with the
+# default rule set.
+title = "MARA"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Seeded secrets in review fixtures and calibration samples"
+paths = [
+  '''^fixtures/''',
+  '''^calib/samples/''',
+]

@@ -28,8 +28,8 @@
    "provenance": [
     {
      "file": ".github/workflows/deploy.yml",
-     "line": 14,
-     "quote": "run: echo \"Building PR: ${{ github.event.pull_request.title }}\""
+     "line": 15,
+     "quote": "echo \"Building PR: ${{ github.event.pull_request.title }}\""
     }
    ],
    "reachability": "reachable",
