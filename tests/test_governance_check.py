@@ -28,8 +28,9 @@ def test_every_item_has_a_verdict_and_evidence(results):
 
 
 def test_verdicts_on_this_repository(results):
-    assert {k: results[k].status for k in ("G-2", "G-3", "G-5", "G-6")} == {"G-2": PASS, "G-3": PASS, "G-5": PASS, "G-6": PASS}
-    assert {k: results[k].status for k in ("G-7", "G-8", "G-11", "G-12", "G-13")} == dict.fromkeys(("G-7", "G-8", "G-11", "G-12", "G-13"), FAIL)
+    passing = ("G-2", "G-3", "G-5", "G-6", "G-11")
+    assert {k: results[k].status for k in passing} == dict.fromkeys(passing, PASS)
+    assert {k: results[k].status for k in ("G-7", "G-8", "G-12", "G-13")} == dict.fromkeys(("G-7", "G-8", "G-12", "G-13"), FAIL)
     assert results["G-9"].status == FAIL and "mock" in results["G-9"].evidence
     assert {k: results[k].status for k in ("G-1", "G-4", "G-10")} == dict.fromkeys(("G-1", "G-4", "G-10"), MANUAL)
 

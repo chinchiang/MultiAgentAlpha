@@ -42,6 +42,10 @@ def review(
     write_markdown(report, out / "report.md")
     (out / "report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
     (out / "pipeline.log").write_text("\n".join(pipe.log) + "\n", encoding="utf-8")
+    if cfg.human_queue.enabled:
+        from .report.human_queue_out import write_human_queue
+
+        write_human_queue(report, out)
     if cfg.psirt.enabled:
         from .report.psirt_out import send_psirt, write_psirt
 
@@ -58,6 +62,7 @@ def review(
                   str(d.human_queue), "yes" if d.tool_ran else "no")
     console.print(t)
     console.print(f"[bold]wrote[/bold] {out/'report.sarif'}, {out/'report.md'}, {out/'report.json'}"
+                  + (f", {out/'human_queue.md'} ({len(report.human_queue)} item(s))" if cfg.human_queue.enabled else "")
                   + (f", {out/'psirt-notifications.json'} ({len(report.psirt)} PSIRT payload(s))" if cfg.psirt.enabled else ""))
     if fail_on_gate and not report.gate_passed:
         raise typer.Exit(code=2)

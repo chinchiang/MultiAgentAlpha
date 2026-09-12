@@ -42,6 +42,11 @@ class Pipeline:
         self.providers: dict[str, Provider] = {m.name: make_provider(m, mock_fixtures) for m in cfg.models}
         self.audit: dict[str, float | int | str] = defaultdict(int)
         self.log: list[str] = []
+        # G-11: the human queue tightens when its ticket backlog is over the limit (never loosens)
+        from .report.human_queue_out import read_backlog, tightening
+
+        self.backlog = read_backlog(cfg)
+        self.human_alpha_threshold, self.exclude_tier_c, self.queue_tightened = tightening(cfg, self.backlog)
 
     # ------------------------------------------------------------------ helpers
     def _p(self, name: str) -> Provider:
@@ -236,7 +241,7 @@ class Pipeline:
                     self.audit["severity_downgraded_by_jury"] += 1
             rt = red_by_id.get(f.id)
             ssvc = ssvc_decision(severity=sev, exploitable=rt.exploitable if rt else "unknown", tier=tier)
-            needs_human = (alpha is not None and alpha < self.cfg.gate.human_threshold_alpha) or (human > tp and human > fp)
+            needs_human = (alpha is not None and alpha < self.human_alpha_threshold) or (human > tp and human > fp)
             accepted = tier != EvidenceTier.D and score >= self.cfg.gate.accept_threshold and not needs_human
             results.append(ConsensusResult(
                 finding_id=f.id, weighted_score=score, votes_tp=tp, votes_fp=fp, votes_human=human,
@@ -293,6 +298,17 @@ class Pipeline:
             families_used=sorted({m.family.value for m in self.cfg.models}), findings=findings, skeptic=sk, redteam=rt,
             votes=votes, consensus=consensus, dimensions=dims, overall_score=overall, gate_passed=gate, bias_audit=dict(self.audit),
         )
+        # G-11: the human queue as an object with full context; decisions come back through calib/decisions
+        from .report.human_queue_out import build_queue
+
+        report.human_queue = build_queue(findings, cons_by_id, sk_by_id, rt_by_id, votes, self.cfg, exclude_tier_c=self.exclude_tier_c)
+        for k, v in (("human_queue_size", len(report.human_queue)), ("human_queue_backlog", self.backlog if self.backlog is not None else "unknown"),
+                     ("human_queue_tightened", int(self.queue_tightened)), ("human_alpha_threshold", self.human_alpha_threshold)):
+            self.audit[k] = v
+            report.bias_audit[k] = v
+        self._say(f"L5: human queue: {len(report.human_queue)} item(s)"
+                  + (f" [TIGHTENED: backlog {self.backlog} > {self.cfg.human_queue.backlog_limit}, alpha threshold {self.human_alpha_threshold}"
+                     f"{', tier C not queued' if self.exclude_tier_c else ''}]" if self.queue_tightened else ""))
         # G-12: accepted tier-A Critical findings on a shipped product start the CRA Article 14 clock
         from .report.psirt_out import build_notifications
 

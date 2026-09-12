@@ -60,6 +60,21 @@ class PsirtConfig(BaseModel):
     final_report_days: int = Field(default=14, ge=1, le=14)
 
 
+class HumanQueueConfig(BaseModel):
+    """G-11: the human queue is a ticketed, bounded backlog whose decisions feed calibration.
+    When the backlog exceeds backlog_limit the pipeline tightens (higher alpha threshold, tier C
+    no longer queued) instead of letting anything through faster."""
+
+    enabled: bool = True
+    ticketing: Literal["none", "github_issues"] = "github_issues"
+    label: str = Field(default="mara-human-queue", description="Issue label that marks queue tickets")
+    backlog_limit: int = Field(default=20, ge=1, description="Open tickets above which the pipeline tightens")
+    backlog_file: str = Field(default="calib/decisions/backlog.json", description="Written by scripts/human_queue_issues.py")
+    tighten_alpha_step: float = Field(default=0.1, ge=0.0, le=0.5, description="Added to gate.human_threshold_alpha while over the limit")
+    tighten_exclude_tier_c: bool = Field(default=True, description="While over the limit, tier C High findings are not queued")
+    queue_tier_c_min_severity: Literal["High", "Critical"] = Field(default="High", description="Tier C findings at or above this severity are queued")
+
+
 class MaraConfig(BaseModel):
     models: list[ModelSpec]
     roles: RolesConfig
@@ -78,6 +93,7 @@ class MaraConfig(BaseModel):
     )
     reduced_panel_reason: str = Field(default="", description="Policy P3: why only two model families are available (e.g. PRC in-country pipeline)")
     psirt: PsirtConfig = Field(default_factory=PsirtConfig, description="G-12: PSIRT / CRA Article 14 hand-off")
+    human_queue: HumanQueueConfig = Field(default_factory=HumanQueueConfig, description="G-11: ticketed human queue with decision write-back")
 
     def model_by_name(self, name: str) -> ModelSpec:
         for m in self.models:

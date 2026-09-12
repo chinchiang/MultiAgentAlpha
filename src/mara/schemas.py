@@ -153,6 +153,38 @@ class DimensionScore(BaseModel):
     notes: str = ""
 
 
+class HumanQueueItem(BaseModel):
+    """One finding that needs a human decision, with everything the human needs to decide it:
+    who found it, what the skeptic and red team said, and how every judge voted in both passes.
+    The judges saw a blinded view; the human deliberately sees who said what (report, 15.1)."""
+
+    finding_id: str
+    key: str = Field(description="Stable ticket key: sha256(file:line:cwe)[:12], survives re-runs")
+    reasons: list[str] = Field(description="alpha_below_threshold | majority_needs_human | tier_c_high")
+    title: str
+    dimension: str
+    cwe: str
+    file: str
+    line: int
+    quote: str
+    tier: str
+    cvss4_score: float
+    cvss4_severity: str
+    ssvc_decision: str
+    weighted_score: float
+    krippendorff_alpha: float | None
+    votes_tp: int
+    votes_fp: int
+    votes_human: int
+    finder_families: list[str]
+    reachability: str
+    reachability_argument: str
+    exploit_sketch: str
+    skeptic: dict | None = None
+    redteam: dict | None = None
+    judge_votes: list[dict] = Field(default_factory=list, description="family, pass, verdict, severity_band, reason, self_family")
+
+
 class ReviewReport(BaseModel):
     target: str
     generated_at: str
@@ -168,3 +200,4 @@ class ReviewReport(BaseModel):
     gate_passed: bool
     bias_audit: dict[str, float | int | str]
     psirt: list[dict] = Field(default_factory=list, description="G-12: CRA Article 14 early-warning payloads for accepted tier-A Critical findings")
+    human_queue: list[HumanQueueItem] = Field(default_factory=list, description="G-11: findings that need a human decision, with full context")

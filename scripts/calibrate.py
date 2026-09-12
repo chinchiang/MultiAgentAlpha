@@ -24,15 +24,55 @@ ROOT = Path(__file__).resolve().parents[1]
 VERDICT_IDX = {"true_positive": 0, "false_positive": 1, "needs_human": 2}
 
 
-def load_runs(out_dir: Path, samples_dir: Path) -> list[tuple[str, dict, list[dict]]]:
+def load_decisions(decisions_dir: Path) -> list[dict]:
+    """G-11: human decisions written back from closed queue tickets (calib/decisions/<key>.json)."""
+    out = []
+    if not decisions_dir.is_dir():
+        return out
+    for p in sorted(decisions_dir.glob("*.json")):
+        if p.name == "backlog.json":
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if d.get("decision") in ("true_positive", "false_positive") and d.get("file") and d.get("cwe"):
+            out.append(d)
+    return out
+
+
+def apply_decisions(sample: str, report: dict, labels: list[dict], decisions: list[dict]) -> tuple[list[dict], int]:
+    """true_positive decisions on this sample's target become extra labels; returns (labels, applied)."""
+    target = report.get("target", "")
+    applied = 0
+    labels = list(labels)
+    for d in decisions:
+        d_target = str(d.get("target", "")).rstrip("/")
+        if not (d_target == target.rstrip("/") or d_target.endswith("/" + sample)):
+            continue
+        if d["decision"] == "true_positive" and not any(_match({"provenance": [{"file": d["file"], "line": d["line"]}], "cwe": d["cwe"]}, lab) for lab in labels):
+            labels.append({"dimension": "", "cwe": d["cwe"], "file": d["file"], "line": int(d["line"]), "quote": "",
+                           "title": f"human decision on ticket #{d.get('issue')}", "source": "human_decision"})
+            applied += 1
+        elif d["decision"] == "false_positive":
+            applied += 1  # confirmed false positive: no label, the finding keeps counting as fp
+    return labels, applied
+
+
+def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = None) -> list[tuple[str, dict, list[dict]]]:
     runs = []
+    decisions = load_decisions(decisions_dir or (ROOT / "calib" / "decisions"))
     for rep in sorted(out_dir.glob("*/report.json")):
         sample = rep.parent.name
         labels_path = samples_dir / sample / "labels.json"
         if not labels_path.exists():
             labels_path = ROOT / "fixtures" / "vuln-sample" / "labels.json"
         labels = json.loads(labels_path.read_text(encoding="utf-8"))["labels"] if labels_path.exists() else []
-        runs.append((sample, json.loads(rep.read_text(encoding="utf-8")), labels))
+        report = json.loads(rep.read_text(encoding="utf-8"))
+        labels, applied = apply_decisions(sample, report, labels, decisions)
+        if applied:
+            print(f"{sample}: {applied} human decision(s) applied")
+        runs.append((sample, report, labels))
     return runs
 
 

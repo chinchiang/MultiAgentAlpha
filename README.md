@@ -141,8 +141,9 @@ the evidence it looked at and the standard clauses from the report's section 25.
 makes the script exit non-zero. `.github/workflows/governance.yml` runs it every Monday and posts
 the table to a `governance-check` tracking issue. `docs/governance-check-2026-09-12.md` is the
 first run: G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
-calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) fail
-on the current state; G-1, G-4 and G-10 need human evidence.
+calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) failed
+on that first run; G-1, G-4 and G-10 need human evidence. G-11 and G-12 have since been implemented:
+G-11 passes, G-12 passes once `psirt.enabled` is set with a real endpoint.
 
 ## PSIRT hand-off (governance item G-12)
 
@@ -155,6 +156,20 @@ trigger narrow (tiers within A/B, severities within Critical/High, HTTPS, no inl
 Whether a vulnerability is actively exploited, the legal trigger of Article 14, remains the
 PSIRT's determination. See `docs/psirt-integration.md`; `config/examples/psirt-enabled.yaml` is a
 complete example.
+
+## Human queue (governance item G-11)
+
+Findings the pipeline will not decide on its own (judge majority says `needs_human`, Krippendorff's
+alpha below the threshold, or tier C at High or above) become `HumanQueueItem`s in
+`out/human_queue.md/json` with the full un-blinded context: finder families, the skeptic's verdict,
+the red team's call and every judge vote from both passes. `scripts/human_queue_issues.py` opens one
+GitHub issue per item (deduplicated by a stable `file:line:cwe` key) and, with `--sync-decisions`,
+turns closed tickets labelled `decision:true-positive` / `decision:false-positive` into
+`calib/decisions/<key>.json`, which `scripts/calibrate.py` uses as labels. When
+`calib/decisions/backlog.json` shows more open tickets than `human_queue.backlog_limit`, the pipeline
+raises the alpha threshold and stops queuing tier C; it never loosens. The `human-queue` CI job runs
+on push to `main` with `issues: write` only and stays in dry-run until the repository variable
+`MARA_HUMAN_QUEUE_ISSUES` is `true`. See `docs/human-queue.md`.
 
 ## Other commands
 
