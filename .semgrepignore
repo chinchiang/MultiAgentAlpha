@@ -1,0 +1,7 @@
+# Paths semgrep skips when scripts/semgrep_ci.py scans this repository. A .semgrepignore replaces semgrep's
+# built-in list (which would also skip tests/), so it is spelled out here; tests/ is deliberately scanned.
+# semgrep already limits a scan to git-tracked files, so .mara-tools/, out/ and other ignored output never
+# enter. The seeded review material (fixtures/, calib/samples/) is NOT listed here — semgrep applies this
+# file from the git root even when scanning a subdirectory, which would blank the fixture drift check —
+# it is excluded per scan through the triage file's `exclude` list instead.
+.git/

@@ -33,14 +33,20 @@ def tool_path(tool: str) -> Path | None:
     return p if p.is_file() and os.access(p, os.X_OK) else None
 
 
-def installed_version(tool: str) -> str | None:
+def installed_manifest_entry(tool: str) -> dict | None:
     manifest = tools_dir() / "manifest.json"
     if not manifest.is_file():
         return None
     try:
-        return json.loads(manifest.read_text(encoding="utf-8")).get("tools", {}).get(tool, {}).get("version")
+        entry = json.loads(manifest.read_text(encoding="utf-8")).get("tools", {}).get(tool)
     except (OSError, ValueError):
         return None
+    return entry if isinstance(entry, dict) else None
+
+
+def installed_version(tool: str) -> str | None:
+    entry = installed_manifest_entry(tool)
+    return entry.get("version") if entry else None
 
 TOOL_DIMENSIONS = {
     "semgrep": ["vulnerabilities", "xss", "input_validation", "error_handling", "authn_authz"],
@@ -59,8 +65,8 @@ class ToolRun:
     note: str = ""
 
 
-def _run(cmd: list[str], cwd: Path, timeout: int = 600) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False)
+def _run(cmd: list[str], cwd: Path, timeout: int = 600, env: dict | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
 
 
 def _offline_zizmor() -> bool:
@@ -89,13 +95,14 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
         sarif.unlink(missing_ok=True)
         try:
             if tool == "semgrep":
-                # Explicit rulesets, never `--config auto`: auto requires metrics to be on (it sends project
-                # identity to semgrep.dev to pick rules), which data-residency policy P5 forbids.
-                cfg = [c for c in os.environ.get("MARA_SEMGREP_CONFIG", "p/default").split(",") if c.strip()]
-                args = [exe, "scan", "--metrics=off", "--sarif", "--output", str(sarif)]
-                for c in cfg:
-                    args += ["--config", c.strip()]
-                cp = _run(args + ["."], target)
+                # Pinned local rulesets (tools/versions.lock `semgrep-rules`) unless MARA_SEMGREP_CONFIG says
+                # otherwise; never `--config auto`, which turns metrics on and sends project identity to
+                # semgrep.dev (data-residency policy P5). Rule ids are normalised to the registry form.
+                from .semgrep_rules import default_configs, normalize_sarif, scan_args, scan_env
+
+                cp = _run(scan_args(exe, default_configs(), sarif) + ["."], target, env=scan_env())
+                if sarif.exists() and sarif.read_text(encoding="utf-8").strip():
+                    normalize_sarif(sarif)
             elif tool == "gitleaks":
                 cp = _run(
                     [exe, "detect", "--no-git", "--source", ".", "--report-format", "sarif", "--report-path", str(sarif), "--exit-code", "0"],

@@ -14,6 +14,7 @@
 | trivy | 0.74.0 | `aquasecurity/trivy` GitHub release，`trivy_0.74.0_Linux-64bit.tar.gz` | Apache-2.0 | SHA-256（與 `trivy_0.74.0_checksums.txt` 交叉核對）→ `cosign verify-blob --bundle trivy_0.74.0_Linux-64bit.tar.gz.sigstore.json`，身分 `https://github.com/aquasecurity/trivy/.github/workflows/reusable-release.yaml@refs/tags/v0.74.0`，issuer `https://token.actions.githubusercontent.com` | Sigstore keyless bundle（goreleaser `signs:`）；release workflow 亦有 `attestations: write` | 無 |
 | PyYAML（安裝器自身依賴） | 見 `tools/bootstrap-requirements.txt` | PyPI wheel | MIT | `pip --require-hashes`（安裝器唯一的非標準庫依賴，用來讀 lock） | 無 | 無簽章；與 semgrep 同樣只有 hash 鎖定 |
 | semgrep | 1.177.0 | PyPI wheel（`manylinux_2_34_x86_64`）與其完整依賴閉包，共 66 個 wheel | LGPL-2.1（semgrep）；依賴各自授權 | `pip install --require-hashes --only-binary=:all:` 對 `tools/semgrep-requirements.txt`（每個 wheel 的 SHA-256） | PyPI 對 semgrep 1.177.0 無 PEP 740 provenance（`/integrity/.../provenance` 回 404，`/pypi/.../json` 無 `provenance` 欄位） | **無簽章**；hash 鎖定只保證「與我們第一次看到的相同」。閉包為 CPython 3.11 × manylinux x86_64 專用，換平台需重新鎖定 |
+| semgrep-rules（規則，非二進位） | `release` 分支 commit `5a8a6be`（2026-07-27） | `semgrep/semgrep-rules` GitHub repo，以 `git fetch --depth 1 origin <commit>`（`fetch.fsckObjects=true`）取出到 `.mara-tools/semgrep-rules`；只把 lock `paths` 列出的 12 個 security 規則目錄交給 semgrep | Semgrep Rules License v1.0（非 OSS；規則只在掃描時讀取，不複製進本 repo） | (1) 取出的 HEAD 必須等於 lock 的 `commit`；(2) 對 `paths` 下每個檔案算 `路徑\0sha256` 排序後的 SHA-256（`git_paths_digest`），必須等於 lock 的 `sha256`（與 git 的 SHA-1 命名無關）；(3) `git verify-commit`：該 merge commit 必須帶有 GitHub web-flow 金鑰（`B5690EEEBB952194`，自 `https://github.com/web-flow.gpg` 取得後以金鑰 ID 核對）的有效簽章 | GitHub web-flow 簽章（證明 commit 物件是 GitHub 的合併流程產生，樹雜湊因此被綁定） | 上游 release 分支不打 tag、不出 release 資產；web-flow 簽章證明「來自 GitHub 的合併」而非「semgrep 團隊審過」。2026-09-13 本地環境的 proxy 擋 `github.com/web-flow.gpg`，只有 CI 真的驗簽章 |
 
 ## 2. 兩層驗證的意義
 
@@ -25,7 +26,7 @@
 ## 3. 信任根與已知缺口
 
 - **信任第一次固定。** 兩個驗證器（cosign、slsa-verifier）本身以 SHA-256 固定；第一次寫進 lock 時是人工從發布者 checksum 檔與獨立下載交叉核對的。之後 cosign 用自身驗證自己的 keyless bundle、slsa-verifier 驗證自己的 provenance，這是自證，只能證明「這個二進位與它宣稱的簽章一致」。
-- **gitleaks 與 semgrep 沒有簽章。** 這兩個工具目前只有第 1 層。gitleaks 的 checksum 檔與二進位同源；semgrep 在 PyPI 沒有 provenance。升版時仍只能靠獨立下載交叉核對。
+- **gitleaks 與 semgrep 沒有簽章。** 這兩個工具目前只有第 1 層。gitleaks 的 checksum 檔與二進位同源；semgrep 在 PyPI 沒有 provenance。升版時仍只能靠獨立下載交叉核對。semgrep 的規則（`semgrep-rules`）則有第 2 層：commit 的 GitHub web-flow 簽章。
 - **CI 的 secret scanning 已改用 lock 內的 gitleaks（2026-09-13）。** 原本的 `gitleaks/gitleaks-action` 自行下載 gitleaks 8.24.3（未驗雜湊），與 lock 的 8.30.1 是兩份不同的 gitleaks，還需要 `pull-requests: read` 與 `GITHUB_TOKEN`。現在 `scripts/gitleaks_ci.py` 只從 `.mara-tools/bin` 取（版本必須等於 lock），PR 掃 `--no-merges --first-parent base..head`、push 掃 `base..head`、無可用 base 時退回單一 commit；SARIF 上傳為 artifact，洩漏或崩潰都讓 job 紅。L0 job 不再需要 `pull-requests: read`，也不再有任何 action 自行下載工具。
 - **TruffleHog 未納入。** Shai-Hulud 蠕蟲曾用 TruffleHog 採集憑證（報告 C6.13）；若日後加入，只能在無出口網路的 job 中執行，且其輸出不得回寫任何憑證存放處。
 - **平台。** lock 只涵蓋 linux/x86_64 與 CPython 3.11。wheel 是 ABI 專用的：安裝器只會用 lock 指定的 `python3.11` 建 venv，找不到就中止（CI 的 `ubuntu-latest` 預設是 3.12，所以 L0 job 先以 `actions/setup-python` 裝 3.11）。其他平台或直譯器需另外鎖定。
@@ -37,17 +38,33 @@
 |---|---|---|
 | gitleaks | 無 | 正常（`detect --no-git`） |
 | zizmor | 線上稽核（impostor-commit、known-vulnerable-actions）需 GitHub API 與 token；runner 預設 `--offline`，設 `MARA_ZIZMOR_ONLINE=1` 且有 token 才開 | 正常，少兩個線上稽核；CI 的 zizmor-action 對真實 workflow 另外跑線上稽核 |
-| osv-scanner | 查詢 `api.osv.dev` | 無結果（不是錯誤）；可改用離線資料庫（`--offline` 加本地 DB）作為後續工作 |
+| osv-scanner | 查詢 `api.osv.dev`（只送套件名與版本，不送原始碼）；對 `requirements.txt` 之類的 manifest 預設還會向 `api.deps.dev` 做遞移解析，CI 的 `scripts/osv_ci.py` 以 `--no-resolve` 關掉 | 以 exit 127／128 結束、無 SARIF；`osv_ci.py` 視為崩潰（exit 1），runner 記錄為未執行。可改用離線資料庫（`--offline-vulnerabilities` 加預先下載的 DB）作為後續工作 |
 | trivy | 首次下載漏洞資料庫（ghcr.io） | 無結果；可預先 `trivy image --download-db-only` 或自架 DB 鏡像 |
-| semgrep | 規則集需從 semgrep 規則登錄（semgrep.dev）下載，預設 `p/default`，以 `MARA_SEMGREP_CONFIG=p/default,p/security-audit` 覆寫；runner 一律 `--metrics=off`，且不用 `--config auto`，因為 auto 強制開啟 metrics 並把專案識別送到 semgrep.dev（政策 P5） | 以 exit 2 結束、無 SARIF，runner 記錄為未執行（本 repo 的開發環境即如此：proxy 對 semgrep.dev 回 403）；離線需改用本地規則目錄（`MARA_SEMGREP_CONFIG=/path/to/rules`），後續工作 |
+| semgrep | **無**（2026-09-13 起）：規則來自 lock 固定的 `.mara-tools/semgrep-rules` 本地目錄，runner 與 `scripts/semgrep_ci.py` 一律 `--metrics=off --disable-version-check`，環境變數 `SEMGREP_ENABLE_VERSION_CHECK=0`、`SEMGREP_SEND_METRICS=off`，且不用 `--config auto`（auto 強制開啟 metrics 並把專案識別送到 semgrep.dev，違反政策 P5）。`MARA_SEMGREP_CONFIG` 可覆寫（例如 `p/default` 就會回到需連 semgrep.dev 的登錄集） | 正常；規則未安裝時 runner 退回 `p/default`，在無網路環境會以 exit 2 結束、無 SARIF，記錄為未執行 |
 
 runner 對每個工具記錄「pinned <版本>」或「exit <code>, no SARIF produced: <stderr 尾>」，報告的 `tools_ran` 只列真正產出 SARIF 的工具。
+
+## 3b. CI 中的 semgrep 與 osv-scanner（2026-09-13）
+
+`deterministic-tools` job 在安裝完 lock 內的工具後，依序執行四個步驟，任何一步非零即紅：
+
+| 步驟 | 指令 | 判定 |
+|---|---|---|
+| semgrep 對 seeded fixture | `scripts/semgrep_ci.py --target fixtures/vuln-sample --expect fixtures/vuln-sample-sarif/semgrep.sarif` | 實掃的 (rule, file, line) 集合必須與預錄檔完全相同（預錄檔是 semgrep 1.177.0 的真實輸出，15 個 finding，規則 ID 已正規化）；少於 3 個 finding 視為規則沒載入。要更新預錄檔：看過差異後把 `--report` 的輸出複製過去 |
+| semgrep 對本 repo | `scripts/semgrep_ci.py --target . --triage tools/semgrep-triage.yaml` | 排除 triage 檔 `exclude` 列的 seeded 目錄（`fixtures/`、`calib/samples/`）；`tests/` 照掃（自訂的 `.semgrepignore` 取代 semgrep 內建的排除清單）。每個 finding 必須被 triage 檔的一條（規則 ID＋路徑 glob＋理由）涵蓋，否則 exit 2；被涵蓋的 finding 留在 SARIF，加上 `suppressions`（`kind: external`，`justification` 為理由）；沒對到任何 finding 的條目印為 STALE。2026-09-13 的 47 個 finding 全部是 `dangerous-subprocess-use-audit`（audit 級，所有 argv 清單式的 subprocess 呼叫都會命中）、四個 `-tainted-env-args`（來源是 `sys.argv`）、產生校準樣本的 fake Stripe key、測試用的 AWS 文件範例 secret、安裝器的 `urllib` 下載（URL 來自 lock、下載後驗 SHA-256）；每條理由寫在 triage 檔 |
+| osv-scanner 對 seeded fixture | `scripts/osv_ci.py --target fixtures/vuln-sample --expect-package requests` | fixture 固定 `requests==2.19.0`；掃描結果必須把 `requests` 列為有已知漏洞，否則 exit 2（掃描器、資料庫或 fixture 任一失效都會被看見） |
+| osv-scanner 對本 repo 安裝的閉包 | `scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/semgrep-requirements.txt --lockfile tools/model-eval-requirements.txt --config tools/osv-scanner.toml` | 68 個套件（PyYAML 1、semgrep 閉包 66、garak 1）。任何未被 `tools/osv-scanner.toml` 的 `[[IgnoredVulns]]`（需 `id`、`reason`、`ignoreUntil`）忽略的 advisory 都 exit 2；正確的處理是升版重新鎖定，忽略只是有期限的暫緩 |
+
+兩個腳本都只從 `MARA_TOOLS_DIR/bin` 取二進位、manifest 版本必須等於 lock；`semgrep_ci.py` 另要求 `.mara-tools/semgrep-rules` 的 HEAD 等於 lock 的 commit。結束碼：0 乾淨、2 有未 triage 的 finding／漂移／未忽略的漏洞、1 工具崩潰或（osv）找不到任何套件。五個 SARIF（`semgrep.sarif`、`fixture-semgrep.sarif`、`osv.sarif`、`fixture-osv.sarif`、`gitleaks.sarif`）上傳為 `l0-sarif` artifact。
+
+規則 ID 正規化：semgrep 對本地規則會把規則檔的路徑（轉成點）接在 ID 前面（`mara-tools.semgrep-rules.python.flask.security.injection.tainted-sql-string`），使 ID 隨安裝路徑而變；`mara.tools.semgrep_rules.normalize_sarif` 把 `semgrep-rules.` 之前的部分去掉，得到與登錄集相同的 ID，並移除沒有結果的規則描述（semgrep 會列出全部 271 條載入的規則）。順帶修正：`mara.tools.sarif.read_sarif` 原本把整個 tag 字串（`CWE-89: Improper Neutralization…`）當 CWE，與 finding 的 `CWE-89` 永遠不相等，手寫的舊 fixture 掩蓋了這個 bug；現在只取 ID，且保留規則列出的所有 CWE（`tainted-sql-string` 上游只標 `CWE-704`，同一行的 `sqlalchemy-execute-raw-query` 標 `CWE-89`），佐證比對任一相符即可。
 
 ## 4. 升版程序（變更管理）
 
 1. 以 `git ls-remote --tags` 確認新 tag；下載新資產與發布者 checksum 檔，獨立計算 SHA-256 並交叉核對，兩者不一致即停止。
 2. 更新 `tools/versions.lock` 的 `version`、`url`、`sha256`、`bundle_url`／`provenance_url`／`source_tag`，以及 cosign 身分正則裡的 tag。
 3. semgrep：在 CPython 3.11 × manylinux 環境重新 `pip download`，以 `scripts/install_tools.py --relock-semgrep <wheel-dir>` 重寫 `tools/semgrep-requirements.txt`。
+3a. semgrep-rules：`git clone --branch release https://github.com/semgrep/semgrep-rules.git`，看過 `git log <舊 commit>..HEAD -- <paths>` 的變更後，以 `scripts/install_tools.py --digest-git semgrep-rules <checkout>` 印出新的 `commit` 與 `sha256` 貼進 lock；重跑 `scripts/semgrep_ci.py --target fixtures/vuln-sample --expect …`，若 fixture 結果變了就更新預錄檔，再對本 repo 跑 `--triage` 補 triage 條目。
 4. 本機 `python3 scripts/install_tools.py`（能連 Sigstore 的環境）或 CI 的 `deterministic-tools` job 必須全綠。
 5. 更新本頁第 1 節，PR 內文列出每個工具的新舊版本與 SHA-256。
 

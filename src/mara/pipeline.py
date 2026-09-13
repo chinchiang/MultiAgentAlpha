@@ -366,6 +366,7 @@ def _tool_corroborates(f: Finding, tool_results: list[ToolResult]) -> bool:
             tf, pf = _norm_path(t.file), _norm_path(p.file)
             same_file = tf == pf or tf.endswith("/" + pf)
             if same_file and abs(t.line - p.line) <= 3:
-                if t.cwe is None or t.cwe.upper() == f.cwe.upper():
+                cwes = {c.upper() for c in (t.cwes or ([t.cwe] if t.cwe else []))}
+                if not cwes or f.cwe.upper() in cwes:
                     return True
     return False

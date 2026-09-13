@@ -12,6 +12,12 @@ Usage:
   python scripts/install_tools.py                 # everything in the lock
   python scripts/install_tools.py --only zizmor trivy
   python scripts/install_tools.py --relock-semgrep <dir of wheels>   # rewrite the hash-pinned requirements
+  python scripts/install_tools.py --digest-git semgrep-rules <checkout>  # print commit + paths digest for the lock
+
+Kinds: binary / archive (a release asset), pip (a hash-pinned requirements file), git (a repository
+checked out at a pinned commit, e.g. the semgrep rules: the lock's sha256 is a digest over the rule
+files themselves, and verify.method git-commit-gpg checks the commit's GPG signature against the key
+named in the lock).
 """
 
 from __future__ import annotations
@@ -36,7 +42,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LOCK = ROOT / "tools" / "versions.lock"
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
-SIGNATURE_METHODS = {"cosign-keyless", "slsa-provenance", "github-attestation"}
+SIGNATURE_METHODS = {"cosign-keyless", "slsa-provenance", "github-attestation", "git-commit-gpg"}
+COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 class InstallError(RuntimeError):
@@ -58,7 +65,10 @@ def download(url: str, dest: Path, *, retries: int = 3, timeout: int = 600) -> P
     """Fetch url to dest (file:// allowed for tests). Writes to a temp file then renames."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     if url.startswith("file://"):
-        shutil.copyfile(url[len("file://"):], dest)
+        try:
+            shutil.copyfile(url[len("file://"):], dest)
+        except OSError as e:
+            raise InstallError(f"could not download {url}: {e}") from e
         return dest
     last: Exception | None = None
     for attempt in range(1, retries + 1):
@@ -95,6 +105,16 @@ def load_lock(path: Path) -> dict:
             for key in ("version", "requirements", "verify"):
                 if key not in t:
                     raise InstallError(f"{path}: tool {name} lacks '{key}'")
+        elif t.get("kind") == "git":
+            for key in ("version", "url", "commit", "paths", "sha256", "verify"):
+                if key not in t:
+                    raise InstallError(f"{path}: tool {name} lacks '{key}'")
+            if not COMMIT_RE.match(str(t["commit"])):
+                raise InstallError(f"{path}: tool {name} has a malformed commit (need 40 hex chars)")
+            if not SHA_RE.match(str(t["sha256"])):
+                raise InstallError(f"{path}: tool {name} has a malformed sha256")
+            if not isinstance(t["paths"], list) or not t["paths"] or any(".." in Path(p).parts or Path(p).is_absolute() for p in t["paths"]):
+                raise InstallError(f"{path}: tool {name} needs a non-empty list of relative 'paths'")
         else:
             raise InstallError(f"{path}: tool {name} has unknown kind {t.get('kind')!r}")
     return lock
@@ -226,6 +246,100 @@ def install_binary_or_archive(name: str, spec: dict, *, bin_dir: Path, cache: Pa
             "verified_by": verified_by, "signature_verified": signature_verified, "path": str(target)}
 
 
+def git_paths_digest(checkout: Path, paths: list[str]) -> str:
+    """SHA-256 over every file under the pinned paths: one line per file, `<relative path>\\0<sha256>\\n`, sorted.
+    Independent of git's own SHA-1 object naming, so the lock pins the rule bytes, not only the commit."""
+    h = hashlib.sha256()
+    for rel in sorted(paths):
+        base = checkout / rel
+        if not base.is_dir():
+            raise InstallError(f"pinned path {rel!r} is not a directory in the checkout")
+        for f in sorted(p for p in base.rglob("*") if p.is_file()):
+            h.update(f"{f.relative_to(checkout).as_posix()}\0{sha256_file(f)}\n".encode())
+    return h.hexdigest()
+
+
+def verify_commit_gpg(name: str, spec: dict, checkout: Path, cache: Path) -> str:
+    """The pinned commit must carry a good GPG signature by the key the lock names (key id = last 16 hex of
+    the fingerprint), imported from gpg_key_url into a throwaway keyring. For semgrep-rules that is GitHub's
+    web-flow key: it proves the commit object (and so its tree) was produced by GitHub's merge flow."""
+    v = spec["verify"]
+    key_id = str(v["gpg_key_id"]).upper()
+    key = download(v["gpg_key_url"], cache / f"{name}.gpg-key.asc")
+    home = cache / f"{name}.gnupg"
+    shutil.rmtree(home, ignore_errors=True)
+    home.mkdir(mode=0o700)
+    env = {**os.environ, "GNUPGHOME": str(home)}
+    cp = run(["gpg", "--batch", "--quiet", "--import", str(key)], env=env)
+    if cp.returncode != 0:
+        raise InstallError(f"{name}: could not import the GPG key from {v['gpg_key_url']}\n{cp.stderr.strip()[-800:]}")
+    cp = run(["gpg", "--batch", "--with-colons", "--fingerprint"], env=env)
+    fprs = [line.split(":")[9] for line in cp.stdout.splitlines() if line.startswith("fpr:")]
+    if not any(f.upper().endswith(key_id) for f in fprs):
+        raise InstallError(f"{name}: the key at {v['gpg_key_url']} is not {key_id} (fingerprints: {fprs})")
+    cp = run(["git", "-C", str(checkout), "verify-commit", "--raw", str(spec["commit"])], env=env)
+    status = cp.stderr
+    good = any(line.startswith("[GNUPG:] GOODSIG ") and line.split()[2].upper().endswith(key_id) for line in status.splitlines())
+    valid = "[GNUPG:] VALIDSIG " in status
+    if cp.returncode != 0 or not (good and valid):
+        raise InstallError(f"{name}: commit {spec['commit'][:12]} is not validly signed by {key_id}\n{status.strip()[-1200:]}")
+    return f"git-commit-gpg key={key_id} ({v['gpg_key_url']})"
+
+
+def install_git(name: str, spec: dict, *, install_dir: Path, cache: Path, no_signature_check: bool) -> dict:
+    """Check the repository out at the pinned commit into <install_dir>/<name>, verify the commit id, the
+    digest over the pinned paths and (unless skipped) the commit signature. Nothing is copied into the
+    repository: the rules stay under the tool directory and are read at scan time."""
+    url, commit = spec["url"], str(spec["commit"])
+    dest = install_dir / name
+    tmp = install_dir / f"{name}.installing"
+    shutil.rmtree(tmp, ignore_errors=True)
+    print(f"[{name}] {spec['version']}: fetching {url} at {commit[:12]}")
+    steps = [("git init", ["git", "init", "-q", str(tmp)]),
+             ("git remote add", ["git", "-C", str(tmp), "remote", "add", "origin", url]),
+             # fsck every object; allowAnySHA1InWant lets a file:// remote (tests) serve a bare commit id like GitHub does
+             ("git fetch", ["git", "-C", str(tmp), "-c", "fetch.fsckObjects=true", "-c", "protocol.file.allow=always",
+                            "-c", "uploadpack.allowAnySHA1InWant=true", "fetch", "-q", "--depth", "1", "origin", commit]),
+             ("git checkout", ["git", "-C", str(tmp), "checkout", "-q", "--detach", "FETCH_HEAD"])]
+    for label, cmd in steps:
+        cp = run(cmd)
+        if cp.returncode != 0:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise InstallError(f"{name}: {label} failed for {url} @ {commit[:12]}\n{(cp.stderr or cp.stdout).strip()[-800:]}")
+    head = run(["git", "-C", str(tmp), "rev-parse", "HEAD"]).stdout.strip()
+    if head != commit:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise InstallError(f"{name}: checked-out commit {head} is not the pinned {commit}")
+    print(f"[{name}] commit ok {commit[:12]}")
+    digest = git_paths_digest(tmp, list(spec["paths"]))
+    if digest != spec["sha256"]:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise InstallError(f"{name}: digest over {spec['paths']} mismatch\n  expected {spec['sha256']}\n  actual   {digest}\n  The lock or the checkout is wrong; nothing was installed.")
+    print(f"[{name}] paths digest ok {digest[:16]}… ({len(spec['paths'])} pinned paths)")
+    method = spec["verify"]["method"]
+    if method == "git-commit-gpg" and not no_signature_check:
+        verified_by = verify_commit_gpg(name, spec, tmp, cache)
+        signature_verified = True
+        print(f"[{name}] {verified_by}")
+    elif method == "git-commit-gpg":
+        verified_by = f"{method} SKIPPED (--no-signature-check)"
+        signature_verified = False
+        print(f"[{name}] WARNING: {method} skipped by --no-signature-check")
+    elif method == "git-commit":
+        verified_by = "git-commit (commit id and paths digest matched; no signature checked)"
+        signature_verified = False
+    else:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise InstallError(f"{name}: unknown verify method {method!r} for a git tool")
+    if dest.is_symlink() or dest.is_file():
+        dest.unlink()
+    else:
+        shutil.rmtree(dest, ignore_errors=True)
+    tmp.replace(dest)
+    return {"version": str(spec["version"]), "kind": "git", "url": url, "commit": commit, "paths": list(spec["paths"]), "sha256": digest,
+            "verified_by": verified_by, "signature_verified": signature_verified, "path": str(dest)}
+
+
 def python_for_pip(lock: dict) -> Path:
     """The interpreter the wheel hashes were locked for (lock platform.python). Wheels are ABI-specific,
     so pip under any other CPython would resolve different files and the hash check would fail."""
@@ -291,6 +405,8 @@ def install(lock: dict, *, install_dir: Path, only: list[str] | None = None, no_
         if spec["kind"] == "pip":
             assert python is not None
             entry = install_pip(n, spec, install_dir=install_dir, bin_dir=bin_dir, python=python)
+        elif spec["kind"] == "git":
+            entry = install_git(n, spec, install_dir=install_dir, cache=cache, no_signature_check=no_signature_check)
         else:
             entry = install_binary_or_archive(n, spec, bin_dir=bin_dir, cache=cache, no_signature_check=no_signature_check)
         entry["installed_at"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
@@ -323,6 +439,7 @@ def main() -> int:
     ap.add_argument("--only", nargs="+", metavar="TOOL")
     ap.add_argument("--no-signature-check", action="store_true", help="skip publisher signature/provenance checks (SHA-256 still enforced); never in CI")
     ap.add_argument("--relock-semgrep", type=Path, metavar="WHEEL_DIR", help="rewrite tools/semgrep-requirements.txt from a directory of wheels")
+    ap.add_argument("--digest-git", nargs=2, metavar=("TOOL", "CHECKOUT"), help="print the commit and paths digest of a checkout for a git-kind lock entry")
     args = ap.parse_args()
     try:
         lock = load_lock(args.lock)
@@ -330,6 +447,14 @@ def main() -> int:
         if args.relock_semgrep:
             spec = lock["tools"]["semgrep"]
             relock_semgrep(args.relock_semgrep, ROOT / spec["requirements"], str(spec["version"]))
+            return 0
+        if args.digest_git:
+            tool, checkout = args.digest_git[0], Path(args.digest_git[1])
+            spec = lock["tools"].get(tool)
+            if not spec or spec.get("kind") != "git":
+                raise InstallError(f"{tool} is not a git-kind tool in {args.lock}")
+            head = run(["git", "-C", str(checkout), "rev-parse", "HEAD"]).stdout.strip()
+            print(f"{tool}:\n    commit: {head}\n    sha256: {git_paths_digest(checkout, list(spec['paths']))}   # over {spec['paths']}")
             return 0
         install_dir = (args.dest or (ROOT / lock.get("install_dir", ".mara-tools"))).resolve()
         manifest = install(lock, install_dir=install_dir, only=args.only, no_signature_check=args.no_signature_check)

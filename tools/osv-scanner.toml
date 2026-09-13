@@ -1,0 +1,8 @@
+# osv-scanner configuration for scripts/osv_ci.py (the L0 job scans the hash-locked closures under tools/).
+# An advisory that cannot be fixed by relocking yet is listed here with a reason and an expiry; the job
+# fails again after ignoreUntil. Keep this list empty whenever possible: the fix is to bump and relock.
+#
+# [[IgnoredVulns]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# ignoreUntil = 2026-12-31
+# reason = "not reachable from semgrep's CLI use; tracked in issue #NN until the upstream fix is released"

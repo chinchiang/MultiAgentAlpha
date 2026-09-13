@@ -1,100 +1,861 @@
 {
- "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
- "version": "2.1.0",
+ "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
  "runs": [
   {
-   "tool": {
-    "driver": {
-     "name": "semgrep",
-     "version": "0.0.0",
-     "rules": [
+   "invocations": [
+    {
+     "executionSuccessful": true,
+     "toolExecutionNotifications": [
       {
-       "id": "python.flask.security.injection.tainted-sql-string",
-       "properties": {
-        "tags": [
-         "CWE-89",
-         "OWASP-A05:2025"
-        ]
+       "descriptor": {
+        "id": "Syntax error"
+       },
+       "level": "warning",
+       "message": {
+        "text": "Syntax error at line .github/workflows/deploy.yml:14:\n When parsing a snippet as Bash for metavariable-pattern in rule 'yaml.github-actions.security.curl-eval', `{ github.event.pull_request.title` was unexpected"
        }
       },
       {
-       "id": "python.flask.security.audit.render-template-string",
-       "properties": {
-        "tags": [
-         "CWE-79"
-        ]
-       }
-      },
-      {
-       "id": "python.flask.security.audit.debug-enabled",
-       "properties": {
-        "tags": [
-         "CWE-215"
-        ]
+       "descriptor": {
+        "id": "Syntax error"
+       },
+       "level": "warning",
+       "message": {
+        "text": "Syntax error at line .github/workflows/deploy.yml:14:\n When parsing a snippet as Bash for metavariable-pattern in rule 'yaml.github-actions.security.gha-curl-pipe-shell', `{ github.event.pull_request.title` was unexpected"
        }
       }
      ]
     }
-   },
+   ],
    "results": [
     {
-     "ruleId": "python.flask.security.injection.tainted-sql-string",
-     "level": "error",
-     "message": {
-      "text": "Detected user input used to manually construct a SQL string"
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
      },
      "locations": [
       {
        "physicalLocation": {
         "artifactLocation": {
-         "uri": "app.py"
+         "uri": ".github/workflows/deploy.yml",
+         "uriBaseId": "%SRCROOT%"
         },
         "region": {
-         "startLine": 32
+         "endColumn": 34,
+         "endLine": 10,
+         "snippet": {
+          "text": "      - uses: actions/checkout@v4"
+         },
+         "startColumn": 9,
+         "startLine": 10
         }
        }
       }
-     ]
+     ],
+     "message": {
+      "text": "GitHub Actions step uses a mutable tag or branch reference. Tags and branch names can be silently repointed by the action owner, enabling supply-chain attacks \u2014 as seen in the trivy-action and kics-github-action compromises. Pin the reference to a full 40-character commit SHA instead, e.g. `uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608`."
+     },
+     "properties": {},
+     "ruleId": "yaml.github-actions.security.github-actions-mutable-action-tag"
     },
     {
-     "ruleId": "python.flask.security.audit.render-template-string",
-     "level": "warning",
-     "message": {
-      "text": "render_template_string with concatenated input"
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
      },
      "locations": [
       {
        "physicalLocation": {
         "artifactLocation": {
-         "uri": "app.py"
+         "uri": ".github/workflows/deploy.yml",
+         "uriBaseId": "%SRCROOT%"
         },
         "region": {
+         "endColumn": 57,
+         "endLine": 12,
+         "snippet": {
+          "text": "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.head.sha }}"
+         },
+         "startColumn": 9,
+         "startLine": 10
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "This GitHub Actions workflow file uses `pull_request_target` and checks out code from the incoming pull request. When using `pull_request_target`, the Action runs in the context of the target repository, which includes access to all repository secrets. Normally, this is safe because the Action only runs code from the target repository, not the incoming PR. However, by checking out the incoming PR code, you're now using the incoming code for the rest of the action. You may be inadvertently executing arbitrary code from the incoming PR with access to repository secrets, which would let an attacker steal repository secrets. This normally happens by running build scripts (e.g., `npm build` and `make`) or dependency installation scripts (e.g., `python setup.py install`). Audit your workflow file to make sure no code from the incoming PR is executed. Please see https://securitylab.github.com/research/github-actions-preventing-pwn-requests/ for additional mitigations."
+     },
+     "properties": {},
+     "ruleId": "yaml.github-actions.security.pull-request-target-code-checkout"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ".github/workflows/deploy.yml",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 70,
+         "endLine": 15,
+         "snippet": {
+          "text": "        run: |\n          echo \"Building PR: ${{ github.event.pull_request.title }}\""
+         },
+         "startColumn": 9,
+         "startLine": 14
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Using variable interpolation `${{...}}` with `github` context data in a `run:` step could allow an attacker to inject their own code into the runner. This would allow them to steal secrets and code. `github` context data can have arbitrary user input and should be treated as untrusted. Instead, use an intermediate environment variable with `env:` to store the data and use the environment variable in the `run:` script. Be sure to use double-quotes the environment variable, like this: \"$ENVVAR\"."
+     },
+     "properties": {},
+     "ruleId": "yaml.github-actions.security.run-shell-injection"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ".github/workflows/deploy.yml",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 42,
+         "endLine": 16,
+         "snippet": {
+          "text": "      - uses: some-org/deploy-action@main"
+         },
+         "startColumn": 9,
+         "startLine": 16
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "An action sourced from a third-party repository on GitHub is not pinned to a full length commit SHA. Pinning an action to a full length commit SHA is currently the only way to use an action as an immutable release. Pinning to a particular SHA helps mitigate the risk of a bad actor adding a backdoor to the action's repository, as they would need to generate a SHA-1 collision for a valid Git object payload."
+     },
+     "properties": {},
+     "ruleId": "yaml.github-actions.security.audit.third-party-action-not-pinned-to-commit-sha"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": ".github/workflows/deploy.yml",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 42,
+         "endLine": 16,
+         "snippet": {
+          "text": "      - uses: some-org/deploy-action@main"
+         },
+         "startColumn": 9,
+         "startLine": 16
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "GitHub Actions step uses a mutable tag or branch reference. Tags and branch names can be silently repointed by the action owner, enabling supply-chain attacks \u2014 as seen in the trivy-action and kics-github-action compromises. Pin the reference to a full 40-character commit SHA instead, e.g. `uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608`."
+     },
+     "properties": {},
+     "ruleId": "yaml.github-actions.security.github-actions-mutable-action-tag"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 68,
+         "endLine": 26,
+         "snippet": {
+          "text": "    return render_template_string(\"<h1>Results for \" + q + \"</h1>\")"
+         },
+         "startColumn": 12,
          "startLine": 26
         }
        }
       }
-     ]
+     ],
+     "message": {
+      "text": "Found a template created with string formatting. This is susceptible to server-side template injection and cross-site scripting attacks."
+     },
+     "properties": {},
+     "ruleId": "python.flask.security.audit.render-template-string"
     },
     {
-     "ruleId": "python.flask.security.audit.debug-enabled",
-     "level": "warning",
-     "message": {
-      "text": "Flask debug mode enabled"
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
      },
      "locations": [
       {
        "physicalLocation": {
         "artifactLocation": {
-         "uri": "app.py"
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
         },
         "region": {
+         "endColumn": 67,
+         "endLine": 26,
+         "snippet": {
+          "text": "    return render_template_string(\"<h1>Results for \" + q + \"</h1>\")"
+         },
+         "startColumn": 35,
+         "startLine": 26
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Detected user input flowing into a manually constructed HTML string. You may be accidentally bypassing secure methods of rendering HTML by manually constructing HTML and this could create a cross-site scripting vulnerability, which could let attackers steal sensitive user data. To be sure this is safe, check that the HTML is rendered safely. Otherwise, use templates (`django.shortcuts.render`) which will safely render HTML instead."
+     },
+     "properties": {},
+     "ruleId": "python.django.security.injection.raw-html-format"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 67,
+         "endLine": 26,
+         "snippet": {
+          "text": "    return render_template_string(\"<h1>Results for \" + q + \"</h1>\")"
+         },
+         "startColumn": 35,
+         "startLine": 26
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Detected user input flowing into a manually constructed HTML string. You may be accidentally bypassing secure methods of rendering HTML by manually constructing HTML and this could create a cross-site scripting vulnerability, which could let attackers steal sensitive user data. To be sure this is safe, check that the HTML is rendered safely. Otherwise, use templates (`flask.render_template`) which will safely render HTML instead."
+     },
+     "properties": {},
+     "ruleId": "python.flask.security.injection.raw-html-format"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 63,
+         "endLine": 32,
+         "snippet": {
+          "text": "    cur.execute(\"SELECT * FROM orders WHERE id = \" + order_id)"
+         },
+         "startColumn": 5,
+         "startLine": 32
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Avoiding SQL string concatenation: untrusted input concatenated with raw SQL query can result in SQL Injection. In order to execute raw query safely, prepared statement should be used. SQLAlchemy provides TextualSQL to easily used prepared statement with named parameters. For complex SQL composition, use SQL Expression Language or Schema Definition Language. In most cases, SQLAlchemy ORM will be a better option."
+     },
+     "properties": {},
+     "ruleId": "python.sqlalchemy.security.sqlalchemy-execute-raw-query"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 62,
+         "endLine": 32,
+         "snippet": {
+          "text": "    cur.execute(\"SELECT * FROM orders WHERE id = \" + order_id)"
+         },
+         "startColumn": 17,
+         "startLine": 32
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Detected user input used to manually construct a SQL string. This is usually bad practice because manual construction could accidentally result in a SQL injection. An attacker could use a SQL injection to steal or modify contents of the database. Instead, use a parameterized query which is available by default in most database engines. Alternatively, consider using an object-relational mapper (ORM) such as SQLAlchemy which will protect your queries."
+     },
+     "properties": {},
+     "ruleId": "python.flask.security.injection.tainted-sql-string"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 60,
+         "endLine": 49,
+         "snippet": {
+          "text": "    log.info(\"login attempt user=%s password=%s\", user, pw)"
+         },
+         "startColumn": 5,
+         "startLine": 49
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Detected a python logger call with a potential hardcoded secret \"login attempt user=%s password=%s\" being logged. This may lead to secret credentials being exposed. Make sure that the logger is not logging  sensitive information."
+     },
+     "properties": {},
+     "ruleId": "python.lang.security.audit.logging.python-logger-credential-disclosure"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 69,
+         "endLine": 53,
+         "snippet": {
+          "text": "        resp = make_response(redirect(request.args.get(\"next\", \"/\")))"
+         },
+         "startColumn": 30,
+         "startLine": 53
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Data from request is passed to redirect(). This is an open redirect and could be exploited. Consider using 'url_for()' to generate links to known locations. If you must use a URL to unknown pages, consider using 'urlparse()' or similar and checking if the 'netloc' property is the same as your site's host name. See the references for more information."
+     },
+     "properties": {},
+     "ruleId": "python.flask.security.open-redirect"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 41,
+         "endLine": 54,
+         "snippet": {
+          "text": "        resp.set_cookie(\"session\", user)"
+         },
+         "startColumn": 9,
+         "startLine": 54
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Found a Flask cookie with insecurely configured properties.  By default the secure, httponly and samesite ar configured insecurely. cookies should be handled securely by setting `secure=True`, `httponly=True`, and `samesite='Lax'` in response.set_cookie(...). If these parameters are not properly set, your cookies are not properly protected and are at risk of being stolen by an attacker. Include the `secure=True`, `httponly=True`, `samesite='Lax'` arguments or set these to be true in the Flask configuration."
+     },
+     "properties": {},
+     "ruleId": "python.flask.security.audit.secure-set-cookie"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 40,
+         "endLine": 74,
+         "snippet": {
+          "text": "    app.run(host=\"0.0.0.0\", debug=True)"
+         },
+         "startColumn": 5,
          "startLine": 74
         }
        }
       }
-     ]
+     ],
+     "message": {
+      "text": "Running flask app with host 0.0.0.0 could expose the server publicly."
+     },
+     "properties": {},
+     "ruleId": "python.flask.security.audit.avoid_app_run_with_bad_host"
+    },
+    {
+     "fingerprints": {
+      "matchBasedId/v1": "requires login"
+     },
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "app.py",
+         "uriBaseId": "%SRCROOT%"
+        },
+        "region": {
+         "endColumn": 40,
+         "endLine": 74,
+         "snippet": {
+          "text": "    app.run(host=\"0.0.0.0\", debug=True)"
+         },
+         "startColumn": 5,
+         "startLine": 74
+        }
+       }
+      }
+     ],
+     "message": {
+      "text": "Detected Flask app with debug=True. Do not deploy to production with this flag enabled as it will leak sensitive information. Instead, consider using Flask configuration variables or setting 'debug' using system environment variables."
+     },
+     "properties": {},
+     "ruleId": "python.flask.security.audit.debug-enabled"
     }
-   ]
+   ],
+   "tool": {
+    "driver": {
+     "name": "Semgrep OSS",
+     "rules": [
+      {
+       "defaultConfiguration": {
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "Detected user input flowing into a manually constructed HTML string. You may be accidentally bypassing secure methods of rendering HTML by manually constructing HTML and this could create a cross-site scripting vulnerability, which could let attackers steal sensitive user data. To be sure this is safe, check that the HTML is rendered safely. Otherwise, use templates (`django.shortcuts.render`) which will safely render HTML instead."
+       },
+       "help": {
+        "markdown": "Detected user input flowing into a manually constructed HTML string. You may be accidentally bypassing secure methods of rendering HTML by manually constructing HTML and this could create a cross-site scripting vulnerability, which could let attackers steal sensitive user data. To be sure this is safe, check that the HTML is rendered safely. Otherwise, use templates (`django.shortcuts.render`) which will safely render HTML instead.\n\n<b>References:</b>\n - [https://docs.djangoproject.com/en/3.2/topics/http/shortcuts/#render](https://docs.djangoproject.com/en/3.2/topics/http/shortcuts/#render)\n - [https://docs.djangoproject.com/en/3.2/topics/security/#cross-site-scripting-xss-protection](https://docs.djangoproject.com/en/3.2/topics/security/#cross-site-scripting-xss-protection)\n",
+        "text": "Detected user input flowing into a manually constructed HTML string. You may be accidentally bypassing secure methods of rendering HTML by manually constructing HTML and this could create a cross-site scripting vulnerability, which could let attackers steal sensitive user data. To be sure this is safe, check that the HTML is rendered safely. Otherwise, use templates (`django.shortcuts.render`) which will safely render HTML instead."
+       },
+       "id": "python.django.security.injection.raw-html-format",
+       "name": "python.django.security.injection.raw-html-format",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+         "MEDIUM CONFIDENCE",
+         "OWASP-A03:2021 - Injection",
+         "OWASP-A05:2025 - Injection",
+         "OWASP-A07:2017 - Cross-Site Scripting (XSS)",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.django.security.injection.raw-html-format"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "Running flask app with host 0.0.0.0 could expose the server publicly."
+       },
+       "help": {
+        "markdown": "Running flask app with host 0.0.0.0 could expose the server publicly.\n\n<b>References:</b>\n - [https://owasp.org/Top10/A01_2021-Broken_Access_Control](https://owasp.org/Top10/A01_2021-Broken_Access_Control)\n",
+        "text": "Running flask app with host 0.0.0.0 could expose the server publicly."
+       },
+       "id": "python.flask.security.audit.avoid_app_run_with_bad_host",
+       "name": "python.flask.security.audit.avoid_app_run_with_bad_host",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-668: Exposure of Resource to Wrong Sphere",
+         "HIGH CONFIDENCE",
+         "OWASP-A01:2021 - Broken Access Control",
+         "OWASP-A01:2025 - Broken Access Control",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.avoid_app_run_with_bad_host"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "Detected Flask app with debug=True. Do not deploy to production with this flag enabled as it will leak sensitive information. Instead, consider using Flask configuration variables or setting 'debug' using system environment variables."
+       },
+       "help": {
+        "markdown": "Detected Flask app with debug=True. Do not deploy to production with this flag enabled as it will leak sensitive information. Instead, consider using Flask configuration variables or setting 'debug' using system environment variables.\n\n<b>References:</b>\n - [https://labs.detectify.com/2015/10/02/how-patreon-got-hacked-publicly-exposed-werkzeug-debugger/](https://labs.detectify.com/2015/10/02/how-patreon-got-hacked-publicly-exposed-werkzeug-debugger/)\n",
+        "text": "Detected Flask app with debug=True. Do not deploy to production with this flag enabled as it will leak sensitive information. Instead, consider using Flask configuration variables or setting 'debug' using system environment variables."
+       },
+       "id": "python.flask.security.audit.debug-enabled",
+       "name": "python.flask.security.audit.debug-enabled",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-489: Active Debug Code",
+         "HIGH CONFIDENCE",
+         "OWASP-A06:2017 - Security Misconfiguration",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.debug-enabled"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "Found a template created with string formatting. This is susceptible to server-side template injection and cross-site scripting attacks."
+       },
+       "help": {
+        "markdown": "Found a template created with string formatting. This is susceptible to server-side template injection and cross-site scripting attacks.\n\n<b>References:</b>\n - [https://nvisium.com/blog/2016/03/09/exploring-ssti-in-flask-jinja2.html](https://nvisium.com/blog/2016/03/09/exploring-ssti-in-flask-jinja2.html)\n",
+        "text": "Found a template created with string formatting. This is susceptible to server-side template injection and cross-site scripting attacks."
+       },
+       "id": "python.flask.security.audit.render-template-string",
+       "name": "python.flask.security.audit.render-template-string",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-96: Improper Neutralization of Directives in Statically Saved Code ('Static Code Injection')",
+         "LOW CONFIDENCE",
+         "OWASP-A03:2021 - Injection",
+         "OWASP-A05:2025 - Injection",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.render-template-string"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "Found a Flask cookie with insecurely configured properties.  By default the secure, httponly and samesite ar configured insecurely. cookies should be handled securely by setting `secure=True`, `httponly=True`, and `samesite='Lax'` in response.set_cookie(...). If these parameters are not properly set, your cookies are not properly protected and are at risk of being stolen by an attacker. Include the `secure=True`, `httponly=True`, `samesite='Lax'` arguments or set these to be true in the Flask configuration."
+       },
+       "help": {
+        "markdown": "Found a Flask cookie with insecurely configured properties.  By default the secure, httponly and samesite ar configured insecurely. cookies should be handled securely by setting `secure=True`, `httponly=True`, and `samesite='Lax'` in response.set_cookie(...). If these parameters are not properly set, your cookies are not properly protected and are at risk of being stolen by an attacker. Include the `secure=True`, `httponly=True`, `samesite='Lax'` arguments or set these to be true in the Flask configuration.\n\n<b>References:</b>\n - [https://flask.palletsprojects.com/en/3.0.x/api/#flask.Response.set_cookie](https://flask.palletsprojects.com/en/3.0.x/api/#flask.Response.set_cookie)\n - [https://flask.palletsprojects.com/en/3.0.x/security/#set-cookie-options](https://flask.palletsprojects.com/en/3.0.x/security/#set-cookie-options)\n",
+        "text": "Found a Flask cookie with insecurely configured properties.  By default the secure, httponly and samesite ar configured insecurely. cookies should be handled securely by setting `secure=True`, `httponly=True`, and `samesite='Lax'` in response.set_cookie(...). If these parameters are not properly set, your cookies are not properly protected and are at risk of being stolen by an attacker. Include the `secure=True`, `httponly=True`, `samesite='Lax'` arguments or set these to be true in the Flask configuration."
+       },
+       "id": "python.flask.security.audit.secure-set-cookie",
+       "name": "python.flask.security.audit.secure-set-cookie",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute",
+         "LOW CONFIDENCE",
+         "OWASP-A02:2025 - Security Misconfiguration",
+         "OWASP-A05:2021 - Security Misconfiguration",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.secure-set-cookie"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "Detected user input flowing into a manually constructed HTML string. You may be accidentally bypassing secure methods of rendering HTML by manually constructing HTML and this could create a cross-site scripting vulnerability, which could let attackers steal sensitive user data. To be sure this is safe, check that the HTML is rendered safely. Otherwise, use templates (`flask.render_template`) which will safely render HTML instead."
+       },
+       "help": {
+        "markdown": "Detected user input flowing into a manually constructed HTML string. You may be accidentally bypassing secure methods of rendering HTML by manually constructing HTML and this could create a cross-site scripting vulnerability, which could let attackers steal sensitive user data. To be sure this is safe, check that the HTML is rendered safely. Otherwise, use templates (`flask.render_template`) which will safely render HTML instead.\n\n<b>References:</b>\n - [https://flask.palletsprojects.com/en/2.0.x/security/#cross-site-scripting-xss](https://flask.palletsprojects.com/en/2.0.x/security/#cross-site-scripting-xss)\n",
+        "text": "Detected user input flowing into a manually constructed HTML string. You may be accidentally bypassing secure methods of rendering HTML by manually constructing HTML and this could create a cross-site scripting vulnerability, which could let attackers steal sensitive user data. To be sure this is safe, check that the HTML is rendered safely. Otherwise, use templates (`flask.render_template`) which will safely render HTML instead."
+       },
+       "id": "python.flask.security.injection.raw-html-format",
+       "name": "python.flask.security.injection.raw-html-format",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+         "MEDIUM CONFIDENCE",
+         "OWASP-A03:2021 - Injection",
+         "OWASP-A05:2025 - Injection",
+         "OWASP-A07:2017 - Cross-Site Scripting (XSS)",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.injection.raw-html-format"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "fullDescription": {
+        "text": "Detected user input used to manually construct a SQL string. This is usually bad practice because manual construction could accidentally result in a SQL injection. An attacker could use a SQL injection to steal or modify contents of the database. Instead, use a parameterized query which is available by default in most database engines. Alternatively, consider using an object-relational mapper (ORM) such as SQLAlchemy which will protect your queries."
+       },
+       "help": {
+        "markdown": "Detected user input used to manually construct a SQL string. This is usually bad practice because manual construction could accidentally result in a SQL injection. An attacker could use a SQL injection to steal or modify contents of the database. Instead, use a parameterized query which is available by default in most database engines. Alternatively, consider using an object-relational mapper (ORM) such as SQLAlchemy which will protect your queries.\n\n<b>References:</b>\n - [https://docs.sqlalchemy.org/en/14/core/tutorial.html#using-textual-sql](https://docs.sqlalchemy.org/en/14/core/tutorial.html#using-textual-sql)\n - [https://www.tutorialspoint.com/sqlalchemy/sqlalchemy_quick_guide.htm](https://www.tutorialspoint.com/sqlalchemy/sqlalchemy_quick_guide.htm)\n - [https://docs.sqlalchemy.org/en/14/core/tutorial.html#using-more-specific-text-with-table-expression-literal-column-and-expression-column](https://docs.sqlalchemy.org/en/14/core/tutorial.html#using-more-specific-text-with-table-expression-literal-column-and-expression-column)\n",
+        "text": "Detected user input used to manually construct a SQL string. This is usually bad practice because manual construction could accidentally result in a SQL injection. An attacker could use a SQL injection to steal or modify contents of the database. Instead, use a parameterized query which is available by default in most database engines. Alternatively, consider using an object-relational mapper (ORM) such as SQLAlchemy which will protect your queries."
+       },
+       "id": "python.flask.security.injection.tainted-sql-string",
+       "name": "python.flask.security.injection.tainted-sql-string",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-704: Incorrect Type Conversion or Cast",
+         "MEDIUM CONFIDENCE",
+         "OWASP-A01:2017 - Injection",
+         "OWASP-A03:2021 - Injection",
+         "OWASP-A05:2025 - Injection",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.injection.tainted-sql-string"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "fullDescription": {
+        "text": "Data from request is passed to redirect(). This is an open redirect and could be exploited. Consider using 'url_for()' to generate links to known locations. If you must use a URL to unknown pages, consider using 'urlparse()' or similar and checking if the 'netloc' property is the same as your site's host name. See the references for more information."
+       },
+       "help": {
+        "markdown": "Data from request is passed to redirect(). This is an open redirect and could be exploited. Consider using 'url_for()' to generate links to known locations. If you must use a URL to unknown pages, consider using 'urlparse()' or similar and checking if the 'netloc' property is the same as your site's host name. See the references for more information.\n\n<b>References:</b>\n - [https://flask-login.readthedocs.io/en/latest/#login-example](https://flask-login.readthedocs.io/en/latest/#login-example)\n - [https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html#dangerous-url-redirect-example-1](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html#dangerous-url-redirect-example-1)\n - [https://docs.python.org/3/library/urllib.parse.html#url-parsing](https://docs.python.org/3/library/urllib.parse.html#url-parsing)\n",
+        "text": "Data from request is passed to redirect(). This is an open redirect and could be exploited. Consider using 'url_for()' to generate links to known locations. If you must use a URL to unknown pages, consider using 'urlparse()' or similar and checking if the 'netloc' property is the same as your site's host name. See the references for more information."
+       },
+       "id": "python.flask.security.open-redirect",
+       "name": "python.flask.security.open-redirect",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')",
+         "LOW CONFIDENCE",
+         "OWASP-A01:2021 - Broken Access Control",
+         "OWASP-A01:2025 - Broken Access Control",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.open-redirect"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "Detected a python logger call with a potential hardcoded secret $FORMAT_STRING being logged. This may lead to secret credentials being exposed. Make sure that the logger is not logging  sensitive information."
+       },
+       "help": {
+        "markdown": "Detected a python logger call with a potential hardcoded secret $FORMAT_STRING being logged. This may lead to secret credentials being exposed. Make sure that the logger is not logging  sensitive information.\n\n<b>References:</b>\n - [https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures](https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures)\n",
+        "text": "Detected a python logger call with a potential hardcoded secret $FORMAT_STRING being logged. This may lead to secret credentials being exposed. Make sure that the logger is not logging  sensitive information."
+       },
+       "id": "python.lang.security.audit.logging.python-logger-credential-disclosure",
+       "name": "python.lang.security.audit.logging.python-logger-credential-disclosure",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-532: Insertion of Sensitive Information into Log File",
+         "MEDIUM CONFIDENCE",
+         "OWASP-A09:2021 - Security Logging and Monitoring Failures",
+         "OWASP-A09:2025 - Security Logging & Alerting Failures",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.lang.security.audit.logging.python-logger-credential-disclosure"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "fullDescription": {
+        "text": "Avoiding SQL string concatenation: untrusted input concatenated with raw SQL query can result in SQL Injection. In order to execute raw query safely, prepared statement should be used. SQLAlchemy provides TextualSQL to easily used prepared statement with named parameters. For complex SQL composition, use SQL Expression Language or Schema Definition Language. In most cases, SQLAlchemy ORM will be a better option."
+       },
+       "help": {
+        "markdown": "Avoiding SQL string concatenation: untrusted input concatenated with raw SQL query can result in SQL Injection. In order to execute raw query safely, prepared statement should be used. SQLAlchemy provides TextualSQL to easily used prepared statement with named parameters. For complex SQL composition, use SQL Expression Language or Schema Definition Language. In most cases, SQLAlchemy ORM will be a better option.\n\n<b>References:</b>\n - [https://docs.sqlalchemy.org/en/14/core/tutorial.html#using-textual-sql](https://docs.sqlalchemy.org/en/14/core/tutorial.html#using-textual-sql)\n - [https://www.tutorialspoint.com/sqlalchemy/sqlalchemy_quick_guide.htm](https://www.tutorialspoint.com/sqlalchemy/sqlalchemy_quick_guide.htm)\n - [https://docs.sqlalchemy.org/en/14/core/tutorial.html#using-more-specific-text-with-table-expression-literal-column-and-expression-column](https://docs.sqlalchemy.org/en/14/core/tutorial.html#using-more-specific-text-with-table-expression-literal-column-and-expression-column)\n",
+        "text": "Avoiding SQL string concatenation: untrusted input concatenated with raw SQL query can result in SQL Injection. In order to execute raw query safely, prepared statement should be used. SQLAlchemy provides TextualSQL to easily used prepared statement with named parameters. For complex SQL composition, use SQL Expression Language or Schema Definition Language. In most cases, SQLAlchemy ORM will be a better option."
+       },
+       "id": "python.sqlalchemy.security.sqlalchemy-execute-raw-query",
+       "name": "python.sqlalchemy.security.sqlalchemy-execute-raw-query",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')",
+         "LOW CONFIDENCE",
+         "OWASP-A01:2017 - Injection",
+         "OWASP-A03:2021 - Injection",
+         "OWASP-A05:2025 - Injection",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.sqlalchemy.security.sqlalchemy-execute-raw-query"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "An action sourced from a third-party repository on GitHub is not pinned to a full length commit SHA. Pinning an action to a full length commit SHA is currently the only way to use an action as an immutable release. Pinning to a particular SHA helps mitigate the risk of a bad actor adding a backdoor to the action's repository, as they would need to generate a SHA-1 collision for a valid Git object payload."
+       },
+       "help": {
+        "markdown": "An action sourced from a third-party repository on GitHub is not pinned to a full length commit SHA. Pinning an action to a full length commit SHA is currently the only way to use an action as an immutable release. Pinning to a particular SHA helps mitigate the risk of a bad actor adding a backdoor to the action's repository, as they would need to generate a SHA-1 collision for a valid Git object payload.\n\n<b>References:</b>\n - [https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components](https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components)\n - [https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions)\n",
+        "text": "An action sourced from a third-party repository on GitHub is not pinned to a full length commit SHA. Pinning an action to a full length commit SHA is currently the only way to use an action as an immutable release. Pinning to a particular SHA helps mitigate the risk of a bad actor adding a backdoor to the action's repository, as they would need to generate a SHA-1 collision for a valid Git object payload."
+       },
+       "id": "yaml.github-actions.security.audit.third-party-action-not-pinned-to-commit-sha",
+       "name": "yaml.github-actions.security.audit.third-party-action-not-pinned-to-commit-sha",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-1357: Reliance on Insufficiently Trustworthy Component",
+         "CWE-353: Missing Support for Integrity Check",
+         "HIGH CONFIDENCE",
+         "OWASP-A06:2021 - Vulnerable and Outdated Components",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.audit.third-party-action-not-pinned-to-commit-sha"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "warning"
+       },
+       "fullDescription": {
+        "text": "GitHub Actions step uses a mutable tag or branch reference. Tags and branch names can be silently repointed by the action owner, enabling supply-chain attacks \u2014 as seen in the trivy-action and kics-github-action compromises. Pin the reference to a full 40-character commit SHA instead, e.g. `uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608`."
+       },
+       "help": {
+        "markdown": "GitHub Actions step uses a mutable tag or branch reference. Tags and branch names can be silently repointed by the action owner, enabling supply-chain attacks \u2014 as seen in the trivy-action and kics-github-action compromises. Pin the reference to a full 40-character commit SHA instead, e.g. `uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608`.\n\n<b>References:</b>\n - [https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions)\n",
+        "text": "GitHub Actions step uses a mutable tag or branch reference. Tags and branch names can be silently repointed by the action owner, enabling supply-chain attacks \u2014 as seen in the trivy-action and kics-github-action compromises. Pin the reference to a full 40-character commit SHA instead, e.g. `uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608`."
+       },
+       "id": "yaml.github-actions.security.github-actions-mutable-action-tag",
+       "name": "yaml.github-actions.security.github-actions-mutable-action-tag",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-1357: Reliance on Insufficiently Trustworthy Component",
+         "CWE-353: Missing Support for Integrity Check",
+         "HIGH CONFIDENCE",
+         "OWASP-A08:2021 - Software and Data Integrity Failures",
+         "OWASP-A08:2025 - Software and Data Integrity Failures",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.github-actions-mutable-action-tag"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "fullDescription": {
+        "text": "This GitHub Actions workflow file uses `pull_request_target` and checks out code from the incoming pull request. When using `pull_request_target`, the Action runs in the context of the target repository, which includes access to all repository secrets. Normally, this is safe because the Action only runs code from the target repository, not the incoming PR. However, by checking out the incoming PR code, you're now using the incoming code for the rest of the action. You may be inadvertently executing arbitrary code from the incoming PR with access to repository secrets, which would let an attacker steal repository secrets. This normally happens by running build scripts (e.g., `npm build` and `make`) or dependency installation scripts (e.g., `python setup.py install`). Audit your workflow file to make sure no code from the incoming PR is executed. Please see https://securitylab.github.com/research/github-actions-preventing-pwn-requests/ for additional mitigations."
+       },
+       "help": {
+        "markdown": "This GitHub Actions workflow file uses `pull_request_target` and checks out code from the incoming pull request. When using `pull_request_target`, the Action runs in the context of the target repository, which includes access to all repository secrets. Normally, this is safe because the Action only runs code from the target repository, not the incoming PR. However, by checking out the incoming PR code, you're now using the incoming code for the rest of the action. You may be inadvertently executing arbitrary code from the incoming PR with access to repository secrets, which would let an attacker steal repository secrets. This normally happens by running build scripts (e.g., `npm build` and `make`) or dependency installation scripts (e.g., `python setup.py install`). Audit your workflow file to make sure no code from the incoming PR is executed. Please see https://securitylab.github.com/research/github-actions-preventing-pwn-requests/ for additional mitigations.\n\n<b>References:</b>\n - [https://securitylab.github.com/research/github-actions-preventing-pwn-requests/](https://securitylab.github.com/research/github-actions-preventing-pwn-requests/)\n - [https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target)\n - [https://github.com/justinsteven/advisories/blob/master/2021_github_actions_checkspelling_token_leak_via_advice_symlink.md](https://github.com/justinsteven/advisories/blob/master/2021_github_actions_checkspelling_token_leak_via_advice_symlink.md)\n",
+        "text": "This GitHub Actions workflow file uses `pull_request_target` and checks out code from the incoming pull request. When using `pull_request_target`, the Action runs in the context of the target repository, which includes access to all repository secrets. Normally, this is safe because the Action only runs code from the target repository, not the incoming PR. However, by checking out the incoming PR code, you're now using the incoming code for the rest of the action. You may be inadvertently executing arbitrary code from the incoming PR with access to repository secrets, which would let an attacker steal repository secrets. This normally happens by running build scripts (e.g., `npm build` and `make`) or dependency installation scripts (e.g., `python setup.py install`). Audit your workflow file to make sure no code from the incoming PR is executed. Please see https://securitylab.github.com/research/github-actions-preventing-pwn-requests/ for additional mitigations."
+       },
+       "id": "yaml.github-actions.security.pull-request-target-code-checkout",
+       "name": "yaml.github-actions.security.pull-request-target-code-checkout",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-829: Inclusion of Functionality from Untrusted Control Sphere",
+         "HIGH CONFIDENCE",
+         "OWASP-A08:2021 - Software and Data Integrity Failures",
+         "OWASP-A08:2025 - Software and Data Integrity Failures",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.pull-request-target-code-checkout"
+       }
+      },
+      {
+       "defaultConfiguration": {
+        "level": "error"
+       },
+       "fullDescription": {
+        "text": "Using variable interpolation `${{...}}` with `github` context data in a `run:` step could allow an attacker to inject their own code into the runner. This would allow them to steal secrets and code. `github` context data can have arbitrary user input and should be treated as untrusted. Instead, use an intermediate environment variable with `env:` to store the data and use the environment variable in the `run:` script. Be sure to use double-quotes the environment variable, like this: \"$ENVVAR\"."
+       },
+       "help": {
+        "markdown": "Using variable interpolation `${{...}}` with `github` context data in a `run:` step could allow an attacker to inject their own code into the runner. This would allow them to steal secrets and code. `github` context data can have arbitrary user input and should be treated as untrusted. Instead, use an intermediate environment variable with `env:` to store the data and use the environment variable in the `run:` script. Be sure to use double-quotes the environment variable, like this: \"$ENVVAR\".\n\n<b>References:</b>\n - [https://docs.github.com/en/actions/learn-github-actions/security-hardening-for-github-actions#understanding-the-risk-of-script-injections](https://docs.github.com/en/actions/learn-github-actions/security-hardening-for-github-actions#understanding-the-risk-of-script-injections)\n - [https://securitylab.github.com/research/github-actions-untrusted-input/](https://securitylab.github.com/research/github-actions-untrusted-input/)\n",
+        "text": "Using variable interpolation `${{...}}` with `github` context data in a `run:` step could allow an attacker to inject their own code into the runner. This would allow them to steal secrets and code. `github` context data can have arbitrary user input and should be treated as untrusted. Instead, use an intermediate environment variable with `env:` to store the data and use the environment variable in the `run:` script. Be sure to use double-quotes the environment variable, like this: \"$ENVVAR\"."
+       },
+       "id": "yaml.github-actions.security.run-shell-injection",
+       "name": "yaml.github-actions.security.run-shell-injection",
+       "properties": {
+        "precision": "very-high",
+        "tags": [
+         "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')",
+         "HIGH CONFIDENCE",
+         "OWASP-A01:2017 - Injection",
+         "OWASP-A03:2021 - Injection",
+         "OWASP-A05:2025 - Injection",
+         "security"
+        ]
+       },
+       "shortDescription": {
+        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.run-shell-injection"
+       }
+      }
+     ],
+     "semanticVersion": "1.177.0"
+    }
+   }
   }
- ]
+ ],
+ "version": "2.1.0"
 }

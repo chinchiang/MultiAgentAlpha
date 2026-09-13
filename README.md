@@ -134,7 +134,37 @@ and installs into `.mara-tools/bin`, writing `.mara-tools/manifest.json`. Any mi
 `mara/tools/runner.py` executes tools only from that directory and reports "not installed" otherwise;
 PATH is never consulted. `docs/tools-provenance.md` records source, licence, what each verification
 proves and the remaining gaps (gitleaks and semgrep publish no signature). CI installs and verifies
-the whole set on every run.
+the whole set on every run. The lock also has a `git` kind: `semgrep-rules` is a checkout of
+`semgrep/semgrep-rules` at a pinned commit, verified by commit id, by a SHA-256 digest over every
+file under the pinned security rulesets, and by the commit's GPG signature (GitHub's web-flow key);
+the rules are read from `.mara-tools/semgrep-rules` at scan time and never copied into this
+repository (Semgrep Rules License v1.0). `--digest-git semgrep-rules <checkout>` prints the two
+values to paste into the lock when bumping the commit.
+
+## semgrep and osv-scanner in CI (L0 job)
+
+Since 2026-09-13 the `deterministic-tools` job runs both scanners from the lock, through two
+scripts that refuse anything not installed by `scripts/install_tools.py` and any version that
+differs from the lock:
+
+- `scripts/semgrep_ci.py --target fixtures/vuln-sample --expect fixtures/vuln-sample-sarif/semgrep.sarif`
+  scans the seeded fixture with the pinned rulesets and fails on any drift from the recording
+  (which is real semgrep 1.177.0 output, 15 findings, rule ids normalised to the registry form).
+- `scripts/semgrep_ci.py --target . --triage tools/semgrep-triage.yaml` scans the repository
+  (minus the seeded `fixtures/` and `calib/samples/`); every finding must be covered by a triage
+  entry with a reason or the job fails, covered findings are uploaded with a SARIF `suppressions`
+  record, and entries that no longer match anything are reported as stale.
+- `scripts/osv_ci.py --target fixtures/vuln-sample --expect-package requests` must see the
+  fixture's `requests==2.19.0` flagged, so a silent scanner or database regression is caught.
+- `scripts/osv_ci.py --lockfile tools/*-requirements.txt --config tools/osv-scanner.toml` checks
+  the hash-locked closures this repository installs; an advisory fails the job unless
+  `tools/osv-scanner.toml` ignores it with a reason and an `ignoreUntil` date.
+
+semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories
+(never `--config auto`), so nothing is sent to semgrep.dev; osv-scanner runs `scan source
+--no-resolve`, so only package names and versions go to api.osv.dev and nothing to deps.dev. All
+SARIF files land in the `l0-sarif` artifact. `mara review` uses the same pinned rulesets by default
+(`MARA_SEMGREP_CONFIG` overrides).
 
 ## Governance checks (Appendix E, prompt 8)
 
