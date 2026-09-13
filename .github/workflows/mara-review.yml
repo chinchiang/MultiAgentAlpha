@@ -19,6 +19,9 @@
 #     seeded fixture must reproduce fixtures/vuln-sample-sarif/semgrep.sarif exactly
 #   - osv-scanner checks the hash-locked closures under tools/ (package names and versions go to api.osv.dev,
 #     never source code; --no-resolve, so nothing goes to deps.dev) and must flag the fixture's requests==2.19.0
+#   - trivy runs only against a database fetched once by scripts/trivy_db.py (OCI digests, UpdatedAt and the
+#     SHA-256 of trivy.db recorded; refused when stale or tampered) with every network path disabled; the
+#     same flow (export/import a bundle) feeds runners without egress
 #   - live model calls are NOT made in CI by default; the pipeline runs in mock mode unless MARA_LIVE=1 is set by a trusted branch
 #   - the human-queue job (G-11) is the only job with a write scope, and only issues: write; it runs on push to
 #     main, never on pull_request, and stays in --dry-run until the repository variable
@@ -88,6 +91,14 @@ jobs:
         run: python3 scripts/osv_ci.py --target fixtures/vuln-sample --report fixture-osv.sarif --expect-package requests
       - name: osv-scanner on the hash-locked closures this repository installs; any un-ignored advisory fails the job
         run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/semgrep-requirements.txt --lockfile tools/model-eval-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
+      - name: trivy offline database — fetch once, record its digests, refuse a stale or tampered copy
+        run: |
+          python3 scripts/trivy_db.py download
+          python3 scripts/trivy_db.py status
+      - name: trivy (offline database) must report the seeded fixture's known-vulnerable dependency (requests==2.19.0)
+        run: python3 scripts/trivy_ci.py --target fixtures/vuln-sample --report fixture-trivy.sarif --expect-package requests
+      - name: trivy (offline database) on this repository; any finding not ignored in tools/trivyignore.yaml fails the job
+        run: python3 scripts/trivy_ci.py --target . --report trivy.sarif --ignorefile tools/trivyignore.yaml --skip-dirs .mara-tools,fixtures,calib/samples,out
       - name: gitleaks (locked CLI) on this change's commits; crash or leak fails the job
         # PR: the PR's own commits base..head; push: every commit the push brought in. The SHAs reach the
         # script through env, never interpolated into the shell line. .gitleaks.toml / .gitleaksignore apply.
@@ -105,6 +116,8 @@ jobs:
             fixture-semgrep.sarif
             osv.sarif
             fixture-osv.sarif
+            trivy.sarif
+            fixture-trivy.sarif
             gitleaks.sarif
           if-no-files-found: ignore
 

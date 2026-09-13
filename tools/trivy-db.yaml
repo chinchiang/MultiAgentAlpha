@@ -1,0 +1,10 @@
+# Where scripts/trivy_db.py fetches trivy's vulnerability database from, and how fresh it must be.
+# The database is a data feed refreshed upstream every six hours, so it is not pinned in
+# tools/versions.lock; what was fetched (OCI manifest and layer digests, UpdatedAt, the SHA-256 of
+# trivy.db) is recorded per download in <cache-dir>/mara-trivy-db.json instead. Upstream pushes the
+# artifact with `oras push` and publishes no signature or attestation (aquasecurity/trivy-db
+# .github/workflows/cron.yml, checked 2026-09-13), so the record is the only provenance.
+repositories:          # tried in order; the first that serves the artifact wins
+  - mirror.gcr.io/aquasec/trivy-db:2
+  - ghcr.io/aquasecurity/trivy-db:2
+max_age_hours: 48      # `status` (and so CI) refuses a database whose UpdatedAt is older than this

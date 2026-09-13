@@ -1,9 +1,9 @@
 import os
 import tempfile
 
-# Tests must never execute whatever happens to be installed under .mara-tools (trivy would try to
-# download its database, semgrep would call its registry). Point the runner at an empty directory;
-# tests that need a tool create their own via MARA_TOOLS_DIR.
+# Tests must never execute whatever happens to be installed under .mara-tools (a real scan takes seconds
+# and depends on what the developer installed). Point the runner at an empty directory; tests that need a
+# tool create their own fake via MARA_TOOLS_DIR, or opt in to the real .mara-tools explicitly.
 os.environ["MARA_TOOLS_DIR"] = tempfile.mkdtemp(prefix="mara-no-tools-")
 
 import sys

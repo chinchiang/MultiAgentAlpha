@@ -18,12 +18,13 @@ accepted:
       installed from tools/versions.lock, git, gh or sys.executable, and the arguments are fixed flags plus
       values the caller validated. Reviewed 2026-09-13 with the scan that introduced this file.
   - rule: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
-    paths: [scripts/calibration_run.py, scripts/gitleaks_ci.py, scripts/osv_ci.py, scripts/semgrep_ci.py]
+    paths: [scripts/calibration_run.py, scripts/gitleaks_ci.py, scripts/osv_ci.py, scripts/semgrep_ci.py, scripts/trivy_ci.py]
     reason: >
       The taint source is sys.argv, i.e. the operator's own command line; each value becomes one argv
       element of the pinned tool, no shell is involved. gitleaks_ci.py verifies --base/--head as commits
       with git rev-parse before they reach gitleaks; the workflow hands SHAs to these scripts through env,
-      never by interpolating them into a shell line.
+      never by interpolating them into a shell line. trivy_ci.py passes --target, --ignorefile and
+      --skip-dirs straight through as separate arguments of the locked trivy.
   - rule: generic.secrets.security.detected-stripe-api-key
     paths: [scripts/gen_calib_samples.py]
     reason: >
@@ -36,7 +37,10 @@ accepted:
       AWS's own documentation example secret key, committed into a throwaway repository by the test so that
       the locked gitleaks demonstrably trips and redacts it. It is not a credential for any account.
   - rule: python.lang.security.audit.dynamic-urllib-use-detected
-    paths: [scripts/install_tools.py]
+    paths: [scripts/install_tools.py, scripts/trivy_db.py]
     reason: >
-      The URL is read from tools/versions.lock (https release URLs that go through change management;
-      file:// only in tests) and every download is SHA-256-checked against the lock before use.
+      install_tools.py: the URL is read from tools/versions.lock (https release URLs that go through change
+      management; file:// only in tests) and every download is SHA-256-checked against the lock before use.
+      trivy_db.py: the registry host and path come from tools/trivy-db.yaml (or an explicit --repository),
+      the request is an https GET of an OCI manifest whose digests are only recorded for provenance; the
+      artifact itself is fetched by the locked trivy, and a failed or odd response is recorded as unknown.

@@ -39,7 +39,7 @@
 | gitleaks | 無 | 正常（`detect --no-git`） |
 | zizmor | 線上稽核（impostor-commit、known-vulnerable-actions）需 GitHub API 與 token；runner 預設 `--offline`，設 `MARA_ZIZMOR_ONLINE=1` 且有 token 才開 | 正常，少兩個線上稽核；CI 的 zizmor-action 對真實 workflow 另外跑線上稽核 |
 | osv-scanner | 查詢 `api.osv.dev`（只送套件名與版本，不送原始碼）；對 `requirements.txt` 之類的 manifest 預設還會向 `api.deps.dev` 做遞移解析，CI 的 `scripts/osv_ci.py` 以 `--no-resolve` 關掉 | 以 exit 127／128 結束、無 SARIF；`osv_ci.py` 視為崩潰（exit 1），runner 記錄為未執行。可改用離線資料庫（`--offline-vulnerabilities` 加預先下載的 DB）作為後續工作 |
-| trivy | 首次下載漏洞資料庫（ghcr.io） | 無結果；可預先 `trivy image --download-db-only` 或自架 DB 鏡像 |
+| trivy | **無**（2026-09-13 起）：runner 與 `scripts/trivy_ci.py` 只對 `MARA_TRIVY_CACHE_DIR`（預設 `.mara-tools/trivy-cache`）內由 `scripts/trivy_db.py` 記錄的資料庫掃描，一律 `--skip-db-update --skip-java-db-update --skip-check-update --offline-scan`（misconfig 用內嵌檢查）。資料庫本身由 `trivy_db.py download` 事先自 `mirror.gcr.io`／`ghcr.io` 取得（見 3c） | 正常；資料庫不存在時 runner 不執行並記錄「no offline database」，不會嘗試下載 |
 | semgrep | **無**（2026-09-13 起）：規則來自 lock 固定的 `.mara-tools/semgrep-rules` 本地目錄，runner 與 `scripts/semgrep_ci.py` 一律 `--metrics=off --disable-version-check`，環境變數 `SEMGREP_ENABLE_VERSION_CHECK=0`、`SEMGREP_SEND_METRICS=off`，且不用 `--config auto`（auto 強制開啟 metrics 並把專案識別送到 semgrep.dev，違反政策 P5）。`MARA_SEMGREP_CONFIG` 可覆寫（例如 `p/default` 就會回到需連 semgrep.dev 的登錄集） | 正常；規則未安裝時 runner 退回 `p/default`，在無網路環境會以 exit 2 結束、無 SARIF，記錄為未執行 |
 
 runner 對每個工具記錄「pinned <版本>」或「exit <code>, no SARIF produced: <stderr 尾>」，報告的 `tools_ran` 只列真正產出 SARIF 的工具。
@@ -58,6 +58,19 @@ runner 對每個工具記錄「pinned <版本>」或「exit <code>, no SARIF pro
 兩個腳本都只從 `MARA_TOOLS_DIR/bin` 取二進位、manifest 版本必須等於 lock；`semgrep_ci.py` 另要求 `.mara-tools/semgrep-rules` 的 HEAD 等於 lock 的 commit。結束碼：0 乾淨、2 有未 triage 的 finding／漂移／未忽略的漏洞、1 工具崩潰或（osv）找不到任何套件。五個 SARIF（`semgrep.sarif`、`fixture-semgrep.sarif`、`osv.sarif`、`fixture-osv.sarif`、`gitleaks.sarif`）上傳為 `l0-sarif` artifact。
 
 規則 ID 正規化：semgrep 對本地規則會把規則檔的路徑（轉成點）接在 ID 前面（`mara-tools.semgrep-rules.python.flask.security.injection.tainted-sql-string`），使 ID 隨安裝路徑而變；`mara.tools.semgrep_rules.normalize_sarif` 把 `semgrep-rules.` 之前的部分去掉，得到與登錄集相同的 ID，並移除沒有結果的規則描述（semgrep 會列出全部 271 條載入的規則）。順帶修正：`mara.tools.sarif.read_sarif` 原本把整個 tag 字串（`CWE-89: Improper Neutralization…`）當 CWE，與 finding 的 `CWE-89` 永遠不相等，手寫的舊 fixture 掩蓋了這個 bug；現在只取 ID，且保留規則列出的所有 CWE（`tainted-sql-string` 上游只標 `CWE-704`，同一行的 `sqlalchemy-execute-raw-query` 標 `CWE-89`），佐證比對任一相符即可。
+
+## 3c. trivy 離線資料庫（2026-09-13）
+
+trivy 原本在掃描時才下載漏洞資料庫（OCI artifact，約 110 MiB 壓縮、1.3 GB 解開），隔離主機會卡住，每次審查也都成了一次網路事件。現在資料庫是一個**事先取得、有紀錄、可搬運**的檔案：
+
+| 步驟 | 指令 | 說明 |
+|---|---|---|
+| 取得 | `python3 scripts/trivy_db.py download` | 依 `tools/trivy-db.yaml` 的順序（`mirror.gcr.io/aquasec/trivy-db:2`，備援 `ghcr.io/aquasecurity/trivy-db:2`）先向 registry 匿名 HEAD manifest 取得 OCI manifest digest、layer digest 與 `org.opencontainers.image.created`，再 `trivy image --download-db-only`；寫 `<cache>/mara-trivy-db.json`：來源、兩個 digest、trivy 的 `metadata.json`（`Version`、`UpdatedAt`、`NextUpdate`）、`trivy.db` 的 SHA-256 與大小、trivy 版本、下載時間。`--pin-digest sha256:…` 以 manifest digest 取代 tag（已驗證 trivy 0.74.0 接受，且取得的 `trivy.db` 位元組相同） |
+| 把關 | `python3 scripts/trivy_db.py status` | 資料庫不存在、`trivy.db` 的 SHA-256 與紀錄不符（被換掉）、或 `UpdatedAt` 超過 `max_age_hours`（預設 48 小時：離線不等於過期）都 exit 1。CI 與 `trivy_ci.py` 掃描前都先跑它 |
+| 搬運 | `export --out trivy-db-<日期>.tar.gz` → `import --bundle … --bundle-sha256 …` | 給沒有出口網路的 runner（報告第八部的上海／重慶隔離管線）：bundle 只含 `db/trivy.db`、`db/metadata.json`、`mara-trivy-db.json`，另產 `.sha256` 旁檔；`import` 拒絕成員不對、路徑不安全、或 `trivy.db` 的 SHA-256 與同行紀錄不符的 bundle |
+| 掃描 | `scripts/trivy_ci.py --target fixtures/vuln-sample --expect-package requests`；`--target . --ignorefile tools/trivyignore.yaml --skip-dirs …` | 前者要求 `requests==2.19.0` 被標為有漏洞（2026-09-13 實測：5 個 CVE，另有 Dockerfile 的 DS-0001／DS-0002／DS-0026）；後者掃本 repo，以 `--file-patterns pip:.*-requirements\.txt` 讓 `tools/` 下三個 hash 鎖定的 requirements 檔被解析（68 個套件，實測無 finding），任何未被 `tools/trivyignore.yaml`（`statement`＋`expired_at`）忽略的 vuln／misconfig 都 exit 2 |
+
+**來源與缺口。** 上游 `aquasecurity/trivy-db` 的 cron workflow 只用 `oras push` 把 artifact 推到 ghcr.io、public.ecr.aws 與 Docker Hub（mirror.gcr.io 是 Docker Hub 的 Google 鏡像），**沒有 cosign 簽章、沒有 attestation**（2026-09-13 查證 `.github/workflows/cron.yml`）。因此資料庫不在 `tools/versions.lock`（它每六小時更新，無法固定），我們能做的是：記錄 manifest／layer digest 與 `trivy.db` 的 SHA-256（跨時間可比對、bundle 可驗）、要求新鮮度上限、以及 `--pin-digest` 讓兩台主機取得同一份。「這份資料庫真的是 Aqua 產生的」只能靠 registry 的 TLS 與 GitHub 帳號安全，列為缺口。trivy 的 misconfig 檢查同樣是 OCI artifact（`mirror.gcr.io/aquasec/trivy-checks:2`）；我們以 `--skip-check-update` 用 trivy 內嵌的那一份，版本隨 trivy 固定。
 
 ## 4. 升版程序（變更管理）
 

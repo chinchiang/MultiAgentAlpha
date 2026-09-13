@@ -109,13 +109,27 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                     target,
                 )
             elif tool == "osv-scanner":
-                cp = _run([exe, "scan", "--format", "sarif", "--output", str(sarif), "-r", "."], target)
+                cp = _run([exe, "scan", "source", "--format", "sarif", "--output-file", str(sarif), "-r", "."], target)
+                if cp.returncode not in (0, 1, 130):
+                    # 127 no packages, 128 general error (e.g. api.osv.dev unreachable): osv-scanner may still write an
+                    # empty SARIF, which must not be read as "ran, nothing found"
+                    sarif.unlink(missing_ok=True)
             elif tool == "zizmor":
                 cp = _run([exe, "--no-progress", "--format", "sarif"] + (["--offline"] if _offline_zizmor() else []) + ["."], target)
                 if cp.stdout.strip():
                     sarif.write_text(cp.stdout, encoding="utf-8")
             elif tool == "trivy":
-                cp = _run([exe, "fs", "--scanners", "vuln,misconfig", "--format", "sarif", "--output", str(sarif), "."], target)
+                # Offline only: the database recorded by scripts/trivy_db.py (never downloaded during a review)
+                from .trivy_db import cache_dir, db_path, read_metadata, scan_args
+
+                cache = cache_dir()
+                if not db_path(cache).is_file():
+                    note = f"no offline database under {cache}; run scripts/trivy_db.py download (or import a bundle)"
+                    runs.append(ToolRun(tool=tool, ran=False, note=note))
+                    continue
+                cp = _run(scan_args(exe, cache, sarif) + ["."], target)
+                updated = (read_metadata(cache) or {}).get("UpdatedAt", "?")
+                version = f"{version}, db {str(updated)[:10]}" if version else f"db {str(updated)[:10]}"
             if not sarif.exists() or not sarif.read_text(encoding="utf-8").strip():
                 tail = " ".join((cp.stderr or cp.stdout).strip().splitlines()[-2:])[:300]
                 note = f"exit {cp.returncode}, no SARIF produced" + (f": {tail}" if tail else "")
