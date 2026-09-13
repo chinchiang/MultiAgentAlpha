@@ -32,6 +32,11 @@ on:
   pull_request:
   push:
     branches: [main]
+# One run per pull request: a newer push cancels the superseded run. Pushes to main queue instead of
+# cancelling, so the human-queue job of an earlier merge is never skipped by a later one.
+concurrency:
+  group: mara-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions: {}
 
 jobs:

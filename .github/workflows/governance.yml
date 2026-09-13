@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: "0 1 * * 1"   # Mondays 01:00 UTC
   workflow_dispatch:
+# A manual dispatch during the weekly run queues behind it; a running check is never cancelled, so the
+# tracking issue always gets the result of every run that started.
+concurrency:
+  group: governance-check
+  cancel-in-progress: false
 permissions: {}
 
 jobs:
@@ -15,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
+      issues: write     # gh issue create / gh issue comment / gh label create on the tracking issue; nothing else
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
