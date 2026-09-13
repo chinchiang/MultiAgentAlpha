@@ -1,0 +1,11 @@
+# trivy ignore file for scripts/trivy_ci.py (--ignorefile). Same rule as tools/osv-scanner.toml: a finding
+# on this repository that cannot be fixed by relocking yet is listed with a statement and an expiry; the
+# job fails again after expired_at. Keep the lists empty whenever possible: the fix is to bump and relock.
+#
+# vulnerabilities:
+#   - id: CVE-2026-00000
+#     paths: ["tools/semgrep-requirements.txt"]
+#     statement: "not reachable from semgrep's CLI use; tracked in issue #NN until the upstream fix is released"
+#     expired_at: 2026-12-31
+vulnerabilities: []
+misconfigurations: []

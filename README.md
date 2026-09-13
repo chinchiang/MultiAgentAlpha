@@ -166,6 +166,23 @@ semgrep runs with `--metrics=off --disable-version-check` and explicit local rul
 SARIF files land in the `l0-sarif` artifact. `mara review` uses the same pinned rulesets by default
 (`MARA_SEMGREP_CONFIG` overrides).
 
+## trivy offline database
+
+trivy used to download its vulnerability database at scan time, which hangs on isolated hosts and
+turns every review into a network event. `python3 scripts/trivy_db.py download` fetches it once
+(from the repositories in `tools/trivy-db.yaml`, `--pin-digest sha256:…` for a reproducible fetch)
+into `.mara-tools/trivy-cache` and writes `mara-trivy-db.json`: OCI manifest and layer digests,
+trivy's `UpdatedAt`/`NextUpdate`, the SHA-256 of `trivy.db`, the trivy version. `status` refuses a
+missing, tampered or stale copy (default 48 h, `max_age_hours`); `export`/`import` carry the
+database as a checked bundle to runners without egress. Both `mara review` and
+`scripts/trivy_ci.py` then run trivy with `--skip-db-update --skip-java-db-update
+--skip-check-update --offline-scan` and never download anything; without a database the runner
+reports "no offline database" instead of reaching out. In CI the L0 job downloads and checks the
+database, requires the fixture's `requests==2.19.0` to be flagged, and scans the hash-locked
+closures under `tools/` (`--file-patterns pip:.*-requirements\.txt`), failing on any finding not
+ignored with a statement and expiry in `tools/trivyignore.yaml`. Upstream publishes no signature
+for the database; `docs/tools-provenance.md` section 3c records what is and is not verified.
+
 ## Governance checks (Appendix E, prompt 8)
 
 `python scripts/governance_check.py --out docs/governance-check-<date>.md` turns the report's
