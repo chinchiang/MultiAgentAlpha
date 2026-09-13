@@ -1,0 +1,42 @@
+# Triage of semgrep findings on this repository (scripts/semgrep_ci.py --triage). The L0 job fails on any
+# finding not covered by an entry here; covered findings stay in the uploaded SARIF with a `suppressions`
+# record carrying the reason. An entry that matches nothing is reported as stale so the list stays honest.
+# `rule` is the canonical semgrep rule id, `paths` are globs relative to the repository root.
+
+# Directories passed to semgrep as --exclude for the repository scan: intentionally vulnerable review
+# material, exercised through the pre-recorded SARIF (fixtures/vuln-sample-sarif) and the pipeline tests.
+exclude:
+  - fixtures
+  - calib/samples
+
+accepted:
+  - rule: python.lang.security.audit.dangerous-subprocess-use-audit
+    paths: ["scripts/*.py", "src/mara/tools/runner.py", "tests/*.py"]
+    reason: >
+      Audit-only rule (LOW confidence) that fires on every subprocess call whose argv is not a literal.
+      Every call in this repository passes an argv list (never shell=True); the executable is a tool
+      installed from tools/versions.lock, git, gh or sys.executable, and the arguments are fixed flags plus
+      values the caller validated. Reviewed 2026-09-13 with the scan that introduced this file.
+  - rule: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
+    paths: [scripts/calibration_run.py, scripts/gitleaks_ci.py, scripts/osv_ci.py, scripts/semgrep_ci.py]
+    reason: >
+      The taint source is sys.argv, i.e. the operator's own command line; each value becomes one argv
+      element of the pinned tool, no shell is involved. gitleaks_ci.py verifies --base/--head as commits
+      with git rev-parse before they reach gitleaks; the workflow hands SHAs to these scripts through env,
+      never by interpolating them into a shell line.
+  - rule: generic.secrets.security.detected-stripe-api-key
+    paths: [scripts/gen_calib_samples.py]
+    reason: >
+      The string is the seed the generator writes into calib/samples/s3-django-orders/settings.py: a fake
+      sk_live_ key the secrets reviewer must find during calibration. calib/samples itself is excluded from
+      this scan for the same reason. It is not a credential for any service.
+  - rule: generic.secrets.security.detected-aws-secret-access-key
+    paths: [tests/test_gitleaks_ci.py]
+    reason: >
+      AWS's own documentation example secret key, committed into a throwaway repository by the test so that
+      the locked gitleaks demonstrably trips and redacts it. It is not a credential for any account.
+  - rule: python.lang.security.audit.dynamic-urllib-use-detected
+    paths: [scripts/install_tools.py]
+    reason: >
+      The URL is read from tools/versions.lock (https release URLs that go through change management;
+      file:// only in tests) and every download is SHA-256-checked against the lock before use.

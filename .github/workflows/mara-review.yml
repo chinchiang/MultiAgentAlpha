@@ -13,6 +13,12 @@
 #     separate step whose findings must match the pre-recorded fixtures/vuln-sample-sarif/zizmor.sarif
 #   - L0 tool binaries come only from tools/versions.lock via scripts/install_tools.py (SHA-256 + publisher
 #     signature/provenance verified); nothing is taken from PATH or installed unpinned
+#   - semgrep runs with the semgrep-rules checkout pinned in the lock (commit + content digest + GitHub's
+#     web-flow commit signature), metrics off, never --config auto: nothing is sent to semgrep.dev. The
+#     repository scan fails on any finding not triaged with a reason in tools/semgrep-triage.yaml, and the
+#     seeded fixture must reproduce fixtures/vuln-sample-sarif/semgrep.sarif exactly
+#   - osv-scanner checks the hash-locked closures under tools/ (package names and versions go to api.osv.dev,
+#     never source code; --no-resolve, so nothing goes to deps.dev) and must flag the fixture's requests==2.19.0
 #   - live model calls are NOT made in CI by default; the pipeline runs in mock mode unless MARA_LIVE=1 is set by a trusted branch
 #   - the human-queue job (G-11) is the only job with a write scope, and only issues: write; it runs on push to
 #     main, never on pull_request, and stays in --dry-run until the repository variable
@@ -48,7 +54,8 @@ jobs:
       - name: Install pinned, verified L0 tools (tools/versions.lock)
         # SHA-256 for every asset, then the publisher's signature/provenance: cosign keyless (trivy, cosign),
         # SLSA provenance (osv-scanner, slsa-verifier), GitHub attestation via gh (zizmor), publisher
-        # checksums (gitleaks), pip --require-hashes (semgrep). Any failure fails the job. See docs/tools-provenance.md.
+        # checksums (gitleaks), pip --require-hashes (semgrep), pinned commit + content digest + GPG commit
+        # signature (semgrep-rules). Any failure fails the job. See docs/tools-provenance.md.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # gh attestation verify
         run: |
@@ -73,6 +80,14 @@ jobs:
           assert len(live) >= 4, "zizmor found fewer than 4 findings on the seeded fixture"
           assert live == recorded, "pre-recorded zizmor SARIF has drifted from what zizmor reports; regenerate it"
           PY
+      - name: semgrep (locked CLI + pinned rules) must trip on the seeded fixture exactly as pre-recorded
+        run: python3 scripts/semgrep_ci.py --target fixtures/vuln-sample --report fixture-semgrep.sarif --expect fixtures/vuln-sample-sarif/semgrep.sarif
+      - name: semgrep on this repository; any finding not triaged in tools/semgrep-triage.yaml fails the job
+        run: python3 scripts/semgrep_ci.py --target . --report semgrep.sarif --triage tools/semgrep-triage.yaml
+      - name: osv-scanner must report the seeded fixture's known-vulnerable dependency (requests==2.19.0)
+        run: python3 scripts/osv_ci.py --target fixtures/vuln-sample --report fixture-osv.sarif --expect-package requests
+      - name: osv-scanner on the hash-locked closures this repository installs; any un-ignored advisory fails the job
+        run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/semgrep-requirements.txt --lockfile tools/model-eval-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
       - name: gitleaks (locked CLI) on this change's commits; crash or leak fails the job
         # PR: the PR's own commits base..head; push: every commit the push brought in. The SHAs reach the
         # script through env, never interpolated into the shell line. .gitleaks.toml / .gitleaksignore apply.
@@ -84,8 +99,13 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: gitleaks-sarif
-          path: gitleaks.sarif
+          name: l0-sarif
+          path: |
+            semgrep.sarif
+            fixture-semgrep.sarif
+            osv.sarif
+            fixture-osv.sarif
+            gitleaks.sarif
           if-no-files-found: ignore
 
   tests-and-mock-review:

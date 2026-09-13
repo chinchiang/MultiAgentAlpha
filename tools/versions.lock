@@ -118,3 +118,34 @@ tools:
     requirements: tools/semgrep-requirements.txt
     verify:
       method: pip-hashes   # PyPI publishes no PEP 740 provenance for semgrep (checked 2026-09-12)
+
+  # Rules for semgrep. Not a binary: a checkout of semgrep/semgrep-rules at a pinned commit, from which only
+  # the `paths` below (the security rulesets for the languages MARA reviews) are ever passed to semgrep.
+  # The rules are licensed under the Semgrep Rules License v1.0 (not OSS): they are read at scan time from
+  # .mara-tools/semgrep-rules and are never copied into this repository. `sha256` is the digest over every
+  # file under `paths` (scripts/install_tools.py git_paths_digest), independent of git's SHA-1 naming.
+  semgrep-rules:
+    version: release@5a8a6be   # branch release, commit of 2026-07-27
+    kind: git
+    homepage: https://github.com/semgrep/semgrep-rules
+    license: Semgrep Rules License v1.0 (https://semgrep.dev/legal/rules-license)
+    url: https://github.com/semgrep/semgrep-rules.git
+    commit: 5a8a6beafb1a848591f44bdddcb51584474493c4
+    paths:
+      - python/lang/security
+      - python/flask/security
+      - python/django/security
+      - python/fastapi/security
+      - python/requests/security
+      - python/sqlalchemy/security
+      - python/jwt/security
+      - javascript/lang/security
+      - javascript/express/security
+      - javascript/jsonwebtoken/security
+      - yaml/github-actions/security
+      - generic/secrets/security
+    sha256: 2e73e1c4693c439f44c68f2a0a1a85f67263a675dafa52655564d35ad7962b90
+    verify:
+      method: git-commit-gpg   # the release-branch merge commit is signed by GitHub's web-flow key
+      gpg_key_url: https://github.com/web-flow.gpg
+      gpg_key_id: B5690EEEBB952194

@@ -17,7 +17,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from install_tools import InstallError, install, load_lock, python_for_pip  # noqa: E402
+from install_tools import InstallError, git_paths_digest, install, load_lock, python_for_pip  # noqa: E402
 
 from mara.tools import runner  # noqa: E402
 
@@ -107,9 +107,15 @@ def test_shipped_lock_is_well_formed():
     lock = load_lock(ROOT / "tools" / "versions.lock")
     assert set(lock["tools"]) >= {"cosign", "slsa-verifier", "gitleaks", "osv-scanner", "zizmor", "trivy", "semgrep"}
     for name, t in lock["tools"].items():
-        if t["kind"] != "pip":
+        if t["kind"] == "git":
+            assert t["url"].startswith("https://github.com/") and t["url"].endswith(".git"), name
+            assert t["verify"]["method"] in {"git-commit-gpg", "git-commit"} and len(t["commit"]) == 40 and len(t["sha256"]) == 64, name
+            assert t["paths"] and all(p.endswith("/security") for p in t["paths"]), "only security rulesets are pinned"
+        elif t["kind"] != "pip":
             assert t["url"].startswith("https://github.com/"), name
             assert t["verify"]["method"] in {"cosign-keyless", "slsa-provenance", "github-attestation", "checksums-file"}, name
+    rules = lock["tools"]["semgrep-rules"]
+    assert rules["verify"]["gpg_key_url"] == "https://github.com/web-flow.gpg" and rules["verify"]["gpg_key_id"] == "B5690EEEBB952194"
     req = (ROOT / lock["tools"]["semgrep"]["requirements"]).read_text()
     assert f"semgrep=={lock['tools']['semgrep']['version']}" in req and req.count("--hash=sha256:") >= 60
     boot = (ROOT / "tools" / "bootstrap-requirements.txt").read_text()
@@ -186,3 +192,72 @@ def test_pip_lock_requires_the_locked_interpreter():
     assert python_for_pip({"platform": {"python": here}}) == Path(sys.executable)
     with pytest.raises(InstallError, match="CPython 9.9"):
         python_for_pip({"platform": {"python": "9.9"}})
+
+
+# ----------------------------------------------------------------------------- git kind (semgrep-rules)
+
+
+def _git(repo: Path, *args: str) -> str:
+    import subprocess
+
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True).stdout.strip()
+
+
+@pytest.fixture
+def rules_repo(tmp_path):
+    repo = tmp_path / "rules"
+    (repo / "python" / "x" / "security").mkdir(parents=True)
+    (repo / "python" / "x" / "security" / "r1.yaml").write_text("rules: []\n")
+    (repo / "python" / "x" / "security" / "r1.py").write_text("# test target\n")
+    (repo / "python" / "x" / "other" / "audit").mkdir(parents=True)
+    (repo / "python" / "x" / "other" / "audit" / "r2.yaml").write_text("rules: []\n")
+    _git(repo, "init", "-q", "-b", "release")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "t")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "rules")
+    return repo
+
+
+def _git_lock(repo: Path, **override) -> dict:
+    spec = {"version": "release@test", "kind": "git", "url": f"file://{repo}", "commit": _git(repo, "rev-parse", "HEAD"),
+            "paths": ["python/x/security"], "sha256": git_paths_digest(repo, ["python/x/security"]), "verify": {"method": "git-commit"}}
+    spec.update(override)
+    return {"schema": 1, "tools": {"semgrep-rules": spec}}
+
+
+def test_git_kind_checks_out_the_pinned_commit_and_digest(rules_repo, tmp_path):
+    dest = tmp_path / "mt"
+    manifest = install(_git_lock(rules_repo), install_dir=dest)
+    entry = manifest["tools"]["semgrep-rules"]
+    assert (dest / "semgrep-rules" / "python" / "x" / "security" / "r1.yaml").is_file()
+    assert _git(dest / "semgrep-rules", "rev-parse", "HEAD") == entry["commit"] and entry["paths"] == ["python/x/security"]
+    assert entry["sha256"] == git_paths_digest(rules_repo, ["python/x/security"]) and entry["signature_verified"] is False
+    # the digest covers only the pinned paths and every file under them, in a path-ordered, content-bound way
+    assert git_paths_digest(rules_repo, ["python/x/security"]) != git_paths_digest(rules_repo, ["python/x/other"])
+    (rules_repo / "python" / "x" / "security" / "r1.py").write_text("# changed\n")
+    assert git_paths_digest(rules_repo, ["python/x/security"]) != entry["sha256"]
+
+
+def test_git_kind_aborts_on_digest_or_commit_mismatch(rules_repo, tmp_path):
+    with pytest.raises(InstallError, match="digest over"):
+        install(_git_lock(rules_repo, sha256="0" * 64), install_dir=tmp_path / "a")
+    assert not (tmp_path / "a" / "semgrep-rules").exists()
+    with pytest.raises(InstallError, match="git fetch failed|not the pinned"):
+        install(_git_lock(rules_repo, commit="1" * 40), install_dir=tmp_path / "b")
+    assert not (tmp_path / "b" / "semgrep-rules").exists()
+    # a signature method needs the key: without network there is no key, and skipping must be explicit
+    with pytest.raises(InstallError, match="could not download|GPG"):
+        install(_git_lock(rules_repo, verify={"method": "git-commit-gpg", "gpg_key_url": "file:///nonexistent/key.asc", "gpg_key_id": "B5690EEEBB952194"}),
+                install_dir=tmp_path / "c")
+    m = install(_git_lock(rules_repo, verify={"method": "git-commit-gpg", "gpg_key_url": "file:///nonexistent/key.asc", "gpg_key_id": "B5690EEEBB952194"}),
+                install_dir=tmp_path / "c", no_signature_check=True)
+    assert "SKIPPED" in m["tools"]["semgrep-rules"]["verified_by"]
+
+
+def test_lock_validation_rejects_bad_git_entries(rules_repo, tmp_path):
+    for bad in ({"commit": "abc"}, {"sha256": "nope"}, {"paths": []}, {"paths": ["../etc"]}):
+        p = tmp_path / "bad.lock"
+        p.write_text(yaml.safe_dump(_git_lock(rules_repo, **bad)))
+        with pytest.raises(InstallError):
+            load_lock(p)
