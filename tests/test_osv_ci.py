@@ -15,17 +15,23 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from osv_ci import packages_in, summarize  # noqa: E402
 
-MSG = ("**Your dependency is vulnerable to [CVE-2018-18074](https://osv.dev/CVE-2018-18074)**\n## [CVE-2018-18074]\n"
-       "### Affected Packages\n\n| Source | Package Name | Package Version |\n| --- | --- | --- |\n| lockfile:/x/requirements.txt | requests | 2.19.0 |\n\n## Remediation\n")
+# exactly what osv-scanner 2.5.1 writes (internal/output/sarif.go): the package sits in the result message, the
+# "Affected Packages" table in the rule's help markdown
+MSG = "Package 'requests@2.19.0' is vulnerable to 'CVE-2018-18074' (also known as 'GHSA-x84v-xcm2-53pg')."
+HELP = ("**Your dependency is vulnerable to [CVE-2018-18074](https://osv.dev/CVE-2018-18074)**\n## [CVE-2018-18074]\n"
+        "### Affected Packages\n\n| Source | Package Name | Package Version |\n| --- | --- | --- |\n| lockfile:/x/requirements.txt | requests | 2.19.0 |\n\n## Remediation\n")
 
 
 def _sarif(*results: dict) -> dict:
-    return {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "osv-scanner"}}, "results": list(results)}]}
+    rules = [{"id": r["ruleId"], "name": r["ruleId"], "help": {"markdown": HELP.replace("requests", r["_pkg"]).replace("2.19.0", r["_ver"])}} for r in results]
+    return {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "osv-scanner", "rules": rules}},
+                                          "results": [{k: v for k, v in r.items() if not k.startswith("_")} for r in results]}]}
 
 
-def _result(vid: str, pkg: str, ver: str, suppressed: bool = False) -> dict:
-    r = {"ruleId": vid, "message": {"text": MSG.replace("requests", pkg).replace("2.19.0", ver)},
-         "locations": [{"physicalLocation": {"artifactLocation": {"uri": "requirements.txt"}, "region": {"startLine": 1}}}]}
+def _result(vid: str, pkg: str, ver: str, suppressed: bool = False, table_only: bool = False) -> dict:
+    text = "See the rule help." if table_only else MSG.replace("requests", pkg).replace("2.19.0", ver).replace("CVE-2018-18074", vid)
+    r = {"ruleId": vid, "level": "warning", "message": {"text": text}, "_pkg": pkg, "_ver": ver,
+         "locations": [{"physicalLocation": {"artifactLocation": {"uri": "file:///w/fixtures/vuln-sample/requirements.txt"}}}]}
     if suppressed:
         r["suppressions"] = [{"kind": "external"}]
     return r
@@ -49,9 +55,11 @@ def _run(tools: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env={**os.environ, "MARA_TOOLS_DIR": str(tools)}, cwd=ROOT)
 
 
-def test_packages_are_parsed_from_the_affected_packages_table():
+def test_packages_are_parsed_from_the_message_or_the_rule_help_table():
     assert packages_in(_result("CVE-1", "requests", "2.19.0")) == [("requests", "2.19.0")]
-    rows = summarize(_sarif(_result("CVE-1", "requests", "2.19.0"), _result("GHSA-2", "pyyaml", "3.0", suppressed=True)))
+    assert packages_in({"message": {"text": "Package 'github.com/x/y@abc1234' is vulnerable to 'GO-1'."}}) == [("github.com/x/y", "abc1234")]
+    assert packages_in({"message": {"text": "nothing here"}}) == []
+    rows = summarize(_sarif(_result("CVE-1", "requests", "2.19.0"), _result("GHSA-2", "pyyaml", "3.0", suppressed=True, table_only=True)))
     assert [(r["id"], r["packages"], r["suppressed"]) for r in rows] == [("CVE-1", [("requests", "2.19.0")], False), ("GHSA-2", [("pyyaml", "3.0")], True)]
 
 

@@ -32,7 +32,10 @@ from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E
 # 129 scanning finished with errors on some paths, 130 vulnerabilities found and errors on some paths
 EXIT_VULNS = {1, 130}
 EXIT_NO_PACKAGES = 127
-ROW_RE = re.compile(r"^\|\s*(?P<source>[^|]+?)\s*\|\s*(?P<name>[^|]+?)\s*\|\s*(?P<version>[^|]+?)\s*\|\s*$", re.M)
+# result.message.text: "Package '<name>@<version>' is vulnerable to '<ID>' (also known as ...)." (internal/output/sarif.go);
+# the rule's help.markdown carries an "Affected Packages" table | Source | Package Name | Package Version | as a fallback
+MSG_RE = re.compile(r"Package '(?P<name>[^'@]+)@(?P<version>[^']*)' is vulnerable to")
+ROW_RE = re.compile(r"^\|\s*(?P<source>[^|]+?)\s*\|\s*(?P<name>[^|]+?)\s*\|\s*(?P<version>[^|]+?)\s*\|?\s*$", re.M)
 
 
 def locked_version(lock: Path = ROOT / "tools" / "versions.lock") -> str:
@@ -42,25 +45,31 @@ def locked_version(lock: Path = ROOT / "tools" / "versions.lock") -> str:
     return str(d.get("tools", d).get("osv-scanner", {}).get("version", ""))
 
 
-def packages_in(result: dict) -> list[tuple[str, str]]:
-    """(package, version) pairs from the 'Affected Packages' table osv-scanner writes into each result message."""
+def packages_in(result: dict, rule: dict | None = None) -> list[tuple[str, str]]:
+    """(package, version) pairs: from the result message osv-scanner writes per package, else from the
+    'Affected Packages' table in the rule's help markdown."""
     text = result.get("message", {}).get("text", "") or result.get("message", {}).get("markdown", "")
+    hit = MSG_RE.search(text)
+    if hit:
+        return [(hit.group("name"), hit.group("version"))]
     out = []
-    for m in ROW_RE.finditer(text):
+    help_md = (rule or {}).get("help", {}).get("markdown", "") or (rule or {}).get("help", {}).get("text", "")
+    for m in ROW_RE.finditer(text + "\n" + help_md):
         name, version = m.group("name"), m.group("version")
-        if name.lower() in ("package name", "---") or set(name) <= {"-"}:
+        if name.lower() in ("package name", "---") or set(name) <= {"-", ":"}:
             continue
         out.append((name, version))
-    return out
+    return sorted(set(out))
 
 
 def summarize(doc: dict) -> list[dict]:
     rows = []
     for run in doc.get("runs", []):
+        rules = {r.get("id"): r for r in run.get("tool", {}).get("driver", {}).get("rules", [])}
         for res in run.get("results", []):
             loc = (res.get("locations") or [{}])[0].get("physicalLocation", {})
             rows.append({"id": res.get("ruleId", "?"), "uri": loc.get("artifactLocation", {}).get("uri", "?"),
-                         "packages": packages_in(res), "suppressed": bool(res.get("suppressions"))})
+                         "packages": packages_in(res, rules.get(res.get("ruleId"))), "suppressed": bool(res.get("suppressions"))})
     return rows
 
 
