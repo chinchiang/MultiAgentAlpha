@@ -118,7 +118,10 @@ its section 6 adds what the CI logs showed that the static inventory cannot, and
 followed: CI now runs zizmor strictly on the real workflows, checks that zizmor's findings on the
 seeded fixture match `fixtures/vuln-sample-sarif/zizmor.sarif` (now produced by zizmor itself), and
 no longer hides a crashed or leaking gitleaks run behind `continue-on-error` (`.gitleaks.toml`
-allowlists the seeded secrets under `fixtures/` and `calib/samples/`).
+allowlists the seeded secrets under `fixtures/` and `calib/samples/`). Since 2026-09-13 the scan
+itself is `scripts/gitleaks_ci.py` with the gitleaks pinned in `tools/versions.lock` (PR: the PR's
+commits; push: every new commit), not gitleaks-action, so no action downloads its own tool and the
+L0 job needs no `pull-requests` permission.
 
 ## Pinned, verified L0 tools (Appendix E, prompt 7)
 

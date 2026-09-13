@@ -6,7 +6,9 @@
 #   - deterministic tools run in their own job and hand SARIF to the model job; the model job never executes repo code
 #   - no expression from github.event.* is interpolated into a run: step
 #   - no continue-on-error on the L0 tools: a crashed scanner must be red, not green (the 2026-09-12 Actions
-#     inventory found gitleaks had crashed with 403 on every PR while the job stayed green)
+#     inventory found gitleaks-action had crashed with 403 on every PR while the job stayed green)
+#   - secret scanning uses the gitleaks pinned and verified in tools/versions.lock (scripts/gitleaks_ci.py),
+#     not gitleaks-action, which downloaded its own unverified copy and needed pull-requests: read + a token
 #   - zizmor audits only the real workflows under .github/workflows; the seeded fixture workflow is audited in a
 #     separate step whose findings must match the pre-recorded fixtures/vuln-sample-sarif/zizmor.sarif
 #   - L0 tool binaries come only from tools/versions.lock via scripts/install_tools.py (SHA-256 + publisher
@@ -29,12 +31,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read   # gitleaks-action lists the PR's commits to scope its scan
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-          fetch-depth: 0      # gitleaks-action scans base^..head, so it needs the history
+          fetch-depth: 0      # gitleaks scans the change's commit range (base..head), so it needs the history
       - name: zizmor on the real workflows (any finding fails the job)
         uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
         with:
@@ -72,12 +73,20 @@ jobs:
           assert len(live) >= 4, "zizmor found fewer than 4 findings on the seeded fixture"
           assert live == recorded, "pre-recorded zizmor SARIF has drifted from what zizmor reports; regenerate it"
           PY
-      - name: gitleaks on this PR's commits (SARIF; crash or leak fails the job)
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+      - name: gitleaks (locked CLI) on this change's commits; crash or leak fails the job
+        # PR: the PR's own commits base..head; push: every commit the push brought in. The SHAs reach the
+        # script through env, never interpolated into the shell line. .gitleaks.toml / .gitleaksignore apply.
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_UPLOAD_GITHUB: "false"
-          GITLEAKS_ENABLE_COMMENTS: "false"   # commenting would need pull-requests: write
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: python3 scripts/gitleaks_ci.py --base "$BASE_SHA" --head "$HEAD_SHA" --event "$EVENT" --report gitleaks.sarif
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: gitleaks-sarif
+          path: gitleaks.sarif
+          if-no-files-found: ignore
 
   tests-and-mock-review:
     name: tests + mock review

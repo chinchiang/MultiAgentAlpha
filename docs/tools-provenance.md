@@ -26,7 +26,7 @@
 
 - **信任第一次固定。** 兩個驗證器（cosign、slsa-verifier）本身以 SHA-256 固定；第一次寫進 lock 時是人工從發布者 checksum 檔與獨立下載交叉核對的。之後 cosign 用自身驗證自己的 keyless bundle、slsa-verifier 驗證自己的 provenance，這是自證，只能證明「這個二進位與它宣稱的簽章一致」。
 - **gitleaks 與 semgrep 沒有簽章。** 這兩個工具目前只有第 1 層。gitleaks 的 checksum 檔與二進位同源；semgrep 在 PyPI 沒有 provenance。升版時仍只能靠獨立下載交叉核對。
-- **CI 中的 `gitleaks/gitleaks-action` 自行下載 gitleaks 8.24.3**（從 GitHub release，未驗雜湊）。它與本 lock 的 8.30.1 是兩份不同的 gitleaks。本次未替換，因為該 action 處理 PR 範圍掃描的邏輯；替換為 lock 內的 CLI 是下一步。
+- **CI 的 secret scanning 已改用 lock 內的 gitleaks（2026-09-13）。** 原本的 `gitleaks/gitleaks-action` 自行下載 gitleaks 8.24.3（未驗雜湊），與 lock 的 8.30.1 是兩份不同的 gitleaks，還需要 `pull-requests: read` 與 `GITHUB_TOKEN`。現在 `scripts/gitleaks_ci.py` 只從 `.mara-tools/bin` 取（版本必須等於 lock），PR 掃 `--no-merges --first-parent base..head`、push 掃 `base..head`、無可用 base 時退回單一 commit；SARIF 上傳為 artifact，洩漏或崩潰都讓 job 紅。L0 job 不再需要 `pull-requests: read`，也不再有任何 action 自行下載工具。
 - **TruffleHog 未納入。** Shai-Hulud 蠕蟲曾用 TruffleHog 採集憑證（報告 C6.13）；若日後加入，只能在無出口網路的 job 中執行，且其輸出不得回寫任何憑證存放處。
 - **平台。** lock 只涵蓋 linux/x86_64 與 CPython 3.11。wheel 是 ABI 專用的：安裝器只會用 lock 指定的 `python3.11` 建 venv，找不到就中止（CI 的 `ubuntu-latest` 預設是 3.12，所以 L0 job 先以 `actions/setup-python` 裝 3.11）。其他平台或直譯器需另外鎖定。
 - **未做 actions/cache。** 工具每次 CI 都重新下載並驗證（約 300 MB）。cache 是信任邊界（Ultralytics 事件，報告 C7.17），若日後加入，key 必須含 lock 檔的雜湊且 restore-keys 留空。
