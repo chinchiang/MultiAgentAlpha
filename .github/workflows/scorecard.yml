@@ -1,0 +1,60 @@
+# OpenSSF Scorecard on the default branch, with the scorecard CLI pinned and SLSA-verified in
+# tools/versions.lock rather than ossf/scorecard-action (a docker action whose image is referenced by a
+# mutable tag, and whose result publishing needs id-token: write). scripts/scorecard_ci.py runs the CLI
+# against this repository through the GitHub API, applies tools/scorecard-policy.yaml (an enforced check
+# below its minimum fails the job), converts the JSON to SARIF and the last step uploads it to Code
+# Scanning under the category "scorecard". Nothing is published to api.scorecard.dev. Same hardening as
+# mara-review.yml: push/schedule/dispatch only, permissions: {} at the top, read-only job token plus
+# security-events: write, every action pinned to a commit SHA, persist-credentials: false, no
+# github.event.* interpolated into a run: line.
+name: scorecard
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * 2"   # Tuesdays 02:00 UTC, a day after the governance check
+  workflow_dispatch:
+concurrency:
+  group: scorecard
+  cancel-in-progress: false
+permissions: {}
+
+jobs:
+  scorecard:
+    name: OpenSSF Scorecard (locked CLI)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # github/codeql-action/upload-sarif
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Install the locked scorecard (SLSA provenance verified with the locked slsa-verifier)
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
+          python3 scripts/install_tools.py --only slsa-verifier scorecard
+          cat .mara-tools/manifest.json
+      - name: Scorecard against this repository; an enforced check below tools/scorecard-policy.yaml fails the job
+        env:
+          GITHUB_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # read-only is enough for a public repository
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: python3 scripts/scorecard_ci.py --repo "github.com/$REPO" --commit "$SHA" --json scorecard.json --sarif scorecard.sarif --policy tools/scorecard-policy.yaml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: scorecard
+          path: |
+            scorecard.json
+            scorecard.sarif
+          if-no-files-found: ignore
+      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        if: always() && hashFiles('scorecard.sarif') != ''
+        with:
+          sarif_file: scorecard.sarif
+          category: scorecard
+          wait-for-processing: true

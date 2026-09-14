@@ -163,8 +163,11 @@ differs from the lock:
 semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories
 (never `--config auto`), so nothing is sent to semgrep.dev; osv-scanner runs `scan source
 --no-resolve`, so only package names and versions go to api.osv.dev and nothing to deps.dev. All
-SARIF files land in the `l0-sarif` artifact. `mara review` uses the same pinned rulesets by default
-(`MARA_SEMGREP_CONFIG` overrides).
+SARIF files land in the `l0-sarif` artifact, and the five scans of the repository itself are also
+uploaded to GitHub Code Scanning (see below). `mara review` uses the same pinned rulesets by default
+(`MARA_SEMGREP_CONFIG` overrides). zizmor on the real workflows runs the same way since 2026-09-14:
+`scripts/zizmor_ci.py` executes the locked zizmor (online audits with the workflow token), keeps the
+SARIF and fails on any finding; zizmor-action is gone.
 
 ## trivy offline database
 
@@ -182,6 +185,27 @@ database, requires the fixture's `requests==2.19.0` to be flagged, and scans the
 closures under `tools/` (`--file-patterns pip:.*-requirements\.txt`), failing on any finding not
 ignored with a statement and expiry in `tools/trivyignore.yaml`. Upstream publishes no signature
 for the database; `docs/tools-provenance.md` section 3c records what is and is not verified.
+
+## Code Scanning and Scorecard (public repository)
+
+The repository is public since 2026-09-14, which makes GitHub Code Scanning free. The
+`code-scanning` job of `mara-review.yml` takes the five SARIF files the L0 job produced for this
+repository (semgrep, osv-scanner, trivy, gitleaks, zizmor) from the `l0-sarif` artifact, runs
+`scripts/code_scanning_prep.py` (drops triaged findings and results without a location, makes
+paths repository-relative, sets one Code Scanning category per tool) and uploads them with
+`github/codeql-action/upload-sarif`. It is the only job with `security-events: write`, it runs no
+repository code, and it is skipped for pull requests from forks or Dependabot (read-only token).
+The fixture scans and the mock review report are never uploaded: they describe seeded material.
+
+`.github/workflows/scorecard.yml` runs OpenSSF Scorecard on pushes to `main` and weekly with the
+scorecard CLI pinned and SLSA-verified in `tools/versions.lock` (not `ossf/scorecard-action`, whose
+docker image is referenced by a mutable tag and whose publishing needs `id-token: write`).
+`scripts/scorecard_ci.py` converts the JSON to SARIF (category `scorecard`) and fails the job when
+a check enforced in `tools/scorecard-policy.yaml` scores below its minimum; only
+Dangerous-Workflow, Token-Permissions and Binary-Artifacts are enforced so far, the rest is
+reported. `.github/dependabot.yml` keeps the SHA-pinned actions updated weekly; the Python closures
+and tool binaries stay outside Dependabot on purpose (they are relocked by hand with hashes and
+signatures re-verified, see `docs/tools-provenance.md`).
 
 ## Governance checks (Appendix E, prompt 8)
 

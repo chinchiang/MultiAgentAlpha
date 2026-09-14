@@ -110,6 +110,21 @@ tools:
       certificate_identity_regexp: "^https://github\\.com/aquasecurity/trivy/\\.github/workflows/reusable-release\\.yaml@refs/tags/v0\\.74\\.0$"
       oidc_issuer: https://token.actions.githubusercontent.com
 
+  scorecard:
+    version: 5.5.0
+    kind: archive
+    extract: scorecard
+    homepage: https://github.com/ossf/scorecard
+    license: Apache-2.0
+    url: https://github.com/ossf/scorecard/releases/download/v5.5.0/scorecard_5.5.0_linux_amd64.tar.gz
+    sha256: 83b90a05c1540ef1390db1cd5711e5fd04be9c1d8537fb84d39d02092d6a8dff
+    # no publisher checksum file on the release (2026-09-14); the SLSA provenance below lists the same sha256
+    verify:
+      method: slsa-provenance
+      provenance_url: https://github.com/ossf/scorecard/releases/download/v5.5.0/multiple.intoto.jsonl
+      source_uri: github.com/ossf/scorecard
+      source_tag: v5.5.0
+
   semgrep:
     version: 1.177.0
     kind: pip
