@@ -456,7 +456,8 @@ def check_g12(root: Path, config_path: Path) -> CheckResult:
     if not isinstance(ps, dict):
         return CheckResult("G-12", FAIL, "設定無 `psirt:` 區塊。需要：PSIRT 接入端點（https）、產品識別、只對 A 級 Critical 觸發的規則（政策 P6），對應 CRA 第 14 條 24 小時預警（2026-09-11 起適用）；見 `docs/psirt-integration.md`")
     if not ps.get("enabled"):
-        return CheckResult("G-12", FAIL, "`psirt:` 區塊存在但 `enabled: false`。需要：填入 https 的 `webhook_url`、`product`，把 `enabled` 與 `shipped` 設為 true，token 放在 `token_env` 指定的環境變數；範例 `config/examples/psirt-enabled.yaml`")
+        return CheckResult("G-12", FAIL, "`psirt:` 區塊存在但 `enabled: false`。需要：填入 https 的 `webhook_url`、`product`，把 `enabled` 與 `shipped` 設為 true，token 放在 `token_env` 指定的環境變數，"
+                           "再以 `scripts/psirt_ops.py handshake` 對真實端點完成握手；範例 `config/examples/psirt-enabled.yaml`")
     problems = []
     if not str(ps.get("webhook_url", "")).lower().startswith("https://"):
         problems.append("webhook_url 非 https")
@@ -467,8 +468,22 @@ def check_g12(root: Path, config_path: Path) -> CheckResult:
         problems.append(f"觸發範圍過寬：tiers={tiers} severities={sevs}（G-12 只限 A 級 Critical，P6 允許到 B/High）")
     if problems:
         return CheckResult("G-12", FAIL, "；".join(problems))
+    from mara import psirt_ledger as pl
+
+    hs_path = Path(str(ps.get("handshake_file", "ops/psirt/handshake.json")))
+    hs_ok, hs_msg = pl.handshake_status(hs_path if hs_path.is_absolute() else root / hs_path, int(ps.get("handshake_max_age_days", 90)))
+    if not hs_ok:
+        return CheckResult("G-12", FAIL, f"設定完整但端點未證實可用：{hs_msg}。`enabled: true` 不證明 PSIRT 收得到；需要對真實端點的成功握手紀錄（`scripts/psirt_ops.py handshake`）")
+    led_path = Path(str(ps.get("ledger_file", "ops/psirt/ledger.json")))
+    ledger = pl.load_ledger(led_path if led_path.is_absolute() else root / led_path)
+    late = pl.overdue(ledger)
+    if late:
+        return CheckResult("G-12", FAIL, "送出紀錄中有逾期的第 14 條階段：" + "；".join(f"{k[:8]}… {s} 期限 {d}" for k, s, d in late)
+                           + "。需要：在 PSIRT 完成該階段後以 `scripts/psirt_ops.py record` 記下參考編號，或以 `close` 結案並寫明理由")
+    open_items = [i for i in ledger["items"].values() if not i.get("closed")]
     return CheckResult("G-12", PASS, f"`psirt.enabled: true`，產品 {ps.get('product')!r}，webhook {ps.get('webhook_url')}，觸發 tiers={tiers} severities={sevs}，"
-                       f"{ps.get('early_warning_hours', 24)} h 預警；`src/mara/report/psirt_out.py` 在每次 review 產出 `out/psirt-notifications.json`")
+                       f"{ps.get('early_warning_hours', 24)} h 預警；{hs_msg}；送出紀錄 {len(ledger['items'])} 筆（{len(open_items)} 筆進行中，無逾期）；"
+                       f"`src/mara/report/psirt_out.py` 在每次 review 產出 `out/psirt-notifications.json`")
 
 
 def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> CheckResult:

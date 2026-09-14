@@ -70,6 +70,9 @@ psirt:
   early_warning_hours: 24
   notification_hours: 72
   final_report_days: 14
+  ledger_file: ops/psirt/ledger.json       # one item per finding key: send attempts, 72 h / 14 d stage references (scripts/psirt_ops.py)
+  handshake_file: ops/psirt/handshake.json # last endpoint handshake; G-12 needs a successful one younger than handshake_max_age_days
+  handshake_max_age_days: 90
 
 # G-11: human queue. Findings the pipeline will not decide on its own (judge majority says needs_human,
 # Krippendorff alpha below gate.human_threshold_alpha, or tier C at High+ severity) become HumanQueueItems

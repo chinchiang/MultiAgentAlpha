@@ -208,11 +208,16 @@ With `psirt.enabled: true` and `psirt.shipped: true` in the config, every accept
 configured tiers and severities (default: tier A, Critical) is written to
 `out/psirt-notifications.json` as an EU CRA Article 14 early-warning payload carrying the evidence
 chain and the 24 h / 72 h / 14 d deadlines counted from the review; `mara review --notify-psirt`
-POSTs them to the PSIRT webhook with a bearer token from the environment. Policy P6 keeps the
-trigger narrow (tiers within A/B, severities within Critical/High, HTTPS, no inline secret).
-Whether a vulnerability is actively exploited, the legal trigger of Article 14, remains the
-PSIRT's determination. See `docs/psirt-integration.md`; `config/examples/psirt-enabled.yaml` is a
-complete example.
+POSTs them to the PSIRT webhook with a bearer token from the environment, once per finding: a
+send ledger (`ops/psirt/ledger.json`) skips findings whose early warning was already delivered,
+records every attempt, and carries the PSIRT's references for the 72 h notification and 14 d final
+report; `scripts/psirt_ops.py status` names any stage past its deadline. `scripts/psirt_ops.py
+handshake` proves the endpoint accepts the payload with the real token and records it; governance
+G-12 requires a fresh successful handshake and no overdue stage, not just `enabled: true`. Policy
+P6 keeps the trigger narrow (tiers within A/B, severities within Critical/High, HTTPS, no inline
+secret). Whether a vulnerability is actively exploited, the legal trigger of Article 14, remains
+the PSIRT's determination. See `docs/psirt-integration.md`; `config/examples/psirt-enabled.yaml`
+is a complete example.
 
 ## ML-BOM for the self-hosted weights (governance item G-7)
 

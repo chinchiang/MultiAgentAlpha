@@ -58,6 +58,9 @@ class PsirtConfig(BaseModel):
     early_warning_hours: int = Field(default=24, ge=1, le=24)
     notification_hours: int = Field(default=72, ge=1, le=72)
     final_report_days: int = Field(default=14, ge=1, le=14)
+    ledger_file: str = Field(default="ops/psirt/ledger.json", description="Send ledger: one item per finding key, attempts, stage references")
+    handshake_file: str = Field(default="ops/psirt/handshake.json", description="Record of the last endpoint handshake (psirt_ops.py handshake)")
+    handshake_max_age_days: int = Field(default=90, ge=1, description="G-12 requires a successful handshake younger than this")
 
 
 class HumanQueueConfig(BaseModel):

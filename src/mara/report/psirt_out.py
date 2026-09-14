@@ -18,6 +18,7 @@ from pathlib import Path
 import httpx
 
 from ..config import MaraConfig
+from ..psirt_ledger import already_sent, dedupe_key, load_ledger, now_utc, record_attempt, save_ledger
 from ..schemas import ReviewReport
 
 SCHEMA = "mara-psirt/1"
@@ -58,6 +59,7 @@ def build_notifications(report: ReviewReport, cfg: MaraConfig, now: dt.datetime 
             "target": report.target,
             "detected_at": detected.isoformat(timespec="seconds"),
             "deadlines": deadlines,
+            "dedupe_key": dedupe_key(ps.product, report.target, p.file, p.line, f.cwe),
             "finding_id": f.id,
             "title": f.title,
             "dimension": f.dimension,
@@ -83,20 +85,39 @@ def write_psirt(payloads: list[dict], path: Path) -> None:
     path.write_text(json.dumps(payloads, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def send_psirt(payloads: list[dict], cfg: MaraConfig, *, client: httpx.Client | None = None, timeout: float = 30.0) -> list[dict]:
-    """POST each payload as JSON with a bearer token from the environment. Returns per-payload status."""
+def send_psirt(payloads: list[dict], cfg: MaraConfig, *, client: httpx.Client | None = None, timeout: float = 30.0,
+               ledger_path: Path | str | None = None, resend: bool = False, now: dt.datetime | None = None) -> list[dict]:
+    """POST each payload as JSON with a bearer token from the environment. Returns per-payload status.
+
+    With a ledger, a finding whose early warning was already delivered is skipped (result `skipped: True`)
+    unless resend=True, every attempt is recorded, and the request carries `Idempotency-Key: <dedupe_key>`
+    so the receiver can dedupe too."""
     ps = cfg.psirt
     token = os.environ.get(ps.token_env, "")
     if not token:
         raise RuntimeError(f"PSIRT token environment variable {ps.token_env} is not set; refusing to send")
+    ledger = load_ledger(ledger_path) if ledger_path else None
     own = client is None
     client = client or httpx.Client(timeout=timeout)
     results = []
     try:
         for payload in payloads:
-            r = client.post(ps.webhook_url, json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
-            results.append({"finding_id": payload["finding_id"], "status_code": r.status_code, "ok": r.is_success})
+            key = payload.get("dedupe_key", "")
+            if ledger is not None and not resend and (sent := already_sent(ledger, key)):
+                results.append({"finding_id": payload["finding_id"], "dedupe_key": key, "skipped": True, "ok": True, "status_code": None,
+                                "reason": f"early warning already delivered {sent}"})
+                continue
+            headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+            if key:
+                headers["Idempotency-Key"] = key
+            r = client.post(ps.webhook_url, json=payload, headers=headers)
+            results.append({"finding_id": payload["finding_id"], "dedupe_key": key, "skipped": False, "status_code": r.status_code,
+                            "ok": r.is_success})
+            if ledger is not None:
+                record_attempt(ledger, payload, r.status_code, r.is_success, now or now_utc())
     finally:
         if own:
             client.close()
+        if ledger is not None:
+            save_ledger(ledger, ledger_path)
     return results
