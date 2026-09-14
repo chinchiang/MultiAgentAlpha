@@ -1,0 +1,24 @@
+# OpenSSF Scorecard policy for scripts/scorecard_ci.py (.github/workflows/scorecard.yml).
+#
+# `enforce` maps a Scorecard check to the minimum score the repository must reach; a lower score, or a
+# check Scorecard could not evaluate (-1), fails the job. Every other check is still run, printed and
+# uploaded to Code Scanning as a warning when below 10, but does not fail the job.
+#
+# 2026-09-14: only the three checks this repository can already prove are enforced (all workflows use
+# pull_request, least-privilege tokens declared per job, no binaries committed). The rest are reported
+# first; tighten a check here once its real score on main is known, and treat a drop below the minimum
+# as a workflow regression to fix, not as a reason to lower the minimum.
+enforce:
+  Dangerous-Workflow: 10      # no pull_request_target with untrusted checkout, no script injection
+  Token-Permissions: 10       # top-level permissions: {} and read-only per job (except issues/security-events where documented)
+  Binary-Artifacts: 10        # no checked-in binaries (tools are installed from tools/versions.lock at run time)
+
+# Known below-10 checks and why they are not enforced yet:
+#   License, Security-Policy    the repository has no LICENSE or SECURITY.md; both are decisions for the
+#                               owner (which licence, which disclosure channel), not something CI should invent
+#   Dependency-Update-Tool      .github/dependabot.yml covers the github-actions ecosystem only; the Python
+#                               closures under tools/ are relocked by hand (docs/tools-provenance.md section 4)
+#   Pinned-Dependencies         the tests job runs `pip install -e .` from pyproject without hashes (known gap)
+#   SAST                        Scorecard looks for CodeQL/Sonar-style workflows; the L0 job runs semgrep
+#                               through scripts/semgrep_ci.py, which Scorecard's heuristics do not recognise
+#   Branch-Protection           needs an admin token; the workflow token reports it as -1

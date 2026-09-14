@@ -18,13 +18,15 @@ accepted:
       installed from tools/versions.lock, git, gh or sys.executable, and the arguments are fixed flags plus
       values the caller validated. Reviewed 2026-09-13 with the scan that introduced this file.
   - rule: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
-    paths: [scripts/calibration_run.py, scripts/gitleaks_ci.py, scripts/osv_ci.py, scripts/semgrep_ci.py, scripts/trivy_ci.py]
+    paths: [scripts/calibration_run.py, scripts/gitleaks_ci.py, scripts/osv_ci.py, scripts/scorecard_ci.py, scripts/semgrep_ci.py, scripts/trivy_ci.py, scripts/zizmor_ci.py]
     reason: >
       The taint source is sys.argv, i.e. the operator's own command line; each value becomes one argv
       element of the pinned tool, no shell is involved. gitleaks_ci.py verifies --base/--head as commits
       with git rev-parse before they reach gitleaks; the workflow hands SHAs to these scripts through env,
       never by interpolating them into a shell line. trivy_ci.py passes --target, --ignorefile and
-      --skip-dirs straight through as separate arguments of the locked trivy.
+      --skip-dirs straight through as separate arguments of the locked trivy. zizmor_ci.py passes --target
+      and --persona (a fixed choice list) to the locked zizmor; scorecard_ci.py passes --repo (checked
+      against github.com/<owner>/<repo>), --commit and --checks to the locked scorecard.
   - rule: generic.secrets.security.detected-stripe-api-key
     paths: [scripts/gen_calib_samples.py]
     reason: >
