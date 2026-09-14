@@ -11,7 +11,7 @@ pending in this repository.
 | piece | role |
 |---|---|
 | `sbom/models.yaml` | manifest the platform team fills: one entry per self-hosted model (`model_id` = the `model` field in `config/mara.yaml`), official source, licence, format, serving stack, signature method, per-file SHA-256 |
-| `scripts/ml_bom.py` | `hash-dir`, `build`, `validate`, `verify`, `verify-signature`, `sign-command`, `check` |
+| `scripts/ml_bom.py` | `hash-dir`, `registry-hashes`, `build`, `validate`, `verify`, `verify-signature`, `sign-command`, `check` |
 | `src/mara/mlbom.py` | the library behind the script, policy P7, the pipeline's audit entry and governance check G-7 |
 | `sbom/ml-bom.cdx.json` | the ML-BOM built from the manifest (committed; CI rebuilds it and fails on drift) |
 | `src/mara/groundtruth/cyclonedx/` | vendored CycloneDX 1.6 JSON schema (`bom-1.6.schema.json`, `spdx.schema.json`, `jsf-0.82.schema.json`) used by `validate` and the tests |
@@ -40,14 +40,30 @@ hashing a directory and when they appear in a BOM, so a BOM cannot bless a pickl
 
 1. Download the weights from the official source only (the `source.url` in the manifest) and pin
    the revision. For NGC-distributed models keep NGC's own signature check on the download host.
-2. On that host:
+2. Get the per-file hashes. The quickest way needs no weight download at all: on any host that can
+   reach huggingface.co,
+
+   ```
+   python3 scripts/ml_bom.py registry-hashes --model-id deepseek-v3.2 --revision <commit or tag> --write-manifest sbom/models.yaml
+   ```
+
+   resolves the revision to a commit, lists the repository tree at that commit, takes the SHA-256
+   Hugging Face already stores for every LFS file (the weights; the LFS object id is the SHA-256 of
+   the content, identical to what `hash-dir` computes on a download), fetches and hashes the small
+   git-stored files (`config.json`, tokenizer files; capped at 50 MB each), refuses pickle
+   checkpoints and any source that is not `https://huggingface.co/<org>/<name>`, and writes `files:`
+   plus `source.revision` (the resolved commit) into the manifest. Set `HF_TOKEN` for a gated
+   repository. Alternatively, on the download host:
 
    ```
    python3 scripts/ml_bom.py hash-dir /srv/models/deepseek-v3.2 --model-id deepseek-v3.2 --write-manifest sbom/models.yaml
    ```
 
-   or paste the registry's per-file sha256 values (Hugging Face exposes them as the LFS object id)
-   into `files:`. Fill `source.revision`, `signature.identity` and `signature.issuer`.
+   For NGC-distributed weights use NGC's checksum list or `hash-dir`; `registry-hashes` deliberately
+   refuses a `source.kind` other than `huggingface`. Then fill `signature.identity` and
+   `signature.issuer`. Either way `verify` on the inference host (step 6) is what proves the served
+   bytes match: the registry route pins what the official repository holds, `verify` pins what is on
+   disk.
 3. Build and validate:
 
    ```
@@ -90,7 +106,9 @@ BOM is complete, and says `pending` until then.
 ## 5. Why the production entries are pending here
 
 This repository does not host the weights, and the environment the prototype was written in could
-not reach huggingface.co, hf-mirror or NGC to fetch registry hashes. The manifest therefore carries
+not reach huggingface.co, hf-mirror or NGC to fetch registry hashes (`registry-hashes` exists for
+that reason and was tested against a simulated registry; its first real run has to happen on a host
+with access). The manifest therefore carries
 the source and licence for DeepSeek-V3.2 (GitHub repository, MIT; the formal source of the V4
 weights could not be confirmed, report Appendix B item A78) and Nemotron 3 Super (NVIDIA Open Model
 License; exact repository and licence text still to be confirmed, B-gap-9) with empty `files:`.

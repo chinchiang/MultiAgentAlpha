@@ -3,6 +3,11 @@
   python3 scripts/ml_bom.py hash-dir /srv/models/deepseek-v3.2 --model-id deepseek-v3.2 [--write-manifest sbom/models.yaml]
       SHA-256 of every file in a weights directory (safetensors only; pickle checkpoints are refused),
       printed as sha256sum lines or written into the manifest entry.
+  python3 scripts/ml_bom.py registry-hashes --model-id deepseek-v3.2 [--revision main] [--write-manifest sbom/models.yaml]
+      the same per-file SHA-256 list straight from the official Hugging Face repository (LFS object
+      ids for the weights, small git-stored files fetched and hashed), pinned to the resolved commit;
+      no weight download needed. Set HF_TOKEN for a gated repository. Refuses any non-huggingface.co
+      source and any pickle checkpoint in the tree.
   python3 scripts/ml_bom.py build --manifest sbom/models.yaml --out sbom/ml-bom.cdx.json [--allow-pending]
       CycloneDX 1.6 ML-BOM from the manifest; exits 1 on a pending entry unless --allow-pending.
   python3 scripts/ml_bom.py validate --bom sbom/ml-bom.cdx.json [--manifest sbom/models.yaml]
@@ -21,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +35,29 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mara import mlbom  # noqa: E402
+
+
+def cmd_registry_hashes(a: argparse.Namespace) -> int:
+    entry = next((e for e in mlbom.load_manifest(a.manifest) if e.model_id == a.model_id), None)
+    if entry is None:
+        print(f"ERROR: model_id {a.model_id!r} not in {a.manifest}", file=sys.stderr)
+        return 2
+    if str(entry.source.get("kind", "")).lower() != "huggingface":
+        print(f"ERROR: {a.model_id}: source.kind is {entry.source.get('kind')!r}, not huggingface; registry-hashes reads the official "
+              f"Hugging Face repository only (for NGC use the NGC checksum list or hash-dir on the download host)", file=sys.stderr)
+        return 2
+    repo = mlbom.hf_repo_from_url(str(entry.source.get("url", "")))
+    revision = a.revision or str(entry.source.get("revision") or "main")
+    print(f"# {a.model_id}: {repo} @ {revision} (token {'set' if os.environ.get(mlbom.HF_TOKEN_ENV) else 'not set'})", file=sys.stderr)
+    commit, files = mlbom.registry_files(repo, revision)
+    for f in files:
+        print(f"{f.sha256}  {f.path}")
+    print(f"# commit {commit}; {len(files)} file(s); component digest {mlbom.manifest_digest(files)}", file=sys.stderr)
+    if a.write_manifest:
+        mlbom.write_manifest_files(a.write_manifest, a.model_id, files)
+        mlbom.write_manifest_source_revision(a.write_manifest, a.model_id, commit)
+        print(f"# wrote {len(files)} hashes and source.revision {commit[:12]} into {a.write_manifest} for {a.model_id}", file=sys.stderr)
+    return 0
 
 
 def cmd_hash_dir(a: argparse.Namespace) -> int:
@@ -124,6 +153,11 @@ def main() -> int:
     s.add_argument("directory", type=Path)
     s.add_argument("--model-id")
     s.add_argument("--write-manifest", type=Path)
+    s = sub.add_parser("registry-hashes")
+    s.add_argument("--model-id", required=True)
+    s.add_argument("--revision", help="branch, tag or commit; default the manifest's source.revision, else main")
+    s.add_argument("--manifest", type=Path, default=ROOT / "sbom" / "models.yaml")
+    s.add_argument("--write-manifest", type=Path)
     s = sub.add_parser("build")
     s.add_argument("--manifest", type=Path, default=ROOT / "sbom" / "models.yaml")
     s.add_argument("--out", type=Path, default=ROOT / "sbom" / "ml-bom.cdx.json")
@@ -147,7 +181,7 @@ def main() -> int:
     s.add_argument("--config", type=Path, default=ROOT / "config" / "mara.yaml")
     a = ap.parse_args()
     try:
-        return {"hash-dir": cmd_hash_dir, "build": cmd_build, "validate": cmd_validate, "verify": cmd_verify,
+        return {"hash-dir": cmd_hash_dir, "registry-hashes": cmd_registry_hashes, "build": cmd_build, "validate": cmd_validate, "verify": cmd_verify,
                 "verify-signature": cmd_verify_signature, "sign-command": cmd_sign_command, "check": cmd_check}[a.cmd](a)
     except (mlbom.PickleWeightsError, FileNotFoundError, ValueError, KeyError) as e:
         print(f"ERROR: {e}", file=sys.stderr)

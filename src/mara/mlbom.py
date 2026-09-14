@@ -15,7 +15,11 @@ import hashlib
 import json
 import os
 import re
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -32,6 +36,11 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 PROP = "mara:"
 MARA_REF = "mara"
 STATUS_COMPLETE, STATUS_PENDING, STATUS_INCOMPLETE, STATUS_ABSENT, STATUS_NO_BOM = "complete", "pending", "incomplete", "absent", "no-bom"
+HF_HOST = "huggingface.co"
+HF_TOKEN_ENV = "HF_TOKEN"
+NON_LFS_MAX_BYTES = 50 * 1024 * 1024   # files stored in git rather than LFS are fetched and hashed; weights never are
+COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+Fetch = Callable[[str], tuple[bytes, dict]]
 
 
 class PickleWeightsError(ValueError):
@@ -149,6 +158,106 @@ def write_manifest_files(path: Path | str, model_id: str, files: list[FileEntry]
     else:
         raise KeyError(f"model_id {model_id!r} not in {p}")
     p.write_text(yaml.safe_dump(raw, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8")
+
+
+def write_manifest_source_revision(path: Path | str, model_id: str, revision: str) -> None:
+    """Pin the exact commit the hashes were taken from into the manifest entry's source.revision."""
+    import yaml
+
+    p = Path(path)
+    raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    for m in raw.get("models", []) or []:
+        if m.get("model_id") == model_id:
+            m.setdefault("source", {})["revision"] = revision
+            break
+    else:
+        raise KeyError(f"model_id {model_id!r} not in {p}")
+    p.write_text(yaml.safe_dump(raw, sort_keys=False, allow_unicode=True, width=120), encoding="utf-8")
+
+
+# ---------------------------------------------------------------- registry hashes (Hugging Face)
+
+def hf_repo_from_url(url: str) -> str:
+    """'https://huggingface.co/<org>/<name>[/...]' -> '<org>/<name>'. Any other host is refused: the
+    manifest's source must be the official Hugging Face repository, not a mirror."""
+    u = urllib.parse.urlparse(url)
+    if u.scheme != "https" or u.netloc.lower() != HF_HOST:
+        raise ValueError(f"source url {url!r} is not on https://{HF_HOST}; registry hashes are taken from the official repository only")
+    parts = [x for x in u.path.split("/") if x]
+    if len(parts) < 2:
+        raise ValueError(f"source url {url!r} does not name a repository (expected https://{HF_HOST}/<org>/<name>)")
+    return f"{parts[0]}/{parts[1]}"
+
+
+def _http_fetch(url: str, timeout: int = 60) -> tuple[bytes, dict]:
+    headers = {"User-Agent": "mara-ml-bom/1"}
+    token = os.environ.get(HF_TOKEN_ENV)
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as r:
+            return r.read(), {k.lower(): v for k, v in r.headers.items()}
+    except urllib.error.HTTPError as e:
+        raise ValueError(f"{url}: HTTP {e.code} ({'set ' + HF_TOKEN_ENV + ' for a gated repository' if e.code in (401, 403) else e.reason})") from e
+    except urllib.error.URLError as e:
+        raise ValueError(f"{url}: {e.reason}") from e
+
+
+def _next_link(headers: dict) -> str | None:
+    for part in str(headers.get("link", "")).split(","):
+        if 'rel="next"' in part:
+            return part.split(";")[0].strip().strip("<>")
+    return None
+
+
+def registry_files(repo: str, revision: str = "main", fetch: Fetch | None = None) -> tuple[str, list[FileEntry]]:
+    """(commit sha, files) for a Hugging Face repository at `revision`, without downloading the weights.
+
+    The revision is resolved to its commit through /api/models/<repo>/revision/<rev>; every file in the
+    tree at that commit is listed (paginated) and LFS-stored files (the weights) contribute the SHA-256
+    Hugging Face already holds as the LFS object id, byte-identical to what `hash-dir` computes on a
+    download. Files stored in plain git (config.json, tokenizer files) carry no SHA-256 in the API, so
+    they are fetched (small, capped at NON_LFS_MAX_BYTES) and hashed here. The same rules as hash_dir
+    apply: pickle checkpoints are refused and at least one safetensors file is required."""
+    fetch = fetch or _http_fetch
+    base = f"https://{HF_HOST}"
+    info_raw, _ = fetch(f"{base}/api/models/{repo}/revision/{urllib.parse.quote(revision, safe='')}")
+    info = json.loads(info_raw)
+    commit = str(info.get("sha", ""))
+    if not COMMIT_RE.match(commit):
+        raise ValueError(f"{repo}@{revision}: the registry returned no commit sha ({commit!r})")
+    url: str | None = f"{base}/api/models/{repo}/tree/{commit}?recursive=true&expand=false"
+    entries: list[dict] = []
+    while url:
+        body, headers = fetch(url)
+        page = json.loads(body)
+        if not isinstance(page, list):
+            raise ValueError(f"{repo}@{commit[:12]}: unexpected tree listing {str(page)[:120]!r}")
+        entries.extend(page)
+        url = _next_link(headers)
+    paths = [str(e["path"]) for e in entries if e.get("type") == "file"]
+    pickles = [p for p in paths if Path(p).suffix.lower() in PICKLE_SUFFIXES]
+    if pickles:
+        raise PickleWeightsError(f"pickle-based checkpoint(s) refused: {', '.join(sorted(pickles))}; the repository must be served as safetensors")
+    if not any(p.lower().endswith(WEIGHT_SUFFIX) for p in paths):
+        raise ValueError(f"{repo}@{commit[:12]}: no {WEIGHT_SUFFIX} file in the repository tree")
+    files = []
+    for e in sorted((e for e in entries if e.get("type") == "file"), key=lambda e: str(e["path"])):
+        path = str(e["path"])
+        lfs = e.get("lfs")
+        if lfs:
+            oid = str(lfs.get("oid", "")).lower()
+            if not SHA256_RE.match(oid):
+                raise ValueError(f"{path}: LFS object id {oid!r} is not a SHA-256")
+            files.append(FileEntry(path, oid, int(lfs.get("size", e.get("size", 0)) or 0)))
+            continue
+        size = int(e.get("size", 0) or 0)
+        if size > NON_LFS_MAX_BYTES:
+            raise ValueError(f"{path}: {size} bytes stored outside LFS exceeds the {NON_LFS_MAX_BYTES} byte cap for fetching; "
+                             "hash it with hash-dir instead")
+        blob, _ = fetch(f"{base}/{repo}/resolve/{commit}/{urllib.parse.quote(path)}")
+        files.append(FileEntry(path, hashlib.sha256(blob).hexdigest(), len(blob)))
+    return commit, files
 
 
 # ---------------------------------------------------------------- BOM
