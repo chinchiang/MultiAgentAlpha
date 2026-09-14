@@ -37,10 +37,13 @@ accepted:
       AWS's own documentation example secret key, committed into a throwaway repository by the test so that
       the locked gitleaks demonstrably trips and redacts it. It is not a credential for any account.
   - rule: python.lang.security.audit.dynamic-urllib-use-detected
-    paths: [scripts/install_tools.py, scripts/trivy_db.py]
+    paths: [scripts/install_tools.py, scripts/trivy_db.py, src/mara/mlbom.py]
     reason: >
       install_tools.py: the URL is read from tools/versions.lock (https release URLs that go through change
       management; file:// only in tests) and every download is SHA-256-checked against the lock before use.
       trivy_db.py: the registry host and path come from tools/trivy-db.yaml (or an explicit --repository),
       the request is an https GET of an OCI manifest whose digests are only recorded for provenance; the
       artifact itself is fetched by the locked trivy, and a failed or odd response is recorded as unknown.
+      mlbom.py (registry_files): the host is fixed to https://huggingface.co and the repository comes from
+      the manifest's source.url after hf_repo_from_url refused anything else; the responses are the
+      revision, the tree listing and small git-stored files that are hashed, never the weights.
