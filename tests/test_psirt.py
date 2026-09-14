@@ -117,3 +117,169 @@ def test_policy_p6_keeps_the_trigger_narrow():
             _mock_cfg(**bad)
     disabled = _mock_cfg(enabled=False, webhook_url="http://insecure")
     assert next(r for r in evaluate_policies(disabled) if r.id == "P6").passed
+
+
+# ---------------------------------------------------------------- ledger, stage clock, handshake (scripts/psirt_ops.py)
+
+from mara import psirt_ledger as pl  # noqa: E402
+
+
+def test_dedupe_key_is_stable_across_reviews_and_in_every_payload(shipped_report):
+    cfg, report = shipped_report
+    assert all(len(p["dedupe_key"]) == 16 for p in report.psirt)
+    p = report.psirt[0]
+    assert p["dedupe_key"] == pl.dedupe_key(cfg.psirt.product, report.target, p["location"]["file"], p["location"]["line"], p["cwe"])
+    assert pl.dedupe_key("a", "t", "f", 1, "CWE-1") != pl.dedupe_key("a", "t", "f", 2, "CWE-1")
+
+
+def test_ledger_skips_delivered_findings_records_attempts_and_sends_idempotency_key(shipped_report, monkeypatch, tmp_path):
+    cfg, report = shipped_report
+    monkeypatch.setenv("PSIRT_WEBHOOK_TOKEN", "s3cret")
+    calls: list[tuple[str, str]] = []
+    codes = iter([202, 503] + [202] * 10)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.headers.get("Idempotency-Key"), json.loads(request.content)["dedupe_key"]))
+        return httpx.Response(next(codes))
+
+    ledger = tmp_path / "ledger.json"
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        first = send_psirt(report.psirt, cfg, client=client, ledger_path=ledger)
+    assert len(first) == len(report.psirt) == 3 and [r["ok"] for r in first] == [True, False, True]
+    assert all(k == d for k, d in calls) and len(calls) == 3, "every request carries Idempotency-Key = dedupe_key"
+    led = pl.load_ledger(ledger)
+    assert len(led["items"]) == 3 and led["schema"] == pl.LEDGER_SCHEMA
+    failed = led["items"][first[1]["dedupe_key"]]
+    assert failed["attempts"][0]["status_code"] == 503 and not failed["stages"]["early_warning"]
+    # second review: the two delivered ones are skipped, the failed one is retried
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        second = send_psirt(report.psirt, cfg, client=client, ledger_path=ledger)
+    assert [r["skipped"] for r in second] == [True, False, True] and second[1]["ok"] and len(calls) == 4
+    assert "already delivered" in second[0]["reason"]
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        forced = send_psirt(report.psirt, cfg, client=client, ledger_path=ledger, resend=True)
+    assert not any(r["skipped"] for r in forced) and len(calls) == 7
+    led = pl.load_ledger(ledger)
+    assert all(i["stages"]["early_warning"].get("sent_at") for i in led["items"].values())
+    assert len(led["items"][first[0]["dedupe_key"]]["attempts"]) == 2
+
+
+def test_stage_clock_records_references_and_names_overdue_stages(shipped_report, tmp_path):
+    cfg, report = shipped_report
+    t0 = dt.datetime(2026, 9, 14, 0, 0, tzinfo=dt.UTC)
+    payloads = build_notifications(report, cfg, now=t0)
+    ledger = pl.load_ledger(tmp_path / "l.json")
+    for p in payloads:
+        pl.record_attempt(ledger, p, 202, True, now=t0 + dt.timedelta(hours=1))
+    key = payloads[0]["dedupe_key"]
+    assert pl.overdue(ledger, now=t0 + dt.timedelta(hours=71)) == []
+    late = pl.overdue(ledger, now=t0 + dt.timedelta(hours=73))
+    assert {s for _, s, _ in late} == {"notification"} and len(late) == 3
+    pl.record_stage(ledger, key, "notification", "PSIRT-123", now=t0 + dt.timedelta(hours=10))
+    late = pl.overdue(ledger, now=t0 + dt.timedelta(days=15))
+    assert (key, "notification", payloads[0]["deadlines"]["notification_by"]) not in late
+    assert any(k == key and s == "final_report" for k, s, _ in late)
+    pl.close_item(ledger, key, "PSIRT: not exploited", now=t0 + dt.timedelta(days=2))
+    assert all(k != key for k, _, _ in pl.overdue(ledger, now=t0 + dt.timedelta(days=15)))
+    rows = {r["key"]: r for r in pl.status_rows(ledger, now=t0 + dt.timedelta(days=15))}
+    assert rows[key]["state"].startswith("closed") and rows[payloads[1]["dedupe_key"]]["overdue"] == ["final_report", "notification"]
+    with pytest.raises(ValueError):
+        pl.record_stage(ledger, key, "early_warning", "x")
+    with pytest.raises(ValueError):
+        pl.close_item(ledger, key, "   ")
+    with pytest.raises(KeyError):
+        pl.record_stage(ledger, "nope", "notification", "x")
+    # an undelivered early warning is overdue after 24 h even though it was never sent
+    fresh = pl.load_ledger(tmp_path / "f.json")
+    pl.record_attempt(fresh, payloads[0], 500, False, now=t0)
+    assert [(s) for _, s, _ in pl.overdue(fresh, now=t0 + dt.timedelta(hours=25))] == ["early_warning"]
+
+
+def test_handshake_records_outcome_and_governance_g12_needs_it(shipped_report, monkeypatch, tmp_path):
+    cfg, _ = shipped_report
+    monkeypatch.delenv("PSIRT_WEBHOOK_TOKEN", raising=False)
+    with pytest.raises(RuntimeError, match="PSIRT_WEBHOOK_TOKEN"):
+        pl.run_handshake(cfg)
+    monkeypatch.setenv("PSIRT_WEBHOOK_TOKEN", "s3cret")
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen.append((request.headers.get("Authorization"), body["stage"], request.headers.get("Idempotency-Key")))
+        return httpx.Response(200 if "ok" in str(request.url) else 401, text="nope" if "ok" not in str(request.url) else "")
+
+    t0 = dt.datetime(2026, 9, 14, 0, 0, tzinfo=dt.UTC)
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        good = pl.run_handshake(_mock_cfg(webhook_url="https://psirt.example.internal/ok"), client=client, now=t0)
+        bad = pl.run_handshake(_mock_cfg(webhook_url="https://psirt.example.internal/deny"), client=client, now=t0)
+    assert good["ok"] and good["status_code"] == 200 and not bad["ok"] and bad["response"] == "nope"
+    assert seen[0] == ("Bearer s3cret", "handshake", good["dedupe_key"] if "dedupe_key" in good else seen[0][2]) and seen[0][1] == "handshake"
+    hs = tmp_path / "handshake.json"
+    pl.write_handshake(good, hs)
+    ok, msg = pl.handshake_status(hs, 90, now=t0 + dt.timedelta(days=10))
+    assert ok and "10 days ago" in msg
+    assert not pl.handshake_status(hs, 90, now=t0 + dt.timedelta(days=91))[0]
+    pl.write_handshake(bad, hs)
+    assert "FAILED" in pl.handshake_status(hs, 90, now=t0)[1]
+    assert not pl.handshake_status(tmp_path / "missing.json", 90)[0]
+    with pytest.raises(RuntimeError, match="https"):
+        pl.run_handshake(_mock_cfg(enabled=False, webhook_url="http://insecure"))
+    # governance: config complete but no handshake -> FAIL naming it; fresh handshake -> PASS; overdue ledger -> FAIL
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from governance_check import FAIL, PASS, check_g12
+
+    root = tmp_path / "repo"
+    (root / "ops" / "psirt").mkdir(parents=True)
+    cfg_path = root / "mara.yaml"
+    cfg_path.write_text("models: []\npsirt:\n  enabled: true\n  webhook_url: https://psirt.example.internal/hook\n  product: IPC-7000\n")
+    r = check_g12(root, cfg_path)
+    assert r.status == FAIL and "握手" in r.evidence
+    pl.write_handshake({**good, "sent_at": pl.iso(pl.now_utc())}, root / "ops" / "psirt" / "handshake.json")
+    r = check_g12(root, cfg_path)
+    assert r.status == PASS and "handshake" in r.evidence and "0 筆進行中" in r.evidence
+    ledger = pl.load_ledger(root / "ops" / "psirt" / "ledger.json")
+    pl.record_attempt(ledger, build_notifications(shipped_report[1], cfg, now=dt.datetime(2020, 1, 1, tzinfo=dt.UTC))[0], 202, True)
+    pl.save_ledger(ledger, root / "ops" / "psirt" / "ledger.json")
+    r = check_g12(root, cfg_path)
+    assert r.status == FAIL and "逾期" in r.evidence and "notification" in r.evidence
+
+
+def test_psirt_ops_cli_dry_run_status_record_and_close(tmp_path, monkeypatch):
+    import subprocess
+
+    import yaml
+
+    raw = yaml.safe_load((ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8"))
+    raw["psirt"] = {**PSIRT, "ledger_file": str(tmp_path / "ledger.json"), "handshake_file": str(tmp_path / "hs.json")}
+    cfg_path = tmp_path / "cfg.yaml"
+    cfg_path.write_text(yaml.safe_dump(raw))
+    script = ROOT / "scripts" / "psirt_ops.py"
+
+    def run(*args):
+        return subprocess.run([sys.executable, str(script), "--config", str(cfg_path), *args], capture_output=True, text=True, cwd=ROOT)
+
+    r = run("handshake", "--dry-run")
+    assert r.returncode == 0 and '"stage": "handshake"' in r.stdout and "nothing sent" in r.stderr and not (tmp_path / "hs.json").exists()
+    r = run("status")
+    assert r.returncode == 0 and "no items" in r.stdout
+    cfg = _mock_cfg()
+    t0 = dt.datetime(2026, 9, 14, 0, 0, tzinfo=dt.UTC)
+    pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    ledger = pl.load_ledger(tmp_path / "ledger.json")
+    payloads = build_notifications(report, cfg, now=t0)
+    for p in payloads:
+        pl.record_attempt(ledger, p, 202, True, now=t0)
+    pl.save_ledger(ledger, tmp_path / "ledger.json")
+    key = payloads[0]["dedupe_key"]
+    r = run("status", "--now", "2026-09-14T12:00:00Z")
+    assert r.returncode == 0 and "awaiting 72 h notification" in r.stdout and "none overdue" in r.stdout
+    r = run("status", "--now", "2026-09-18T00:00:00Z")
+    assert r.returncode == 1 and "OVERDUE" in r.stdout
+    r = run("record", "--key", key, "--stage", "notification", "--reference", "PSIRT-42")
+    assert r.returncode == 0 and "PSIRT-42" in r.stdout
+    r = run("close", "--key", key, "--reason", "PSIRT: false positive after triage")
+    assert r.returncode == 0 and "closed" in r.stdout
+    r = run("record", "--key", "nope", "--stage", "final_report", "--reference", "x")
+    assert r.returncode == 2 and "no ledger item" in r.stderr
+    assert pl.load_ledger(tmp_path / "ledger.json")["items"][key]["closed"]["reason"].startswith("PSIRT: false positive")

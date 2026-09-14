@@ -27,6 +27,7 @@ def review(
     mock_fixtures: Path | None = typer.Option(None, "--mock-fixtures"),
     fail_on_gate: bool = typer.Option(False, "--fail-on-gate", help="Exit 2 when the gate blocks (implied by rollout.phase: blocking)"),
     notify_psirt: bool = typer.Option(False, "--notify-psirt", help="POST the CRA Article 14 payloads to the configured PSIRT webhook"),
+    psirt_resend: bool = typer.Option(False, "--psirt-resend", help="With --notify-psirt: send even findings the ledger says were already delivered"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
     cfg_path = config
@@ -51,8 +52,11 @@ def review(
 
         write_psirt(report.psirt, out / "psirt-notifications.json")
         if notify_psirt and report.psirt:
-            for s in send_psirt(report.psirt, cfg):
-                console.print(f"PSIRT {s['finding_id']}: HTTP {s['status_code']} {'ok' if s['ok'] else 'FAILED'}")
+            for s in send_psirt(report.psirt, cfg, ledger_path=Path(cfg.psirt.ledger_file), resend=psirt_resend):
+                if s.get("skipped"):
+                    console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: skipped, {s['reason']} (ledger {cfg.psirt.ledger_file})")
+                else:
+                    console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: HTTP {s['status_code']} {'ok' if s['ok'] else 'FAILED'}")
 
     t = Table(title=f"MARA · {target} · overall {report.overall_score}/100 · gate {'PASSED' if report.gate_passed else 'BLOCKED'}")
     for col in ("Dimension", "Score", "Accepted", "Rejected", "Human", "Tool"):

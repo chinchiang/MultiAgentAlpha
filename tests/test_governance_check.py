@@ -75,9 +75,17 @@ def test_g6_fails_on_the_seeded_fixture_workflow(tmp_path):
         assert needle in r.evidence
 
 
-def test_g12_needs_an_enabled_narrow_psirt_block(tmp_path):
+def test_g12_needs_an_enabled_narrow_psirt_block_and_a_fresh_handshake(tmp_path):
+    import json
+
     cfg = tmp_path / "mara.yaml"
     cfg.write_text("models: []\npsirt:\n  enabled: true\n  webhook_url: https://psirt.example.internal/hook\n  product: IPC-7000\n")
+    r = check_g12(tmp_path, cfg)
+    assert r.status == FAIL and "握手" in r.evidence, "enabled: true alone proves nothing about the endpoint"
+    hs = tmp_path / "ops" / "psirt" / "handshake.json"
+    hs.parent.mkdir(parents=True)
+    hs.write_text(json.dumps({"sent_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"), "webhook_url": "https://psirt.example.internal/hook",
+                              "status_code": 202, "ok": True}))
     assert check_g12(tmp_path, cfg).status == PASS
     cfg.write_text("models: []\npsirt:\n  enabled: false\n  webhook_url: https://psirt.example.internal/hook\n")
     assert check_g12(tmp_path, cfg).status == FAIL
