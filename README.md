@@ -219,8 +219,9 @@ complete example.
 The weights served by the on-prem DeepSeek and Nemotron endpoints are inference dependencies, so
 they are listed in a CycloneDX 1.6 ML-BOM. `sbom/models.yaml` is the manifest the platform team
 fills (official source, licence, per-file SHA-256 of the safetensors weights, signature method);
-`scripts/ml_bom.py` hashes a weights directory (pickle checkpoints are refused), builds
-`sbom/ml-bom.cdx.json`, validates it against the vendored schema, re-verifies a directory on the
+`scripts/ml_bom.py` hashes a weights directory (pickle checkpoints are refused) or, with
+`registry-hashes`, takes the same per-file SHA-256 straight from the official Hugging Face
+repository at a pinned commit without downloading the weights, builds `sbom/ml-bom.cdx.json`, validates it against the vendored schema, re-verifies a directory on the
 inference host and checks the cosign bundle with the locked cosign. Policy P7 refuses the config
 once `ml_bom.required` is true and a self-hosted model has no complete component; until then
 `mara check-config` and the review report show each model's BOM status. Both production entries

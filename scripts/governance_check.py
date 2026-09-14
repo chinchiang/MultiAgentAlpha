@@ -303,7 +303,7 @@ def check_g7(root: Path, config_path: Path) -> CheckResult:
             continue
     if not self_hosted:
         return CheckResult("G-7", PASS, "設定中沒有自架模型，ML-BOM 無需列出權重")
-    need = ("需要：平台團隊只從官方來源下載權重，在下載主機執行 `scripts/ml_bom.py hash-dir … --write-manifest sbom/models.yaml`（或貼上 registry 的 sha256），"
+    need = ("需要：平台團隊只從官方來源下載權重，在能連 huggingface.co 的主機執行 `scripts/ml_bom.py registry-hashes --model-id … --write-manifest sbom/models.yaml`（LFS object id 即 SHA-256，不必下載權重；或在下載主機執行 `hash-dir`），"
             "`ml_bom.py build` 產生 BOM，以 `cosign sign-blob --bundle` 簽章後提交，並把 `ml_bom.required` 設為 true 讓政策 P7 強制")
     if not boms:
         return CheckResult("G-7", FAIL, f"找不到 CycloneDX ML-BOM（`sbom/*.cdx.json`、`bom.json`）。自架模型 {[m for _, m in self_hosted]} 的權重未列冊。{need}")

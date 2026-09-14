@@ -1,6 +1,8 @@
 """G-7: the self-hosted weights are listed in a CycloneDX 1.6 ML-BOM (safetensors-only hashes,
 licence, source, signature); policy P7 enforces it once required; governance G-7 reads the same BOM."""
 
+import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -233,3 +235,92 @@ def test_pipeline_records_ml_bom_status_in_the_report(tmp_path):
     live = load_config(ROOT / "config" / "mara.yaml")
     st = mlbom.status_for_config(live, ROOT)
     assert {s.status for s in st.values()} == {"pending"} and set(st) == {"deepseek-reviewer", "nemotron-reviewer"}
+
+
+# ---------------------------------------------------------------- registry hashes (Hugging Face, no download)
+
+SHA_A, SHA_B = "a" * 64, "b" * 64
+COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+
+def _fake_hf(tree_pages: list[list[dict]], blobs: dict[str, bytes], calls: list[str]):
+    """A fetch() standing in for huggingface.co: revision lookup, a paginated tree, and small blobs."""
+    def fetch(url: str) -> tuple[bytes, dict]:
+        calls.append(url)
+        if "/api/models/org/model/revision/" in url:
+            return json.dumps({"sha": COMMIT, "siblings": []}).encode(), {}
+        if "/api/models/org/model/tree/" in url:
+            page = int(url.rsplit("page=", 1)[1]) if "page=" in url else 0
+            headers = {"link": f'<https://huggingface.co/api/models/org/model/tree/{COMMIT}?recursive=true&page={page + 1}>; rel="next"'} \
+                if page + 1 < len(tree_pages) else {}
+            return json.dumps(tree_pages[page]).encode(), headers
+        if f"/org/model/resolve/{COMMIT}/" in url:
+            return blobs[url.rsplit("/", 1)[1]], {}
+        raise AssertionError(f"unexpected url {url}")
+    return fetch
+
+
+def test_registry_files_uses_lfs_oids_hashes_small_git_files_and_pins_the_commit():
+    pages = [[{"type": "file", "path": "model-00001-of-00002.safetensors", "size": 5, "lfs": {"oid": SHA_A, "size": 5000}},
+              {"type": "directory", "path": "figures"}],
+             [{"type": "file", "path": "model-00002-of-00002.safetensors", "size": 5, "lfs": {"oid": SHA_B, "size": 6000}},
+              {"type": "file", "path": "config.json", "size": 12, "oid": "1234567890abcdef1234"}]]
+    calls: list[str] = []
+    commit, files = mlbom.registry_files("org/model", "main", fetch=_fake_hf(pages, {"config.json": b'{"a": 1}\n'}, calls))
+    assert commit == COMMIT
+    assert [(f.path, f.sha256, f.size) for f in files] == [
+        ("config.json", hashlib.sha256(b'{"a": 1}\n').hexdigest(), 9),
+        ("model-00001-of-00002.safetensors", SHA_A, 5000),
+        ("model-00002-of-00002.safetensors", SHA_B, 6000)]
+    assert sum("/tree/" in c for c in calls) == 2 and sum("/resolve/" in c for c in calls) == 1, "weights are never fetched, only listed"
+    assert f"/tree/{COMMIT}?" in calls[1], "the tree is read at the resolved commit, not at the moving branch"
+
+
+def test_registry_files_refuses_pickle_trees_bad_oids_and_oversized_git_files():
+    calls: list[str] = []
+    pages = [[{"type": "file", "path": "pytorch_model.bin", "size": 1, "lfs": {"oid": SHA_A, "size": 1}},
+              {"type": "file", "path": "model.safetensors", "size": 1, "lfs": {"oid": SHA_B, "size": 1}}]]
+    with pytest.raises(mlbom.PickleWeightsError, match="pytorch_model.bin"):
+        mlbom.registry_files("org/model", "main", fetch=_fake_hf(pages, {}, calls))
+    pages = [[{"type": "file", "path": "model.safetensors", "size": 1, "lfs": {"oid": "notahash", "size": 1}}]]
+    with pytest.raises(ValueError, match="not a SHA-256"):
+        mlbom.registry_files("org/model", "main", fetch=_fake_hf(pages, {}, calls))
+    pages = [[{"type": "file", "path": "model.safetensors", "size": 1, "lfs": {"oid": SHA_A, "size": 1}},
+              {"type": "file", "path": "huge.json", "size": mlbom.NON_LFS_MAX_BYTES + 1}]]
+    with pytest.raises(ValueError, match="exceeds the"):
+        mlbom.registry_files("org/model", "main", fetch=_fake_hf(pages, {}, calls))
+    pages = [[{"type": "file", "path": "README.md", "size": 3}]]
+    with pytest.raises(ValueError, match="no .safetensors"):
+        mlbom.registry_files("org/model", "main", fetch=_fake_hf(pages, {"README.md": b"hi\n"}, calls))
+    for bad in ("https://hf-mirror.com/org/model", "http://huggingface.co/org/model", "https://huggingface.co/org"):
+        with pytest.raises(ValueError):
+            mlbom.hf_repo_from_url(bad)
+    assert mlbom.hf_repo_from_url("https://huggingface.co/deepseek-ai/DeepSeek-V3.2/tree/main") == "deepseek-ai/DeepSeek-V3.2"
+
+
+def test_registry_hashes_cli_writes_files_and_revision_and_refuses_non_hf_sources(tmp_path, monkeypatch, capsys):
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import ml_bom as cli
+
+    manifest = tmp_path / "models.yaml"
+    manifest.write_text(yaml.safe_dump({"models": [
+        {"model_id": "m-hf", "family": "deepseek", "name": "M", "version": "1", "source": {"kind": "huggingface", "url": "https://huggingface.co/org/model", "revision": ""},
+         "license": {"id": "MIT"}, "format": "safetensors", "serving": "vllm", "signature": {"method": "cosign-keyless"}, "files": []},
+        {"model_id": "m-ngc", "family": "nemotron", "name": "N", "version": "3", "source": {"kind": "ngc", "url": "https://huggingface.co/nvidia"},
+         "license": {"name": "x"}, "format": "safetensors", "serving": "nim", "signature": {"method": "ngc"}, "files": []}]}, sort_keys=False))
+    pages = [[{"type": "file", "path": "model.safetensors", "size": 1, "lfs": {"oid": SHA_A, "size": 4096}},
+              {"type": "file", "path": "config.json", "size": 2}]]
+    monkeypatch.setattr(mlbom, "_http_fetch", _fake_hf(pages, {"config.json": b"{}"}, []))
+    ns = argparse.Namespace(model_id="m-hf", revision=None, manifest=manifest, write_manifest=manifest)
+    assert cli.cmd_registry_hashes(ns) == 0
+    out = capsys.readouterr()
+    assert f"{SHA_A}  model.safetensors" in out.out and f"commit {COMMIT}" in out.err
+    entries = {e.model_id: e for e in mlbom.load_manifest(manifest)}
+    assert entries["m-hf"].source["revision"] == COMMIT and [f.sha256 for f in entries["m-hf"].files] == [hashlib.sha256(b"{}").hexdigest(), SHA_A]
+    assert not entries["m-hf"].pending and entries["m-ngc"].pending, "only the requested entry changes"
+    # the now-complete entry builds into a complete, schema-valid component
+    bom = mlbom.build_bom([entries["m-hf"]])
+    (c,) = mlbom.ml_components(bom).values()
+    assert mlbom.component_problems(c) == [] and mlbom.validate_schema(bom) == []
+    assert cli.cmd_registry_hashes(argparse.Namespace(model_id="m-ngc", revision=None, manifest=manifest, write_manifest=None)) == 2
+    assert "not huggingface" in capsys.readouterr().err
