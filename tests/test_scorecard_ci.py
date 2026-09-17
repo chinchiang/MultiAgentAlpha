@@ -64,9 +64,23 @@ def _run(tools: Path, *args: str, token: str | None = "t") -> subprocess.Complet
     return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, cwd=ROOT)
 
 
-def test_repository_policy_file_is_valid_and_enforces_the_three_self_evident_checks():
+def test_repository_policy_file_is_valid_and_enforces_the_repository_floor():
     pol = sc.load_policy(ROOT / "tools" / "scorecard-policy.yaml")
-    assert pol == {"Dangerous-Workflow": 10, "Token-Permissions": 10, "Binary-Artifacts": 10}
+    assert pol == {"Dangerous-Workflow": 10, "Token-Permissions": 10, "Binary-Artifacts": 10, "Pinned-Dependencies": 8}
+
+
+def test_dockerfiles_live_only_in_seeded_material():
+    """Scorecard's Pinned-Dependencies matches `*Dockerfile*` anywhere in the repository. The two seeded
+    Dockerfiles (unpinned image, curl | sh, pip without hashes) are what caps the score at 8, the floor
+    tools/scorecard-policy.yaml enforces; a real Dockerfile added elsewhere would have to pin its image by
+    digest and install with hashes, or the floor drops. Catch that on the pull request, not on main."""
+    seeded = ("fixtures/", "calib/samples/")
+    found = sorted(p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*Dockerfile*")
+                   if not p.relative_to(ROOT).parts[0].startswith(".") and p.is_file())
+    assert found, "the seeded Dockerfiles are expected (fixtures/vuln-sample, calib/samples/s1-fastapi-inventory)"
+    strays = [f for f in found if not f.startswith(seeded)]
+    assert not strays, ("Dockerfile outside the seeded directories; pin FROM by digest and install with --require-hashes "
+                        "or Scorecard Pinned-Dependencies drops below the enforced 8: " + ", ".join(strays))
 
 
 def test_policy_rejects_unknown_checks_and_bad_minimums(tmp_path):
