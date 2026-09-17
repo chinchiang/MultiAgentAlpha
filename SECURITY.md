@@ -36,9 +36,9 @@ file and line, the version or commit you tested, and a reproduction (a command, 
 minimal input). If the problem involves a model provider or a self-hosted endpoint, say which
 provider class (`anthropic`, `openai_compatible`, `mock`) and never include a real API key.
 
-Note for the maintainer: private vulnerability reporting must be switched on once in
-*Settings → Code security → Private vulnerability reporting*; until then the link above returns
-404 and this policy is a draft.
+Private vulnerability reporting was switched on for this repository on 2026-09-17
+(*Settings → Code security → Private vulnerability reporting*), so the link above opens the
+private advisory form directly.
 
 ## What happens next
 
@@ -68,5 +68,5 @@ tools miss is what this file is for.
 本檔案處理的是**本 repo 自身程式碼**的漏洞回報：請使用上方的 GitHub private vulnerability
 reporting 連結，不要開公開 issue。`fixtures/vuln-sample/` 與 `calib/samples/` 是刻意種下漏洞的審查材料，
 不受理。管線把 A 級 Critical finding 交給產品 PSIRT 的流程在 `docs/psirt-integration.md`，與本檔案無關。
-回報後的處理節奏比照該文件的三個階段（預警、通報、報告），時限是內部目標而非承諾。維護者需先在
-Settings → Code security 開啟 private vulnerability reporting，連結才會生效。
+回報後的處理節奏比照該文件的三個階段（預警、通報、報告），時限是內部目標而非承諾。本 repo 已於
+2026-09-17 開啟 private vulnerability reporting，上方連結直接開啟私密回報表單。
