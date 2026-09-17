@@ -27,7 +27,7 @@ from pathlib import Path
 
 import yaml
 
-SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "out", "calib-out", "__pycache__"}
+SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "out", "calib-out", "__pycache__", ".mara-tools"}   # .mara-tools: the semgrep-rules checkout carries its own workflows
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_RE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)\s*(#.*)?$")
 EXPR_RE = re.compile(r"\$\{\{\s*([^}]*?)\s*\}\}")

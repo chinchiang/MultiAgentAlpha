@@ -13,12 +13,22 @@ enforce:
   Token-Permissions: 10       # top-level permissions: {} and read-only per job (except issues/security-events where documented)
   Binary-Artifacts: 10        # no checked-in binaries (tools are installed from tools/versions.lock at run time)
 
-# Known below-10 checks and why they are not enforced yet:
+# Known below-10 checks and why they are not enforced yet (scores from the first run on main, 2026-09-14):
+#   Vulnerabilities (0)         Scorecard runs osv-scanner over the whole repository and cannot exclude
+#                               directories; all 11 advisories it found are the deliberately old packages in
+#                               fixtures/vuln-sample and calib/samples (seeded review material). The closures
+#                               this repository really installs are checked by the L0 osv-scanner and trivy
+#                               steps, which are clean, so this check stays informational for as long as the
+#                               seeded material exists
 #   License, Security-Policy    the repository has no LICENSE or SECURITY.md; both are decisions for the
-#                               owner (which licence, which disclosure channel), not something CI should invent
+#   (0, 0)                      owner (which licence, which disclosure channel), not something CI should invent
+#   Code-Review (0)             every pull request was merged by its author without another approver
+#   Pinned-Dependencies (7)     the tests job runs `pip install -e .` from pyproject without hashes (known gap)
 #   Dependency-Update-Tool      .github/dependabot.yml covers the github-actions ecosystem only; the Python
-#                               closures under tools/ are relocked by hand (docs/tools-provenance.md section 4)
-#   Pinned-Dependencies         the tests job runs `pip install -e .` from pyproject without hashes (known gap)
+#                               closures under tools/ are relocked by hand (docs/tools-provenance.md section 4).
+#                               Expected to pass once the full check set runs; tighten here when it does
 #   SAST                        Scorecard looks for CodeQL/Sonar-style workflows; the L0 job runs semgrep
 #                               through scripts/semgrep_ci.py, which Scorecard's heuristics do not recognise
-#   Branch-Protection           needs an admin token; the workflow token reports it as -1
+#   Branch-Protection           needs an admin token to see everything; with the workflow token it may be -1 or
+#                               low. It was not run at all on 2026-09-14 because the workflow named a commit
+#                               (--commit <sha> restricts scorecard to commit-capable checks); fixed on 2026-09-17

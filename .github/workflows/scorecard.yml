@@ -39,11 +39,13 @@ jobs:
           python3 scripts/install_tools.py --only slsa-verifier scorecard
           cat .mara-tools/manifest.json
       - name: Scorecard against this repository; an enforced check below tools/scorecard-policy.yaml fails the job
+        # No --commit: scorecard analyses HEAD of the default branch, which on a push run is this commit.
+        # Naming a SHA makes scorecard skip every check without commit-level support (Branch-Protection,
+        # Maintained, SAST, Dependency-Update-Tool, Signed-Releases, ...): the first run on main only got 9.
         env:
           GITHUB_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # read-only is enough for a public repository
           REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-        run: python3 scripts/scorecard_ci.py --repo "github.com/$REPO" --commit "$SHA" --json scorecard.json --sarif scorecard.sarif --policy tools/scorecard-policy.yaml
+        run: python3 scripts/scorecard_ci.py --repo "github.com/$REPO" --json scorecard.json --sarif scorecard.sarif --policy tools/scorecard-policy.yaml
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
