@@ -105,11 +105,16 @@ def test_cli_runs_the_locked_binary_and_gates_on_policy(tmp_path):
     tools = tmp_path / "tools"
     _fake_scorecard(tools, sc.locked_version(), DOC)
     pol = _policy(tmp_path, "enforce: {Token-Permissions: 10, Dangerous-Workflow: 10}\n")
-    r = _run(tools, "--repo", "github.com/o/r", "--commit", "abc", "--json", str(tmp_path / "s.json"), "--sarif", str(tmp_path / "s.sarif"), "--policy", str(pol))
+    r = _run(tools, "--repo", "github.com/o/r", "--json", str(tmp_path / "s.json"), "--sarif", str(tmp_path / "s.sarif"), "--policy", str(pol))
     assert r.returncode == 0, r.stdout + r.stderr
     argv = (tools / "argv.txt").read_text().split()
-    assert argv[:4] == ["--repo=github.com/o/r", "--commit=abc", "--format=json", "--show-details"] and argv[4].startswith("--output=")
-    assert "policy met" in r.stdout and "SARIF: 3 result(s)" in r.stdout
+    assert argv[:3] == ["--repo=github.com/o/r", "--format=json", "--show-details"] and argv[3].startswith("--output=")
+    assert not any(x.startswith("--commit") for x in argv), "HEAD is scorecard's default and the only way to get every check"
+    assert "policy met" in r.stdout and "SARIF: 3 result(s)" in r.stdout and "6 check(s) reported" in r.stdout
+    assert "not run by scorecard: Branch-Protection" not in r.stdout and "not run by scorecard: CI-Tests" in r.stdout
+    # an explicit commit is passed through, and the script says what that costs
+    r = _run(tools, "--repo", "github.com/o/r", "--commit", "abc", "--json", str(tmp_path / "s.json"), "--sarif", str(tmp_path / "s.sarif"), "--policy", str(pol))
+    assert r.returncode == 0 and "--commit=abc" in (tools / "argv.txt").read_text().split()
     assert json.loads((tmp_path / "s.sarif").read_text())["runs"][0]["automationDetails"]["id"] == "scorecard/"
     # the same output fails once the policy asks for something the repository does not reach
     pol = _policy(tmp_path, "enforce: {License: 10}\n")

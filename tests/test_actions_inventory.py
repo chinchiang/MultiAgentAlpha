@@ -49,6 +49,16 @@ def test_hardened_workflow_has_no_critical_or_high():
     assert SEVERITY_ORDER.index(inv.severity) >= SEVERITY_ORDER.index("Medium")
 
 
+def test_find_workflows_skips_the_tool_checkouts_under_mara_tools(tmp_path):
+    real = tmp_path / ".github" / "workflows"
+    real.mkdir(parents=True)
+    (real / "b.yml").write_text("on: push\njobs: {}\n", encoding="utf-8")
+    vendored = tmp_path / ".mara-tools" / "semgrep-rules" / ".github" / "workflows"
+    vendored.mkdir(parents=True)
+    (vendored / "a.yml").write_text("on: push\njobs: {}\n", encoding="utf-8")
+    assert [p.relative_to(tmp_path).as_posix() for p in find_workflows(tmp_path)] == [".github/workflows/b.yml"]
+
+
 def test_invalid_yaml_is_flagged_but_still_inventoried(tmp_path):
     wf = tmp_path / ".github" / "workflows" / "bad.yml"
     wf.parent.mkdir(parents=True)

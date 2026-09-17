@@ -203,7 +203,11 @@ docker image is referenced by a mutable tag and whose publishing needs `id-token
 `scripts/scorecard_ci.py` converts the JSON to SARIF (category `scorecard`) and fails the job when
 a check enforced in `tools/scorecard-policy.yaml` scores below its minimum; only
 Dangerous-Workflow, Token-Permissions and Binary-Artifacts are enforced so far, the rest is
-reported. `.github/dependabot.yml` keeps the SHA-pinned actions updated weekly; the Python closures
+reported (Vulnerabilities scores 0 on purpose: Scorecard scans the whole repository and finds the
+deliberately old packages seeded under `fixtures/` and `calib/samples/`; the closures this
+repository installs are checked clean by the L0 osv-scanner and trivy steps). Do not pass
+`--commit` to scorecard: naming a commit restricts it to commit-capable checks, which is why the
+first run on main reported only 9 of them. `.github/dependabot.yml` keeps the SHA-pinned actions updated weekly; the Python closures
 and tool binaries stay outside Dependabot on purpose (they are relocked by hand with hashes and
 signatures re-verified, see `docs/tools-provenance.md`).
 

@@ -1,6 +1,6 @@
 """OpenSSF Scorecard with the CLI pinned in tools/versions.lock: JSON result, SARIF for Code Scanning, policy gate.
 
-  GITHUB_AUTH_TOKEN=... python3 scripts/scorecard_ci.py --repo github.com/<owner>/<repo> --commit <sha> \\
+  GITHUB_AUTH_TOKEN=... python3 scripts/scorecard_ci.py --repo github.com/<owner>/<repo> [--commit <sha>] \\
       --json scorecard.json --sarif scorecard.sarif --policy tools/scorecard-policy.yaml
 
 The binary comes only from MARA_TOOLS_DIR/bin (scripts/install_tools.py: SHA-256 and SLSA provenance
@@ -9,8 +9,11 @@ output (its --format is default/json/probe/intoto), so this script converts the 
 check, no result for a check that scored 10, `note` for a check Scorecard could not evaluate (-1),
 `warning` below 10, `error` when the policy enforces a minimum the score misses. A result's location is
 the first `path:line` a check's details name, else README.md:1 (Code Scanning needs a file). The token
-is read only from GITHUB_AUTH_TOKEN (the workflow token is enough for a public repository; checks that
-need admin scope such as Branch-Protection come back as -1 and are reported as such, never guessed).
+is read only from GITHUB_AUTH_TOKEN (the workflow token is enough for a public repository; a check that
+needs more, such as Branch-Protection, may come back -1 or low and is reported as such, never guessed).
+Leave --commit at its default HEAD: naming a commit makes scorecard run only the checks that support
+commit-level analysis and silently skip the rest (Branch-Protection, Maintained, SAST, ...); every check
+scorecard did not report is printed as "not run by scorecard".
 Exit 0 policy met, 2 an enforced check scored below its minimum or could not be evaluated, 1 scorecard
 crashed or wrote no JSON.
 """
@@ -141,7 +144,7 @@ def to_sarif(doc: dict, rows: list[dict], root: Path | None) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repo", required=True, help="github.com/<owner>/<repo>")
-    ap.add_argument("--commit", default="HEAD")
+    ap.add_argument("--commit", default="HEAD", help="commit to analyse; anything but HEAD restricts scorecard to commit-capable checks")
     ap.add_argument("--json", type=Path, default=Path("scorecard.json"))
     ap.add_argument("--sarif", type=Path, default=Path("scorecard.sarif"))
     ap.add_argument("--policy", type=Path, default=ROOT / "tools" / "scorecard-policy.yaml")
@@ -170,7 +173,9 @@ def main() -> int:
         return 2
     print(f"scorecard {have} from {exe} (lock {want}); policy enforces {policy or 'nothing'}")
 
-    argv = [str(exe), f"--repo={a.repo}", f"--commit={a.commit}", "--format=json", "--show-details", f"--output={a.json}"]
+    argv = [str(exe), f"--repo={a.repo}", "--format=json", "--show-details", f"--output={a.json}"]
+    if a.commit.upper() != "HEAD":
+        argv.insert(2, f"--commit={a.commit}")
     if a.checks:
         argv.append(f"--checks={a.checks}")
     print("+ " + " ".join(argv))
@@ -193,10 +198,14 @@ def main() -> int:
     a.sarif.parent.mkdir(parents=True, exist_ok=True)
     a.sarif.write_text(json.dumps(sarif, indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
-    print(f"aggregate score {doc.get('score')} for {(doc.get('repo') or {}).get('name')} @ {(doc.get('repo') or {}).get('commit')}")
+    print(f"aggregate score {doc.get('score')} for {(doc.get('repo') or {}).get('name')} @ {(doc.get('repo') or {}).get('commit')} "
+          f"(scorecard {(doc.get('scorecard') or {}).get('version')}, {len(rows)} check(s) reported)")
     for row in rows:
         mn = "" if row["minimum"] is None else f" (policy >= {row['minimum']})"
         print(f"  {row['name']:<24} {row['score']:>3}{mn:<16} {row['status']}  {row['reason'][:80]}")
+    missing = sorted(KNOWN_CHECKS - {row["name"] for row in rows})
+    if missing:
+        print(f"not run by scorecard: {', '.join(missing)} (a --commit other than HEAD skips checks without commit-level support)")
     print(f"SARIF: {len(sarif['runs'][0]['results'])} result(s) in {a.sarif} (category scorecard)")
     if failures:
         print(f"POLICY: {len(failures)} enforced check(s) not met:")
