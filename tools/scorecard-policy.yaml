@@ -20,8 +20,10 @@ enforce:
 #                               this repository really installs are checked by the L0 osv-scanner and trivy
 #                               steps, which are clean, so this check stays informational for as long as the
 #                               seeded material exists
-#   License, Security-Policy    the repository has no LICENSE or SECURITY.md; both are decisions for the
-#   (0, 0)                      owner (which licence, which disclosure channel), not something CI should invent
+#   License (0)                 the repository has no LICENSE; which licence is the owner's decision
+#   Security-Policy (0)         SECURITY.md exists since 2026-09-17 (private vulnerability reporting, scope,
+#                               what happens next); the reporting link works only after the owner switches
+#                               private vulnerability reporting on in Settings. Enforce once the score confirms it
 #   Code-Review (0)             every pull request was merged by its author without another approver
 #   Pinned-Dependencies (7)     the tests job runs `pip install -e .` from pyproject without hashes (known gap)
 #   Dependency-Update-Tool      .github/dependabot.yml covers the github-actions ecosystem only; the Python
