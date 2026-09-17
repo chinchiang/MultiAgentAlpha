@@ -12,23 +12,27 @@ labelled `live` (the scripts refuse), so the governance checks cannot be satisfi
   the ZDR-covered Anthropic key. Keys only in environment variables (`DEEPSEEK_LOCAL_KEY`,
   `NIM_LOCAL_KEY`, `ANTHROPIC_API_KEY`); no script prints or stores them.
 - `mara check-config config/mara.yaml` passes (P1–P7).
-- Python 3.11, this package installed (`pip install -e ".[dev]"`).
+- Python 3.11 on Linux x86_64, this package installed from the hash-pinned closure
+  (`pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt && pip install --no-deps -e .`).
 
 ## 2. G-8: garak + CyberSecEval 4, every quarter, every family
 
 Install the tools once:
 
 ```
-python3 -m pip install -r tools/model-eval-requirements.txt        # garak, version pinned to config model_eval.garak_version
+python3 -m pip install --require-hashes -r tools/model-eval-requirements.txt   # garak 0.17.0 and its whole closure, every file's SHA-256 pinned
 git clone https://github.com/meta-llama/PurpleLlama && cd PurpleLlama && git checkout <commit>   # then pip install -r CybersecurityBenchmarks/requirements.txt
 export DATASETS=<path with prompt_injection/ and mitre_frr/ from CybersecurityBenchmarks/datasets>
 export CSE_JUDGE_LLM="OPENAI::<judge model>::<key>::<base_url>"      # judge for prompt-injection scoring; an on-prem model is fine
 ```
 
 Record the PurpleLlama commit in `config/mara.yaml` `model_eval.cyberseceval_ref` (it ships as
-`@main`, to be pinned before the first live run). garak's dependency tree (torch-sized) is not
-hash-pinned in `tools/versions.lock`; the version pin plus the recorded `run.json` is the
-provenance we have, and this is listed as a gap.
+`@main`, to be pinned before the first live run). garak's dependency tree (194 distributions,
+torch and the CUDA wheels included) is hash-pinned in `tools/model-eval-requirements.txt` since
+2026-09-17, resolved on CPython 3.11 / Linux x86_64; a run host on another platform must relock
+with `scripts/relock_requirements.py` first. Two entries (langdetect, ecoji) are sdists because no
+wheel exists, so pip builds them at install time in an isolated environment whose build tools it
+fetches without hash checking; that residual gap is recorded in `docs/tools-provenance.md`.
 
 Run:
 

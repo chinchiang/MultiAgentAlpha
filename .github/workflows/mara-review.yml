@@ -101,7 +101,7 @@ jobs:
       - name: osv-scanner must report the seeded fixture's known-vulnerable dependency (requests==2.19.0)
         run: python3 scripts/osv_ci.py --target fixtures/vuln-sample --report fixture-osv.sarif --expect-package requests
       - name: osv-scanner on the hash-locked closures this repository installs; any un-ignored advisory fails the job
-        run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/semgrep-requirements.txt --lockfile tools/model-eval-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
+        run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/semgrep-requirements.txt --lockfile tools/model-eval-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
       - name: trivy offline database — fetch once, record its digests, refuse a stale or tampered copy
         run: |
           python3 scripts/trivy_db.py download
@@ -173,8 +173,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
-      - name: Install
-        run: python -m pip install --quiet -e ".[dev]"
+      - name: Install (hash-pinned closure, then the package itself without dependencies)
+        # tools/dev-requirements.txt is the resolved closure of pyproject's dependencies plus the dev
+        # extra, every wheel pinned by SHA-256 (scripts/relock_requirements.py); the editable install
+        # adds only this repository's own code. No pip install here runs without hashes.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/dev-requirements.txt
+          python3 -m pip install --quiet --disable-pip-version-check --no-deps -e .
       - name: Lint
         run: ruff check src tests scripts
       - name: Unit and end-to-end tests (mock providers, no network)
@@ -207,8 +212,8 @@ jobs:
           python-version: "3.11"
       - name: Install
         run: |
-          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
-          python3 -m pip install --quiet -e .
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/dev-requirements.txt
+          python3 -m pip install --quiet --disable-pip-version-check --no-deps -e .
       - name: Mock review of the seeded fixture (produces out/human_queue.json)
         run: mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out
       - name: Open one ticket per queued finding and sync decisions from closed tickets

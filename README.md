@@ -39,7 +39,8 @@ Found a security problem in this repository's own code? See [SECURITY.md](SECURI
 ## Quick start (offline)
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt   # the resolved, hash-pinned closure
+python -m pip install --no-deps -e .                                                          # this repository's own code only
 pytest -q
 mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out
 ```
@@ -144,6 +145,15 @@ the rules are read from `.mara-tools/semgrep-rules` at scan time and never copie
 repository (Semgrep Rules License v1.0). `--digest-git semgrep-rules <checkout>` prints the two
 values to paste into the lock when bumping the commit.
 
+The Python side is pinned the same way since 2026-09-17: `tools/dev-requirements.txt` is the
+complete closure of `pyproject.toml`'s dependencies plus the `dev` extra, every wheel with its
+SHA-256, and `tools/model-eval-requirements.txt` is the closure of `garak==0.17.0` (194
+distributions, two of them sdists because no wheel exists). Both are written by
+`scripts/relock_requirements.py` from a `pip install --dry-run --report` resolution on CPython 3.11 /
+Linux x86_64 and installed with `--require-hashes`; the workflows then add this repository's own
+code with `pip install --no-deps -e .`, so no `pip install` in CI runs unpinned. A test fails if
+one ever does.
+
 ## semgrep and osv-scanner in CI (L0 job)
 
 Since 2026-09-13 the `deterministic-tools` job runs both scanners from the lock, through two
@@ -206,7 +216,8 @@ docker image is referenced by a mutable tag and whose publishing needs `id-token
 `scripts/scorecard_ci.py` converts the JSON to SARIF (category `scorecard`) and fails the job when
 a check enforced in `tools/scorecard-policy.yaml` scores below its minimum; only
 Dangerous-Workflow, Token-Permissions and Binary-Artifacts are enforced so far, the rest is
-reported (Vulnerabilities scores 0 on purpose: Scorecard scans the whole repository and finds the
+reported (Pinned-Dependencies should reach 10 now that every pip install in the workflows uses a
+hash-pinned closure; Vulnerabilities scores 0 on purpose: Scorecard scans the whole repository and finds the
 deliberately old packages seeded under `fixtures/` and `calib/samples/`; the closures this
 repository installs are checked clean by the L0 osv-scanner and trivy steps). Do not pass
 `--commit` to scorecard: naming a commit restricts it to commit-capable checks, which is why the
