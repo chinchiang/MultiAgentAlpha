@@ -33,6 +33,9 @@ Three rules are enforced by code, not by prompt:
 - **Pinned ground truth**: standard ids (ASVS 5.0 chapters, OWASP Top 10:2025, API Top 10 2023, LLM Top 10 2025, CWE subset) are validated against `mara/groundtruth/*.json`; unknown ids are stripped.
 - **Data residency**: source code is only sent to models declared `on_prem` or `vendor_api_zdr`. The default config refuses anything else.
 
+Found a security problem in this repository's own code? See [SECURITY.md](SECURITY.md)
+(private vulnerability reporting; the seeded fixtures are out of scope by design).
+
 ## Quick start (offline)
 
 ```bash
