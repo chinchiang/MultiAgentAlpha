@@ -7,5 +7,13 @@
 #     paths: ["tools/semgrep-requirements.txt"]
 #     statement: "not reachable from semgrep's CLI use; tracked in issue #NN until the upstream fix is released"
 #     expired_at: 2026-12-31
-vulnerabilities: []
+vulnerabilities:
+  - id: CVE-2026-81726
+    paths: ["tools/model-eval-requirements.txt"]
+    statement: >-
+      nltk 3.10.3 path traversal in model-artifact loading APIs. No fixed release exists (2026-09-17:
+      3.10.3 is the newest and garak 0.17.0 requires >=3.10.3), so relocking cannot remove it. The
+      closure is installed only on the isolated G-8 evaluation host (docs/model-eval-runbook.md), never
+      in CI or the review pipeline. Re-check for a fixed nltk before the expiry.
+    expired_at: 2026-12-17
 misconfigurations: []

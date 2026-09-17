@@ -23,7 +23,9 @@ enforce:
 #   License, Security-Policy    the repository has no LICENSE or SECURITY.md; both are decisions for the
 #   (0, 0)                      owner (which licence, which disclosure channel), not something CI should invent
 #   Code-Review (0)             every pull request was merged by its author without another approver
-#   Pinned-Dependencies (7)     the tests job runs `pip install -e .` from pyproject without hashes (known gap)
+#   Pinned-Dependencies (7)     was the tests job's `pip install -e .` without hashes; since 2026-09-17 every pip
+#                               install in the workflows uses a hash-pinned closure (tools/dev-requirements.txt)
+#                               plus `--no-deps -e .`, which Scorecard counts as pinned. Enforce once the score on main confirms it
 #   Dependency-Update-Tool      .github/dependabot.yml covers the github-actions ecosystem only; the Python
 #                               closures under tools/ are relocked by hand (docs/tools-provenance.md section 4).
 #                               Expected to pass once the full check set runs; tighten here when it does
