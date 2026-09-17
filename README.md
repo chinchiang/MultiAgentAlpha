@@ -7,7 +7,8 @@ decide the outcome.
 This repository contains two things:
 
 1. **The research report** (正體中文, GSMD series): `docs/GSMD-RPT-2026-0908-01_多模型多代理資安審查.md`
-   with an online single-file HTML edition next to it. It covers the architecture, the scoring
+   with an online single-file HTML edition next to it, published at
+   <https://chinchiang.github.io/MultiAgentAlpha/> (GitHub Pages, see below). It covers the architecture, the scoring
    method, the data-credibility model, the bias catalogue and its mitigations, a comparison of
    commercial and academic alternatives, deployment for a multinational ODM/EMS (including the
    CSL/DSL/PIPL isolation rule for PRC sites), limitations, and governance recommendations mapped
@@ -15,6 +16,19 @@ This repository contains two things:
 2. **A runnable prototype** (`src/mara`) that implements the six-layer architecture the report
    describes. It runs fully offline with mock providers, and against live models (Anthropic API
    plus self-hosted DeepSeek / Nemotron behind an OpenAI-compatible endpoint) when configured.
+
+## Online report (GitHub Pages)
+
+The HTML edition of the report is served by GitHub Pages straight from the `docs/` folder of
+`main` (Settings → Pages → Deploy from a branch → `main` / `/docs`), so no workflow and no
+`pages: write` / `id-token: write` token are involved; the governance check G-6 and the Scorecard
+Token-Permissions floor stay as they are. `docs/.nojekyll` makes GitHub serve the files as they
+are (Jekyll would otherwise try to build the Markdown and mishandle the non-ASCII report file
+name), and `docs/index.html` is a self-contained redirect to the report, so the public address is
+just <https://chinchiang.github.io/MultiAgentAlpha/>. Everything under `docs/` becomes reachable
+at that address, which adds nothing to what the public repository already exposes. Until the
+owner switches Pages on in Settings, the address returns 404. `tests/test_docs_site.py` checks
+that the redirect points at a file that exists and loads nothing off-site.
 
 ## The six layers
 
