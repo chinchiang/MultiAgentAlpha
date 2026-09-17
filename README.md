@@ -215,7 +215,8 @@ scorecard CLI pinned and SLSA-verified in `tools/versions.lock` (not `ossf/score
 docker image is referenced by a mutable tag and whose publishing needs `id-token: write`).
 `scripts/scorecard_ci.py` converts the JSON to SARIF (category `scorecard`) and fails the job when
 a check enforced in `tools/scorecard-policy.yaml` scores below its minimum. Enforced: Dangerous-Workflow,
-Token-Permissions and Binary-Artifacts at 10, and Pinned-Dependencies at 8, which is its ceiling while the
+Token-Permissions, Binary-Artifacts, Security-Policy (`SECURITY.md`) and Dependency-Update-Tool
+(`.github/dependabot.yml`) at 10, and Pinned-Dependencies at 8, which is its ceiling while the
 seeded material exists: the workflows themselves are fully pinned (every action by SHA, every pip install
 by hash), but Scorecard matches `*Dockerfile*` anywhere in the repository and the two deliberately
 unpinned Dockerfiles under `fixtures/` and `calib/samples/` cost the last two points. Vulnerabilities
