@@ -214,12 +214,13 @@ The fixture scans and the mock review report are never uploaded: they describe s
 scorecard CLI pinned and SLSA-verified in `tools/versions.lock` (not `ossf/scorecard-action`, whose
 docker image is referenced by a mutable tag and whose publishing needs `id-token: write`).
 `scripts/scorecard_ci.py` converts the JSON to SARIF (category `scorecard`) and fails the job when
-a check enforced in `tools/scorecard-policy.yaml` scores below its minimum; only
-Dangerous-Workflow, Token-Permissions and Binary-Artifacts are enforced so far, the rest is
-reported (Pinned-Dependencies should reach 10 now that every pip install in the workflows uses a
-hash-pinned closure; Vulnerabilities scores 0 on purpose: Scorecard scans the whole repository and finds the
-deliberately old packages seeded under `fixtures/` and `calib/samples/`; the closures this
-repository installs are checked clean by the L0 osv-scanner and trivy steps). Do not pass
+a check enforced in `tools/scorecard-policy.yaml` scores below its minimum. Enforced: Dangerous-Workflow,
+Token-Permissions and Binary-Artifacts at 10, and Pinned-Dependencies at 8, which is its ceiling while the
+seeded material exists: the workflows themselves are fully pinned (every action by SHA, every pip install
+by hash), but Scorecard matches `*Dockerfile*` anywhere in the repository and the two deliberately
+unpinned Dockerfiles under `fixtures/` and `calib/samples/` cost the last two points. Vulnerabilities
+scores 0 for the same reason (the deliberately old packages seeded there; the closures this repository
+installs are checked clean by the L0 osv-scanner and trivy steps). The rest is reported. Do not pass
 `--commit` to scorecard: naming a commit restricts it to commit-capable checks, which is why the
 first run on main reported only 9 of them. `.github/dependabot.yml` keeps the SHA-pinned actions updated weekly; the Python closures
 and tool binaries stay outside Dependabot on purpose (they are relocked by hand with hashes and

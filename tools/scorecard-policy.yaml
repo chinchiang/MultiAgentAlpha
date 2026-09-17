@@ -4,16 +4,32 @@
 # check Scorecard could not evaluate (-1), fails the job. Every other check is still run, printed and
 # uploaded to Code Scanning as a warning when below 10, but does not fail the job.
 #
-# 2026-09-14: only the three checks this repository can already prove are enforced (all workflows use
-# pull_request, least-privilege tokens declared per job, no binaries committed). The rest are reported
-# first; tighten a check here once its real score on main is known, and treat a drop below the minimum
-# as a workflow regression to fix, not as a reason to lower the minimum.
+# 2026-09-14: only the three checks this repository could already prove were enforced (all workflows use
+# pull_request, least-privilege tokens declared per job, no binaries committed). 2026-09-17: Pinned-
+# Dependencies added at its real ceiling of 8 (see below). Everything else is reported first; tighten a
+# check here once its real score on main is known, and treat a drop below the minimum as a workflow
+# regression to fix, not as a reason to lower the minimum.
 enforce:
   Dangerous-Workflow: 10      # no pull_request_target with untrusted checkout, no script injection
   Token-Permissions: 10       # top-level permissions: {} and read-only per job (except issues/security-events where documented)
   Binary-Artifacts: 10        # no checked-in binaries (tools are installed from tools/versions.lock at run time)
+  Pinned-Dependencies: 8      # the ceiling while the seeded Dockerfiles exist; a drop means a workflow regression
 
-# Known below-10 checks and why they are not enforced yet (scores from the first run on main, 2026-09-14):
+# Known below-10 checks and why they are not enforced at 10 (scores from the runs on main, 2026-09-14 and 2026-09-17):
+#   Pinned-Dependencies (8,     the repository's own workflows are fully pinned: 18 of 18 GitHub-owned actions by SHA
+#   enforced at 8)              and 8 of 9 pip commands by hash (tools/*-requirements.txt with --require-hashes, then
+#                               `--no-deps -e .`, which Scorecard counts as pinned). The five remaining warnings are
+#                               all in the two deliberately vulnerable Dockerfiles, fixtures/vuln-sample/Dockerfile
+#                               (FROM python:latest, curl | sh, pip install -r without hashes) and
+#                               calib/samples/s1-fastapi-inventory/Dockerfile (FROM python:latest, curl | bash):
+#                               Scorecard matches `*Dockerfile*` by file name anywhere in the repository and cannot
+#                               exclude directories (its `.github/workflows/*` pattern, by contrast, matches only at
+#                               the root, so the seeded workflows do not count). Weighted proportional score:
+#                               10 * (18 + 0 + 0 + 8) / (18 + 2 + 2 + 9) = 8.4, reported as 8. Reproduced locally with
+#                               `scorecard --local <clean checkout> --checks=Pinned-Dependencies`. Reaching 10 would
+#                               mean pinning or removing the seeded Dockerfiles, which are trivy misconfiguration
+#                               and calibration material on purpose, so 8 is the floor enforced here;
+#                               tests/test_scorecard_ci.py also refuses a Dockerfile outside the seeded directories
 #   Vulnerabilities (0)         Scorecard runs osv-scanner over the whole repository and cannot exclude
 #                               directories; all 11 advisories it found are the deliberately old packages in
 #                               fixtures/vuln-sample and calib/samples (seeded review material). The closures
@@ -25,14 +41,13 @@ enforce:
 #                               what happens next) and private vulnerability reporting is switched on in
 #                               Settings since the same day. Enforce once the score on main confirms it
 #   Code-Review (0)             every pull request was merged by its author without another approver
-#   Pinned-Dependencies (7)     was the tests job's `pip install -e .` without hashes; since 2026-09-17 every pip
-#                               install in the workflows uses a hash-pinned closure (tools/dev-requirements.txt)
-#                               plus `--no-deps -e .`, which Scorecard counts as pinned. Enforce once the score on main confirms it
-#   Dependency-Update-Tool      .github/dependabot.yml covers the github-actions ecosystem only; the Python
+#   Dependency-Update-Tool (10) .github/dependabot.yml covers the github-actions ecosystem only; the Python
 #                               closures under tools/ are relocked by hand (docs/tools-provenance.md section 4).
-#                               Expected to pass once the full check set runs; tighten here when it does
-#   SAST                        Scorecard looks for CodeQL/Sonar-style workflows; the L0 job runs semgrep
+#                               Scores 10 since the full check set runs; enforce once a second run confirms it
+#   SAST (2)                    Scorecard looks for CodeQL/Sonar-style workflows; the L0 job runs semgrep
 #                               through scripts/semgrep_ci.py, which Scorecard's heuristics do not recognise
-#   Branch-Protection           needs an admin token to see everything; with the workflow token it may be -1 or
-#                               low. It was not run at all on 2026-09-14 because the workflow named a commit
+#   Branch-Protection (0)       not enabled on main (an owner setting); with the workflow token a protected
+#                               branch may still read low because admin-only settings are invisible. It was
+#                               not run at all on 2026-09-14 because the workflow named a commit
 #                               (--commit <sha> restricts scorecard to commit-capable checks); fixed on 2026-09-17
+#   Maintained (0)              the repository is younger than 90 days; Scorecard scores that 0 by design
