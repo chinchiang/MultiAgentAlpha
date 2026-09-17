@@ -66,7 +66,8 @@ def _run(tools: Path, *args: str, token: str | None = "t") -> subprocess.Complet
 
 def test_repository_policy_file_is_valid_and_enforces_the_repository_floor():
     pol = sc.load_policy(ROOT / "tools" / "scorecard-policy.yaml")
-    assert pol == {"Dangerous-Workflow": 10, "Token-Permissions": 10, "Binary-Artifacts": 10, "Pinned-Dependencies": 8}
+    assert pol == {"Dangerous-Workflow": 10, "Token-Permissions": 10, "Binary-Artifacts": 10, "Pinned-Dependencies": 8,
+                   "Security-Policy": 10, "Dependency-Update-Tool": 10}
 
 
 def test_dockerfiles_live_only_in_seeded_material():

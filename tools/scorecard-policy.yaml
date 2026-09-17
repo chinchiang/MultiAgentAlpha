@@ -6,16 +6,20 @@
 #
 # 2026-09-14: only the three checks this repository could already prove were enforced (all workflows use
 # pull_request, least-privilege tokens declared per job, no binaries committed). 2026-09-17: Pinned-
-# Dependencies added at its real ceiling of 8 (see below). Everything else is reported first; tighten a
-# check here once its real score on main is known, and treat a drop below the minimum as a workflow
-# regression to fix, not as a reason to lower the minimum.
+# Dependencies added at its real ceiling of 8 (see below); Security-Policy and Dependency-Update-Tool
+# added at 10 after scorecard runs 4 to 6 on main scored them 10 (SECURITY.md with private vulnerability
+# reporting; .github/dependabot.yml). Everything else is reported first; tighten a check here once its
+# real score on main is known, and treat a drop below the minimum as a workflow regression to fix, not
+# as a reason to lower the minimum.
 enforce:
   Dangerous-Workflow: 10      # no pull_request_target with untrusted checkout, no script injection
   Token-Permissions: 10       # top-level permissions: {} and read-only per job (except issues/security-events where documented)
   Binary-Artifacts: 10        # no checked-in binaries (tools are installed from tools/versions.lock at run time)
   Pinned-Dependencies: 8      # the ceiling while the seeded Dockerfiles exist; a drop means a workflow regression
+  Security-Policy: 10         # SECURITY.md present, with links, enough text and disclosure wording (tests/test_security_policy.py mirrors the probes)
+  Dependency-Update-Tool: 10  # .github/dependabot.yml (github-actions ecosystem; Python closures are relocked by hand, section 4 of docs/tools-provenance.md)
 
-# Known below-10 checks and why they are not enforced at 10 (scores from the runs on main, 2026-09-14 and 2026-09-17):
+# Known below-10 checks and why they are not enforced at 10 (scores from the runs on main, 2026-09-14 and 2026-09-17, run 6 after PR #26):
 #   Pinned-Dependencies (8,     the repository's own workflows are fully pinned: 18 of 18 GitHub-owned actions by SHA
 #   enforced at 8)              and 8 of 9 pip commands by hash (tools/*-requirements.txt with --require-hashes, then
 #                               `--no-deps -e .`, which Scorecard counts as pinned). The five remaining warnings are
@@ -37,14 +41,8 @@ enforce:
 #                               steps, which are clean, so this check stays informational for as long as the
 #                               seeded material exists
 #   License (0)                 the repository has no LICENSE; which licence is the owner's decision
-#   Security-Policy (0)         SECURITY.md exists since 2026-09-17 (private vulnerability reporting, scope,
-#                               what happens next) and private vulnerability reporting is switched on in
-#                               Settings since the same day. Enforce once the score on main confirms it
 #   Code-Review (0)             every pull request was merged by its author without another approver
-#   Dependency-Update-Tool (10) .github/dependabot.yml covers the github-actions ecosystem only; the Python
-#                               closures under tools/ are relocked by hand (docs/tools-provenance.md section 4).
-#                               Scores 10 since the full check set runs; enforce once a second run confirms it
-#   SAST (2)                    Scorecard looks for CodeQL/Sonar-style workflows; the L0 job runs semgrep
+#   SAST (4)                    Scorecard looks for CodeQL/Sonar-style workflows; the L0 job runs semgrep
 #                               through scripts/semgrep_ci.py, which Scorecard's heuristics do not recognise
 #   Branch-Protection (0)       not enabled on main (an owner setting); with the workflow token a protected
 #                               branch may still read low because admin-only settings are invisible. It was
