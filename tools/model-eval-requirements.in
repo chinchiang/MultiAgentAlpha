@@ -1,0 +1,6 @@
+# Top-level requirement of the G-8 model-evaluation tooling (scripts/model_eval.py). The version must
+# equal config/mara.yaml model_eval.garak_version; `model_eval.py run` refuses to start otherwise.
+# The hash-pinned closure lives in tools/model-eval-requirements.txt; regenerate it with
+#   python3 scripts/relock_requirements.py --in tools/model-eval-requirements.in --out tools/model-eval-requirements.txt --allow-sdist
+# (--allow-sdist because langdetect and ecoji publish no wheel).
+garak==0.17.0
