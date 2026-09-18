@@ -30,7 +30,7 @@
 | F22 | 實際被呼叫但零 finding 的模型家族仍計入漏報與拒答 | `scripts/calibrate.py` |
 | F23 | 採納需達到實際有效的獨立家族數，每家族具正反序回票；同家族票不補 quorum | `pipeline.py`、quorum 回歸測試 |
 | F24 | HTML tags／attributes／URL scheme allowlist；CSS／JS 精確 hash CSP，無 unsafe-inline 放行 | `scripts/build_html.py`、CSP／注入回歸測試 |
-| F25 | 補 doctype、zh-Hant、charset、viewport、靜態 TOC、來源連結、鍵盤焦點與行動選單狀態 | HTML generator；瀏覽器端完整可及性驗收另列待辦 |
+| F25 | 補 doctype、zh-Hant、charset、viewport、靜態 TOC、來源連結、鍵盤焦點與行動選單狀態 | HTML generator；瀏覽器安全政策禁止本機 HTML 預覽，完整可及性驗收另列待辦 |
 | F26 | SARIF preprocessing 移到唯讀 L0 job；有 security-events:write 的 job 不 checkout、不執行 repo script | `mara-review.yml`、workflow 邊界測試 |
 | F27 | 移除整個教材目錄秘密豁免，改精準已知假值；同目錄新憑證仍使掃描失敗 | `.gitleaks.toml`、實際鎖定 gitleaks 回歸測試 |
 | F28 | 加入每週與手動 SCA，使用同一套 runtime closure 及例外範圍 | `mara-review.yml` |
@@ -41,9 +41,10 @@
 
 - Python 3.11：從既有 hash lock 安裝 dev closure，另從新 build lock 安裝 backend，成功以 `--no-deps --no-build-isolation` 建置及安裝本專案。
 - 本機完整測試：**227 passed、4 skipped**；最後一項 build-runbook／relock 調整再跑相關 42 項，全部通過。`ruff`、`git diff --check` 與引用檢查通過。
-- `pytest` 涵蓋真實 Git 歷史／gitleaks、惡意模型回覆、context 邊界、gate、人工裁決、PSIRT 合成事件、HTML/CSP 與 workflow 權限。未安裝的其他 locked L0 工具整合測試會 skip；PR 的 L0 job 另安裝及執行全套工具。
+- `pytest` 涵蓋真實 Git 歷史／gitleaks、惡意模型回覆、context 邊界、gate、人工裁決、PSIRT 合成事件、HTML/CSP 與 workflow 權限。本次略過 3 項未安裝 Semgrep／rules 的整合測試及 1 項需要既有 calib-out 的測試；PR 的 L0 job 另安裝及執行全套工具。
 - gitleaks 8.30.1 的資產雜湊與發行者 checksum 核對成功；live preflight 確實辨識教材假憑證並阻擋外送。上游未提供簽章，此限制維持揭露。
 - 報告 Markdown／HTML 已重建；citation checker 核對 213 筆來源、202 個正文引用 ID，無失聯編號。這不等於 213 項研究聲明已查證。
+- PR 首輪 zizmor 通過；Semgrep 偵測到 allowlist 中既有教材假金鑰，已加上規則、精確路徑與 snippet SHA-256 三者綁定的判定，其他值仍失敗。
 - 本次未呼叫 live LLM、未傳送真實 PSIRT 事件、未建立人工裁決工單；相關測試使用模擬 provider、合成資料及 MockTransport。
 
 ## 相容性與後續負責事項

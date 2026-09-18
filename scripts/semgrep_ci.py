@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
 import json
 import subprocess
 import sys
@@ -75,9 +76,11 @@ def load_triage(path: Path) -> tuple[list[dict], list[str]]:
     return entries, [str(x) for x in (d.get("exclude") or [])]
 
 
-def match_triage(rule_id: str, uri: str, entries: list[dict]) -> dict | None:
+def match_triage(rule_id: str, uri: str, entries: list[dict], snippet: str = "") -> dict | None:
     for e in entries:
         if e["rule"] == rule_id and any(fnmatch.fnmatchcase(uri, str(g)) for g in e["paths"]):
+            if e.get("snippet_sha256") and hashlib.sha256(snippet.strip().encode()).hexdigest() != e["snippet_sha256"]:
+                continue
             return e
     return None
 
@@ -91,7 +94,7 @@ def apply_triage(doc: dict, entries: list[dict]) -> tuple[list[str], list[str], 
             uri = loc.get("artifactLocation", {}).get("uri", "")
             line = loc.get("region", {}).get("startLine", "?")
             rid = res.get("ruleId", "")
-            e = match_triage(rid, uri, entries)
+            e = match_triage(rid, uri, entries, loc.get("region", {}).get("snippet", {}).get("text", ""))
             if e is None:
                 untriaged.append(f"{rid}  {uri}:{line}")
                 continue
