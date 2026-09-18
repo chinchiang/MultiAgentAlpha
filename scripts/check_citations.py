@@ -7,6 +7,7 @@ Also flags Part I (executive summary) if it contains CVE ids, version numbers or
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -41,6 +42,21 @@ def main() -> int:
     exec_problems = re.findall(r"CVE-\d{4}-\d+|\bv?\d+\.\d+(?:\.\d+)?\b|\b(?:HTTP|TLS|OAuth|SAML|TCP|SSH)\b", exec_text)
     print(f"附錄A 條目: {len(known)}；正文引用的不同編號: {len(used)}；未被引用的條目: {len(known - used)}")
     ok = True
+    ledger = json.loads((ROOT / "docs" / "source-verification.json").read_text(encoding="utf-8"))
+    entries = ledger["sources"]
+    if {e["id"] for e in entries} != known:
+        print("source verification ledger does not match appendix IDs")
+        ok = False
+    for entry in entries:
+        if entry["verification_status"] in {"原文核對", "交叉核對"} and not all(
+            entry.get(k) for k in ("checked_at", "reviewer", "claim_excerpt")
+        ):
+            print("verified source lacks evidence:", entry["id"])
+            ok = False
+    for line in sources.splitlines():
+        if line.startswith("| ") and "摘要" in line and "已證實" in line:
+            print("snippet-only source must not be marked confirmed")
+            ok = False
     if missing:
         ok = False
         for f, keys in missing.items():

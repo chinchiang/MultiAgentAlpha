@@ -21,6 +21,23 @@ class ModelSpec(BaseModel):
     data_residency: Literal["on_prem", "vendor_api_zdr", "vendor_api_30d", "unknown"] = "unknown"
     weight: float = Field(default=1.0, ge=0.0, le=2.0, description="Vote weight; updated by calibration")
 
+    @model_validator(mode="after")
+    def _secure_endpoint(self):
+        if self.provider != "openai_compatible":
+            return self
+        import ipaddress
+        from urllib.parse import urlsplit
+        u = urlsplit(self.base_url or "")
+        try:
+            loopback = ipaddress.ip_address(u.hostname or "").is_loopback
+        except ValueError:
+            loopback = u.hostname == "localhost"
+        if not u.hostname or u.username or u.password or u.query or u.fragment:
+            raise ValueError("provider endpoint requires a host and no credentials, query or fragment")
+        if u.scheme != "https" and not (u.scheme == "http" and loopback):
+            raise ValueError("non-loopback inference endpoints require HTTPS with certificate validation")
+        return self
+
 
 class RolesConfig(BaseModel):
     reviewers: list[str] = Field(min_length=1, description="Model names used as dimension reviewers")
@@ -34,17 +51,17 @@ class GateConfig(BaseModel):
     block_on_severity: list[str] = Field(default_factory=lambda: ["High", "Critical"])
     min_dimension_score: float = 60.0
     accept_threshold: float = Field(default=0.6, description="Weighted consensus needed to accept a finding")
-    human_threshold_alpha: float = Field(default=0.4, ge=0.0, le=1.0, description="Krippendorff alpha below which -> human queue (policy P4: >= 0.3)")
-    min_independent_judges: int = Field(default=2, description="If fewer non-finder families can judge, all judges vote")
+    human_threshold_alpha: float = Field(
+        default=0.4, ge=0.0, le=1.0, description="Legacy key: single-finding agreement proxy threshold (policy P4: >= 0.3)"
+    )
+    min_independent_judges: int = Field(default=2, ge=1, description="Minimum actual non-finder judge families, each with both passes")
     self_judge_discount: float = Field(
         default=0.5, ge=0.0, le=1.0, description="Weight multiplier for a judge voting on its own family's finding (policy P4: <= 0.5)"
     )
 
 
 class PsirtConfig(BaseModel):
-    """G-12: hand accepted tier-A Critical findings on a shipped product to the PSIRT so the
-    EU CRA Article 14 clocks (24 h early warning, 72 h notification, 14 d final report) start
-    from the review, not from someone reading the report."""
+    """Internal PSIRT hand-off SLA. Legal clocks require separately confirmed incident events."""
 
     enabled: bool = False
     webhook_url: str = Field(default="", description="HTTPS endpoint of the PSIRT intake (ticketing or SOAR)")
@@ -170,6 +187,10 @@ class MaraConfig(BaseModel):
     @model_validator(mode="after")
     def _validate(self) -> MaraConfig:
         names = {m.name for m in self.models}
+        if len(names) != len(self.models):
+            raise ValueError("model names must be unique")
+        if len(self.roles.judges) != len(set(self.roles.judges)):
+            raise ValueError("judge roles must be unique")
         for role_names in ([self.roles.skeptic, self.roles.redteam], self.roles.reviewers, self.roles.judges):
             for n in role_names:
                 if n not in names:

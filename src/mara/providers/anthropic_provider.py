@@ -36,12 +36,12 @@ class AnthropicProvider(Provider):
                 output_config={"effort": "high", "format": {"type": "json_schema", "schema": schema}},
             ) as stream:
                 msg = stream.get_final_message()
-        except anthropic.RateLimitError as e:
-            raise RuntimeError(f"anthropic rate limit: {e}") from e
+        except anthropic.RateLimitError:
+            raise RuntimeError("provider_rate_limited") from None
         except anthropic.APIStatusError as e:
-            raise RuntimeError(f"anthropic API error {e.status_code}: {e.message}") from e
-        except anthropic.APIConnectionError as e:
-            raise RuntimeError(f"anthropic connection error: {e}") from e
+            raise RuntimeError(f"provider_http_error:{e.status_code}") from None
+        except anthropic.APIConnectionError:
+            raise RuntimeError("provider_connection_failed") from None
         if msg.stop_reason == "refusal":
             return Completion(data=None, raw_text="", refused=True,
                               input_tokens=msg.usage.input_tokens, output_tokens=msg.usage.output_tokens)

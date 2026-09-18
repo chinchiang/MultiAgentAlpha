@@ -14,9 +14,9 @@ def _base(**over):
         "models": [
             {"name": "a", "family": "anthropic", "provider": "anthropic", "model": "claude-opus-5", "data_residency": "vendor_api_zdr"},
             {"name": "d", "family": "deepseek", "provider": "openai_compatible", "model": "deepseek-v3.2",
-             "base_url": "http://vllm-deepseek.internal:8000/v1", "data_residency": "on_prem"},
+             "base_url": "https://vllm-deepseek.internal:8000/v1", "data_residency": "on_prem"},
             {"name": "n", "family": "nemotron", "provider": "openai_compatible", "model": "nvidia/nemotron-3-super",
-             "base_url": "http://192.168.10.5:8000/v1", "data_residency": "on_prem"},
+             "base_url": "https://192.168.10.5:8000/v1", "data_residency": "on_prem"},
         ],
         "roles": {"reviewers": ["a", "d", "n"], "skeptic": "n", "redteam": "d", "judges": ["a", "d", "n"]},
     }
@@ -41,7 +41,7 @@ def test_p1_covered_model_requires_authorization():
         MaraConfig.model_validate(half)
 
 
-@pytest.mark.parametrize("url", ["https://api.deepseek.com/v1", "http://deepseek.com/v1", "http://8.8.8.8:8000/v1", "http://models.example.com/v1"])
+@pytest.mark.parametrize("url", ["https://api.deepseek.com/v1", "https://deepseek.com/v1", "https://8.8.8.8:8000/v1", "https://models.example.com/v1"])
 def test_p2_rejects_vendor_api_and_public_hosts(url):
     bad = _base()
     bad["models"][1]["base_url"] = url
@@ -49,7 +49,7 @@ def test_p2_rejects_vendor_api_and_public_hosts(url):
         MaraConfig.model_validate(bad)
 
 
-@pytest.mark.parametrize("url", ["http://10.0.0.7:8000/v1", "http://172.16.4.4/v1", "http://192.168.1.1:8000/v1", "http://vllm.internal/v1", "http://localhost:8000/v1"])
+@pytest.mark.parametrize("url", ["https://10.0.0.7:8000/v1", "https://172.16.4.4/v1", "https://192.168.1.1:8000/v1", "https://vllm.internal/v1", "http://localhost:8000/v1"])
 def test_p2_accepts_private_hosts(url):
     ok = _base()
     ok["models"][1]["base_url"] = url

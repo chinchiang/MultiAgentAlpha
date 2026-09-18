@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .sarif import ToolResult, read_sarif
+from .sarif import ToolResult, read_sarif, scan_complete
 
 NOT_INSTALLED = "not installed under {bin_dir}; run `python scripts/install_tools.py`"
 
@@ -104,13 +104,17 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 if sarif.exists() and sarif.read_text(encoding="utf-8").strip():
                     normalize_sarif(sarif)
             elif tool == "gitleaks":
+                secret_config = out_dir / "gitleaks-preflight.toml"
+                secret_config.write_text("[extend]\nuseDefault = true\n", encoding="utf-8")
+                (out_dir / "no-allowlist").write_text("", encoding="utf-8")
                 cp = _run(
-                    [exe, "detect", "--no-git", "--source", ".", "--report-format", "sarif", "--report-path", str(sarif), "--exit-code", "0"],
+                    [exe, "dir", "--config", str(secret_config), "--redact", "--ignore-gitleaks-allow", "--gitleaks-ignore-path",
+                     str(out_dir / "no-allowlist"), "--report-format", "sarif", "--report-path", str(sarif), "."],
                     target,
                 )
             elif tool == "osv-scanner":
                 cp = _run([exe, "scan", "source", "--format", "sarif", "--output-file", str(sarif), "-r", "."], target)
-                if cp.returncode not in (0, 1, 130):
+                if cp.returncode not in (0, 1):
                     # 127 no packages, 128 general error (e.g. api.osv.dev unreachable): osv-scanner may still write an
                     # empty SARIF, which must not be read as "ran, nothing found"
                     sarif.unlink(missing_ok=True)
@@ -135,7 +139,11 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 note = f"exit {cp.returncode}, no SARIF produced" + (f": {tail}" if tail else "")
                 runs.append(ToolRun(tool=tool, ran=False, note=note))
                 continue
-            json.loads(sarif.read_text(encoding="utf-8"))
+            doc = json.loads(sarif.read_text(encoding="utf-8"))
+            allowed = {"semgrep": {0}, "gitleaks": {0, 1}, "osv-scanner": {0, 1}, "zizmor": {0, 11, 12, 13, 14}, "trivy": {0}}
+            if cp.returncode not in allowed[tool] or not scan_complete(doc):
+                runs.append(ToolRun(tool=tool, ran=False, results=read_sarif(sarif, tool), note="scanner_incomplete"))
+                continue
             runs.append(ToolRun(tool=tool, ran=True, results=read_sarif(sarif, tool), note=f"pinned {version}" if version else "pinned"))
         except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as e:
             runs.append(ToolRun(tool=tool, ran=False, note=f"failed: {e}"))
@@ -147,5 +155,6 @@ def load_prerecorded(sarif_dir: Path) -> list[ToolRun]:
     the GitHub Actions workflow where the tool step runs in an isolated job."""
     runs = []
     for p in sorted(sarif_dir.glob("*.sarif")):
-        runs.append(ToolRun(tool=p.stem, ran=True, results=read_sarif(p, p.stem)))
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        runs.append(ToolRun(tool=p.stem, ran=scan_complete(doc), results=read_sarif(p, p.stem), note="prerecorded"))
     return runs

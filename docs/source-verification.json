@@ -1,0 +1,2135 @@
+{
+  "schema": "mara-source-verification/1",
+  "sources": [
+    {
+      "id": "A1",
+      "url": "https://github.com/anthropics/claude-code-security-review",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A2",
+      "url": "https://github.com/anthropics/claude-code-security-review/blob/main/.claude/commands/security-review.md",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A3",
+      "url": "https://venturebeat.com/ai/anthropic-ships-automated-security-reviews-for-claude-code-as-ai-generated-vulnerabilities-surge",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A6",
+      "url": "https://venturebeat.com/security/anthropic-claude-code-security-reasoning-vulnerability-hunting",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A7",
+      "url": "https://axios.com/2026/02/05/anthropic-claude-opus-46-software-hunting",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A11",
+      "url": "https://cybersecuritynews.com/claude-code-shifts-agent-security/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A12",
+      "url": "https://openai.com/index/introducing-aardvark/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A15",
+      "url": "https://openai.com/index/codex-security-now-in-research-preview/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A17",
+      "url": "https://thehackernews.com/2026/03/openai-codex-security-scanned-12.html",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A18",
+      "url": "https://deepmind.google/blog/introducing-codemender-an-ai-agent-for-code-security/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A22",
+      "url": "https://www.wiz.io/vulnerability-database/cve/cve-2025-6965",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A25",
+      "url": "https://docs.github.com/en/code-security/responsible-use/responsible-use-autofix-code-scanning",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A26",
+      "url": "https://github.blog/changelog/2024-08-14-copilot-autofix-for-codeql-code-scanning-alerts-is-now-generally-available/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A31",
+      "url": "https://github.blog/changelog/2026-07-14-security-reviews-now-available-in-the-github-copilot-app/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A37",
+      "url": "https://semgrep.dev/blog/2025/building-an-appsec-ai-that-security-researchers-agree-with-96-of-the-time/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A38",
+      "url": "https://semgrep.dev/blog/2025/semgrep-is-confidently-handling-60-of-all-triage-for-users-without-reducing-coverage/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A40",
+      "url": "https://semgrep.dev/docs/semgrep-assistant/overview",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A41",
+      "url": "https://github.com/semgrep/mcp",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A43",
+      "url": "https://snyk.io/platform/deepcode-ai/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A44",
+      "url": "https://snyk.io/articles/snyk-dcaif-under-the-hood/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A45",
+      "url": "https://snyk.io/reports/secure-adoption-in-the-genai-era/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A54",
+      "url": "https://joshua.hu/llm-engineer-review-sast-security-ai-tools-pentesters",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A56",
+      "url": "https://www.prnewswire.com/news-releases/endor-labs-debuts-ai-native-multi-modal-sast-marking-a-new-era-in-code-flaw-detection-302619629.html",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A57",
+      "url": "https://docs.endorlabs.com/secure-ai-coding/ai-security-review",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A61",
+      "url": "https://www.infosecurity-magazine.com/news/malware-ai-detection-npm-package/",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A62",
+      "url": "https://www.datadoghq.com/blog/using-llms-to-filter-out-false-positives/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A63",
+      "url": "https://docs.datadoghq.com/security/code_security/static_analysis/ai_enhanced_sast/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A67",
+      "url": "https://www.digitalapplied.com/blog/nvidia-nemotron-3-ultra-550b-open-reasoning-model-2026",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A68",
+      "url": "https://github.com/NVIDIA/NeMo-Agent-Toolkit",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A70",
+      "url": "https://developer.nvidia.com/blog/applying-generative-ai-for-cve-analysis-at-an-enterprise-scale/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A72",
+      "url": "https://build.nvidia.com/nvidia/vulnerability-analysis-for-container-security",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A75",
+      "url": "https://github.com/deepseek-ai/DeepSeek-V3.2",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A77",
+      "url": "https://api-docs.deepseek.com/news/news260424/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A78",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A80",
+      "url": "https://www.protectivesecurity.gov.au/news/pspf-direction-update-deepseek-products-applications-and-web-services",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A82",
+      "url": "https://www.congress.gov/bill/119th-congress/senate-bill/765",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A83",
+      "url": "https://www.congress.gov/bill/119th-congress/senate-bill/2177/text",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A85",
+      "url": "https://arxiv.org/abs/2405.17238",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A86",
+      "url": "https://arxiv.org/abs/2501.18160",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A87",
+      "url": "https://arxiv.org/abs/2509.11523",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A89",
+      "url": "https://arxiv.org/abs/2403.14274",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A93",
+      "url": "https://dl.acm.org/doi/10.1145/3597503.3639117",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A94",
+      "url": "https://arxiv.org/html/2601.19138v1",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A102",
+      "url": "https://arxiv.org/abs/2406.11147 ; https://dl.acm.org/doi/10.1145/3797277",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A105",
+      "url": "https://arxiv.org/abs/2511.08462",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A115",
+      "url": "https://arxiv.org/abs/2403.18624",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A116",
+      "url": "https://arxiv.org/abs/2312.12575",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A122",
+      "url": "https://arxiv.org/abs/2503.17332",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A123",
+      "url": "https://arxiv.org/abs/2506.02548",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A124",
+      "url": "https://arxiv.org/abs/2506.11791",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A128",
+      "url": "https://arxiv.org/abs/2604.13764",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A132",
+      "url": "https://dl.acm.org/doi/10.1145/3576915.3623157",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A133",
+      "url": "https://cset.georgetown.edu/publication/cybersecurity-risks-of-ai-generated-code/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A134",
+      "url": "https://www.veracode.com/resources/analyst-reports/2025-genai-code-security-report/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A135",
+      "url": "https://www.veracode.com/resources/analyst-reports/2026-genai-code-security-report/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A136",
+      "url": "https://arxiv.org/abs/2606.23130",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A137",
+      "url": "https://www.gitclear.com/ai_assistant_code_quality_2025_research",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A140",
+      "url": "https://apiiro.com/blog/4x-velocity-10x-vulnerabilities-ai-coding-assistants-are-shipping-more-risks/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A142",
+      "url": "https://www.oasis-open.org/standard/sarif-v2-1-0/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A144",
+      "url": "https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/sarif-support-for-code-scanning",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "A145",
+      "url": "https://www.veracode.com/blog/spring-2026-genai-code-security/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B1",
+      "url": "https://arxiv.org/abs/2404.13076",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B2",
+      "url": "https://arxiv.org/abs/2410.21819",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B7",
+      "url": "https://arxiv.org/abs/2306.05685",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B8",
+      "url": "https://arxiv.org/abs/2410.02736",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B9",
+      "url": "https://arxiv.org/abs/2406.07791",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B12",
+      "url": "https://arxiv.org/abs/2412.05579",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B13",
+      "url": "https://arxiv.org/abs/2608.25869",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B14",
+      "url": "https://arxiv.org/abs/2604.16790",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B15",
+      "url": "https://arxiv.org/abs/2506.22316",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B16",
+      "url": "https://arxiv.org/abs/2510.12462",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B17",
+      "url": "https://arxiv.org/abs/2502.04313",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B18",
+      "url": "https://arxiv.org/abs/2506.07962",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B22",
+      "url": "https://arxiv.org/abs/2404.18796",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B26",
+      "url": "https://arxiv.org/abs/2502.08788",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B27",
+      "url": "https://arxiv.org/abs/2510.20963",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B30",
+      "url": "https://arxiv.org/abs/2608.18167",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B31",
+      "url": "https://arxiv.org/abs/2604.19049",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B34",
+      "url": "https://arxiv.org/abs/2508.06225",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B37",
+      "url": "https://arxiv.org/abs/2601.22952",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B39",
+      "url": "https://arxiv.org/abs/2605.23243",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B42",
+      "url": "https://www.bleepingcomputer.com/news/security/curl-ending-bug-bounty-program-after-flood-of-ai-slop-reports/",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B43",
+      "url": "https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B45",
+      "url": "https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B46",
+      "url": "https://atlas.mitre.org/",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B48",
+      "url": "https://arxiv.org/abs/2601.17548",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B49",
+      "url": "https://arxiv.org/abs/2509.10248",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B55",
+      "url": "https://arxiv.org/abs/2310.13548",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B58",
+      "url": "https://arxiv.org/abs/2505.06120",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B60",
+      "url": "https://arxiv.org/abs/2203.11171",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B62",
+      "url": "DOI 10.2307/2346806",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "否",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B63",
+      "url": "https://arxiv.org/abs/2601.02370",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B64",
+      "url": "https://arxiv.org/abs/2606.06843",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B68",
+      "url": "https://arxiv.org/abs/2604.02490",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B70",
+      "url": "https://arxiv.org/abs/2501.10970",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B72",
+      "url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11636850/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B79",
+      "url": "https://platform.claude.com/docs/en/about-claude/models/overview",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B80",
+      "url": "https://platform.claude.com/docs/en/models/opus-5/overview",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B81",
+      "url": "https://platform.claude.com/docs/en/manage-claude/api-and-data-retention",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B82",
+      "url": "https://privacy.claude.com/en/articles/8956058",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B84",
+      "url": "https://github.com/anthropics/claude-code-security-review",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B85",
+      "url": "https://www.anthropic.com/claude-opus-5-system-card",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "否",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B86",
+      "url": "https://api-docs.deepseek.com/news/news260424/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B88",
+      "url": "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B89",
+      "url": "https://www.garanteprivacy.it/home/docweb/-/docweb-display/docweb/10097450",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B90",
+      "url": "https://www.thaicert.or.th/en/2025/02/19/7304/",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B91",
+      "url": "https://www.ey.gov.tw/Page/9277F759E41CCD91/3ce9fe8f-2f5f-4d1d-8176-6fa4cf622b82",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B92",
+      "url": "https://moda.gov.tw/press/press-releases/15104",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B93",
+      "url": "https://www.cnn.com/2025/02/04/business/australia-deepseek-ban-security-concerns-intl/index.html",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B95",
+      "url": "https://www.nist.gov/news-events/news/2025/09/caisi-evaluation-deepseek-ai-models-finds-shortcomings-and-risks",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B96",
+      "url": "https://www.nist.gov/news-events/news/2026/05/caisi-evaluation-deepseek-v4-pro",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "否",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B97",
+      "url": "https://www.crowdstrike.com/en-us/blog/crowdstrike-researchers-identify-hidden-vulnerabilities-ai-coded-software/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B98",
+      "url": "https://blogs.cisco.com/security/evaluating-security-risk-in-deepseek-and-other-frontier-reasoning-models",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B100",
+      "url": "https://nvidianews.nvidia.com/news/nvidia-debuts-nemotron-3-family-of-open-models",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B102",
+      "url": "https://www.nvidia.com/en-us/ai-data-science/products/nim-microservices/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B104",
+      "url": "https://github.com/NVIDIA/garak",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B106",
+      "url": "https://github.com/meta-llama/llama-models/blob/main/models/llama4/MODEL_CARD.md",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B107",
+      "url": "https://qwenlm.github.io/blog/qwen3/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B111",
+      "url": "https://arxiv.org/abs/2502.11844 ; https://baxbench.com/",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B113",
+      "url": "https://github.com/meta-llama/PurpleLlama/tree/main/CybersecurityBenchmarks",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B118",
+      "url": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B119",
+      "url": "https://csrc.nist.gov/pubs/sp/800/218/a/final",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B121",
+      "url": "https://www.iso.org/standard/42001",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B122",
+      "url": "https://www.iso.org/standard/77304.html",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "B123",
+      "url": "https://artificialintelligenceact.eu/article/4/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C1.1",
+      "url": "https://github.com/OWASP/ASVS",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C1.2",
+      "url": "同上",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C1.3",
+      "url": "https://owaspsamm.org/model/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C1.4",
+      "url": "https://csrc.nist.gov/pubs/sp/800/160/v1/r1/final",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C1.5",
+      "url": "https://www.threatmodelingmanifesto.org/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C1.6",
+      "url": "https://github.com/OWASP/threat-dragon",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C1.10",
+      "url": "https://c4model.com/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C2.1",
+      "url": "https://github.com/OWASP/Top10/tree/master/2025/docs/en",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C2.3",
+      "url": "同上",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C2.4",
+      "url": "同上",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C2.5",
+      "url": "https://www.cisa.gov/news-events/alerts/2025/12/11/2025-cwe-top-25-most-dangerous-software-weaknesses",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C2.7",
+      "url": "https://www.nist.gov/news-events/news/2026/04/nist-updates-nvd-operations-address-record-cve-growth",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C2.8",
+      "url": "https://www.cisa.gov/news-events/directives/bod-26-04-prioritizing-security-updates-based-risk",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C3.1",
+      "url": "https://github.com/OWASP/CheatSheetSeries",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C3.2",
+      "url": "同上",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C3.3",
+      "url": "https://www.w3.org/TR/2026/WD-trusted-types-20260623/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C3.7",
+      "url": "—",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C4.1",
+      "url": "https://www.w3.org/TR/CSP3/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C4.2",
+      "url": "https://www.w3.org/TR/CSP2/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C4.4",
+      "url": "https://github.com/OWASP/CheatSheetSeries",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C4.5",
+      "url": "https://research.google/pubs/csp-is-dead-long-live-csp-on-the-insecurity-of-whitelists-and-the-future-of-content-security-policy/",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C4.6",
+      "url": "https://github.com/google/csp-evaluator",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C5.1",
+      "url": "https://github.com/OWASP/ASVS",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C5.2",
+      "url": "https://csrc.nist.gov/pubs/sp/800/63/4/final",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C5.3",
+      "url": "https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-15",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C5.4",
+      "url": "https://www.w3.org/TR/webauthn-3/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C5.5",
+      "url": "https://github.com/OWASP/CheatSheetSeries",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C5.7",
+      "url": "https://github.com/OWASP/API-Security",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.1",
+      "url": "https://github.com/dependency-check/DependencyCheck",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.2",
+      "url": "https://osv.dev/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.3",
+      "url": "https://github.com/google/osv-scanner",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.6",
+      "url": "https://github.com/anchore/grype",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.7",
+      "url": "https://www.first.org/epss/",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.8",
+      "url": "https://www.first.org/cvss/v4.0/specification-document",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.9",
+      "url": "https://www.cisa.gov/resources-tools/resources/stakeholder-specific-vulnerability-categorization-ssvc",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.10",
+      "url": "https://www.usenix.org/publications/loginonline/we-have-package-you-comprehensive-analysis-package-hallucinations-code",
+      "source_type": "第三方資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.11",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2024-3094",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.12",
+      "url": "https://sansec.io/research/polyfill-supply-chain-attack",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.13",
+      "url": "https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C6.14",
+      "url": "https://semgrep.dev/blog/2025/chalk-debug-and-color-on-npm-compromised-in-new-supply-chain-attack/",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.1",
+      "url": "https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.4",
+      "url": "https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.5",
+      "url": "https://securitylab.github.com/resources/github-actions-untrusted-input/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.8",
+      "url": "https://github.blog/changelog/2025-08-15-github-actions-policy-now-supports-blocking-and-sha-pinning-actions/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.9",
+      "url": "https://github.com/zizmorcore/zizmor",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.10",
+      "url": "https://github.com/rhysd/actionlint",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.11",
+      "url": "https://github.com/boostsecurityio/poutine",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.12",
+      "url": "https://github.com/step-security/harden-runner",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.13",
+      "url": "https://github.com/ossf/scorecard",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.14",
+      "url": "https://github.com/advisories/GHSA-mrrh-fwg8-r2c3",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.15",
+      "url": "https://www.cisa.gov/news-events/alerts/2025/03/18/supply-chain-compromise-third-party-tj-actionschanged-files-cve-2025-30066-and-reviewdogaction",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.16",
+      "url": "https://nx.dev/blog/s1ngularity-postmortem",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C7.17",
+      "url": "https://socket.dev/blog/ultralytics-pypi-package-compromised-through-github-actions-cache-poisoning",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C8.1",
+      "url": "https://docs.github.com/en/code-security/secret-scanning/introduction/about-secret-scanning",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C8.2",
+      "url": "https://github.com/gitleaks/gitleaks",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C8.3",
+      "url": "https://github.com/trufflesecurity/trufflehog",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C8.4",
+      "url": "https://github.com/Yelp/detect-secrets",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C8.5",
+      "url": "https://github.com/OWASP/CheatSheetSeries",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C8.7",
+      "url": "https://www.gitguardian.com/state-of-secrets-sprawl-report-2026",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C8.8",
+      "url": "https://www.microsoft.com/en-us/msrc/blog/2023/09/microsoft-mitigated-exposure-of-internal-information-in-a-storage-account-due-to-overly-permissive-sas-token",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C9.1",
+      "url": "https://github.com/OWASP/CheatSheetSeries",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C9.3",
+      "url": "https://github.com/OWASP/ASVS",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C9.6",
+      "url": "https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C10.1",
+      "url": "https://github.com/OWASP/CheatSheetSeries",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C10.2",
+      "url": "同上",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C10.3",
+      "url": "https://github.com/OWASP/ASVS",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C10.5",
+      "url": "https://github.com/OWASP/Top10",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.1",
+      "url": "https://slsa.dev/blog/2025/11/announce-slsa-v1.2",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.2",
+      "url": "https://ecma-international.org/publications-and-standards/standards/ecma-424/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.3",
+      "url": "https://www.iso.org/standard/93810.html",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.4",
+      "url": "https://blog.sigstore.dev/cosign-3-0-available/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.5",
+      "url": "https://github.com/in-toto/attestation",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.6",
+      "url": "https://csrc.nist.gov/pubs/sp/800/204/d/final",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.7",
+      "url": "https://csrc.nist.gov/projects/ssdf",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.8",
+      "url": "https://www.cisa.gov/resources-tools/resources/secure-by-design",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.9",
+      "url": "https://eur-lex.europa.eu/eli/reg/2024/2847/oj",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.10",
+      "url": "https://github.com/ossf/s2c2f/blob/main/specification/framework.md",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "是",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.11",
+      "url": "https://www.cisa.gov/news-events/directives/ed-21-01-mitigate-solarwinds-orion-code-compromise-closed",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.12",
+      "url": "https://about.codecov.io/apr-2021-post-mortem/",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C11.13",
+      "url": "https://cloud.google.com/blog/topics/threat-intelligence/3cx-software-supply-chain-compromise",
+      "source_type": "廠商資料",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C12.1",
+      "url": "https://www.first.org/cvss/calculator/4.0",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要（計算器原始碼直接讀取）",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C12.2",
+      "url": "https://owasp.org/www-community/OWASP_Risk_Rating_Methodology",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C12.6",
+      "url": "—",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "—",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C13.1",
+      "url": "https://www.iso.org/standard/27001",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "否",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C13.2",
+      "url": "—",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（缺逐項核對紀錄）",
+      "access_record": "—",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C13.3",
+      "url": "https://webstore.ansi.org/preview-pages/iec/preview_iec62443-4-1%7Bed1.0%7Db.pdf",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C13.4",
+      "url": "https://doi.org/10.6028/NIST.CSWP.29",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    },
+    {
+      "id": "C13.5",
+      "url": "https://store-us.semi.org/products/e18700-semi-e187-specification-for-cybersecurity-of-fab-equipment",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "待核實（僅摘要）",
+      "access_record": "摘要",
+      "checked_at": null,
+      "reviewer": null,
+      "claim_excerpt": null
+    }
+  ]
+}

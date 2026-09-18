@@ -32,11 +32,32 @@ def _mock_cfg(**psirt) -> MaraConfig:
     return MaraConfig.model_validate(raw)
 
 
+def _adjudicate_for_psirt_test(report, cfg):
+    count = 0
+    for c in report.consensus:
+        if c.tier.value == "A" and c.cvss4_severity == "Critical" and count < 3:
+            c.accepted = True
+            count += 1
+        elif c.tier.value == "B":
+            c.accepted = True
+    report.psirt = build_notifications(report, cfg)
+    report.bias_audit["psirt_notifications"] = len(report.psirt)
+
+
+def _event(t0):
+    return {"event_type": "actively_exploited_vulnerability", "confirmed_by": "test-psirt",
+            "awareness_at": t0.isoformat(), "remediation_available_at": t0.isoformat()}
+
+
 @pytest.fixture(scope="module")
 def shipped_report(tmp_path_factory):
     cfg = _mock_cfg()
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path_factory.mktemp("out"))
-    return cfg, pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    # PSIRT transport tests consume synthetic adjudicated results. The pipeline's independent
+    # quorum failures are covered by test_pipeline_mock and must not be bypassed in production.
+    _adjudicate_for_psirt_test(report, cfg)
+    return cfg, report
 
 
 def test_only_accepted_tier_a_critical_findings_notify(shipped_report):
@@ -56,8 +77,9 @@ def test_payload_carries_evidence_and_article_14_deadlines(shipped_report):
     now = dt.datetime(2026, 9, 12, 8, 0, tzinfo=dt.UTC)
     payloads = build_notifications(report, cfg, now)
     p = payloads[0]
-    assert p["schema"] == "mara-psirt/1" and "Article 14" in p["regulation"] and p["product"] == PSIRT["product"]
-    assert p["deadlines"] == {"early_warning_by": "2026-09-13T08:00:00+00:00", "notification_by": "2026-09-15T08:00:00+00:00",
+    assert p["schema"] == "mara-psirt/2" and "Article 14" in p["regulation"] and p["product"] == PSIRT["product"]
+    assert p["deadlines"] == {}
+    assert p["internal_sla"] == {"early_warning_by": "2026-09-13T08:00:00+00:00", "notification_by": "2026-09-15T08:00:00+00:00",
                               "final_report_by": "2026-09-26T08:00:00+00:00"}
     for key in ("finding_id", "cwe", "location", "cvss4", "evidence_tier", "ssvc", "exploitable", "families_agreeing", "tool_corroborated"):
         assert key in p
@@ -93,7 +115,7 @@ def test_send_posts_json_with_bearer_token_and_refuses_without_token(shipped_rep
 def test_write_and_cli_file_output(shipped_report, tmp_path):
     cfg, report = shipped_report
     write_psirt(report.psirt, tmp_path / "n.json")
-    assert json.loads((tmp_path / "n.json").read_text())[0]["stage"] == "early_warning"
+    assert json.loads((tmp_path / "n.json").read_text())[0]["stage"] == "internal_handoff"
     cfg_path = tmp_path / "mock-psirt.yaml"
     import yaml
 
@@ -150,7 +172,7 @@ def test_ledger_skips_delivered_findings_records_attempts_and_sends_idempotency_
     led = pl.load_ledger(ledger)
     assert len(led["items"]) == 3 and led["schema"] == pl.LEDGER_SCHEMA
     failed = led["items"][first[1]["dedupe_key"]]
-    assert failed["attempts"][0]["status_code"] == 503 and not failed["stages"]["early_warning"]
+    assert failed["attempts"][0]["status_code"] == 503 and not failed["stages"]["internal_handoff"]
     # second review: the two delivered ones are skipped, the failed one is retried
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         second = send_psirt(report.psirt, cfg, client=client, ledger_path=ledger)
@@ -160,17 +182,18 @@ def test_ledger_skips_delivered_findings_records_attempts_and_sends_idempotency_
         forced = send_psirt(report.psirt, cfg, client=client, ledger_path=ledger, resend=True)
     assert not any(r["skipped"] for r in forced) and len(calls) == 7
     led = pl.load_ledger(ledger)
-    assert all(i["stages"]["early_warning"].get("sent_at") for i in led["items"].values())
+    assert all(i["stages"]["internal_handoff"].get("sent_at") for i in led["items"].values())
     assert len(led["items"][first[0]["dedupe_key"]]["attempts"]) == 2
 
 
 def test_stage_clock_records_references_and_names_overdue_stages(shipped_report, tmp_path):
     cfg, report = shipped_report
     t0 = dt.datetime(2026, 9, 14, 0, 0, tzinfo=dt.UTC)
-    payloads = build_notifications(report, cfg, now=t0)
+    payloads = build_notifications(report, cfg, now=t0, event=_event(t0))
     ledger = pl.load_ledger(tmp_path / "l.json")
     for p in payloads:
         pl.record_attempt(ledger, p, 202, True, now=t0 + dt.timedelta(hours=1))
+        pl.record_stage(ledger, p["dedupe_key"], "early_warning", "EW-test", now=t0 + dt.timedelta(hours=2))
     key = payloads[0]["dedupe_key"]
     assert pl.overdue(ledger, now=t0 + dt.timedelta(hours=71)) == []
     late = pl.overdue(ledger, now=t0 + dt.timedelta(hours=73))
@@ -184,7 +207,7 @@ def test_stage_clock_records_references_and_names_overdue_stages(shipped_report,
     rows = {r["key"]: r for r in pl.status_rows(ledger, now=t0 + dt.timedelta(days=15))}
     assert rows[key]["state"].startswith("closed") and rows[payloads[1]["dedupe_key"]]["overdue"] == ["final_report", "notification"]
     with pytest.raises(ValueError):
-        pl.record_stage(ledger, key, "early_warning", "x")
+        pl.record_stage(ledger, key, "invalid_stage", "x")
     with pytest.raises(ValueError):
         pl.close_item(ledger, key, "   ")
     with pytest.raises(KeyError):
@@ -192,7 +215,7 @@ def test_stage_clock_records_references_and_names_overdue_stages(shipped_report,
     # an undelivered early warning is overdue after 24 h even though it was never sent
     fresh = pl.load_ledger(tmp_path / "f.json")
     pl.record_attempt(fresh, payloads[0], 500, False, now=t0)
-    assert [(s) for _, s, _ in pl.overdue(fresh, now=t0 + dt.timedelta(hours=25))] == ["early_warning"]
+    assert [(s) for _, s, _ in pl.overdue(fresh, now=t0 + dt.timedelta(hours=25))] == ["internal_handoff", "early_warning"]
 
 
 def test_handshake_records_outcome_and_governance_g12_needs_it(shipped_report, monkeypatch, tmp_path):
@@ -212,7 +235,7 @@ def test_handshake_records_outcome_and_governance_g12_needs_it(shipped_report, m
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         good = pl.run_handshake(_mock_cfg(webhook_url="https://psirt.example.internal/ok"), client=client, now=t0)
         bad = pl.run_handshake(_mock_cfg(webhook_url="https://psirt.example.internal/deny"), client=client, now=t0)
-    assert good["ok"] and good["status_code"] == 200 and not bad["ok"] and bad["response"] == "nope"
+    assert good["ok"] and good["status_code"] == 200 and not bad["ok"] and bad["response"] == "endpoint_rejected"
     assert seen[0] == ("Bearer s3cret", "handshake", good["dedupe_key"] if "dedupe_key" in good else seen[0][2]) and seen[0][1] == "handshake"
     hs = tmp_path / "handshake.json"
     pl.write_handshake(good, hs)
@@ -238,10 +261,10 @@ def test_handshake_records_outcome_and_governance_g12_needs_it(shipped_report, m
     r = check_g12(root, cfg_path)
     assert r.status == PASS and "handshake" in r.evidence and "0 筆進行中" in r.evidence
     ledger = pl.load_ledger(root / "ops" / "psirt" / "ledger.json")
-    pl.record_attempt(ledger, build_notifications(shipped_report[1], cfg, now=dt.datetime(2020, 1, 1, tzinfo=dt.UTC))[0], 202, True)
+    pl.record_attempt(ledger, build_notifications(shipped_report[1], cfg, now=dt.datetime(2020, 1, 1, tzinfo=dt.UTC))[0], 500, False)
     pl.save_ledger(ledger, root / "ops" / "psirt" / "ledger.json")
     r = check_g12(root, cfg_path)
-    assert r.status == FAIL and "逾期" in r.evidence and "notification" in r.evidence
+    assert r.status == FAIL and "逾期" in r.evidence and "internal_handoff" in r.evidence
 
 
 def test_psirt_ops_cli_dry_run_status_record_and_close(tmp_path, monkeypatch):
@@ -266,10 +289,12 @@ def test_psirt_ops_cli_dry_run_status_record_and_close(tmp_path, monkeypatch):
     t0 = dt.datetime(2026, 9, 14, 0, 0, tzinfo=dt.UTC)
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    _adjudicate_for_psirt_test(report, cfg)
     ledger = pl.load_ledger(tmp_path / "ledger.json")
-    payloads = build_notifications(report, cfg, now=t0)
+    payloads = build_notifications(report, cfg, now=t0, event=_event(t0))
     for p in payloads:
         pl.record_attempt(ledger, p, 202, True, now=t0)
+        pl.record_stage(ledger, p["dedupe_key"], "early_warning", "EW-test", now=t0)
     pl.save_ledger(ledger, tmp_path / "ledger.json")
     key = payloads[0]["dedupe_key"]
     r = run("status", "--now", "2026-09-14T12:00:00Z")

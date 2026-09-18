@@ -46,10 +46,10 @@
 
 | 準則 | Anthropic Claude（Opus 5） | DeepSeek（V3.2 / V4） | NVIDIA Nemotron 3 |
 |---|---|---|---|
-| 部署與資料主權 | API 或 Bedrock / Vertex / Foundry；ZDR 需申請；Fable 系列不可 ZDR【已證實｜B79–B82】 | 只能自架權重；隱私政策載明資料存於中國【廠商主張｜B88】；API 不得用於原始碼 | NIM 地端，無資料離境【廠商主張｜B102】 |
+| 部署與資料主權 | API 或 Bedrock / Vertex / Foundry；ZDR 需申請；Fable 系列不可 ZDR【尚未證實｜B79–B82】 | 只能自架權重；隱私政策載明資料存於中國【廠商主張｜B88】；API 不得用於原始碼 | NIM 地端，無資料離境【廠商主張｜B102】 |
 | 授權 | 商業 API 條款 | V3.2 為 MIT【已證實｜A75】；V4 授權尚未證實 | NVIDIA Open Model License 或 OpenMDW【尚未證實｜B100】 |
-| 公開資安評估 | 2026 年宣稱 Opus 4.6 找到 500+ 漏洞【第三方評論｜A7】；RealVuln 中 Sonnet 4.6 為最佳通用模型 51.7【第三方評論｜A128】 | NIST CAISI 2025-09：遵從惡意指令 12 倍、jailbreak 95–100%、cyber 任務完成率較低【已證實（摘要）｜B95】；CrowdStrike：敏感詞使弱點率最多 +50%【第三方評論｜B97】；Cisco：HarmBench 攻擊成功率 100%【第三方評論｜B98】 | 本次未找到針對 Nemotron 3 的獨立資安評估【尚未證實】 |
-| 採購與稽核風險 | 低；需確認 ZDR 涵蓋範圍 | 高；多國政府禁令與立法提案【已證實｜B89、B93、A82、A83】，客戶稽核可能拒絕 | 低；NVIDIA 為美系供應商 |
+| 公開資安評估 | 2026 年宣稱 Opus 4.6 找到 500+ 漏洞【第三方評論｜A7】；RealVuln 中 Sonnet 4.6 為最佳通用模型 51.7【第三方評論｜A128】 | NIST CAISI 2025-09：遵從惡意指令 12 倍、jailbreak 95–100%、cyber 任務完成率較低【尚未證實（摘要）｜B95】；CrowdStrike：敏感詞使弱點率最多 +50%【第三方評論｜B97】；Cisco：HarmBench 攻擊成功率 100%【第三方評論｜B98】 | 本次未找到針對 Nemotron 3 的獨立資安評估【尚未證實】 |
+| 採購與稽核風險 | 低；需確認 ZDR 涵蓋範圍 | 高；多國政府禁令與立法提案【尚未證實｜B89、B93、A82、A83】，客戶稽核可能拒絕 | 低；NVIDIA 為美系供應商 |
 | 建議角色 | 三個家族中唯一跨境者；作為 reviewer 與 judge，不作為唯一的 skeptic | reviewer 與 judge 之一；必須是可抽換的家族；校準集納入敏感詞配對 | reviewer、skeptic 與 judge；地端部署使它適合處理最敏感的 repo |
 
 這張表的結論是：三個家族沒有一個可以單獨承擔審查，也沒有一個應該被排除。Claude 有最強的公開能力證據但是唯一的跨境者；DeepSeek 有最強的自架彈性但有最多的採購與行為風險；Nemotron 有最強的資料主權保證但最少的獨立評估。這正是異質面板的論證：每個家族的弱點都由另一個家族的強項覆蓋，而每個家族的偏誤都被另一個家族的裁決制衡。

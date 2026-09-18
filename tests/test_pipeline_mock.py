@@ -29,10 +29,12 @@ def _accepted(report):
     return [f for f in report.findings if cons[f.id].accepted], cons
 
 
-def test_every_seeded_defect_is_accepted(mock_report):
+def test_every_seeded_defect_is_retained_for_human_review(mock_report):
     _, report = mock_report
     accepted, _ = _accepted(report)
-    got = {(f.dimension, f.cwe, f.provenance[0].file) for f in accepted}
+    unresolved = {q.finding_id for q in report.human_queue}
+    got = {(f.dimension, f.cwe, f.provenance[0].file) for f in report.findings
+           if f in accepted or f.id in unresolved}
     missing = SEEDED - got
     assert not missing, f"seeded defects not accepted: {missing}"
 
@@ -67,7 +69,7 @@ def test_multi_family_agreement_without_tool_yields_tier_b(mock_report):
 def test_gate_blocks_on_high_tier_high_severity(mock_report):
     _, report = mock_report
     assert report.gate_passed is False
-    assert 0 < report.overall_score < 100
+    assert report.overall_score is None and report.review_status == "incomplete"
 
 
 def test_bias_audit_captures_refusal_and_position_flip(mock_report):
@@ -76,7 +78,7 @@ def test_bias_audit_captures_refusal_and_position_flip(mock_report):
     assert audit["reviewer_refusals"] == 1  # nemotron mock refuses error_handling
     assert audit["position_flips"] >= 1  # deepseek mock flips 'open redirect' on the reverse pass
     assert audit["standard_refs_stripped"] == 2  # ASVS V17.1 and A11:2025 do not exist
-    assert audit["findings_with_unverified_quotes"] == 1
+    assert audit["findings_with_unverified_quotes"] >= 1  # fake quote plus masked secret quotations
     assert isinstance(audit["global_krippendorff_alpha"], float)
 
 

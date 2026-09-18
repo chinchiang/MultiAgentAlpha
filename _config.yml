@@ -1,0 +1,17 @@
+# Defense in depth if Pages is accidentally configured to publish the repository root.
+# Intended source remains main:/docs. Never publish the vulnerable training material.
+exclude:
+  - fixtures
+  - calib
+  - src
+  - scripts
+  - tests
+  - tools
+  - config
+  - policy
+  - ops
+  - training
+  - sbom
+  - README.md
+  - pyproject.toml
+  - docs/parts

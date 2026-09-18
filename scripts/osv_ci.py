@@ -27,10 +27,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
+from mara.tools.sarif import scan_complete  # noqa: E402
 
 # osv-scanner exit codes (cmd/osv-scanner): 1 vulnerabilities found, 127 no package sources found, 128 general error,
 # 129 scanning finished with errors on some paths, 130 vulnerabilities found and errors on some paths
-EXIT_VULNS = {1, 130}
+EXIT_VULNS = {1}
 EXIT_NO_PACKAGES = 127
 # result.message.text: "Package '<name>@<version>' is vulnerable to '<ID>' (also known as ...)." (internal/output/sarif.go);
 # the rule's help.markdown carries an "Affected Packages" table | Source | Package Name | Package Version | as a fallback
@@ -69,7 +70,7 @@ def summarize(doc: dict) -> list[dict]:
         for res in run.get("results", []):
             loc = (res.get("locations") or [{}])[0].get("physicalLocation", {})
             rows.append({"id": res.get("ruleId", "?"), "uri": loc.get("artifactLocation", {}).get("uri", "?"),
-                         "packages": packages_in(res, rules.get(res.get("ruleId"))), "suppressed": bool(res.get("suppressions"))})
+                         "packages": packages_in(res, rules.get(res.get("ruleId"))), "suppressed": any(s.get("status") == "accepted" for s in res.get("suppressions", []))})
     return rows
 
 
@@ -124,7 +125,11 @@ def main() -> int:
     if not report.is_file() or not report.read_text(encoding="utf-8").strip():
         print(f"ERROR: osv-scanner exited {r.returncode} but wrote no SARIF", file=sys.stderr)
         return 1
-    rows = summarize(json.loads(report.read_text(encoding="utf-8")))
+    doc = json.loads(report.read_text(encoding="utf-8"))
+    if not scan_complete(doc):
+        print("ERROR: OSV SARIF reports an incomplete scan", file=sys.stderr)
+        return 1
+    rows = summarize(doc)
     live = [x for x in rows if not x["suppressed"]]
     for x in rows:
         pk = ", ".join(f"{n}@{v}" for n, v in x["packages"]) or "?"

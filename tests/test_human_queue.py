@@ -30,7 +30,9 @@ def _finding(fid, line, cwe="CWE-89"):
 def _cons(fid, *, tp=2, fp=0, human=0, alpha=1.0, tier=EvidenceTier.B, sev="High", accepted=True):
     return ConsensusResult(finding_id=fid, weighted_score=0.9, votes_tp=tp, votes_fp=fp, votes_human=human, families_agreeing=[ModelFamily.DEEPSEEK],
                            tool_corroborated=False, skeptic_refuted=False, position_consistent=True, krippendorff_alpha=alpha, tier=tier,
-                           cvss4_score=8.0, cvss4_severity=sev, ssvc_decision="Attend", accepted=accepted)
+                           cvss4_score=8.0, cvss4_severity=sev, ssvc_decision="Attend", accepted=accepted,
+                           needs_human=human > tp or alpha < 0.4,
+                           human_reasons=(["majority_needs_human"] if human > tp else []) + (["agreement_below_threshold"] if alpha < 0.4 else []))
 
 
 def _vote(fid, fam, pass_id, verdict):
@@ -51,7 +53,7 @@ def test_selection_reasons_and_full_context(cfg):
     votes = [_vote("F-1", ModelFamily.DEEPSEEK, "forward", "needs_human"), _vote("F-1", ModelFamily.DEEPSEEK, "reverse", "needs_human")]
     items = {i.finding_id: i for i in build_queue(fs, cons, sk, {}, votes, cfg)}
     assert set(items) == {"F-1", "F-2", "F-3"}
-    assert items["F-1"].reasons == ["majority_needs_human"] and items["F-2"].reasons == ["alpha_below_threshold"] and items["F-3"].reasons == ["tier_c_high"]
+    assert items["F-1"].reasons == ["majority_needs_human"] and items["F-2"].reasons == ["agreement_below_threshold"] and items["F-3"].reasons == ["tier_c_high"]
     assert items["F-1"].skeptic["verdict"] == "weakened" and len(items["F-1"].judge_votes) == 2 and items["F-1"].judge_votes[0]["family"] == "deepseek"
     assert items["F-1"].key == queue_key("app.py", 10, "CWE-89") == queue_key("./app.py", 10, "cwe-89")
     # tier C is dropped while tightened; the other reasons stay
@@ -133,22 +135,31 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
          "reachability": "conditional", "reachability_argument": "r", "exploit_sketch": "e",
          "skeptic": {"family": "nemotron", "verdict": "weakened", "reason": "x", "sanitizer_or_control": ""}, "redteam": None,
          "judge_votes": [{"family": "anthropic", "pass": "forward", "verdict": "true_positive", "severity_band": "Medium", "reason": "y", "self_family": False}]}]}
+    for it in queue["items"]:
+        it.update(target_id="target-x", revision="revision-x", context_hash="context-x")
+        it["key"] = queue_key(it["file"], it["line"], it["cwe"], target_id="target-x", revision="revision-x", context_hash="context-x")
+    state["open"][0]["body"] = hq.ticket_body(queue["items"][0], "/t/x")
+    state["closed"][0]["body"] = hq.ticket_body({**queue["items"][1], "finding_id": "F-0002"}, "/t/x")
+    state["events"]["8"][1].update(id=100, created_at="2026-09-12T08:00:00Z")
+    (tmp_path / "state.json").write_text(json.dumps(state))
     (tmp_path / "hq.json").write_text(json.dumps(queue))
     created, skipped = hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False)
     assert (created, skipped) == (1, 1)
     st = json.loads((tmp_path / "state.json").read_text())
     new = st["open"][-1]
-    assert hq.MARKER.format(key="dddddddddddd") in new["body"] and "Skeptic (nemotron)" in new["body"] and "anthropic [forward]" in new["body"]
+    assert hq.MARKER.format(key=queue["items"][1]["key"]) in new["body"] and "Skeptic (nemotron)" in new["body"] and "anthropic [forward]" in new["body"]
     assert not list(tmp_path.glob(".mara-hq-*.md"))
     register = tmp_path / "records.yaml"
     register.write_text("curriculum_version: '2026-09'\nvalidity_days: 365\npass_mark: 0.8\nrecords: []\n", encoding="utf-8")
     written, open_count = hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "decisions", tmp_path / "decisions" / "backlog.json",
                                             dry_run=False, register=register)
     assert (written, open_count) == (1, 2)
-    rec = json.loads((tmp_path / "decisions" / "bbbbbbbbbbbb.json").read_text())
+    rec = json.loads((tmp_path / "decisions" / (queue["items"][1]["key"] + ".json")).read_text())
     checked_on = rec.pop("training_checked_on")
-    assert rec == {"key": "bbbbbbbbbbbb", "decision": "true_positive", "issue": 8, "url": "https://example/8", "decided_at": "2026-09-12T08:00:00Z",
-                   "target": "/t/x", "finding_id": "F-0002", "cwe": "CWE-79", "file": "app.py", "line": 26,
+    assert rec == {"key": queue["items"][1]["key"], "decision": "true_positive", "issue": 8, "url": "https://example/8", "decided_at": "2026-09-12T08:00:00Z",
+                   "target_id": "target-x", "revision": "revision-x", "context_hash": "context-x",
+                   "finding_id": "F-0002", "cwe": "CWE-79", "file": "app.py", "line": 26,
+                   "decision_event_id": 100, "decision_label": "decision:true-positive",
                    "decided_by": "alice", "adjudicator_trained": False}
     # once alice holds a valid adjudicator record the same decision is marked trained (G-13)
     import datetime as dt
@@ -158,7 +169,7 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
                         encoding="utf-8")
     assert dt.date.fromisoformat(checked_on)
     hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "decisions", tmp_path / "decisions" / "backlog.json", dry_run=False, register=register)
-    assert json.loads((tmp_path / "decisions" / "bbbbbbbbbbbb.json").read_text())["adjudicator_trained"] is True
+    assert json.loads((tmp_path / "decisions" / (queue["items"][1]["key"] + ".json")).read_text())["adjudicator_trained"] is True
     assert json.loads((tmp_path / "decisions" / "backlog.json").read_text())["open"] == 2
     # a closed ticket without a decision label writes nothing
     assert not (tmp_path / "decisions" / "cccccccccccc.json").exists()
@@ -176,16 +187,20 @@ def test_calibration_uses_true_positive_decisions_as_labels(tmp_path):
                  {"key": "k4", "decision": "true_positive", "target": "/x/calib/samples/s9", "file": "app.py", "line": 80, "cwe": "CWE-89", "issue": 6,
                   "decided_by": "mallory", "adjudicator_trained": False}]
     calibrate.SKIPPED_UNTRAINED.clear()
-    labels, applied = calibrate.apply_decisions("s9", {"target": "/x/calib/samples/s9"}, [], decisions)
+    report = {"target_id": "target-s9", "revision": "rev", "coverage": {"content_hash": "ctx"}}
+    for d in decisions:
+        d.update(target_id="other" if d["issue"] == 5 else "target-s9", revision="rev", context_hash="ctx", decision_event_id=d["issue"])
+        d["key"] = queue_key(d["file"], d["line"], d["cwe"], target_id=d["target_id"], revision="rev", context_hash="ctx")
+    labels, applied = calibrate.apply_decisions("s9", report, [], decisions)
     assert applied == 2 and len(labels) == 1 and labels[0]["source"] == "human_decision" and labels[0]["cwe"] == "CWE-79"
     assert calibrate.SKIPPED_UNTRAINED == ["s9: ticket #6 by mallory"]  # G-13: untrained adjudicator's decision not applied
-    labels, applied = calibrate.apply_decisions("s9", {"target": "/x/calib/samples/s9"}, [], decisions, require_trained=False)
+    labels, applied = calibrate.apply_decisions("s9", report, [], decisions, require_trained=False)
     assert applied == 3 and len(labels) == 2
     d = tmp_path / "decisions"
     d.mkdir()
     (d / "k.json").write_text(json.dumps(decisions[0]))
     (d / "backlog.json").write_text(json.dumps({"open": 3}))
-    assert [x["key"] for x in calibrate.load_decisions(d)] == ["k"]
+    assert [x["key"] for x in calibrate.load_decisions(d)] == [decisions[0]["key"]]
 
 
 def test_report_and_governance_g11(tmp_path):

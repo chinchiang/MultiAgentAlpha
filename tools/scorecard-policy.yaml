@@ -40,7 +40,8 @@ enforce:
 #                               this repository really installs are checked by the L0 osv-scanner and trivy
 #                               steps, which are clean, so this check stays informational for as long as the
 #                               seeded material exists
-#   License (0)                 the repository has no LICENSE; which licence is the owner's decision
+#   License (historical 0)      LICENSE and third-party NOTICE were added on 2026-09-18 to match
+#                               the existing Apache-2.0 declaration; remeasure on main after merge
 #   Code-Review (0)             every pull request was merged by its author without another approver
 #   SAST (4)                    Scorecard looks for CodeQL/Sonar-style workflows; the L0 job runs semgrep
 #                               through scripts/semgrep_ci.py, which Scorecard's heuristics do not recognise

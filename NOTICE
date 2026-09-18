@@ -1,0 +1,17 @@
+MultiAgentAlpha (MARA)
+
+The project uses Apache License 2.0, as declared in pyproject.toml; see LICENSE.
+
+The CVSS v4 calculation in src/mara/scoring/cvss4.py and the data tables in
+src/mara/scoring/cvss4_lookup.json are derived from the FIRST reference implementation:
+https://github.com/FIRSTdotorg/cvss-v4-calculator
+Copyright (c) 2023 FIRST.ORG, Inc., Red Hat, and contributors.
+The applicable BSD 2-Clause terms are reproduced in LICENSE-CVSS. The Python port
+and its integration into MARA are modifications to that reference implementation.
+
+Third-party dependencies, model weights, datasets, standards and research material
+remain under their respective licenses. This project's license does not grant rights
+to redistribute model weights or full standards texts. Tool and rule-set sources and
+license restrictions are listed in docs/tools-provenance.md; model-specific records
+belong in sbom/models.yaml. No model weight license or provenance is certified by
+this notice.

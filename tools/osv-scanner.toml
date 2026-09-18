@@ -1,18 +1,1 @@
-# osv-scanner configuration for scripts/osv_ci.py (the L0 job scans the hash-locked closures under tools/).
-# An advisory that cannot be fixed by relocking yet is listed here with a reason and an expiry; the job
-# fails again after ignoreUntil. Keep this list empty whenever possible: the fix is to bump and relock.
-#
-# [[IgnoredVulns]]
-# id = "GHSA-xxxx-xxxx-xxxx"
-# ignoreUntil = 2026-12-31
-# reason = "not reachable from semgrep's CLI use; tracked in issue #NN until the upstream fix is released"
-
-[[IgnoredVulns]]
-id = "CVE-2026-81726"   # aliases (GHSA/PYSEC ids) match too: osv-scanner checks every alias of a group
-ignoreUntil = 2026-12-17
-reason = "nltk 3.10.3 path traversal in model-artifact loading; no fixed release exists on 2026-09-17 and garak 0.17.0 requires >=3.10.3, so relocking cannot remove it. tools/model-eval-requirements.txt is installed only on the isolated G-8 evaluation host, never in CI or the review pipeline. Same entry in tools/trivyignore.yaml."
-
-[[IgnoredVulns]]
-id = "CVE-2026-66007"
-ignoreUntil = 2026-12-17
-reason = "datasets 3.6.0 in the garak closure (reported by osv-scanner in CI on 2026-09-17; trivy's database did not carry it). garak 0.17.0 pins datasets>=3.0.0,<4.0 and 3.6.0 is the newest 3.x release, so relocking cannot remove it without a garak upgrade. tools/model-eval-requirements.txt is installed only on the isolated G-8 evaluation host, never in CI or the review pipeline. Same entry in tools/trivyignore.yaml."
+# Explicit empty default: no advisory exceptions for runtime, CI or build dependencies.

@@ -4,10 +4,10 @@
 
 The binary comes only from MARA_TOOLS_DIR/bin (scripts/install_tools.py: SHA-256 and publisher
 checksum verified), never from PATH, and its manifest version must equal the lock. Range rules:
-  pull_request  --no-merges --first-parent <base>..<head>   (the PR's own commits)
+  pull_request  <merge-base(base,head)>..<head>             (all introduced commits, including merges)
   push          <base>..<head>                              (every commit the push brought in)
   no usable base (empty, all zeros, or not an ancestor of head: new branch, force push)
-                -> the head commit alone (<head>^..<head>), or a working-tree scan when head has no parent.
+                -> all history reachable from head; an invalid head fails the scan.
 gitleaks reads .gitleaks.toml and .gitleaksignore from the source root itself. Findings are redacted.
 Exit 0 clean, 2 leaks found (job fails), 1 gitleaks crashed (job fails).
 """
@@ -47,19 +47,18 @@ def scan_range(base: str, head: str, event: str, source: Path) -> tuple[str | No
     rc, head_sha = git(["rev-parse", "--verify", f"{head}^{{commit}}"], source)
     if rc != 0:
         raise SystemExit(f"ERROR: head {head!r} is not a commit in {source}: {head_sha}")
-    usable = bool(base) and not ZERO_SHA.match(base)
-    if usable:
-        rc, _ = git(["rev-parse", "--verify", f"{base}^{{commit}}"], source)
-        usable = rc == 0 and git(["merge-base", "--is-ancestor", base, head_sha], source)[0] == 0
-    if usable:
-        if event == "pull_request":
-            return f"--no-merges --first-parent {base}..{head_sha}", f"pull_request: the PR's own commits {base[:7]}..{head_sha[:7]}"
-        return f"{base}..{head_sha}", f"{event}: every commit in {base[:7]}..{head_sha[:7]}"
-    rc, _ = git(["rev-parse", "--verify", f"{head_sha}^"], source)
-    why = "no base given" if not base else ("base is all zeros (new branch)" if ZERO_SHA.match(base) else f"base {base[:7]} is not an ancestor of head")
-    if rc == 0:
-        return f"{head_sha}^..{head_sha}", f"{why}: falling back to the head commit {head_sha[:7]} alone"
-    return None, f"{why} and head has no parent: scanning the working tree"
+    if base and not ZERO_SHA.match(base):
+        rc, base_sha = git(["rev-parse", "--verify", f"{base}^{{commit}}"], source)
+        if rc == 0:
+            if event == "pull_request":
+                rc, common = git(["merge-base", base_sha, head_sha], source)
+                if rc == 0:
+                    return f"{common}..{head_sha}", "pull_request: all commits since merge-base"
+            elif git(["merge-base", "--is-ancestor", base_sha, head_sha], source)[0] == 0:
+                return f"{base_sha}..{head_sha}", f"{event}: every introduced commit"
+    # New branch, force push or unavailable base: scan all history reachable from head.
+    # Do not omit secrets added and removed in an earlier commit or merged side branch.
+    return head_sha, "no trustworthy range: all history reachable from head"
 
 
 def summarize(report: Path) -> list[str]:

@@ -47,7 +47,7 @@ def test_config_rejects_single_family_panel():
 def test_config_refuses_source_code_to_vendor_api_without_zdr():
     bad = {
         "models": [{"name": "a", "family": "anthropic", "provider": "anthropic", "model": "claude-opus-5", "data_residency": "vendor_api_30d"},
-                   {"name": "d", "family": "deepseek", "provider": "openai_compatible", "model": "x", "base_url": "http://x", "data_residency": "on_prem"}],
+                   {"name": "d", "family": "deepseek", "provider": "openai_compatible", "model": "x", "base_url": "https://x", "data_residency": "on_prem"}],
         "roles": {"reviewers": ["a", "d"], "skeptic": "d", "redteam": "d", "judges": ["a", "d"]},
     }
     with pytest.raises(ValueError, match="data_residency"):

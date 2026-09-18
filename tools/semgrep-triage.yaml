@@ -49,3 +49,10 @@ accepted:
       mlbom.py (registry_files): the host is fixed to https://huggingface.co and the repository comes from
       the manifest's source.url after hf_repo_from_url refused anything else; the responses are the
       revision, the tree listing and small git-stored files that are hashed, never the weights.
+  - rule: generic.secrets.security.detected-stripe-api-key
+    paths: [".gitleaks.toml"]
+    snippet_sha256: 90a49f6dfb4e862e9041cd3e0383488143a0537b6ca6099dc03724de68ab99c6
+    reason: >
+      Exact allowlist line for the pre-existing synthetic Stripe credential in the Django calibration
+      fixture. The snippet hash binds this exception to that literal; changed values or other lines
+      are not accepted. All fixture paths remain covered by gitleaks with exact-value exceptions.

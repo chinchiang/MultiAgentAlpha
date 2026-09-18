@@ -149,3 +149,16 @@ def test_binary_and_rules_only_from_the_tools_dir(tmp_path):
     (fake / "manifest.json").write_text(json.dumps({"tools": {"semgrep": {"version": "1.177.0"}}}))
     r = _run("--target", "fixtures/vuln-sample", "--report", str(tmp_path / "y.sarif"), "--expect", "fixtures/vuln-sample-sarif/semgrep.sarif", tools=fake)
     assert r.returncode == 2 and "semgrep-rules is not installed" in r.stderr
+
+
+def test_exact_secret_triage_does_not_accept_changed_or_missing_snippet():
+    import hashlib
+
+    from semgrep_ci import match_triage
+    source = "known synthetic allowlist entry"
+    entry = {"rule": "test.secret", "paths": [".gitleaks.toml"], "reason": "synthetic",
+             "snippet_sha256": hashlib.sha256(source.encode()).hexdigest()}
+    assert match_triage("test.secret", ".gitleaks.toml", [entry], source) is entry
+    assert match_triage("test.secret", ".gitleaks.toml", [entry], source+"modified") is None
+    assert match_triage("test.secret", ".gitleaks.toml", [entry]) is None
+    assert match_triage("test.secret", "other.py", [entry], source) is None

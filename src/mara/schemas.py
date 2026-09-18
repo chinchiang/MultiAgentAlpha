@@ -91,6 +91,18 @@ class Finding(BaseModel):
     canary_echoed: bool = Field(default=False, description="Set by the harness if the model repeated the injection canary")
     finder_families: list[ModelFamily] = Field(default_factory=list, description="Families whose reviewers produced this (deduplicated) finding")
 
+    @field_validator("title")
+    @classmethod
+    def _single_line(cls, v: str) -> str:
+        return " ".join(v.split())
+
+    @field_validator("cvss4_vector")
+    @classmethod
+    def _cvss(cls, v: str) -> str:
+        from .scoring.cvss4 import score
+        score(v)
+        return v
+
     @field_validator("dimension")
     @classmethod
     def _dim(cls, v: str) -> str:
@@ -140,10 +152,15 @@ class ConsensusResult(BaseModel):
     position_consistent: bool
     krippendorff_alpha: float | None
     tier: EvidenceTier
-    cvss4_score: float
+    cvss4_score: float | None
     cvss4_severity: str
     ssvc_decision: Literal["Track", "Track*", "Attend", "Act"]
     accepted: bool
+    needs_human: bool = False
+    human_reasons: list[str] = Field(default_factory=list)
+    independent_judges: int = 0
+    agreement_proxy: float | None = None
+    operational_severity: str | None = None
 
 
 class DimensionScore(BaseModel):
@@ -162,8 +179,11 @@ class HumanQueueItem(BaseModel):
     The judges saw a blinded view; the human deliberately sees who said what (report, 15.1)."""
 
     finding_id: str
-    key: str = Field(description="Stable ticket key: sha256(file:line:cwe)[:12], survives re-runs")
-    reasons: list[str] = Field(description="alpha_below_threshold | majority_needs_human | tier_c_high")
+    key: str = Field(description="v2: hash of target, revision, content, file, line and CWE")
+    target_id: str = ""
+    revision: str = ""
+    context_hash: str = ""
+    reasons: list[str] = Field(description="Unresolved reasons shared with the effective gate decision")
     title: str
     dimension: str
     cwe: str
@@ -171,11 +191,12 @@ class HumanQueueItem(BaseModel):
     line: int
     quote: str
     tier: str
-    cvss4_score: float
+    cvss4_score: float | None
     cvss4_severity: str
     ssvc_decision: str
     weighted_score: float
     krippendorff_alpha: float | None
+    agreement_proxy: float | None = None
     votes_tp: int
     votes_fp: int
     votes_human: int
@@ -199,7 +220,16 @@ class ReviewReport(BaseModel):
     votes: list[JudgeVote]
     consensus: list[ConsensusResult]
     dimensions: list[DimensionScore]
-    overall_score: float
+    overall_score: float | None
+    review_status: Literal["complete", "incomplete", "error"] = "incomplete"
+    incomplete_reasons: list[str] = Field(default_factory=list)
+    coverage: dict = Field(default_factory=dict)
+    tool_results: list[dict] = Field(default_factory=list)
+    tool_health: list[dict] = Field(default_factory=list)
+    provider_manifest: list[dict] = Field(default_factory=list)
+    config_hash: str = ""
+    target_id: str = ""
+    revision: str = ""
     gate_passed: bool
     bias_audit: dict[str, float | int | str | dict]
     psirt: list[dict] = Field(default_factory=list, description="G-12: CRA Article 14 early-warning payloads for accepted tier-A Critical findings")

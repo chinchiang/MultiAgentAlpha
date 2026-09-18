@@ -35,7 +35,7 @@ def test_seeded_fixture_is_critical_pwn_request():
 def test_hardened_workflow_has_no_critical_or_high():
     inv = inventory_workflow(ROOT / ".github/workflows/mara-review.yml", ROOT)
     assert inv.parse_error is None
-    assert inv.triggers == ["pull_request", "push"]
+    assert set(inv.triggers) == {"pull_request", "push", "schedule", "workflow_dispatch"}
     assert not inv.pull_request_target, "a comment mentioning pull_request_target must not count as a trigger"
     assert not inv.head_checkout_lines
     assert inv.top_permissions == "{}"

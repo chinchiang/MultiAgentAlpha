@@ -26,9 +26,26 @@ Token-Permissions floor stay as they are. `docs/.nojekyll` makes GitHub serve th
 are (Jekyll would otherwise try to build the Markdown and mishandle the non-ASCII report file
 name), and `docs/index.html` is a self-contained redirect to the report, so the public address is
 just <https://chinchiang.github.io/MultiAgentAlpha/>. Everything under `docs/` becomes reachable
-at that address, which adds nothing to what the public repository already exposes. Until the
-owner switches Pages on in Settings, the address returns 404. `tests/test_docs_site.py` checks
+at that address, so it must contain only intended public documentation. Before the
+2026-09-18 remediation, Pages served the repository root; it now serves `/docs` only.
+The deliberately vulnerable fixture URLs return 404. `tests/test_docs_site.py` checks
 that the redirect points at a file that exists and loads nothing off-site.
+
+## Security remediation (2026-09-18)
+
+See [the remediation record](docs/security-remediation-2026-09-18.md) for review IDs, changed controls,
+validation and remaining operational requirements. The review gate now fails closed when coverage,
+tool health, valid independent votes or human adjudication is missing. `overall_score` is `null`
+for incomplete reviews; scores on completed reviews are prioritization heuristics, not probabilities
+that the application is secure. Single-finding agreement is named `agreement_proxy`, distinct from
+corpus-level Krippendorff alpha. The older alpha-named configuration keys remain for compatibility.
+
+Git targets include tracked source only. Secret files, symlinks, unsafe paths and file/request-size
+limits are visible in the coverage manifest; omitted required text prevents a complete result. Live
+model calls require a current local secret preflight, even when other SARIF was pre-recorded. Use
+HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
+lack two independent judge families when several reviewers find the same issue; add independently
+operated families or complete human review instead of weakening the quorum.
 
 ## The six layers
 
@@ -54,7 +71,8 @@ Found a security problem in this repository's own code? See [SECURITY.md](SECURI
 
 ```bash
 python -m pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt   # the resolved, hash-pinned closure
-python -m pip install --no-deps -e .                                                          # this repository's own code only
+python -m pip install --require-hashes --only-binary=:all: -r tools/build-requirements.txt # build backend closure
+python -m pip install --no-deps --no-build-isolation -e .                                    # use only the pinned backend
 pytest -q
 mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out
 ```
@@ -136,7 +154,7 @@ its section 6 adds what the CI logs showed that the static inventory cannot, and
 followed: CI now runs zizmor strictly on the real workflows, checks that zizmor's findings on the
 seeded fixture match `fixtures/vuln-sample-sarif/zizmor.sarif` (now produced by zizmor itself), and
 no longer hides a crashed or leaking gitleaks run behind `continue-on-error` (`.gitleaks.toml`
-allowlists the seeded secrets under `fixtures/` and `calib/samples/`). Since 2026-09-13 the scan
+allowlists exact known synthetic values; all fixture paths remain scanned). Since 2026-09-13 the scan
 itself is `scripts/gitleaks_ci.py` with the gitleaks pinned in `tools/versions.lock` (PR: the PR's
 commits; push: every new commit), not gitleaks-action, so no action downloads its own tool and the
 L0 job needs no `pull-requests` permission.
@@ -165,8 +183,11 @@ SHA-256, and `tools/model-eval-requirements.txt` is the closure of `garak==0.17.
 distributions, two of them sdists because no wheel exists). Both are written by
 `scripts/relock_requirements.py` from a `pip install --dry-run --report` resolution on CPython 3.11 /
 Linux x86_64 and installed with `--require-hashes`; the workflows then add this repository's own
-code with `pip install --no-deps -e .`, so no `pip install` in CI runs unpinned. A test fails if
-one ever does.
+code with `pip install --no-deps --no-build-isolation -e .` after installing the hashed
+`tools/build-requirements.txt` closure. The runtime CI path does not let build isolation resolve
+unpinned backends. The separate model-evaluation closure contains two source distributions;
+the runbook also uses the hashed build closure with `--no-build-isolation`. Both sdists were
+successfully built this way; a full live evaluation still requires the deployment environment.
 
 ## semgrep and osv-scanner in CI (L0 job)
 
@@ -183,9 +204,10 @@ differs from the lock:
   record, and entries that no longer match anything are reported as stale.
 - `scripts/osv_ci.py --target fixtures/vuln-sample --expect-package requests` must see the
   fixture's `requests==2.19.0` flagged, so a silent scanner or database regression is caught.
-- `scripts/osv_ci.py --lockfile tools/*-requirements.txt --config tools/osv-scanner.toml` checks
-  the hash-locked closures this repository installs; an advisory fails the job unless
-  `tools/osv-scanner.toml` ignores it with a reason and an `ignoreUntil` date.
+- The bootstrap, dev, semgrep and build closures use `tools/osv-scanner.toml` with no advisory
+  exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`;
+  its dated exceptions cannot suppress an advisory in runtime or build dependencies. These scans
+  also run weekly and on manual workflow dispatch.
 
 semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories
 (never `--config auto`), so nothing is sent to semgrep.dev; osv-scanner runs `scan source
@@ -216,10 +238,10 @@ for the database; `docs/tools-provenance.md` section 3c records what is and is n
 ## Code Scanning and Scorecard (public repository)
 
 The repository is public since 2026-09-14, which makes GitHub Code Scanning free. The
-`code-scanning` job of `mara-review.yml` takes the five SARIF files the L0 job produced for this
-repository (semgrep, osv-scanner, trivy, gitleaks, zizmor) from the `l0-sarif` artifact, runs
-`scripts/code_scanning_prep.py` (drops triaged findings and results without a location, makes
-paths repository-relative, sets one Code Scanning category per tool) and uploads them with
+read-only L0 job of `mara-review.yml` runs `scripts/code_scanning_prep.py` before publishing the
+`code-scanning` artifact (accepted suppressions and locationless results are filtered, paths are
+repository-relative, and each tool has a category). The separate `code-scanning` job only
+downloads that prepared artifact and uploads it with
 `github/codeql-action/upload-sarif`. It is the only job with `security-events: write`, it runs no
 repository code, and it is skipped for pull requests from forks or Dependabot (read-only token).
 The fixture scans and the mock review report are never uploaded: they describe seeded material.
@@ -252,7 +274,7 @@ the table to a `governance-check` tracking issue. `docs/governance-check-2026-09
 first run: G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
 calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) failed
 on that first run; G-1, G-4 and G-10 needed human evidence. Since then every item has a mechanism
-and is machine-decidable: G-11 passes; G-12 passes once `psirt.enabled` is set with a real endpoint;
+and is machine-decidable: G-11 passes; G-12 requires a successful endpoint handshake and no overdue confirmed stage;
 G-7 once the platform team has hashed and signed the weights (`docs/ml-bom.md`); G-13 once one
 person per role holds a valid training record (`docs/ai-literacy-training.md`); G-1, G-4 and G-10
 once the policy is approved, live swap drills are recorded and the rollout has started
@@ -264,12 +286,14 @@ marked passed before the fact.
 
 With `psirt.enabled: true` and `psirt.shipped: true` in the config, every accepted finding in the
 configured tiers and severities (default: tier A, Critical) is written to
-`out/psirt-notifications.json` as an EU CRA Article 14 early-warning payload carrying the evidence
-chain and the 24 h / 72 h / 14 d deadlines counted from the review; `mara review --notify-psirt`
-POSTs them to the PSIRT webhook with a bearer token from the environment, once per finding: a
-send ledger (`ops/psirt/ledger.json`) skips findings whose early warning was already delivered,
-records every attempt, and carries the PSIRT's references for the 72 h notification and 14 d final
-report; `scripts/psirt_ops.py status` names any stage past its deadline. `scripts/psirt_ops.py
+`out/psirt-notifications.json` as a `mara-psirt/2` internal hand-off carrying the evidence chain.
+Review time anchors only internal service targets. Legal deadlines stay empty until PSIRT confirms
+an event type and awareness timestamp; the final-report anchor depends on that event type.
+`mara review --notify-psirt` POSTs the hand-off to the configured webhook with an environment token.
+The send ledger (`ops/psirt/ledger.json`) deduplicates internal hand-offs. After confirmation, use
+`scripts/psirt_ops.py confirm-event --key … --event event.json --reference …` to update the event
+and deadlines without resetting delivery history; `record` records the PSIRT's legal-stage references.
+`scripts/psirt_ops.py status` distinguishes unknown legal anchors from recorded overdue stages. `scripts/psirt_ops.py
 handshake` proves the endpoint accepts the payload with the real token and records it; governance
 G-12 requires a fresh successful handshake and no overdue stage, not just `enabled: true`. Policy
 P6 keeps the trigger narrow (tiers within A/B, severities within Critical/High, HTTPS, no inline

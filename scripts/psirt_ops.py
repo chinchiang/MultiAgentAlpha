@@ -6,13 +6,15 @@
       than psirt.handshake_max_age_days: `enabled: true` alone proves nothing about the endpoint.
   python3 scripts/psirt_ops.py status [--config ...] [--now ISO]
       every finding in the ledger with its stage and deadlines; exit 1 when any open item is past a
-      deadline (early warning not delivered, 72 h notification or 14 d final report not recorded).
-  python3 scripts/psirt_ops.py record --key <dedupe_key> --stage notification|final_report --reference PSIRT-123
-      the PSIRT produced the 72 h notification / 14 d final report: record its reference.
+      confirmed deadline; unknown legal anchors are explicitly shown as unknown.
+  python3 scripts/psirt_ops.py confirm-event --key <dedupe_key> --event event.json --reference PSIRT-123
+      record PSIRT-confirmed awareness and event-specific anchors (also updates an existing hand-off).
+  python3 scripts/psirt_ops.py record --key <dedupe_key> --stage early_warning|notification|final_report --reference PSIRT-123
+      record the PSIRT's reference for a legal reporting stage.
   python3 scripts/psirt_ops.py close --key <dedupe_key> --reason "..."
       the PSIRT decided the item is not an Article 14 event (not exploited, false positive) or it is done.
 
-Nothing here is a notification to an authority: the early warning goes to the PSIRT from
+Nothing here is a notification to an authority: the internal hand-off goes to the PSIRT from
 `mara review --notify-psirt`; whether it becomes an Article 14 report is the PSIRT's call.
 """
 
@@ -58,7 +60,7 @@ def cmd_status(a: argparse.Namespace) -> int:
     ledger = pl.load_ledger(_ledger_path(cfg))
     rows = pl.status_rows(ledger, now)
     if not rows:
-        print(f"ledger {_ledger_path(cfg)}: no items (no early warning has been sent yet)")
+        print(f"ledger {_ledger_path(cfg)}: no items (no internal hand-off has been attempted)")
         return 0
     for r in rows:
         f = r["finding"]
@@ -83,6 +85,15 @@ def cmd_record(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_confirm_event(a: argparse.Namespace) -> int:
+    cfg = load_config(a.config)
+    ledger = pl.load_ledger(_ledger_path(cfg))
+    item = pl.confirm_event(ledger, a.key, json.loads(a.event.read_text(encoding="utf-8")), a.reference)
+    pl.save_ledger(ledger, _ledger_path(cfg))
+    print(f"{a.key}: confirmed PSIRT event {a.reference}; deadlines {json.dumps(item['deadlines'])}")
+    return 0
+
+
 def cmd_close(a: argparse.Namespace) -> int:
     cfg = load_config(a.config)
     ledger = pl.load_ledger(_ledger_path(cfg))
@@ -102,14 +113,19 @@ def main() -> int:
     s.add_argument("--now", help="evaluate deadlines as of this ISO time (default: now)")
     s = sub.add_parser("record")
     s.add_argument("--key", required=True)
-    s.add_argument("--stage", required=True, choices=["notification", "final_report"])
+    s.add_argument("--stage", required=True, choices=["early_warning", "notification", "final_report"])
+    s.add_argument("--reference", required=True)
+    s = sub.add_parser("confirm-event")
+    s.add_argument("--key", required=True)
+    s.add_argument("--event", type=Path, required=True)
     s.add_argument("--reference", required=True)
     s = sub.add_parser("close")
     s.add_argument("--key", required=True)
     s.add_argument("--reason", required=True)
     a = ap.parse_args()
     try:
-        return {"handshake": cmd_handshake, "status": cmd_status, "record": cmd_record, "close": cmd_close}[a.cmd](a)
+        return {"handshake": cmd_handshake, "status": cmd_status, "record": cmd_record,
+                "confirm-event": cmd_confirm_event, "close": cmd_close}[a.cmd](a)
     except (RuntimeError, ValueError, KeyError, OSError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2

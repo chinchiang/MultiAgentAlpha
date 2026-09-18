@@ -33,7 +33,7 @@ def _result(vid: str, pkg: str, ver: str, suppressed: bool = False, table_only: 
     r = {"ruleId": vid, "level": "warning", "message": {"text": text}, "_pkg": pkg, "_ver": ver,
          "locations": [{"physicalLocation": {"artifactLocation": {"uri": "file:///w/fixtures/vuln-sample/requirements.txt"}}}]}
     if suppressed:
-        r["suppressions"] = [{"kind": "external"}]
+        r["suppressions"] = [{"kind": "external", "status": "accepted"}]
     return r
 
 
