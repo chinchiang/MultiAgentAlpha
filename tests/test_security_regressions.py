@@ -185,6 +185,16 @@ def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path, monke
     assert report.bias_audit["reviewer_refusals"] == 33
 
 
+def test_one_verified_quote_cannot_launder_an_invalid_primary_location(tmp_path):
+    pipe, f = pipeline(tmp_path), finding()
+    bad = Provenance(file="../outside.py", line=999, quote="fabricated", verified=False)
+    f = f.model_copy(update={"provenance": [bad, *f.provenance]})
+    votes = [vote(family, pass_id) for family in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON) for pass_id in ("forward", "reverse")]
+    c = pipe.score([f], {f.id: {ModelFamily.ANTHROPIC}}, {}, {}, votes, [])[0]
+    assert not c.accepted and c.needs_human and c.tier.value == "D"
+    assert "unverified_provenance" in c.human_reasons
+
+
 def test_live_secret_preflight_stops_all_provider_requests(tmp_path, monkeypatch):
     pipe = pipeline(tmp_path)
     pipe.providers = {n: Reply(p.spec.model_copy(update={"provider": "anthropic"})) for n, p in pipe.providers.items()}

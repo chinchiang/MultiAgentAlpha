@@ -66,7 +66,7 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
             prov = [Provenance(**p) for p in raw["provenance"]]
             for p in prov:
                 p.verified = base.verify_quote(ctx, p.file, p.line, p.quote)
-            if not any(p.verified for p in prov):
+            if not all(p.verified for p in prov):
                 audit["unverified_quotes"] += 1
             f = Finding(
                 id="pending", dimension=dimension, title=raw["title"], cwe=raw["cwe"],

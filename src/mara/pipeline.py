@@ -116,10 +116,10 @@ class Pipeline:
         for f in findings:
             p = f.provenance[0]
             match = None
-            f_ok = any(x.verified for x in f.provenance)
+            f_ok = all(x.verified for x in f.provenance)
             for k in kept:
                 q = k.provenance[0]
-                k_ok = any(x.verified for x in k.provenance)
+                k_ok = all(x.verified for x in k.provenance)
                 # never merge an unverified (possibly fabricated) finding into a verified one:
                 # it would inherit the verified finding's acceptance and hide the fabrication
                 if k.dimension == f.dimension and k.cwe == f.cwe and q.file == p.file and abs(q.line - p.line) <= 3 and k_ok == f_ok:
@@ -240,7 +240,7 @@ class Pipeline:
             alpha = _agreement_proxy(fv)
             sk = skeptic_by_id.get(f.id)
             refuted = bool(sk and sk.verdict == "refuted")
-            prov_ok = any(p.verified for p in f.provenance)
+            prov_ok = bool(f.provenance) and all(p.verified for p in f.provenance)
             corroborated = _tool_corroborates(f, tool_results)
             fams = set(agreeing) | (finders[f.id] if score >= self.cfg.gate.accept_threshold else set())
             if corroborated:
@@ -267,6 +267,8 @@ class Pipeline:
             rt = red_by_id.get(f.id)
             ssvc = ssvc_decision(severity=sev, exploitable=rt.exploitable if rt else "unknown", tier=tier)
             reasons = []
+            if not prov_ok:
+                reasons.append("unverified_provenance")
             if not quorum_ok:
                 reasons.append("insufficient_independent_judges")
             if len(fv) != len(raw_votes):
