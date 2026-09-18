@@ -6,7 +6,9 @@ schemas; reviewers never see each other's output; judges never see model identit
 from __future__ import annotations
 
 import datetime as dt
-from collections import defaultdict
+import hashlib
+from collections import Counter, defaultdict
+from dataclasses import asdict
 from pathlib import Path
 
 from .agents import base, judge, redteam, reviewer, skeptic
@@ -73,26 +75,30 @@ class Pipeline:
     def run_reviewers(self, ctx: RepoContext) -> list[Finding]:
         canary = base.Canary()
         raw: list[Finding] = []
-        for dim in self.cfg.dimensions:
-            for name in self.cfg.roles.reviewers:
-                prov = self._p(name)
-                findings, audit = reviewer.review_dimension(prov, ctx, dim, canary)
-                self.audit["reviewer_calls"] += 1
-                self.audit["reviewer_refusals"] += int(audit["refused"])
-                self.audit["canary_echoes"] += int(audit["canary_echoed"])
-                fam = prov.family.value
-                self.audit[f"reviewer_calls[{fam}]"] += 1
-                self.audit[f"reviewer_refusals[{fam}]"] += int(audit["refused"])
-                self.audit[f"canary_echoes[{fam}]"] += int(audit["canary_echoed"])
-                self.audit[f"findings_with_unverified_quotes[{fam}]"] += audit["unverified_quotes"]
-                self.audit[f"invalid_findings_dropped[{fam}]"] += audit["invalid"]
-                self.audit["invalid_findings_dropped"] += audit["invalid"]
-                self.audit["findings_with_unverified_quotes"] += audit["unverified_quotes"]
-                self.audit["input_tokens"] += audit["input_tokens"]
-                self.audit["output_tokens"] += audit["output_tokens"]
-                raw.extend(findings)
-                self._say(f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)"
-                          + (" [REFUSED]" if audit["refused"] else "") + (" [CANARY ECHOED]" if audit["canary_echoed"] else ""))
+        for batch in ctx.batches():
+            for dim in self.cfg.dimensions:
+                for name in self.cfg.roles.reviewers:
+                    prov = self._p(name)
+                    findings, audit = reviewer.review_dimension(prov, batch, dim, canary)
+                    self.audit["reviewer_calls"] += 1
+                    self.audit["reviewer_refusals"] += int(audit["refused"])
+                    self.audit["canary_echoes"] += int(audit["canary_echoed"])
+                    fam = prov.family.value
+                    self.audit[f"reviewer_calls[{fam}]"] += 1
+                    self.audit[f"reviewer_refusals[{fam}]"] += int(audit["refused"])
+                    self.audit[f"canary_echoes[{fam}]"] += int(audit["canary_echoed"])
+                    self.audit[f"findings_with_unverified_quotes[{fam}]"] += audit["unverified_quotes"]
+                    self.audit[f"invalid_findings_dropped[{fam}]"] += audit["invalid"]
+                    self.audit["invalid_findings_dropped"] += audit["invalid"]
+                    self.audit["findings_with_unverified_quotes"] += audit["unverified_quotes"]
+                    self.audit["input_tokens"] += audit["input_tokens"]
+                    self.audit["output_tokens"] += audit["output_tokens"]
+                    raw.extend(findings)
+                    self._say(
+                        f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)"
+                        + (" [REFUSED]" if audit["refused"] else "")
+                        + (" [CANARY ECHOED]" if audit["canary_echoed"] else "")
+                    )
         # assign ids and strip unknown standard references
         out: list[Finding] = []
         for i, f in enumerate(raw, 1):
@@ -116,8 +122,7 @@ class Pipeline:
                 k_ok = any(x.verified for x in k.provenance)
                 # never merge an unverified (possibly fabricated) finding into a verified one:
                 # it would inherit the verified finding's acceptance and hide the fabrication
-                if (k.dimension == f.dimension and k.cwe == f.cwe and q.file == p.file
-                        and abs(q.line - p.line) <= 3 and k_ok == f_ok):
+                if k.dimension == f.dimension and k.cwe == f.cwe and q.file == p.file and abs(q.line - p.line) <= 3 and k_ok == f_ok:
                     match = k
                     break
             if match is None:
@@ -167,8 +172,9 @@ class Pipeline:
         return notes
 
     # ------------------------------------------------------------------ L4
-    def run_jury(self, ctx: RepoContext, findings: list[Finding], skeptic_by_id: dict[str, SkepticVerdict],
-                 finders: dict[str, set[ModelFamily]]) -> list[JudgeVote]:
+    def run_jury(
+        self, ctx: RepoContext, findings: list[Finding], skeptic_by_id: dict[str, SkepticVerdict], finders: dict[str, set[ModelFamily]]
+    ) -> list[JudgeVote]:
         votes: list[JudgeVote] = []
         judge_fams = [self._p(n).family for n in self.cfg.roles.judges]
         min_ind = self.cfg.gate.min_independent_judges
@@ -205,8 +211,15 @@ class Pipeline:
         return votes
 
     # ------------------------------------------------------------------ L5
-    def score(self, findings: list[Finding], finders: dict[str, set[ModelFamily]], skeptic_by_id: dict[str, SkepticVerdict],
-              red_by_id: dict[str, RedTeamNote], votes: list[JudgeVote], tool_results: list[ToolResult]) -> list[ConsensusResult]:
+    def score(
+        self,
+        findings: list[Finding],
+        finders: dict[str, set[ModelFamily]],
+        skeptic_by_id: dict[str, SkepticVerdict],
+        red_by_id: dict[str, RedTeamNote],
+        votes: list[JudgeVote],
+        tool_results: list[ToolResult],
+    ) -> list[ConsensusResult]:
         weights = {m.family: m.weight for m in self.cfg.models}
         by_finding: dict[str, list[JudgeVote]] = defaultdict(list)
         for v in votes:
@@ -214,10 +227,17 @@ class Pipeline:
         results: list[ConsensusResult] = []
         flips = 0
         for f in findings:
-            fv = by_finding.get(f.id, [])
+            raw_votes = by_finding.get(f.id, [])
+            counts = Counter((v.judge_family, v.pass_id) for v in raw_votes)
+            configured = {self._p(n).family for n in self.cfg.roles.judges}
+            valid_families = {fam for fam in configured if counts[(fam, "forward")] == counts[(fam, "reverse")] == 1}
+            fv = [v.model_copy(update={"self_family": v.judge_family in finders[f.id]}) for v in raw_votes if v.judge_family in valid_families]
+            independent = valid_families - finders[f.id]
+            quorum_ok = len(independent) >= self.cfg.gate.min_independent_judges
+
             score, tp, fp, human, agreeing, consistent = weighted_consensus(fv, weights, self.cfg.gate.self_judge_discount)
             flips += int(not consistent and bool(fv))
-            alpha = _per_finding_alpha(fv)
+            alpha = _agreement_proxy(fv)
             sk = skeptic_by_id.get(f.id)
             refuted = bool(sk and sk.verdict == "refuted")
             prov_ok = any(p.verified for p in f.provenance)
@@ -225,38 +245,77 @@ class Pipeline:
             fams = set(agreeing) | (finders[f.id] if score >= self.cfg.gate.accept_threshold else set())
             if corroborated:
                 fams.add(ModelFamily.TOOL)
-            tier = assign_tier(provenance_verified=prov_ok, tool_corroborated=corroborated, families_agreeing=sorted(fams, key=lambda x: x.value),
-                               skeptic_refuted=refuted, reachability=f.reachability, consensus_score=score,
-                               accept_threshold=self.cfg.gate.accept_threshold)
+            tier = assign_tier(
+                provenance_verified=prov_ok,
+                tool_corroborated=corroborated,
+                families_agreeing=sorted(fams, key=lambda x: x.value),
+                skeptic_refuted=refuted,
+                reachability=f.reachability,
+                consensus_score=score,
+                accept_threshold=self.cfg.gate.accept_threshold,
+            )
             try:
                 num = cvss4.score(f.cvss4_vector)
                 sev = cvss4.severity(num)
             except cvss4.CVSS4Error:
-                num, sev = 0.0, "None"
+                num, sev = None, "Unknown"
                 self.audit["invalid_cvss_vectors"] += 1
-            # judges' severity bands act as a sanity check on the finder's vector: use the lower of the two
-            bands = [v.severity_band for v in fv]
-            if bands:
-                order = ["None", "Low", "Medium", "High", "Critical"]
-                jury_band = sorted(bands, key=order.index)[len(bands) // 2]
-                if order.index(jury_band) < order.index(sev):
-                    sev = jury_band
-                    self.audit["severity_downgraded_by_jury"] += 1
+            # Keep mathematical CVSS severity separate from the jury's operational opinion.
+            order = ["None", "Low", "Medium", "High", "Critical"]
+            family_bands = [max((v.severity_band for v in fv if v.judge_family == fam), key=order.index) for fam in valid_families]
+            operational = sorted(family_bands, key=order.index)[len(family_bands) // 2] if family_bands else None
             rt = red_by_id.get(f.id)
             ssvc = ssvc_decision(severity=sev, exploitable=rt.exploitable if rt else "unknown", tier=tier)
-            needs_human = (alpha is not None and alpha < self.human_alpha_threshold) or (human > tp and human > fp)
+            reasons = []
+            if not quorum_ok:
+                reasons.append("insufficient_independent_judges")
+            if len(fv) != len(raw_votes):
+                reasons.append("invalid_or_incomplete_judge_passes")
+            if num is None:
+                reasons.append("invalid_cvss_vector")
+            if alpha is not None and alpha < self.human_alpha_threshold:
+                reasons.append("agreement_below_threshold")
+            if human > tp and human > fp:
+                reasons.append("majority_needs_human")
+            if not consistent and fv:
+                reasons.append("position_inconsistent")
+            if tier == EvidenceTier.C and sev in {"High", "Critical"}:
+                reasons.append("tier_c_high")
+            needs_human = bool(reasons)
             accepted = tier != EvidenceTier.D and score >= self.cfg.gate.accept_threshold and not needs_human
-            results.append(ConsensusResult(
-                finding_id=f.id, weighted_score=score, votes_tp=tp, votes_fp=fp, votes_human=human,
-                families_agreeing=sorted(fams, key=lambda x: x.value), tool_corroborated=corroborated, skeptic_refuted=refuted,
-                position_consistent=consistent, krippendorff_alpha=alpha, tier=tier, cvss4_score=num, cvss4_severity=sev,
-                ssvc_decision=ssvc, accepted=accepted,
-            ))
+            results.append(
+                ConsensusResult(
+                    finding_id=f.id,
+                    weighted_score=score,
+                    votes_tp=tp,
+                    votes_fp=fp,
+                    votes_human=human,
+                    families_agreeing=sorted(fams, key=lambda x: x.value),
+                    tool_corroborated=corroborated,
+                    skeptic_refuted=refuted,
+                    position_consistent=consistent,
+                    krippendorff_alpha=None,
+                    tier=tier,
+                    cvss4_score=num,
+                    cvss4_severity=sev,
+                    ssvc_decision=ssvc,
+                    accepted=accepted,
+                    needs_human=needs_human,
+                    human_reasons=reasons,
+                    independent_judges=len(independent),
+                    agreement_proxy=alpha,
+                    operational_severity=operational,
+                )
+            )
         self.audit["position_flips"] = flips
         return results
 
     # ------------------------------------------------------------------ run
     def run(self, target: str | Path, *, sarif_dir: Path | None = None, mode: str = "live") -> ReviewReport:
+        actual_modes = {p.spec.provider for p in self.providers.values()}
+        actual_mode = "mock" if actual_modes == {"mock"} else "live"
+        if mode not in {"mock", "live"} or actual_mode != mode or (mode == "live" and "mock" in actual_modes):
+            raise ValueError("provider mode does not match the actual provider configuration")
         target = Path(target).resolve()
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = build_context(target)
@@ -264,9 +323,17 @@ class Pipeline:
             prov.bind_target(ctx.root)
         self._say(f"L1: {ctx.summary()}")
         tool_runs = self.run_tools(target, sarif_dir)
+        if mode == "live" and sarif_dir:
+            # Pre-recorded SARIF cannot authorize egress from the current working tree.
+            preflight = run_all(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])
+            tool_runs = [r for r in tool_runs if r.tool != "gitleaks"] + preflight
         tool_results = [r for run in tool_runs for r in run.results]
         tools_ran = {run.tool for run in tool_runs if run.ran}
-        raw = self.run_reviewers(ctx)
+        # Live source egress is blocked before any provider sees data if the trusted local
+        # secret scan is unavailable or reports secrets. The masked manifest remains reviewable.
+        secret_runs = [r for r in tool_runs if r.tool == "gitleaks"]
+        egress_blocked = mode == "live" and (not secret_runs or any(not r.ran or r.results for r in secret_runs))
+        raw = [] if egress_blocked else self.run_reviewers(ctx)
         findings, finders = self.dedupe(raw)
         findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
         self.audit["findings_raw"] = len(raw)
@@ -281,10 +348,36 @@ class Pipeline:
         cons_by_id = {c.finding_id: c for c in consensus}
         dims = []
         for d in self.cfg.dimensions:
-            tool_ran = any(d in TOOL_DIMENSIONS[t] for t in tools_ran)
+            tool_ran = any(d in TOOL_DIMENSIONS.get(t, []) for t in tools_ran)
             dims.append(score_dimension(d, findings, cons_by_id, tool_ran))
         overall = round(sum(x.score for x in dims) / len(dims), 1) if dims else 0.0
-        gate = True
+        incomplete = []
+        if not ctx.complete:
+            incomplete.append("context_coverage_incomplete")
+        if egress_blocked:
+            incomplete.append("source_egress_blocked_by_secret_preflight")
+        required_tools = {t for t, ds in TOOL_DIMENSIONS.items() if set(ds) & set(self.cfg.dimensions)}
+        if not required_tools <= tools_ran or any(not r.ran for r in tool_runs):
+            incomplete.append("required_tool_incomplete")
+        for key in (
+            "reviewer_refusals",
+            "invalid_findings_dropped",
+            "canary_echoes",
+            "judge_invalid_items",
+            "skeptic_invalid_items",
+            "redteam_invalid_items",
+        ):
+            if self.audit[key]:
+                incomplete.append(key)
+        if any(c.needs_human for c in consensus):
+            incomplete.append("unresolved_human_review")
+        # Tool evidence remains visible independently of model output. A model's silence or
+        # rejection never clears an unsuppressed tool result.
+        if any(t.level in {"error", "warning"} for t in tool_results):
+            incomplete.append("unresolved_tool_findings")
+        gate = not incomplete
+        if incomplete:
+            overall = None
         for c in consensus:
             if c.accepted and c.tier.value in self.cfg.gate.block_on_tiers and c.cvss4_severity in self.cfg.gate.block_on_severity:
                 gate = False
@@ -296,22 +389,63 @@ class Pipeline:
             self.audit[f"judge_agreement[{k}]"] = v
         self.audit["tool_results_ingested"] = len(tool_results)
         self.audit["tools_ran"] = ",".join(sorted(tools_ran)) or "none"
+        target_id = hashlib.sha256(str(target).encode()).hexdigest()
         report = ReviewReport(
-            target=str(target), generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"), provider_mode=mode,
-            families_used=sorted({m.family.value for m in self.cfg.models}), findings=findings, skeptic=sk, redteam=rt,
-            votes=votes, consensus=consensus, dimensions=dims, overall_score=overall, gate_passed=gate, bias_audit=dict(self.audit),
+            target=str(target),
+            generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+            provider_mode=mode,
+            families_used=sorted({m.family.value for m in self.cfg.models}),
+            findings=findings,
+            skeptic=sk,
+            redteam=rt,
+            review_status="incomplete" if incomplete else "complete",
+            incomplete_reasons=incomplete,
+            coverage=ctx.coverage(),
+            tool_results=[asdict(t) for t in tool_results],
+            tool_health=[{"tool": t.tool, "ran": t.ran, "note": t.note} for t in tool_runs],
+            provider_manifest=[{"name": n, "type": p.spec.provider, "family": p.family.value, "model": p.model} for n, p in self.providers.items()],
+            config_hash=hashlib.sha256(self.cfg.model_dump_json().encode()).hexdigest(),
+            target_id=target_id,
+            revision=ctx.revision,
+            votes=votes,
+            consensus=consensus,
+            dimensions=dims,
+            overall_score=overall,
+            gate_passed=gate,
+            bias_audit=dict(self.audit),
         )
         # G-11: the human queue as an object with full context; decisions come back through calib/decisions
         from .report.human_queue_out import build_queue
 
-        report.human_queue = build_queue(findings, cons_by_id, sk_by_id, rt_by_id, votes, self.cfg, exclude_tier_c=self.exclude_tier_c)
-        for k, v in (("human_queue_size", len(report.human_queue)), ("human_queue_backlog", self.backlog if self.backlog is not None else "unknown"),
-                     ("human_queue_tightened", int(self.queue_tightened)), ("human_alpha_threshold", self.human_alpha_threshold)):
+        report.human_queue = build_queue(
+            findings,
+            cons_by_id,
+            sk_by_id,
+            rt_by_id,
+            votes,
+            self.cfg,
+            exclude_tier_c=self.exclude_tier_c,
+            target_id=target_id,
+            revision=ctx.revision,
+            context_hash=ctx.content_hash,
+        )
+        for k, v in (
+            ("human_queue_size", len(report.human_queue)),
+            ("human_queue_backlog", self.backlog if self.backlog is not None else "unknown"),
+            ("human_queue_tightened", int(self.queue_tightened)),
+            ("human_alpha_threshold", self.human_alpha_threshold),
+        ):
             self.audit[k] = v
             report.bias_audit[k] = v
-        self._say(f"L5: human queue: {len(report.human_queue)} item(s)"
-                  + (f" [TIGHTENED: backlog {self.backlog} > {self.cfg.human_queue.backlog_limit}, alpha threshold {self.human_alpha_threshold}"
-                     f"{', tier C not queued' if self.exclude_tier_c else ''}]" if self.queue_tightened else ""))
+        self._say(
+            f"L5: human queue: {len(report.human_queue)} item(s)"
+            + (
+                f" [TIGHTENED: backlog {self.backlog} > {self.cfg.human_queue.backlog_limit}, alpha threshold {self.human_alpha_threshold}"
+                f"{', tier C not queued' if self.exclude_tier_c else ''}]"
+                if self.queue_tightened
+                else ""
+            )
+        )
         # G-12: accepted tier-A Critical findings on a shipped product start the CRA Article 14 clock
         from .report.psirt_out import build_notifications
 
@@ -319,8 +453,10 @@ class Pipeline:
         self.audit["psirt_notifications"] = len(report.psirt)
         report.bias_audit["psirt_notifications"] = len(report.psirt)
         # G-7: which self-hosted weights the report was produced with, as the ML-BOM knows them
-        ml_bom = {n: {"model_id": st.model_id, "status": st.status, "component": st.component_name,
-                      "version": st.component_version, "sha256": st.digest} for n, st in self.ml_bom_status.items()}
+        ml_bom = {
+            n: {"model_id": st.model_id, "status": st.status, "component": st.component_name, "version": st.component_version, "sha256": st.digest}
+            for n, st in self.ml_bom_status.items()
+        }
         self.audit["ml_bom"] = ml_bom
         report.bias_audit["ml_bom"] = ml_bom
         self.audit["rollout_phase"] = self.cfg.rollout.phase
@@ -332,12 +468,12 @@ class Pipeline:
         self.audit["model_eval"] = me
         report.bias_audit["model_eval"] = me
         if ml_bom:
-            self.log("L0: ML-BOM: " + ", ".join(f"{n} {v['status']}" for n, v in ml_bom.items()))
+            self._say("L0: ML-BOM: " + ", ".join(f"{n} {v['status']}" for n, v in ml_bom.items()))
         self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")
         return report
 
 
-def _per_finding_alpha(votes: list[JudgeVote]) -> float | None:
+def _agreement_proxy(votes: list[JudgeVote]) -> float | None:
     """Agreement among judges on one finding, treating each (judge, pass) as a rater over the
     two-unit set {this finding forward, this finding reverse} is degenerate; instead we report
     the simple share of the modal verdict as a bounded proxy when alpha is undefined."""
@@ -345,9 +481,13 @@ def _per_finding_alpha(votes: list[JudgeVote]) -> float | None:
         return None
     from collections import Counter
 
-    c = Counter(v.verdict for v in votes)
+    # Exactly one family-level verdict; split passes are an explicit abstention.
+    per_family = defaultdict(set)
+    for v in votes:
+        per_family[v.judge_family].add(v.verdict)
+    c = Counter(next(iter(values)) if len(values) == 1 else "needs_human" for values in per_family.values())
     modal = c.most_common(1)[0][1]
-    return round((modal / len(votes) - 1 / 3) / (1 - 1 / 3), 3)  # chance-corrected for 3 categories
+    return round((modal / len(per_family) - 1 / 3) / (1 - 1 / 3), 3)  # chance-corrected for 3 categories
 
 
 def _norm_path(path: str) -> str:

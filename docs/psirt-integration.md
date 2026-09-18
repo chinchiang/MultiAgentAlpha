@@ -1,89 +1,52 @@
-# PSIRT 接入：A 級 Critical finding 與 EU CRA 第 14 條（G-12）
+# PSIRT 接入與 CRA 事件時鐘（G-12）
 
-治理建議 G-12：「A 級 Critical finding 若涉及已出貨產品，直接接入 PSIRT 的 CRA 第 14 條通報流程。」本頁說明雛型如何落實、設定方式、payload 內容、時限計算，以及它刻意不做的事。日期：2026-09-12。
+2026-09-18 修正：審查產出的是內部交接 `internal_handoff`，不能以審查完成時間代表製造商知悉事件的時間。法定通報是否適用，由 PSIRT 判定並提供事件資料。未確認的事件顯示「法定期限未知」。
 
-## 1. 為什麼是「接入」而不是「通報」
+依 [ENISA SRP 官方 FAQ](https://www.enisa.europa.eu/topics/product-security/single-reporting-platform-srp/frequently-asked-questions)，已遭主動利用的漏洞與嚴重資安事件都涉及知悉後 24 小時預警及 72 小時通報；漏洞最終報告的起點是修正或緩解措施可提供之日，嚴重事件最終報告則以事件通報提出之日計算一個月。實作分開這兩類起算點，不把它們簡化成「審查後 14 天」。
 
-CRA（Regulation (EU) 2024/2847）第 14 條的義務對象是製造商，觸發條件是「主動遭利用的漏洞」（actively exploited vulnerability），時限是 24 小時內預警、72 小時內通報、修正措施後 14 天內最終報告；24 小時預警義務自 2026 年 9 月 11 日起適用（報告 C11.9）。審查管線能判定的是「這段程式碼有一個由確定性工具佐證、多家族一致、CVSS 4.0 為 Critical 的漏洞」（A 級 Critical），不能判定它是否已被利用。所以管線做的是把時鐘從「審查完成」那一刻起算並把證據交給 PSIRT，是否構成第 14 條事件由 PSIRT 判定。這也是 G-12 只限 A 級的理由：B 級與 C 級的誤報會消耗 PSIRT 的判斷時間。
+## 設定與交接
 
-## 2. 流程
+設定 `psirt.enabled`、`shipped`、`product`、HTTPS `webhook_url` 與 `token_env`。預設僅 accepted、A 級、Critical 的 finding 進入交接。`mara review` 產生 `out/psirt-notifications.json`；只有明確使用 `--notify-psirt` 才傳送。預設設定仍停用 PSIRT；mock CI 不傳送。
 
-```
-mara review <target>
-  L5 評分 → accepted 且 tier ∈ trigger_tiers 且 severity ∈ trigger_severities
-          → 若 psirt.enabled 且 psirt.shipped：
-              out/psirt-notifications.json（每個 finding 一個 payload，含三個時限）
-              report.md 的「PSIRT hand-off」段、report.json 的 psirt 欄位、bias_audit.psirt_notifications
-          → 若加 --notify-psirt：查 psirt.ledger_file，早已送達的 finding 略過（--psirt-resend 強制），
-                                  其餘以 Bearer token（環境變數）與 Idempotency-Key: <dedupe_key> POST 到
-                                  psirt.webhook_url，逐筆回報 HTTP 狀態並寫進 ledger
-```
+`mara-psirt/2` payload 保留 finding、引用、CVSS 與去重鍵，另包含：
 
-預設只寫檔不送出。CI 的 mock 模式不啟用 PSIRT（`config/mara.mock.yaml` 無 `psirt` 區塊）。
+| 欄位 | 語意 |
+|---|---|
+| `stage` | 固定為 `internal_handoff` |
+| `internal_sla` | 從審查時間計算的內部服務目標；舊版 `early_warning_hours` 等設定只控制這些目標 |
+| `clock_kind` | `unconfirmed` 或 `psirt_confirmed_event` |
+| `incident_event` | PSIRT 明確提供的事件類型、確認人與時間 |
+| `deadlines` | 只從已確認事件計算；缺最終報告起算點時不產生該期限 |
 
-## 3. 設定（`config/mara.yaml` 的 `psirt:` 區塊）
+`dedupe_key` 仍以產品、target 與位置/CWE 去重；交接送達不代表已向主管機關完成預警。舊版 ledger 沒有可信的事件起算點時，必須重新確認，不能直接沿用舊期限。
 
-| 欄位 | 意義 | 政策 P6 的限制 |
-|---|---|---|
-| `enabled` | 是否啟用接入 | 停用時 P6 一律通過 |
-| `webhook_url` | PSIRT 接收端（工單系統或 SOAR 的 intake API） | 必須 `https://` |
-| `token_env` | 存放 Bearer token 的環境變數名稱 | 不得為空；token 永不寫進設定檔 |
-| `product` | 受審程式碼所屬的產品或元件識別 | 不得為空 |
-| `shipped` | 受審目標是否為已出貨產品 | 為 false 時不產生 payload |
-| `trigger_tiers` | 觸發的證據層級 | 非空且 ⊆ {A, B}，預設 [A] |
-| `trigger_severities` | 觸發的 CVSS 嚴重度 | 非空且 ⊆ {Critical, High}，預設 [Critical] |
-| `early_warning_hours` / `notification_hours` / `final_report_days` | 三個時限 | 上限 24 / 72 / 14，與第 14 條一致 |
-| `ledger_file` | 送出紀錄（預設 `ops/psirt/ledger.json`）：每個 finding key 一筆，含送出嘗試、三個階段的 PSIRT 參考編號 | — |
-| `handshake_file` / `handshake_max_age_days` | 端點握手紀錄（預設 `ops/psirt/handshake.json`）與有效期（預設 90 天） | G-12 要求成功且未過期的握手 |
+## 事件確認與追蹤
 
-`mara check-config` 會列出 P6 的結果；`config/examples/psirt-enabled.yaml` 是通過六條政策的完整範例。
+PSIRT 提供 JSON；以下時間僅為格式示例，不能直接當成組織事件紀錄：
 
-## 4. Payload（`mara-psirt/1`）
-
-每個 finding 一個 JSON 物件：
-
-- `regulation`、`stage`（`early_warning`）、`product`、`target`、`detected_at`（審查完成時間，UTC）。
-- `dedupe_key`：`sha256(product, target, file:line:cwe)` 前 16 位，同一個 finding 在多次審查中不變；送出時同時放在 `Idempotency-Key` header，接收端與本地 ledger 都以它去重。
-- `deadlines`：`early_warning_by`、`notification_by`、`final_report_by`，自 `detected_at` 起算。
-- 證據：`finding_id`、`title`、`dimension`、`cwe`、`standard_refs`、`location`（檔案、行號、逐字引用）、`cvss4`（向量、分數、嚴重度）、`evidence_tier`、`ssvc`、`reachability`、紅隊的 `exploitable` 與 `preconditions`、`families_agreeing`、`tool_corroborated`、`consensus`。
-- `note`：說明「是否主動遭利用」由 PSIRT 判定。
-
-PSIRT 端拿到的是可重算的證據鏈（工具結果、逐字引用、家族裁決），不是一段自然語言摘要。
-
-## 5. 握手、送出紀錄與階段時鐘（`scripts/psirt_ops.py`）
-
-`enabled: true` 只是設定，不證明 PSIRT 收得到。啟用後先做一次握手：
-
-```
-PSIRT_WEBHOOK_TOKEN=… python3 scripts/psirt_ops.py handshake        # --dry-run 只印 payload
+```json
+{
+  "event_type": "actively_exploited_vulnerability",
+  "confirmed_by": "PSIRT operator identity",
+  "awareness_at": "2026-09-18T09:00:00+08:00",
+  "remediation_available_at": "2026-09-20T09:00:00+08:00"
+}
 ```
 
-它以真實 token 把一個明標「connectivity test, NOT an incident」的 `mara-psirt/1` payload POST 到 `webhook_url`，
-把時間與 HTTP 狀態寫進 `handshake_file`。治理檢查 G-12 除了設定完整，還要求這份紀錄成功且未超過
-`handshake_max_age_days`；握手失敗或過期就失敗並說明。
+另一類事件使用 `event_type: severe_incident` 與 `notification_at`。每個時間都必須有時區。`confirmed_by` 與 `awareness_at` 是必要欄位；修正可用時間或通報時間未知時可先不填。
 
-送出紀錄（`ledger_file`）由 `mara review --notify-psirt` 維護：同一個 finding（`dedupe_key`）的預警只送一次，每次
-嘗試與 HTTP 狀態都留下；之後的兩個階段由 PSIRT 產出，管線只記錄它們的參考編號並看著時鐘：
-
-```
-python3 scripts/psirt_ops.py status                                   # 每筆的階段與三個期限；有逾期即 exit 1
-python3 scripts/psirt_ops.py record --key <dedupe_key> --stage notification --reference PSIRT-123
-python3 scripts/psirt_ops.py record --key <dedupe_key> --stage final_report --reference PSIRT-123-final
-python3 scripts/psirt_ops.py close  --key <dedupe_key> --reason "PSIRT: not exploited; tracked as ordinary fix"
+```bash
+python3 scripts/psirt_ops.py confirm-event --key <key> --event event.json --reference PSIRT-123
+python3 scripts/psirt_ops.py record --key <key> --stage early_warning --reference SRP-early
+python3 scripts/psirt_ops.py record --key <key> --stage notification --reference SRP-notification
+python3 scripts/psirt_ops.py record --key <key> --stage final_report --reference SRP-final
+python3 scripts/psirt_ops.py status
 ```
 
-G-12 也讀這份 ledger：任何進行中的項目過了期限而該階段沒有紀錄，就失敗並指名。ledger 只記 finding 的
-位置、CWE、嚴重度與參考編號，不含程式碼引用；上海／重慶管線各自在境內保存（CN-3），不合併到本 repo。
+`confirm-event` 可在原交接送達後補登或更新事件，保留歷次事件參考與原送達紀錄。若最終報告起算點稍後才確定，再以完整事件 JSON 更新。`mara review --psirt-event event.json` 可在新交接附上同樣資料。`close --key … --reason …` 由 PSIRT 記錄結案理由。
 
-## 6. 驗證
+## 握手與驗證界線
 
-- `tests/test_psirt.py`：只有 accepted 的 A 級 Critical 進入 payload（seeded fixture 有三筆：SQLi、pwn request、硬編碼 secret）；時限計算；`shipped: false` 或 `enabled: false` 時為空；未設 token 時拒絕送出；以 `httpx.MockTransport` 驗證 POST 的 URL、Bearer header 與 JSON；CLI 產出 `psirt-notifications.json`；P6 對五種錯誤設定各失敗一次。
-- `tests/test_psirt.py` 另涵蓋：`dedupe_key` 跨審查穩定；有 ledger 時第二次送出略過已送達者、`--psirt-resend` 強制、header 帶 `Idempotency-Key`；`record`／`close`；以假時間驗證逾期判定；握手以 `httpx.MockTransport` 驗證成功寫檔、失敗 exit 1、拒絕 http 與缺 token。
-- `scripts/governance_check.py` 的 G-12：`psirt` 區塊存在且 `enabled: true`、https、有產品識別、觸發範圍在 P6 允許內，**且** `handshake_file` 有成功且未過期的握手、ledger 無逾期階段才通過；本 repo 的 `config/mara.yaml` 預設 `enabled: false`，因此 G-12 仍為失敗，證據欄寫明要填什麼。
+`python3 scripts/psirt_ops.py handshake --dry-run` 只顯示測試 payload。正式握手需要組織提供端點與環境變數中的 token；回應僅保存狀態碼及固定錯誤碼，不保存遠端回應本文。
 
-## 7. 尚未做的事
-
-- **接收端**：本 repo 不提供 PSIRT 系統；webhook 的格式是本專案自訂的 `mara-psirt/1`，接收端需做對應（例如轉成 Jira issue 或 CSAF/VEX 草稿）。`Idempotency-Key`／`dedupe_key` 給接收端去重用。
-- **72 小時通報與 14 天報告的內容**：管線只產出預警階段的 payload，後兩階段的內容（影響評估、修正措施）來自 PSIRT；本 repo 只記錄它們的參考編號與是否逾期。
-- **上海與重慶**：境內管線的 finding 明細不出境（CN-3），若境內產品同時受 CRA 約束，PSIRT 接入需在境內完成，webhook 指向境內端點，ledger 也留在境內。
-- **真實端點**：本 repo 的設定仍是 `enabled: false`、`webhook_url` 空白。要讓 G-12 通過，需要組織的 PSIRT intake 端點、產品識別與 token，然後做一次握手。
+G-12 要求設定完整、近期成功的握手及 ledger 無已知逾期階段。這些檢查不證明組織已辨識所有事件，也不證明法定通報已合規完成。`tests/test_psirt.py` 與 `tests/test_security_regressions.py` 使用合成事件和 MockTransport 驗證時鐘、去重、更新與傳送；本次修正未聯繫真實 PSIRT 或主管機關。

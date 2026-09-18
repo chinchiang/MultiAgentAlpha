@@ -36,14 +36,14 @@ def test_targets_and_commands_never_carry_keys(monkeypatch):
     assert argv[:5] == ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible"] and "--target_name" in argv
     assert "probes.promptinject,probes.encoding" in argv and "sk-secret-deepseek" not in " ".join(argv)
     assert env == {"OPENAICOMPATIBLE_API_KEY": "$DEEPSEEK_LOCAL_KEY"}
-    assert me.garak_generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "http://vllm-deepseek.internal:8000/v1/"}}}
+    assert me.garak_generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://vllm-deepseek.internal:8000/v1/"}}}
     an = next(t for t in targets if t.family == "anthropic")
     argv, env = me.garak_command(an, ["dan"], "/tmp/out")
     assert argv[3:6] == ["--target_type", "anthropic", "--target_name"] and env == {"ANTHROPIC_API_KEY": "$ANTHROPIC_API_KEY"}
     assert me.garak_generator_options(an) is None
     cmds = me.cyberseceval_commands(ds, "/data", "/tmp/out", "$CSE_JUDGE_LLM")
     assert set(cmds) == {"prompt-injection", "mitre-frr"}
-    assert f"--llm-under-test=OPENAI::deepseek-v3.2::{me.MASK}::http://vllm-deepseek.internal:8000/v1" in cmds["prompt-injection"]
+    assert f"--llm-under-test=OPENAI::deepseek-v3.2::{me.MASK}::https://vllm-deepseek.internal:8000/v1" in cmds["prompt-injection"]
     assert "--judge-llm=$CSE_JUDGE_LLM" in cmds["prompt-injection"] and "--benchmark=mitre-frr" in cmds["mitre-frr"]
     assert me.cse_spec(an, "sk-real") == "ANTHROPIC::claude-opus-5::sk-real"
     with pytest.raises(RuntimeError):

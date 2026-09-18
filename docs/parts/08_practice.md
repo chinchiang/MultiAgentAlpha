@@ -4,7 +4,7 @@
 
 ### 21.1 共用管線：台北、桃園、休士頓、Brno/Blučina
 
-這四個廠區可以共用同一條管線，拓樸如第 8 章的圖。Claude Opus 5 經 Anthropic API 或 AWS Bedrock（依各廠區的雲端合約），DeepSeek 與 Nemotron 自架於區域資料中心；GitHub Enterprise 的 runner 部署於各廠區網段，L0 工具在本地跑，SARIF 上傳到中央的 code scanning。Brno 廠區另需注意 EU CRA 的時程：第 14 條的 24 小時預警義務自 2026 年 9 月 11 日適用【已證實｜C11.9】，審查管線產出的 A 級 Critical finding 若涉及已出貨產品，應直接接入 PSIRT 的通報流程。
+這四個廠區可以共用同一條管線，拓樸如第 8 章的圖。Claude Opus 5 經 Anthropic API 或 AWS Bedrock（依各廠區的雲端合約），DeepSeek 與 Nemotron 自架於區域資料中心；GitHub Enterprise 的 runner 部署於各廠區網段，L0 工具在本地跑，SARIF 上傳到中央的 code scanning。Brno 廠區另需注意 EU CRA 的時程：第 14 條的 24 小時預警義務自 2026 年 9 月 11 日適用【尚未證實｜C11.9】，審查管線產出的 A 級 Critical finding 若涉及已出貨產品，應直接接入 PSIRT 的通報流程。
 
 ### 21.2 隔離管線：上海浦東與重慶
 

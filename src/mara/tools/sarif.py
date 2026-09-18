@@ -22,6 +22,20 @@ class ToolResult:
     cwes: list[str] = field(default_factory=list)  # every CWE the rule names; corroboration matches any of them
 
 
+def scan_complete(doc: dict) -> bool:
+    """A report must contain runs and must not record a failed/partial invocation."""
+    if not isinstance(doc, dict) or not doc.get("runs"):
+        return False
+    for run in doc["runs"]:
+        for invocation in run.get("invocations", []):
+            if invocation.get("executionSuccessful") is False:
+                return False
+            for key in ("toolExecutionNotifications", "toolConfigurationNotifications"):
+                if any(n.get("level") == "error" for n in invocation.get(key, [])):
+                    return False
+    return True
+
+
 def read_sarif(path: str | Path, tool_hint: str = "") -> list[ToolResult]:
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
     out: list[ToolResult] = []
@@ -29,6 +43,8 @@ def read_sarif(path: str | Path, tool_hint: str = "") -> list[ToolResult]:
         tool = run.get("tool", {}).get("driver", {}).get("name", tool_hint or "unknown")
         rules = {r.get("id"): r for r in run.get("tool", {}).get("driver", {}).get("rules", [])}
         for res in run.get("results", []):
+            if any(s.get("status") == "accepted" for s in res.get("suppressions", [])):
+                continue
             loc = (res.get("locations") or [{}])[0].get("physicalLocation", {})
             uri = loc.get("artifactLocation", {}).get("uri", "")
             line = loc.get("region", {}).get("startLine", 1)

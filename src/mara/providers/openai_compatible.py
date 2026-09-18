@@ -36,7 +36,7 @@ class OpenAICompatibleProvider(Provider):
         }
         r = self.client.post("/chat/completions", json=body)
         if r.status_code >= 400:
-            raise RuntimeError(f"{self.spec.name}: HTTP {r.status_code}: {r.text[:300]}")
+            raise RuntimeError(f"provider_http_error:{r.status_code}")
         payload = r.json()
         choice = payload["choices"][0]
         text = choice["message"].get("content") or ""
