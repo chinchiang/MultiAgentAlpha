@@ -51,7 +51,7 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
         "Return {\"findings\": [...]} following the schema."
     )
     comp = base.call(provider, system_extra=system_extra, user=user, schema=FINDING_SCHEMA, role=f"reviewer:{dimension}")
-    audit = {"refused": comp.refused, "canary_echoed": bool(comp.raw_text and canary.echoed(comp.raw_text)),
+    audit = {"refused": comp.refused, "truncated": comp.truncated, "canary_echoed": bool(comp.raw_text and canary.echoed(comp.raw_text)),
              "input_tokens": comp.input_tokens, "output_tokens": comp.output_tokens, "invalid": 0, "unverified_quotes": 0}
     if comp.refused or comp.data is None:
         return [], audit

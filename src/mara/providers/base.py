@@ -16,6 +16,7 @@ class Completion:
     input_tokens: int = 0
     output_tokens: int = 0
     refused: bool = False
+    truncated: bool = False  # output hit max_tokens (or was not valid JSON): not a refusal, data is None
 
 
 class Provider(abc.ABC):
