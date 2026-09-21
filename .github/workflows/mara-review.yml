@@ -180,10 +180,18 @@ jobs:
         run: |
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/dev-requirements.txt
           python3 -m pip install --quiet --disable-pip-version-check --no-deps -e .
+      - name: Install the locked gitleaks, semgrep and semgrep-rules so their tests run instead of skipping
+        # tests/test_gitleaks_ci.py and tests/test_semgrep_ci.py opt in to .mara-tools explicitly (conftest points
+        # MARA_TOOLS_DIR elsewhere for everything else). Same verified installer as the L0 job, limited to the
+        # three tools those tests use: SHA-256 for every asset, gitleaks' publisher checksums, pip --require-hashes
+        # for semgrep, pinned commit + content digest + GPG commit signature for semgrep-rules. No token needed.
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
+          python3 scripts/install_tools.py --only gitleaks semgrep semgrep-rules
       - name: Lint
         run: ruff check src tests scripts
-      - name: Unit and end-to-end tests (mock providers, no network)
-        run: pytest -q
+      - name: Unit and end-to-end tests (mock providers, no network; tool tests against the locked binaries)
+        run: pytest -q -rs
       - name: Mock review of the seeded fixture (gate expected to block)
         run: |
           mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out
