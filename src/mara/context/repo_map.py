@@ -181,7 +181,7 @@ def _read_bounded(root: Path, rel: Path) -> str:
         try:
             resolved.relative_to(root.resolve())
         except ValueError:
-            raise ValueError("outside_root")
+            raise ValueError("outside_root") from None
         if not cur.is_file():
             raise ValueError("not_regular_file")
         if cur.stat().st_size > MAX_FILE_BYTES:
