@@ -155,7 +155,10 @@ jobs:
     # Runs even when L0 went red (its findings are what the Security tab should show), never on a cancelled
     # run, and only where GITHUB_TOKEN can write security events: pushes to main and same-repository pull
     # requests. Fork and Dependabot pull requests get a read-only token, so the upload would fail with 403.
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
+    # Skipped while the repository is private: Code Scanning there needs GitHub Advanced Security, and
+    # without it upload-sarif fails with "Resource not accessible by integration" (2026-09-21). The SARIF
+    # files stay in the l0-sarif artifact either way.
+    if: ${{ !cancelled() && !github.event.repository.private && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) }}
     permissions:
       contents: read
       security-events: write   # github/codeql-action/upload-sarif; this job runs no repository scan itself

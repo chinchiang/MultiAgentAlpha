@@ -55,7 +55,8 @@ jobs:
             scorecard.sarif
           if-no-files-found: ignore
       - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
-        if: always() && hashFiles('scorecard.sarif') != ''
+        # not while the repository is private (Code Scanning needs Advanced Security there); the artifact above keeps the SARIF
+        if: always() && hashFiles('scorecard.sarif') != '' && !github.event.repository.private
         with:
           sarif_file: scorecard.sarif
           category: scorecard
