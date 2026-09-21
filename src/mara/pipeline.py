@@ -332,7 +332,7 @@ class Pipeline:
         self.audit["model_eval"] = me
         report.bias_audit["model_eval"] = me
         if ml_bom:
-            self.log("L0: ML-BOM: " + ", ".join(f"{n} {v['status']}" for n, v in ml_bom.items()))
+            self._say("L0: ML-BOM: " + ", ".join(f"{n} {v['status']}" for n, v in ml_bom.items()))
         self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")
         return report
 
