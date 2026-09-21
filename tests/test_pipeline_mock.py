@@ -75,7 +75,7 @@ def test_bias_audit_captures_refusal_and_position_flip(mock_report):
     audit = report.bias_audit
     assert audit["reviewer_refusals"] == 1  # nemotron mock refuses error_handling
     assert audit["position_flips"] >= 1  # deepseek mock flips 'open redirect' on the reverse pass
-    assert audit["standard_refs_stripped"] == 2  # ASVS V17.1 and A11:2025 do not exist
+    assert audit["standard_refs_stripped"] == 2  # ASVS V18.1 and A11:2025 do not exist (ASVS 5.0 ends at V17)
     assert audit["findings_with_unverified_quotes"] == 1
     assert isinstance(audit["global_krippendorff_alpha"], float)
 

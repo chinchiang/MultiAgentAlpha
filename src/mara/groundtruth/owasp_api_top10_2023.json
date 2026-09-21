@@ -1,5 +1,5 @@
 {
-  "_source": "OWASP API Security Top 10 2023, https://github.com/OWASP/API-Security/blob/master/editions/2023/en/0x11-t10.md",
+  "_source": "OWASP API Security Top 10 2023, https://github.com/OWASP/API-Security/blob/master/editions/2023/en/0x11-t10.md Re-verified 2026-09-21 against OWASP/API-Security e85ddfa (editions/2023/en/0x11-t10.md): identical.",
   "categories": {
     "API1": "Broken Object Level Authorization",
     "API2": "Broken Authentication",

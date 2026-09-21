@@ -55,7 +55,7 @@ def test_config_refuses_source_code_to_vendor_api_without_zdr():
 
 
 def test_idcheck_strips_nonexistent_refs():
-    f, reasons = check_finding_refs(_finding(refs=["ASVS 5.0 V1", "ASVS 5.0 V17", "OWASP A01:2025", "NIST 800-53 AC-3"]))
+    f, reasons = check_finding_refs(_finding(refs=["ASVS 5.0 V1", "ASVS 5.0 V18", "OWASP A01:2025", "NIST 800-53 AC-3"]))
     assert f.standard_refs == ["ASVS 5.0 V1", "OWASP A01:2025"]
     assert len(reasons) == 2
 
