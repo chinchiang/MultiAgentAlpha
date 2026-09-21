@@ -25,11 +25,17 @@ The HTML edition of the report is served by GitHub Pages straight from the `docs
 Token-Permissions floor stay as they are. `docs/.nojekyll` makes GitHub serve the files as they
 are (Jekyll would otherwise try to build the Markdown and mishandle the non-ASCII report file
 name), and `docs/index.html` is a self-contained redirect to the report, so the public address is
-just <https://chinchiang.github.io/MultiAgentAlpha/>. Everything under `docs/` becomes reachable
-at that address, so it must contain only intended public documentation. Before the
-2026-09-18 remediation, Pages served the repository root; it now serves `/docs` only.
-The deliberately vulnerable fixture URLs return 404. `tests/test_docs_site.py` checks
-that the redirect points at a file that exists and loads nothing off-site.
+just <https://chinchiang.github.io/MultiAgentAlpha/>. Pages has been live since 2026-09-17 (the
+"pages build and deployment" runs in the Actions tab are the deployment record). Everything under
+`docs/` becomes reachable at that address, so it must contain only intended public documentation:
+the report, its parts, the appendices, the dated assessment, calibration, inventory, governance and
+ground-truth records, the runbooks and the changelog. Before the 2026-09-18 remediation, Pages served
+the repository root; it now serves `/docs` only, and the deliberately vulnerable fixture URLs return
+404. Two files at the repository root are defence in depth for the day someone switches the source
+back to the root by mistake: `index.html` is a self-contained redirect to `docs/`, and `_config.yml`
+tells Jekyll to exclude `fixtures/`, `calib/`, the source tree and the other non-documentation
+directories, so the seeded vulnerable material is never published either way.
+`tests/test_docs_site.py` checks that the redirect points at a file that exists and loads nothing off-site.
 `.github/workflows/docs-check.yml` (Appendix E prompt 1) runs on every pull request that touches `docs/`:
 it rebuilds the report from `docs/parts/` and requires the result to be byte-identical to the committed
 file, fails when the body is under 20,000 characters, and fails when a citation marker has no row in
