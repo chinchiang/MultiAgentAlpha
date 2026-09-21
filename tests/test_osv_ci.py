@@ -41,12 +41,39 @@ def _tools(tmp_path: Path, sarif: dict, exit_code: int, version: str = "2.5.1") 
     tools = tmp_path / "tools"
     (tools / "bin").mkdir(parents=True)
     (tools / "canned.sarif").write_text(json.dumps(sarif))
-    fake = tools / "bin" / "osv-scanner"
-    fake.write_text("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'osv-scanner version: 2.5.1'; exit 0; fi\n"
-                    f"echo \"$@\" > {tools}/argv.txt\n"
-                    "out=''\nwhile [ $# -gt 0 ]; do if [ \"$1\" = --output-file ]; then out=$2; fi; shift; done\n"
-                    f"[ -n \"$out\" ] && cp {tools}/canned.sarif \"$out\"\nexit {exit_code}\n")
-    fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+    if sys.platform == "win32":
+        py_script = tools / "bin" / "fake_osv.py"
+        py_code = f"""import sys, os, shutil
+from pathlib import Path
+args = sys.argv[1:]
+if args and args[0] == '--version':
+    print('osv-scanner version: 2.5.1')
+    sys.exit(0)
+argv_path = Path({str(tools / 'argv.txt')!r})
+with open(argv_path, 'w', encoding='utf-8') as f:
+    f.write(' '.join(args) + '\\n')
+out = ''
+i = 0
+while i < len(args):
+    if args[i] == '--output-file' and i + 1 < len(args):
+        out = args[i+1]
+        i += 2
+    else:
+        i += 1
+if out:
+    shutil.copyfile(Path({str(tools / 'canned.sarif')!r}), out)
+sys.exit({exit_code})
+"""
+        py_script.write_text(py_code, encoding="utf-8")
+        cmd_script = tools / "bin" / "osv-scanner.cmd"
+        cmd_script.write_text(f'@"{sys.executable}" "{py_script}" %*\n', encoding="utf-8")
+    else:
+        fake = tools / "bin" / "osv-scanner"
+        fake.write_text("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'osv-scanner version: 2.5.1'; exit 0; fi\n"
+                        f"echo \"$@\" > {tools}/argv.txt\n"
+                        "out=''\nwhile [ $# -gt 0 ]; do if [ \"$1\" = --output-file ]; then out=$2; fi; shift; done\n"
+                        f"[ -n \"$out\" ] && cp {tools}/canned.sarif \"$out\"\nexit {exit_code}\n")
+        fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     (tools / "manifest.json").write_text(json.dumps({"tools": {"osv-scanner": {"version": version}}}))
     return tools
 

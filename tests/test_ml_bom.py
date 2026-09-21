@@ -151,9 +151,12 @@ def test_cli_round_trip_and_cosign_commands(tmp_path, monkeypatch):
     # cosign: only the locked binary under MARA_TOOLS_DIR, never PATH
     tools = tmp_path / "tools"
     (tools / "bin").mkdir(parents=True)
-    fake = tools / "bin" / "cosign"
-    fake.write_text("#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/args.txt\"\nexit 0\n", encoding="utf-8")
-    fake.chmod(0o755)
+    fake = tools / "bin" / ("cosign.cmd" if sys.platform == "win32" else "cosign")
+    if sys.platform == "win32":
+        fake.write_text("@echo off\r\necho %* > \"%~dp0args.txt\"\r\nexit /b 0\r\n", encoding="utf-8")
+    else:
+        fake.write_text("#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/args.txt\"\nexit 0\n", encoding="utf-8")
+        fake.chmod(0o755)
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tools))
     cmd = mlbom.cosign_verify_blob_cmd(tmp_path / "bom.json", tmp_path / "b.sigstore.json", "p@example.internal", "https://issuer.example")
     assert cmd[0] == str(fake) and cmd[1] == "verify-blob" and "--certificate-identity" in cmd and cmd[-1].endswith("bom.json")

@@ -36,16 +36,43 @@ DOC = {
 
 def _fake_scorecard(tools: Path, version: str, doc: dict | None, crash: bool = False) -> Path:
     (tools / "bin").mkdir(parents=True, exist_ok=True)
-    exe = tools / "bin" / "scorecard"
-    lines = ["#!/bin/sh", "printf '%s\\n' \"$@\" > \"$(dirname \"$0\")/../argv.txt\""]
-    if crash:
-        lines.append("echo 'boom' >&2; exit 1")
-    else:
+    if not crash:
         (tools / "canned.json").write_text(json.dumps(doc), encoding="utf-8")
-        lines += ["for a in \"$@\"; do case \"$a\" in --output=*) out=\"${a#--output=}\";; esac; done",
-                  "cp \"$(dirname \"$0\")/../canned.json\" \"$out\""]
-    exe.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    exe.chmod(0o755)
+    if sys.platform == "win32":
+        py_script = tools / "bin" / "fake_scorecard.py"
+        py_code = f"""import sys, os
+from pathlib import Path
+args = sys.argv[1:]
+argv_path = Path({str(tools / 'argv.txt')!r})
+with open(argv_path, 'w', encoding='utf-8') as f:
+    f.write('\\n'.join(args) + '\\n')
+if {crash}:
+    sys.stderr.write('boom\\n')
+    sys.exit(1)
+canned = Path({str(tools / 'canned.json')!r})
+out = ''
+for a in args:
+    if a.startswith('--output='):
+        out = a.split('=', 1)[1]
+if out:
+    import shutil
+    shutil.copyfile(canned, out)
+sys.exit(0)
+"""
+        py_script.write_text(py_code, encoding="utf-8")
+        cmd_script = tools / "bin" / "scorecard.cmd"
+        cmd_script.write_text(f'@"{sys.executable}" "{py_script}" %*\n', encoding="utf-8")
+        exe = cmd_script
+    else:
+        exe = tools / "bin" / "scorecard"
+        lines = ["#!/bin/sh", "printf '%s\\n' \"$@\" > \"$(dirname \"$0\")/../argv.txt\""]
+        if crash:
+            lines.append("echo 'boom' >&2; exit 1")
+        else:
+            lines += ["for a in \"$@\"; do case \"$a\" in --output=*) out=\"${a#--output=}\";; esac; done",
+                      "cp \"$(dirname \"$0\")/../canned.json\" \"$out\""]
+        exe.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        exe.chmod(0o755)
     (tools / "manifest.json").write_text(json.dumps({"tools": {"scorecard": {"version": version}}}), encoding="utf-8")
     return exe
 

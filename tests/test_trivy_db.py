@@ -22,9 +22,51 @@ from mara.tools import trivy_db as tdb  # noqa: E402
 
 def _fake_trivy(tools: Path, updated_at: str, version: str = "0.74.0") -> None:
     (tools / "bin").mkdir(parents=True, exist_ok=True)
-    fake = tools / "bin" / "trivy"
-    # image --download-db-only -> write the db into --cache-dir; fs -> write the canned SARIF to --output; --version
-    fake.write_text(f"""#!/bin/sh
+    if sys.platform == "win32":
+        py_script = tools / "bin" / "fake_trivy.py"
+        py_code = f"""import sys, os
+from pathlib import Path
+args = sys.argv[1:]
+if args and args[0] == '--version':
+    print('Version: 0.74.0')
+    print('Vulnerability DB:')
+    sys.exit(0)
+argv_path = Path({str(tools / 'argv.txt')!r})
+with open(argv_path, 'a', encoding='utf-8') as f:
+    f.write(' '.join(args) + '\\n')
+cache = ''
+out = ''
+i = 0
+while i < len(args):
+    if args[i] == '--cache-dir' and i + 1 < len(args):
+        cache = args[i+1]
+        i += 2
+    elif args[i] == '--output' and i + 1 < len(args):
+        out = args[i+1]
+        i += 2
+    else:
+        i += 1
+argv_text = open(argv_path, 'r', encoding='utf-8').read()
+if 'download-db-only' in argv_text and not out:
+    db_dir = os.path.join(cache, 'db')
+    os.makedirs(db_dir, exist_ok=True)
+    with open(os.path.join(db_dir, 'trivy.db'), 'wb') as f:
+        f.write(b'fake-db-bytes')
+    with open(os.path.join(db_dir, 'metadata.json'), 'w', encoding='utf-8') as f:
+        f.write('{{"Version":2,"NextUpdate":"2099-01-01T00:00:00Z","UpdatedAt":"{updated_at}","DownloadedAt":"{updated_at}"}}')
+    sys.exit(0)
+if out:
+    import shutil
+    shutil.copyfile(Path({str(tools / 'canned.sarif')!r}), out)
+sys.exit(0)
+"""
+        py_script.write_text(py_code, encoding="utf-8")
+        cmd_script = tools / "bin" / "trivy.cmd"
+        cmd_script.write_text(f'@"{sys.executable}" "{py_script}" %*\n', encoding="utf-8")
+    else:
+        fake = tools / "bin" / "trivy"
+        # image --download-db-only -> write the db into --cache-dir; fs -> write the canned SARIF to --output; --version
+        fake.write_text(f"""#!/bin/sh
 if [ "$1" = --version ]; then echo 'Version: 0.74.0'; echo 'Vulnerability DB:'; exit 0; fi
 echo "$@" >> {tools}/argv.txt
 cache=''; out=''
@@ -39,7 +81,7 @@ fi
 [ -n "$out" ] && cp {tools}/canned.sarif "$out"
 exit 0
 """)
-    fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+        fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     (tools / "manifest.json").write_text(json.dumps({"tools": {"trivy": {"version": version}}}))
     (tools / "canned.sarif").write_text(json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Trivy"}}, "results": []}]}))
 

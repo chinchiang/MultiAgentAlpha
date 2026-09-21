@@ -87,24 +87,30 @@ def _fake_gh(tmp_path: Path, state: dict) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (tmp_path / "state.json").write_text(json.dumps(state))
-    script = bin_dir / "gh"
-    script.write_text(f'''#!/usr/bin/env python3
-import json, sys
+    py_code = f'''import json, sys
 state_path = {str(tmp_path / "state.json")!r}
-state = json.load(open(state_path))
+state = json.load(open(state_path, encoding="utf-8"))
 args = sys.argv[1:]
 state.setdefault("calls", []).append(args)
 if args[:2] == ["issue", "list"]:
     want = args[args.index("--state") + 1]
     print(json.dumps(state.get(want, [])))
 elif args[:2] == ["issue", "create"]:
-    body = open(args[args.index("--body-file") + 1]).read()
+    body = open(args[args.index("--body-file") + 1], encoding="utf-8").read()
     state.setdefault("open", []).append({{"number": 100 + len(state.get("open", [])), "body": body, "labels": []}})
 elif args[:1] == ["api"]:
     number = args[1].rsplit("/", 2)[-2]
     print(json.dumps(state.get("events", {{}}).get(number, [])))
-json.dump(state, open(state_path, "w"))
-''')
+json.dump(state, open(state_path, "w", encoding="utf-8"))
+'''
+    if sys.platform == "win32":
+        py_script = bin_dir / "fake_gh.py"
+        py_script.write_text(py_code, encoding="utf-8")
+        script = bin_dir / "gh.cmd"
+        script.write_text(f'@"{sys.executable}" "{py_script}" %*\n', encoding="utf-8")
+        return script
+    script = bin_dir / "gh"
+    script.write_text(f'#!/usr/bin/env python3\n{py_code}')
     script.chmod(script.stat().st_mode | stat.S_IXUSR)
     return script
 

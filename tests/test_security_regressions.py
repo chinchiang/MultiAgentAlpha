@@ -60,18 +60,25 @@ def test_context_does_not_read_symlinks_ignored_or_secret_files(tmp_path):
     root.mkdir()
     outside = tmp_path / "outside.py"
     outside.write_text("OUTSIDE_MARKER")
-    (root / "link.py").symlink_to(outside)
+    has_symlink = True
+    try:
+        (root / "link.py").symlink_to(outside)
+    except OSError:
+        has_symlink = False
     (root / ".env").write_text("LOCAL_SECRET_MARKER")
     (root / "ignored.py").write_text("IGNORED_MARKER")
     (root / "app.py").write_text('token = "' + 'ghp_' + 'A' * 36 + '"\nprint(1)')
     (root / ".gitignore").write_text("ignored.py\n.env\n")
     git(root, "init", "-q")
-    git(root, "add", "app.py", "link.py", ".gitignore")
+    git_add = ["app.py", ".gitignore"] + (["link.py"] if has_symlink else [])
+    git(root, "add", *git_add)
     ctx = build_context(root)
     assert "OUTSIDE_MARKER" not in ctx.bundle() and "LOCAL_SECRET_MARKER" not in ctx.bundle()
     assert "IGNORED_MARKER" not in ctx.bundle() and 'ghp_' + 'A' * 36 not in ctx.bundle()
-    assert ctx.omitted["link.py"] and ctx.redacted == ["app.py"]
-    assert not ctx.complete
+    if has_symlink:
+        assert ctx.omitted["link.py"]
+        assert not ctx.complete
+    assert ctx.redacted == ["app.py"]
 
 
 def test_context_batches_cover_all_sources_and_report_oversize(tmp_path, monkeypatch):
@@ -286,7 +293,7 @@ def test_site_strips_active_content_and_hashes_only_expected_scripts():
     body, toc = site.safe_body('# Safe\n<script>alert(1)</script>\n<img src=x onerror=alert(1)>\n[x](javascript:alert)\nhttps://example.org/a')
     assert '<script' not in body and '<img' not in body and 'href="javascript:' not in body
     assert 'href="https://example.org/a"' in body and 'href="#s0"' in toc
-    generated = site.OUT.read_text()
+    generated = site.OUT.read_text(encoding="utf-8")
     assert site.csp_hash(site.JS) in generated and site.csp_hash(site.CSS) in generated
     assert "unsafe-inline" not in generated.split("</head>")[0] and '<html lang="zh-Hant">' in generated
 
@@ -366,11 +373,11 @@ def test_cross_target_and_legacy_decisions_never_apply():
 
 def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():
     import yaml
-    data = yaml.safe_load((ROOT / ".github/workflows/mara-review.yml").read_text())
+    data = yaml.safe_load((ROOT / ".github/workflows/mara-review.yml").read_text(encoding="utf-8"))
     upload = data["jobs"]["code-scanning"]
     assert upload["permissions"]["security-events"] == "write"
     assert all("run" not in step and "checkout@" not in step.get("uses", "") for step in upload["steps"])
     runs = [s.get("run", "") for s in data["jobs"]["deterministic-tools"]["steps"]]
     model_scan = [s for s in runs if "osv_ci.py" in s and "osv-model-eval.toml" in s]
     assert len(model_scan) == 1 and model_scan[0].count("--lockfile") == 1
-    assert "IgnoredVulns" not in (ROOT / "tools/osv-scanner.toml").read_text()
+    assert "IgnoredVulns" not in (ROOT / "tools/osv-scanner.toml").read_text(encoding="utf-8")

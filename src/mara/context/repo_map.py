@@ -151,24 +151,46 @@ def redact_secrets(text: str) -> str:
 
 def _read_bounded(root: Path, rel: Path) -> str:
     """Open each component without following symlinks, including directory components."""
-    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        for part in rel.parts[:-1]:
-            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
-            os.close(fd)
-            fd = child
-        leaf = os.open(rel.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
-        with os.fdopen(leaf, "rb") as f:
-            import stat
+    if hasattr(os, "O_DIRECTORY") and hasattr(os, "O_NOFOLLOW") and os.open in getattr(os, "supports_dir_fd", set()):
+        fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            for part in rel.parts[:-1]:
+                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                os.close(fd)
+                fd = child
+            leaf = os.open(rel.name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0), dir_fd=fd)
+            with os.fdopen(leaf, "rb") as f:
+                import stat
 
-            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
-                raise ValueError("not_regular_file")
+                if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                    raise ValueError("not_regular_file")
+                data = f.read(MAX_FILE_BYTES + 1)
+            if len(data) > MAX_FILE_BYTES:
+                raise ValueError("file_size_limit")
+            return data.decode("utf-8")
+        finally:
+            os.close(fd)
+    else:
+        # Cross-platform fallback for Windows and systems lacking O_DIRECTORY / dir_fd
+        cur = root
+        for part in rel.parts:
+            cur = cur / part
+            if cur.is_symlink():
+                raise ValueError("symlink_refused")
+        resolved = cur.resolve()
+        try:
+            resolved.relative_to(root.resolve())
+        except ValueError:
+            raise ValueError("outside_root")
+        if not cur.is_file():
+            raise ValueError("not_regular_file")
+        if cur.stat().st_size > MAX_FILE_BYTES:
+            raise ValueError("file_size_limit")
+        with cur.open("rb") as f:
             data = f.read(MAX_FILE_BYTES + 1)
         if len(data) > MAX_FILE_BYTES:
             raise ValueError("file_size_limit")
         return data.decode("utf-8")
-    finally:
-        os.close(fd)
 
 
 def build_context(root: str | Path) -> RepoContext:
@@ -177,10 +199,16 @@ def build_context(root: str | Path) -> RepoContext:
     root = Path(root).resolve()
     ctx = RepoContext(root=root)
     # git ls-files honors the target subdirectory and excludes untracked/ignored local files.
-    tracked = subprocess.run(["git", "-C", str(root), "ls-files", "--cached", "-z", "--", "."], capture_output=True, check=False)
+    # Check if root is actually a git repository root rather than falling through to a parent user repo
+    has_git = (root / ".git").exists()
+    tracked = (
+        subprocess.run(["git", "-C", str(root), "ls-files", "--cached", "-z", "--", "."], capture_output=True, check=False)
+        if has_git
+        else None
+    )
     paths = (
         [Path(os.fsdecode(x)) for x in tracked.stdout.split(b"\0") if x]
-        if tracked.returncode == 0
+        if tracked is not None and tracked.returncode == 0
         else [p.relative_to(root) for p in root.rglob("*") if not p.is_dir()]
     )
 

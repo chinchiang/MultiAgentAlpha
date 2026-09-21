@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,8 +30,12 @@ def tools_dir() -> Path:
 
 def tool_path(tool: str) -> Path | None:
     """The pinned, verified binary for `tool`, or None. Never consults PATH."""
-    p = tools_dir() / "bin" / tool
-    return p if p.is_file() and os.access(p, os.X_OK) else None
+    base = tools_dir() / "bin" / tool
+    candidates = [base.with_suffix(".cmd"), base.with_suffix(".bat"), base.with_suffix(".exe"), base] if sys.platform == "win32" else [base]
+    for p in candidates:
+        if p.is_file() and os.access(p, os.X_OK):
+            return p
+    return None
 
 
 def installed_manifest_entry(tool: str) -> dict | None:
@@ -66,7 +71,22 @@ class ToolRun:
 
 
 def _run(cmd: list[str], cwd: Path, timeout: int = 600, env: dict | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
+    try:
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
+    except OSError as e:
+        if sys.platform == "win32" and getattr(e, "winerror", None) == 193:
+            import shutil
+            sh = shutil.which("sh")
+            if not sh:
+                git = shutil.which("git")
+                if git:
+                    for cand in (Path(git).parent.parent / "bin" / "sh.exe", Path(git).parent.parent / "usr" / "bin" / "sh.exe"):
+                        if cand.exists():
+                            sh = str(cand)
+                            break
+            if sh:
+                return subprocess.run([sh, *cmd], cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
+        raise
 
 
 def _offline_zizmor() -> bool:

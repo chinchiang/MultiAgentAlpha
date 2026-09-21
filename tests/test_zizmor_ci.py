@@ -26,11 +26,30 @@ def _fake_zizmor(tools: Path, version: str, sarif: str | None, crash: bool = Fal
     """A zizmor that records its argv and prints the canned SARIF to stdout (exit 0), or crashes."""
     (tools / "bin").mkdir(parents=True, exist_ok=True)
     (tools / "canned.sarif").write_text(sarif or "", encoding="utf-8")
-    body = "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/../argv.txt\"\n"
-    body += "echo 'crash' >&2; exit 3\n" if crash else "cat \"$(dirname \"$0\")/../canned.sarif\"\n"
-    exe = tools / "bin" / "zizmor"
-    exe.write_text(body, encoding="utf-8")
-    exe.chmod(0o755)
+    if sys.platform == "win32":
+        py_script = tools / "bin" / "fake_zizmor.py"
+        py_code = f"""import sys, os
+from pathlib import Path
+args = sys.argv[1:]
+argv_path = Path({str(tools / 'argv.txt')!r})
+with open(argv_path, 'w', encoding='utf-8') as f:
+    f.write('\\n'.join(args) + '\\n')
+if {crash}:
+    sys.stderr.write('crash\\n')
+    sys.exit(3)
+canned = Path({str(tools / 'canned.sarif')!r}).read_text(encoding='utf-8')
+sys.stdout.write(canned)
+sys.exit(0)
+"""
+        py_script.write_text(py_code, encoding="utf-8")
+        cmd_script = tools / "bin" / "zizmor.cmd"
+        cmd_script.write_text(f'@"{sys.executable}" "{py_script}" %*\n', encoding="utf-8")
+    else:
+        body = "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/../argv.txt\"\n"
+        body += "echo 'crash' >&2; exit 3\n" if crash else "cat \"$(dirname \"$0\")/../canned.sarif\"\n"
+        exe = tools / "bin" / "zizmor"
+        exe.write_text(body, encoding="utf-8")
+        exe.chmod(0o755)
     (tools / "manifest.json").write_text(json.dumps({"tools": {"zizmor": {"version": version}}}), encoding="utf-8")
 
 
@@ -47,7 +66,7 @@ def test_clean_audit_writes_sarif_and_exits_zero(tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     assert "clean" in r.stdout and json.loads(report.read_text())["runs"][0]["results"] == []
     argv = (tools / "argv.txt").read_text().split()
-    assert argv[:5] == ["--no-progress", "--format", "sarif", "--persona", "regular"] and "--offline" in argv and argv[-1] == ".github/workflows"
+    assert argv[:5] == ["--no-progress", "--format", "sarif", "--persona", "regular"] and "--offline" in argv and argv[-1].replace("\\", "/") == ".github/workflows"
 
 
 def test_any_finding_exits_two_and_is_listed(tmp_path):

@@ -150,7 +150,7 @@ def test_verifier_verifies_its_own_release_with_the_downloaded_artifact(tmp_path
     src = tmp_path / "src"
     src.mkdir()
     log = tmp_path / "calls.log"
-    fake_cosign = f"#!/bin/sh\necho \"$0 $@\" >> {log}\nexit 0\n".encode()
+    fake_cosign = f"#!/bin/sh\necho \"$0 $@\" >> '{log.as_posix()}'\nexit 0\n".encode()
     (src / "cosign-linux-amd64").write_bytes(fake_cosign)
     (src / "bundle.json").write_text("{}")
     other = _fake_tool("echo other")
@@ -166,8 +166,8 @@ def test_verifier_verifies_its_own_release_with_the_downloaded_artifact(tmp_path
     assert manifest["tools"]["cosign"]["signature_verified"] and manifest["tools"]["other"]["signature_verified"]
     calls = log.read_text().splitlines()
     assert len(calls) == 2
-    assert calls[0].startswith(str(dest / "cache" / "cosign-linux-amd64")), "self-verification must use the downloaded artifact"
-    assert calls[1].startswith(str(dest / "bin" / "cosign")), "later tools must use the installed verifier"
+    assert calls[0].replace("\\", "/").startswith((dest / "cache" / "cosign-linux-amd64").as_posix()), "self-verification must use the downloaded artifact"
+    assert calls[1].replace("\\", "/").startswith((dest / "bin" / "cosign").as_posix()), "later tools must use the installed verifier"
     assert "verify-blob" in calls[1] and "--certificate-identity-regexp r" in calls[1]
 
 
