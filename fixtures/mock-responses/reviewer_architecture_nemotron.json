@@ -5,7 +5,7 @@
    "cwe": "CWE-285",
    "standard_refs": [
     "ASVS 5.0 V8.2",
-    "ASVS 5.0 V17.1",
+    "ASVS 5.0 V18.1",
     "OWASP A11:2025"
    ],
    "provenance": [

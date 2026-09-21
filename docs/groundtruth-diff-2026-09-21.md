@@ -2,7 +2,7 @@
 
 執行環境：Claude Code 遠端容器，出口代理。能開啟的一手網域：`github.com`（git clone／ls-remote）、`raw.githubusercontent.com`、`datadoghq.com`、`docs.datadoghq.com`、`cloud.google.com`。仍被封鎖（連線被拒或逾時）：`api.github.com`（403）、`cwe.mitre.org`、`cisa.gov`、`arxiv.org`、`owasp.org`、`genai.owasp.org`、`nist.gov`、`first.org`、`huggingface.co`、`api-docs.deepseek.com`、`developer.nvidia.com`、`anthropic.com`、`slsa.dev`、`artificialintelligenceact.eu`、`wikipedia.org`，以及附錄A 中「讀取＝摘要／否」的 162 個 URL 裡的 158 個。
 
-規則（prompt 2 第 2 點）：**差異一律不直接覆寫 JSON**，只在 `_source` 追加查證日期；下表列出的每個變更都要由人核准後才進入 pinned 集。
+規則（prompt 2 第 2 點）：**差異一律不直接覆寫 JSON**，只在 `_source` 追加查證日期；下表列出的每個變更都要由人核准後才進入 pinned 集。§2 的 ASVS 差異已於同日經 owner 核准後套用（見 §2 末）。
 
 ## 1. 逐檔比對結果
 
@@ -30,7 +30,9 @@
 
 master（2b30071）與 5.0.0 tag 在章節層級沒有差異；tag 之後唯一觸及 CSV 的 commit 是 2026-09-03 的印尼文翻譯說明。
 
-**採用 V17 的影響**（人核准前先知道）：`validate_ref` 目前把 `ASVS 5.0 V17` 判為不存在，`tests/test_bias_and_scoring.py:58` 與 `tests/test_pipeline_mock.py:78` 明確斷言 V17 會被剔除，`fixtures/mock-responses` 也刻意用 V17.1 當「捏造的標準編號」。核准後需要：在 `chapters` 加入 `"17"`、改這兩個測試的假編號（例如 V18）、重新產生 mock fixtures（`scripts/gen_mock_fixtures.py`），並把 `owasp_top10`／報告第 12.4 節提到「V1 到 V16」之處一併更新。附錄B 第 52 項已依本次證據關閉。
+**已於 2026-09-21 由 owner 核准並套用**：`asvs_5_0.json` 加入 V17 與兩處節名，`tests/test_bias_and_scoring.py` 與 `scripts/gen_mock_fixtures.py` 的捏造編號改為 V18／V18.1，`fixtures/mock-responses` 以產生器重建（只有這一個欄位變動）。原先評估的影響如下，留作紀錄：
+
+**採用 V17 的影響**（核准前的評估）：`validate_ref` 目前把 `ASVS 5.0 V17` 判為不存在，`tests/test_bias_and_scoring.py:58` 與 `tests/test_pipeline_mock.py:78` 明確斷言 V17 會被剔除，`fixtures/mock-responses` 也刻意用 V17.1 當「捏造的標準編號」。核准後需要：在 `chapters` 加入 `"17"`、改這兩個測試的假編號（例如 V18）、重新產生 mock fixtures（`scripts/gen_mock_fixtures.py`），並把 `owasp_top10`／報告第 12.4 節提到「V1 到 V16」之處一併更新。附錄B 第 52 項已依本次證據關閉。
 
 ## 3. 附錄B 缺口的關閉與部分核對
 
@@ -56,5 +58,4 @@ master（2b30071）與 5.0.0 tag 在章節層級沒有差異；tag 之後唯一�
 ## 5. 下次季更（2026-12）待辦
 
 - 在能連 `cwe.mitre.org` 與 `cisa.gov` 的環境重驗 2025 CWE Top 25 子集；若 2026 版 Top 25 已發布，列出增減。
-- 人核准 §2 後套用 V17 與兩處改名，並同步測試與 mock fixtures。
 - 在能連 `genai.owasp.org` 的環境確認 LLM Top 10 是否有 2026 版。

@@ -64,7 +64,7 @@
 49. **CWE 與 CAPEC 目錄的當前版本號與日期**未驗。暫採：未引用版本。
 50. **SARIF 2.1.0 的 OASIS 批准日**（2020-03-27）與 2.2 時程：A 組來源給出批准與公告日，C 組未能驗，兩組不矛盾。暫採：已證實（A142）。
 51. **GitHub code scanning 的 SARIF 上傳數值上限**未驗。暫採：正文只寫「子集」。
-52. **ASVS 5.0 是否有 V17 WebRTC**：官方 CSV 渲染止於 V16。暫採：V1 到 V16 已證實，V17 尚未證實；雛型 ground truth 只收錄 V1 到 V16。已於 2026-09-21 關閉：`OWASP/ASVS` tag v5.0.0_release（5cf9b03，2025-05-30）的官方 CSV 有 17 章，V17 WebRTC 含 V17.1 TURN Server、V17.2 Media、V17.3 Signaling；雛型 ground truth 尚未收錄，差異與採用影響見 `docs/groundtruth-diff-2026-09-21.md`。
+52. **ASVS 5.0 是否有 V17 WebRTC**：官方 CSV 渲染止於 V16。暫採：V1 到 V16 已證實，V17 尚未證實；雛型 ground truth 只收錄 V1 到 V16。已於 2026-09-21 關閉：`OWASP/ASVS` tag v5.0.0_release（5cf9b03，2025-05-30）的官方 CSV 有 17 章，V17 WebRTC 含 V17.1 TURN Server、V17.2 Media、V17.3 Signaling；雛型 ground truth 已於同日核准後收錄 V17，見 `docs/groundtruth-diff-2026-09-21.md`。
 53. **OWASP Top 10:2025 的定稿日期**：官方 Introduction 無日期。暫採：第三方（2025-11 公布、2026-01 定稿）。已於 2026-09-21 關閉：`OWASP/Top10` git 歷史顯示 2025 版骨架建於 2025-10-28，「Removed RC」與「Remove RC notice」於 2025-12-24，其後只有錯字修正；定稿日為 2025-12-24，第三方所稱 2026-01 不確。
 54. **OWASP SAMM 是否有 2.1**：未找到。暫採：引 2.0。
 55. **Microsoft 棄用 DREAD 的一手聲明**未找到。暫採：尚未證實，第 11.3 節明示。
