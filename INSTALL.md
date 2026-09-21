@@ -6,14 +6,39 @@ Python 套件（必要）、L0 掃描工具（要對真實 repo 掃描才需要�
 
 ## 1. 取得原始碼
 
-repo 是公開的，不需要 GitHub 帳號。
+repo 是私有的（2026-09-21 起），取得方式取決於對方有沒有 GitHub 帳號。
+
+### 1.1 對方有 GitHub 帳號：加為 collaborator
+
+repo 擁有者到 **Settings → Collaborators → Add people** 邀請對方（Read 權限即可）。對方接受邀請後，三種方式擇一：
 
 ```bash
+# HTTPS：第一次 push/clone 時輸入 GitHub 帳號與 personal access token（不是密碼；token 需有 repo 讀取權）
 git clone https://github.com/chinchiang/MultiAgentAlpha.git
+
+# SSH：先把 SSH 公鑰加到 GitHub 帳號的 Settings → SSH and GPG keys
+git clone git@github.com:chinchiang/MultiAgentAlpha.git
+
 cd MultiAgentAlpha
 ```
 
-沒有 git 的話，到 <https://github.com/chinchiang/MultiAgentAlpha> 按 **Code → Download ZIP**，解壓縮後進入該資料夾。
+沒有 git 的話，登入 GitHub 後到 <https://github.com/chinchiang/MultiAgentAlpha> 按 **Code → Download ZIP**，解壓縮後進入該資料夾。
+
+### 1.2 對方沒有 GitHub 帳號：交付壓縮檔
+
+擁有者在自己的 clone 裡打包目前的 main，只含追蹤的檔案，不含 `.git`、`.venv`、`.mara-tools`、`out/` 等本機產物：
+
+```bash
+git archive --format=zip --prefix=MultiAgentAlpha/ -o MultiAgentAlpha-$(git rev-parse --short HEAD).zip main
+```
+
+把 zip 用內部檔案伺服器或加密附件交給對方，對方解壓縮後進入 `MultiAgentAlpha/` 資料夾，從第 2 節開始。
+檔名裡的 commit id 讓對方回報問題時能對上版本。不要把 zip 放到公開位置：`fixtures/` 與 `calib/samples/` 含刻意植入的假憑證與漏洞程式碼。
+
+### 1.3 私有化後的兩個副作用
+
+- **GitHub Pages 的線上報告會停止**：個人免費方案的 Pages 只能發布公開 repo。報告的 HTML 版仍在 `docs/` 裡，用瀏覽器直接開啟 `docs/GSMD-RPT-2026-0908-01_多模型多代理資安審查.html` 即可。
+- **Code Scanning 上傳會失敗**：免費的 Code Scanning 只涵蓋公開 repo，私有 repo 需要 GitHub Advanced Security。`mara-review.yml` 的 `code-scanning` job 在私有狀態下會一直紅，但分支保護要求的 `L0 deterministic tools` 與 `tests + mock review` 不受影響；SARIF 仍會以 `l0-sarif` artifact 保存。
 
 ## 2. Python 套件（必要）
 
