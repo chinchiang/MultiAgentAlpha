@@ -5,14 +5,14 @@ models:
     family: deepseek
     provider: openai_compatible
     model: deepseek-v3.2
-    base_url: http://10.20.30.40:8000/v1
+    base_url: https://10.20.30.40:8000/v1
     api_key_env: DEEPSEEK_LOCAL_KEY
     data_residency: on_prem
   - name: nemotron-local
     family: nemotron
     provider: openai_compatible
     model: nvidia/nemotron-3-super
-    base_url: http://nim-nemotron.internal:8000/v1
+    base_url: https://nim-nemotron.internal:8000/v1
     api_key_env: NIM_LOCAL_KEY
     data_residency: on_prem
 roles:

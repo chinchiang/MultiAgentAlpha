@@ -10,15 +10,15 @@
 
 ### 16.2 Prompt Injection 操縱審查結果
 
-第 9 章的五道防線對應這個風險。這裡補充一個治理面的觀察：OWASP 2026 年 Agentic Applications Top 10 的第一項是 Agent Goal Hijack，第二項是 Tool Misuse，第三項是 Identity and Privilege Abuse【已證實（僅前三項確認）｜B45】。本架構的 agent 沒有工具、沒有身分、沒有權限，所以第二與第三項在設計上不存在；第一項則靠 canary 量測而非靠 prompt 祈禱。MITRE ATLAS 於 2025 年 10 月新增了 14 項 AI agent 技術【第三方評論（計數未直接驗證）｜B46】，治理建議要求每半年對照一次。
+第 9 章的五道防線對應這個風險。這裡補充一個治理面的觀察：OWASP 2026 年 Agentic Applications Top 10 的第一項是 Agent Goal Hijack，第二項是 Tool Misuse，第三項是 Identity and Privilege Abuse【尚未證實（僅前三項確認）｜B45】。本架構的 agent 沒有工具、沒有身分、沒有權限，所以第二與第三項在設計上不存在；第一項則靠 canary 量測而非靠 prompt 祈禱。MITRE ATLAS 於 2025 年 10 月新增了 14 項 AI agent 技術【第三方評論（計數未直接驗證）｜B46】，治理建議要求每半年對照一次。
 
 ### 16.3 模型供應鏈
 
-自架權重本身是供應鏈風險。Hugging Face 上的模型檔可能含惡意的 pickle；權重的來源必須可驗證（NVIDIA NGC 自 2025 年 7 月起對模型簽章【第三方評論｜C11.4】）；DeepSeek 的 GitHub 組織頁未列出 V4 倉庫，V4 權重的正式來源在本次研究中無法確認【尚未證實｜A78】。治理建議要求：只從官方來源下載權重、以 cosign 或 NGC 簽章驗證、以 safetensors 而非 pickle 格式載入、記錄權重的雜湊值進入 SBOM（CycloneDX 1.6 以上支援 ML-BOM【已證實｜C11.2】）。
+自架權重本身是供應鏈風險。Hugging Face 上的模型檔可能含惡意的 pickle；權重的來源必須可驗證（NVIDIA NGC 自 2025 年 7 月起對模型簽章【第三方評論｜C11.4】）；DeepSeek 的 GitHub 組織頁未列出 V4 倉庫，V4 權重的正式來源在本次研究中無法確認【尚未證實｜A78】。治理建議要求：只從官方來源下載權重、以 cosign 或 NGC 簽章驗證、以 safetensors 而非 pickle 格式載入、記錄權重的雜湊值進入 SBOM（CycloneDX 1.6 以上支援 ML-BOM【尚未證實｜C11.2】）。
 
 ### 16.4 審查系統自己的 GitHub Actions
 
-一個審查 workflow 安全性的 workflow，若自己不安全，會是諷刺也會是災難。雛型的 workflow 做到：`pull_request` 而非 `pull_request_target`、頂層 `permissions: {}` 且每個 job 明示只讀、所有 action 固定到 40 字元 SHA 並附版本註解、`persist-credentials: false`、工具 job 與模型 job 分離、模型 job 不 checkout 可執行內容。GitHub 於 2025 年 8 月提供的組織層級 SHA pinning 政策【已證實｜C7.8】應在組織層級開啟，讓這些選擇成為強制而非慣例。
+一個審查 workflow 安全性的 workflow，若自己不安全，會是諷刺也會是災難。雛型的 workflow 做到：`pull_request` 而非 `pull_request_target`、頂層 `permissions: {}` 且每個 job 明示只讀、所有 action 固定到 40 字元 SHA 並附版本註解、`persist-credentials: false`、工具 job 與模型 job 分離、模型 job 不 checkout 可執行內容。GitHub 於 2025 年 8 月提供的組織層級 SHA pinning 政策【尚未證實｜C7.8】應在組織層級開啟，讓這些選擇成為強制而非慣例。
 
 ### 16.5 過度信任與責任稀釋
 

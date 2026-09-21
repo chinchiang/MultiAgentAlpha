@@ -58,10 +58,10 @@ def test_g8_and_g9_freshness(tmp_path):
     assert check_g8(tmp_path, TODAY).status == FAIL, "garak report not marked live"
     (docs / "garak-2026-08-20.md").write_text(live)
     assert check_g8(tmp_path, TODAY).status == PASS
-    (docs / "calibration-2026-09-01.md").write_text("# 校準\n\n執行模式：**mock**。\n")
+    (docs / "calibration-2026-09-01.md").write_text("# 校準\n\n執行模式：**mock**。\n", encoding="utf-8")
     r = check_g9(tmp_path, TODAY)
     assert r.status == FAIL and "mock" in r.evidence
-    (docs / "calibration-2026-09-05.md").write_text("---\nmode: live\nfamilies: []\nprovider_modes: [live]\nlabels: 3\n---\n# 校準\n")
+    (docs / "calibration-2026-09-05.md").write_text("---\nmode: live\nfamilies: []\nprovider_modes: [live]\nlabels: 3\n---\n# 校準\n", encoding="utf-8")
     assert check_g9(tmp_path, TODAY).status == PASS
 
 

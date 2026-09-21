@@ -13,9 +13,9 @@ given, and the header records what it was resolved on.
 
 --only-binary=:all: is the default: every entry must be a wheel, so an install needs no build step.
 --allow-sdist admits source distributions for projects that publish no wheel (their hash is pinned
-just the same); installing them builds in an isolated environment whose build tools pip fetches
-without hash checking, which is why the header names every sdist and why the wheel-only closures
-keep the default.
+just the same). Install tools/build-requirements.txt with hash checking first: resolution and
+installation of sdists disable build isolation and use that pinned backend. The source build still
+executes package code, which is why the header names every sdist and wheels remain the default.
 """
 
 from __future__ import annotations
@@ -81,6 +81,8 @@ def resolve(reqs: list[str], allow_sdist: bool, workdir: Path) -> dict:
             "--report", str(report)]
     if not allow_sdist:
         argv.append("--only-binary=:all:")
+    else:
+        argv.append("--no-build-isolation")
     argv += ["-r", str(req_file)]
     print("+ " + " ".join(argv))
     r = subprocess.run(argv, capture_output=True, text=True)
@@ -119,9 +121,10 @@ def render(entries: list[dict], *, title: str, source: str, host: str, pip_versi
         f"# {title}: hash-pinned dependency closure, {len(entries)} distribution(s), resolved {dt.date.today().isoformat()}",
         f"# on {host} with pip {pip_version} from {source}. Do not edit by hand; regenerate with",
         f"#   {regenerate}",
-        "# Install: python3 -m pip install --require-hashes " + ("" if allow_sdist else "--only-binary=:all: ") + "-r <this file>",
+        "# Install: python3 -m pip install --require-hashes " + ("--no-build-isolation " if allow_sdist else "--only-binary=:all: ") + "-r <this file>",
     ]
     if sdists:
+        lines.append("# Preinstall the hash-pinned tools/build-requirements.txt closure before resolving or installing sdists.")
         lines.append("# Source distributions (no wheel published; built at install time, see scripts/relock_requirements.py): "
                      + ", ".join(f"{e['name']}=={e['version']}" for e in sdists))
     body = "".join(f"{e['name']}=={e['version']} \\\n    --hash=sha256:{e['sha256']}\n" for e in entries)

@@ -1,7 +1,8 @@
 # model-eval (garak): hash-pinned dependency closure, 194 distribution(s), resolved 2026-09-17
 # on CPython 3.11.15 / linux-x86_64 with pip 24.0 from tools/model-eval-requirements.in. Do not edit by hand; regenerate with
 #   python3 scripts/relock_requirements.py --in tools/model-eval-requirements.in --out tools/model-eval-requirements.txt --allow-sdist
-# Install: python3 -m pip install --require-hashes -r <this file>
+# Install: python3 -m pip install --require-hashes --no-build-isolation -r <this file>
+# Preinstall the hash-pinned tools/build-requirements.txt closure before resolving or installing sdists.
 # Source distributions (no wheel published; built at install time, see scripts/relock_requirements.py): ecoji==0.1.1, langdetect==1.0.9
 accelerate==1.15.0 \
     --hash=sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec

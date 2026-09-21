@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -23,8 +25,8 @@ JUDGE_SCHEMA = {
 
 class _JudgeRaw(BaseModel):
     finding_id: str
-    verdict: str
-    severity_band: str
+    verdict: Literal["true_positive", "false_positive", "needs_human"]
+    severity_band: Literal["None", "Low", "Medium", "High", "Critical"]
     reason: str = Field(max_length=400)
 
 
@@ -35,6 +37,9 @@ def run_judge(provider: Provider, batch: list[dict], pass_id: str, self_ids: set
     comp = base.call(provider, system_extra=base.load_prompt("judge"), user=user, schema=JUDGE_SCHEMA, role="judge")
     items, errors = base.parse_items(comp, _JudgeRaw)
     order = {b["finding_id"]: i for i, b in enumerate(batch)}
+    counts = Counter(i.finding_id for i in items)
+    if set(counts) != set(order) or any(n != 1 for n in counts.values()) or errors:
+        return [], errors + ["incomplete_or_duplicate_judge_response"]
     votes = []
     for i in items:
         if i.finding_id not in order:

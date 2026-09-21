@@ -15,10 +15,11 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .sarif import ToolResult, read_sarif
+from .sarif import ToolResult, read_sarif, scan_complete
 
 NOT_INSTALLED = "not installed under {bin_dir}; run `python scripts/install_tools.py`"
 
@@ -29,8 +30,12 @@ def tools_dir() -> Path:
 
 def tool_path(tool: str) -> Path | None:
     """The pinned, verified binary for `tool`, or None. Never consults PATH."""
-    p = tools_dir() / "bin" / tool
-    return p if p.is_file() and os.access(p, os.X_OK) else None
+    base = tools_dir() / "bin" / tool
+    candidates = [base.with_suffix(".cmd"), base.with_suffix(".bat"), base.with_suffix(".exe"), base] if sys.platform == "win32" else [base]
+    for p in candidates:
+        if p.is_file() and os.access(p, os.X_OK):
+            return p
+    return None
 
 
 def installed_manifest_entry(tool: str) -> dict | None:
@@ -66,7 +71,22 @@ class ToolRun:
 
 
 def _run(cmd: list[str], cwd: Path, timeout: int = 600, env: dict | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
+    try:
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
+    except OSError as e:
+        if sys.platform == "win32" and getattr(e, "winerror", None) == 193:
+            import shutil
+            sh = shutil.which("sh")
+            if not sh:
+                git = shutil.which("git")
+                if git:
+                    for cand in (Path(git).parent.parent / "bin" / "sh.exe", Path(git).parent.parent / "usr" / "bin" / "sh.exe"):
+                        if cand.exists():
+                            sh = str(cand)
+                            break
+            if sh:
+                return subprocess.run([sh, *cmd], cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
+        raise
 
 
 def _offline_zizmor() -> bool:
@@ -104,13 +124,17 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 if sarif.exists() and sarif.read_text(encoding="utf-8").strip():
                     normalize_sarif(sarif)
             elif tool == "gitleaks":
+                secret_config = out_dir / "gitleaks-preflight.toml"
+                secret_config.write_text("[extend]\nuseDefault = true\n", encoding="utf-8")
+                (out_dir / "no-allowlist").write_text("", encoding="utf-8")
                 cp = _run(
-                    [exe, "detect", "--no-git", "--source", ".", "--report-format", "sarif", "--report-path", str(sarif), "--exit-code", "0"],
+                    [exe, "dir", "--config", str(secret_config), "--redact", "--ignore-gitleaks-allow", "--gitleaks-ignore-path",
+                     str(out_dir / "no-allowlist"), "--report-format", "sarif", "--report-path", str(sarif), "."],
                     target,
                 )
             elif tool == "osv-scanner":
                 cp = _run([exe, "scan", "source", "--format", "sarif", "--output-file", str(sarif), "-r", "."], target)
-                if cp.returncode not in (0, 1, 130):
+                if cp.returncode not in (0, 1):
                     # 127 no packages, 128 general error (e.g. api.osv.dev unreachable): osv-scanner may still write an
                     # empty SARIF, which must not be read as "ran, nothing found"
                     sarif.unlink(missing_ok=True)
@@ -135,7 +159,11 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 note = f"exit {cp.returncode}, no SARIF produced" + (f": {tail}" if tail else "")
                 runs.append(ToolRun(tool=tool, ran=False, note=note))
                 continue
-            json.loads(sarif.read_text(encoding="utf-8"))
+            doc = json.loads(sarif.read_text(encoding="utf-8"))
+            allowed = {"semgrep": {0}, "gitleaks": {0, 1}, "osv-scanner": {0, 1}, "zizmor": {0, 11, 12, 13, 14}, "trivy": {0}}
+            if cp.returncode not in allowed[tool] or not scan_complete(doc):
+                runs.append(ToolRun(tool=tool, ran=False, results=read_sarif(sarif, tool), note="scanner_incomplete"))
+                continue
             runs.append(ToolRun(tool=tool, ran=True, results=read_sarif(sarif, tool), note=f"pinned {version}" if version else "pinned"))
         except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as e:
             runs.append(ToolRun(tool=tool, ran=False, note=f"failed: {e}"))
@@ -147,5 +175,6 @@ def load_prerecorded(sarif_dir: Path) -> list[ToolRun]:
     the GitHub Actions workflow where the tool step runs in an isolated job."""
     runs = []
     for p in sorted(sarif_dir.glob("*.sarif")):
-        runs.append(ToolRun(tool=p.stem, ran=True, results=read_sarif(p, p.stem)))
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        runs.append(ToolRun(tool=p.stem, ran=scan_complete(doc), results=read_sarif(p, p.stem), note="prerecorded"))
     return runs

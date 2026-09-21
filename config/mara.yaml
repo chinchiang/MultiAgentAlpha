@@ -12,7 +12,7 @@ models:
     family: deepseek
     provider: openai_compatible
     model: deepseek-v3.2                # self-hosted weights on vLLM/NIM only; never the vendor API
-    base_url: http://vllm-deepseek.internal:8000/v1
+    base_url: https://vllm-deepseek.internal:8000/v1
     api_key_env: DEEPSEEK_LOCAL_KEY
     data_residency: on_prem
     weight: 1.0
@@ -20,7 +20,7 @@ models:
     family: nemotron
     provider: openai_compatible
     model: nvidia/nemotron-3-super      # NVIDIA NIM, OpenAI-compatible endpoint
-    base_url: http://nim-nemotron.internal:8000/v1
+    base_url: https://nim-nemotron.internal:8000/v1
     api_key_env: NIM_LOCAL_KEY
     data_residency: on_prem
     weight: 1.0

@@ -4,9 +4,9 @@
 # the standby deployment before a live drill and record the drill in ops/model-swap-drills.yaml.
 standby_for: anthropic
 models:
-  - { name: mistral-reviewer,  family: mistral,   provider: openai_compatible, model: mistral-instruct,       base_url: http://vllm-mistral.internal:8000/v1, api_key_env: MISTRAL_LOCAL_KEY, data_residency: on_prem }
-  - { name: deepseek-reviewer, family: deepseek,  provider: openai_compatible, model: deepseek-v3.2,          base_url: http://vllm-deepseek.internal:8000/v1, api_key_env: DEEPSEEK_LOCAL_KEY, data_residency: on_prem }
-  - { name: nemotron-reviewer, family: nemotron,  provider: openai_compatible, model: nvidia/nemotron-3-super, base_url: http://nim-nemotron.internal:8000/v1, api_key_env: NIM_LOCAL_KEY, data_residency: on_prem }
+  - { name: mistral-reviewer,  family: mistral,   provider: openai_compatible, model: mistral-instruct,       base_url: https://vllm-mistral.internal:8000/v1, api_key_env: MISTRAL_LOCAL_KEY, data_residency: on_prem }
+  - { name: deepseek-reviewer, family: deepseek,  provider: openai_compatible, model: deepseek-v3.2,          base_url: https://vllm-deepseek.internal:8000/v1, api_key_env: DEEPSEEK_LOCAL_KEY, data_residency: on_prem }
+  - { name: nemotron-reviewer, family: nemotron,  provider: openai_compatible, model: nvidia/nemotron-3-super, base_url: https://nim-nemotron.internal:8000/v1, api_key_env: NIM_LOCAL_KEY, data_residency: on_prem }
 roles:
   reviewers: [mistral-reviewer, deepseek-reviewer, nemotron-reviewer]
   skeptic: nemotron-reviewer

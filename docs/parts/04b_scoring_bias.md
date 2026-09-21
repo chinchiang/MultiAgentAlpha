@@ -6,11 +6,11 @@ LLM 給出的數字分數不可信。《Overconfidence in LLM-as-a-Judge》系�
 
 ### 11.2 單一 finding 的四個維度
 
-**嚴重度（Severity）。** 由 L2 reviewer 提供 CVSS 4.0 基礎向量（AV、AC、AT、PR、UI、VC、VI、VA、SC、SI、SA 十一個指標），L5 以移植自 FIRST 參考實作的計算器算分。CVSS 4.0 規範於 2023 年 11 月 1 日發布，分為 Base、Threat、Environmental、Supplemental 四組指標，並以 CVSS-B、BT、BE、BTE 命名法標示套用了哪幾組【已證實｜C12.1】。雛型的計算器逐字重現 FIRST 的 MacroVector 查表（270 個 MacroVector）、EQ 最高向量表與嚴重度深度表，並以 FIRST 官方 JavaScript 產生的 16 組參考向量做迴歸測試，全數一致。L4 judge 給出的嚴重度區間中位數作為健全性檢查：若 judge 的中位數低於向量算出的區間，取較低者並記錄「嚴重度被評審團下修」。這個單向下修的設計是刻意的：模型傾向高報嚴重度以顯得重要，評審團只能減不能加。
+**嚴重度（Severity）。** 由 L2 reviewer 提供 CVSS 4.0 基礎向量（AV、AC、AT、PR、UI、VC、VI、VA、SC、SI、SA 十一個指標），L5 以移植自 FIRST 參考實作的計算器算分。CVSS 4.0 規範於 2023 年 11 月 1 日發布，分為 Base、Threat、Environmental、Supplemental 四組指標，並以 CVSS-B、BT、BE、BTE 命名法標示套用了哪幾組【尚未證實｜C12.1】。雛型的計算器逐字重現 FIRST 的 MacroVector 查表（270 個 MacroVector）、EQ 最高向量表與嚴重度深度表，並以 FIRST 官方 JavaScript 產生的 16 組參考向量做迴歸測試，全數一致。L4 judge 的嚴重度意見另存為 `operational_severity`，不覆寫 CVSS 計算出的嚴重度。無效向量會被拒收；防禦性回退為 `Unknown` 與空分數，轉人工處理，不能以 0 分解除阻擋。
 
-**可利用性（Exploitability）。** 依 finding 的類型分流。依賴類 finding 以 EPSS 分數與 KEV 是否收錄為準，兩者都由工具查詢而非模型回憶；EPSS v4（2025 年 3 月）只能作為「可能性」軸【已證實｜C6.7】。程式碼類 finding 以 L3 Red Team 的類別（yes、conditional、no、unknown）與 L2 的可達性判斷（reachable、conditional、unreachable、unknown）為準。
+**可利用性（Exploitability）。** 依 finding 的類型分流。依賴類 finding 以 EPSS 分數與 KEV 是否收錄為準，兩者都由工具查詢而非模型回憶；EPSS v4（2025 年 3 月）只能作為「可能性」軸【尚未證實｜C6.7】。程式碼類 finding 以 L3 Red Team 的類別（yes、conditional、no、unknown）與 L2 的可達性判斷（reachable、conditional、unreachable、unknown）為準。
 
-**信心（Confidence）。** 由共識分數表示，範圍 0 到 1。計算方式：每個 judge 家族對該 finding 的正序與反序投票取平均（true_positive 記 1、needs_human 記 0.5、false_positive 記 0），再以家族權重加權平均。一個家族在正反序給出不同裁決，其貢獻自然被平均稀釋；同家族在獨立 judge 不足時的投票乘以 0.5 的折減。工具佐證不進入共識分數，而是進入證據層級。
+**共識（Consensus）。** 共識分數範圍 0 到 1，是裁決的彙整指標，尚未校準為正確率或安全機率。計算方式：每個 judge 家族對該 finding 的正序與反序投票取平均（true_positive 記 1、needs_human 記 0.5、false_positive 記 0），再以家族權重加權平均。每一家族必須有且僅有一張正序及反序有效回票；重複、缺漏與未知 finding 的回覆不計入有效票。發現者同家族的票即使折減，也不補足獨立家族數。至少達到 `min_independent_judges` 個實際獨立家族、正反序一致且無其他待判原因，才可採納。工具佐證不進入共識分數，而是進入證據層級；未解決的工具結果也單獨保留並阻擋 gate。
 
 **證據層級（Evidence tier）。** 這是本架構最重要的輸出，也是「資料可信度」問題的直接答案。四級定義如下，判定順序由上而下：
 
@@ -23,11 +23,11 @@ LLM 給出的數字分數不可信。《Overconfidence in LLM-as-a-Judge》系�
 
 證據層級與第 12 章的「報告本身的證據四級」是兩套不同的東西：前者是 finding 的可信度，後者是本報告引用來源的可信度。混淆兩者是常見的溝通錯誤，第九部會再提醒。
 
-**SSVC 決策。** CISA 的 Stakeholder-Specific Vulnerability Categorization 以決策樹輸出 Track、Track*、Attend、Act 四種行動【已證實｜C6.9】。雛型實作的是簡化版：D 級一律 Track；Critical 且可利用為 yes 或 conditional 且對外曝露是 Act；High 或 Critical 且非不可利用是 Attend；Medium 且可利用是 Track*；其餘 Track。這裡的「可利用」是 Red Team 在審查中的判斷，不是 KEV 意義下的「野外遭利用」，報告中必須如此標示。
+**SSVC 決策。** CISA 的 Stakeholder-Specific Vulnerability Categorization 以決策樹輸出 Track、Track*、Attend、Act 四種行動【尚未證實｜C6.9】。雛型實作的是簡化版：D 級一律 Track；Critical 且可利用為 yes 或 conditional 且對外曝露是 Act；High 或 Critical 且非不可利用是 Attend；Medium 且可利用是 Track*；其餘 Track。這裡的「可利用」是 Red Team 在審查中的判斷，不是 KEV 意義下的「野外遭利用」，報告中必須如此標示。
 
 ### 11.3 為什麼不用 DREAD，也不只用 OWASP Risk Rating
 
-DREAD（Damage、Reproducibility、Exploitability、Affected users、Discoverability）常被引用為 Microsoft 在 2008 年前後因評分主觀且不一致而棄用；但本次研究找不到 Microsoft 的一手棄用聲明，這個說法只能以實務共識的層級陳述【尚未證實｜C12.6】。無論出處，DREAD 的問題在本架構中會被放大：五個主觀維度交給 LLM 打分，正是第 11.1 節要避免的事。OWASP Risk Rating Methodology 的 16 個子因子（威脅代理四項、弱點四項、技術影響四項、業務影響四項，各 0 到 9）【已證實｜C12.2】比 DREAD 結構化得多，是強迫 LLM 輸出固定 schema 的理想格式；但它的業務影響四項（財務、聲譽、合規、隱私）需要組織脈絡，不適合由審查 agent 判斷。本架構的取捨是：技術面用 CVSS 4.0（可重算、業界可比），行動面用 SSVC（決策導向），業務影響留給人工佇列。
+DREAD（Damage、Reproducibility、Exploitability、Affected users、Discoverability）常被引用為 Microsoft 在 2008 年前後因評分主觀且不一致而棄用；但本次研究找不到 Microsoft 的一手棄用聲明，這個說法只能以實務共識的層級陳述【尚未證實｜C12.6】。無論出處，DREAD 的問題在本架構中會被放大：五個主觀維度交給 LLM 打分，正是第 11.1 節要避免的事。OWASP Risk Rating Methodology 的 16 個子因子（威脅代理四項、弱點四項、技術影響四項、業務影響四項，各 0 到 9）【尚未證實｜C12.2】比 DREAD 結構化得多，是強迫 LLM 輸出固定 schema 的理想格式；但它的業務影響四項（財務、聲譽、合規、隱私）需要組織脈絡，不適合由審查 agent 判斷。本架構的取捨是：技術面用 CVSS 4.0（可重算、業界可比），行動面用 SSVC（決策導向），業務影響留給人工佇列。
 
 ### 11.4 面向分數與閘門
 
@@ -65,7 +65,7 @@ DREAD（Damage、Reproducibility、Exploitability、Affected users、Discoverabi
 
 ### 12.5 拒答與棄權的處理
 
-模型會拒答，尤其在攻擊性的內容上【B39】。本架構把拒答視為棄權而非零 finding：reviewer 拒答時該面向由其他家族覆蓋，稽核記錄 `reviewer_refusals`；judge 拒答時該家族在該批 finding 上沒有票，共識分數只以有票的家族計算，Krippendorff's α 天生能處理缺值（這是選 α 而不選 Cohen's κ 的原因【已證實｜B72】）。Fixture 中 mock 的 Nemotron 家族刻意在錯誤處理面向拒答，管線正確地以另外兩個家族完成該面向。
+模型會拒答，尤其在攻擊性的內容上【B39】。本架構把拒答視為棄權而非零 finding：reviewer 拒答時該面向由其他家族覆蓋，稽核記錄 `reviewer_refusals`；judge 拒答時該家族在該批 finding 上沒有票，共識分數只以有票的家族計算，Krippendorff's α 天生能處理缺值（這是選 α 而不選 Cohen's κ 的原因【尚未證實｜B72】）。Fixture 中 mock 的 Nemotron 家族刻意拒答，用來驗證 `review_status=incomplete`、`overall_score=null` 與 gate 阻擋；其餘家族的輸出仍保留，但不冒稱完整審查。
 
 ### 12.6 本報告自身的證據分級
 
@@ -89,11 +89,11 @@ DREAD（Damage、Reproducibility、Exploitability、Affected users、Discoverabi
 | 10 | Prompt injection | OWASP LLM01:2025【B43】；審稿注入研究【B49】 | untrusted 包裹、canary、不執行、來源驗證 | `agents/base.py` | `canary_echoes` |
 | 11 | 拒答導致的安靜少報 | 雙模式基準研究【B39】 | 拒答記為棄權；其他家族覆蓋；α 處理缺值 | `providers/*`、`scoring/consensus.py` | `reviewer_refusals`、`judge_refusals` |
 | 12 | 多輪對話漂移 | Laban et al. ICLR 2026【B58】 | 所有呼叫都是單輪、自足的 | 架構層級 | 無需指標 |
-| 13 | 共識過早收斂壓掉異議 | debate hacking 研究【B27】 | 無辯論；少數異議進入人工佇列而非被投票淹沒（α 低於門檻即 needs_human） | `pipeline.score` | `human_queue` |
+| 13 | 共識過早收斂壓掉異議 | debate hacking 研究【B27】 | 無辯論；少數異議進入人工佇列而非被投票淹沒（finding 的 `agreement_proxy` 低於有效門檻即 needs_human） | `pipeline.score` | `human_queue` |
 | 14 | 政治敏感 token 影響輸出品質 | CrowdStrike 2025 年 11 月【B97】 | 自架、中性提示模板；校準集納入含敏感詞的樣本比對各家族輸出差異 | 校準迴圈 | 校準報告 |
 | 15 | 語言偏誤 | 本報告的假設，無直接文獻 | 校準集以中英雙語提示各跑一次 | 校準迴圈 | 校準報告 |
 | 16 | 評估者自身的 bias sensitivity | Zhao et al. 2026【B14】 | 對同一 finding 做語意保持的擾動（改變數名、重排欄位）再跑 judge，回報裁決變化率 | 校準迴圈（雛型未實作） | 附錄B 缺口 |
 
-第 14 項需要說明。CrowdStrike 於 2025 年 11 月報告，DeepSeek-R1 在中性提示下產出弱點程式碼的比率約 19%，與同儕相當；但當提示中含有與程式任務無關的政治敏感詞（西藏、法輪功、維吾爾）時，嚴重弱點的機率最多上升 50%，例如「為一家西藏的金融機構」寫 PayPal webhook 處理器時出現硬編碼 secret 與較不安全的資料抽取方式；報告並記錄了模型規劃完完整技術回應後拒絕輸出程式碼的「內建開關」【第三方評論（廠商研究，原頁被擋）｜B97】。這項發現若成立，意味著 DeepSeek 作為審查者的輸出品質取決於被審查程式碼中是否恰好出現某些與安全無關的字串，而這在真實程式庫中是不可控的變數。本報告不因此排除 DeepSeek，但要求：它只能是三個家族之一而非唯一；校準集必須包含含敏感詞與不含敏感詞的配對樣本，量測其輸出差異；差異顯著時降低其權重。NIST CAISI 於 2025 年 9 月 30 日的評估另指出 DeepSeek R1-0528 遵從惡意指令的機率是美國前沿模型的約 12 倍、在公開 jailbreak 提示下 95% 到 100% 產出釣魚與惡意程式內容【已證實（頁面被擋，依搜尋摘要）｜B95】，2026 年 5 月對 V4 Pro 的評估則只取得標題【尚未證實｜B96】。
+第 14 項需要說明。CrowdStrike 於 2025 年 11 月報告，DeepSeek-R1 在中性提示下產出弱點程式碼的比率約 19%，與同儕相當；但當提示中含有與程式任務無關的政治敏感詞（西藏、法輪功、維吾爾）時，嚴重弱點的機率最多上升 50%，例如「為一家西藏的金融機構」寫 PayPal webhook 處理器時出現硬編碼 secret 與較不安全的資料抽取方式；報告並記錄了模型規劃完完整技術回應後拒絕輸出程式碼的「內建開關」【第三方評論（廠商研究，原頁被擋）｜B97】。這項發現若成立，意味著 DeepSeek 作為審查者的輸出品質取決於被審查程式碼中是否恰好出現某些與安全無關的字串，而這在真實程式庫中是不可控的變數。本報告不因此排除 DeepSeek，但要求：它只能是三個家族之一而非唯一；校準集必須包含含敏感詞與不含敏感詞的配對樣本，量測其輸出差異；差異顯著時降低其權重。NIST CAISI 於 2025 年 9 月 30 日的評估另指出 DeepSeek R1-0528 遵從惡意指令的機率是美國前沿模型的約 12 倍、在公開 jailbreak 提示下 95% 到 100% 產出釣魚與惡意程式內容【尚未證實（頁面被擋，依搜尋摘要）｜B95】，2026 年 5 月對 V4 Pro 的評估則只取得標題【尚未證實｜B96】。
 
 第 7 項是整個目錄中最不能省略的一項。三個家族的設定在數學上很脆弱：一個 finding 若被兩個家族同時發現，只剩一個獨立的 judge；fixture 的稽核顯示 53 張票是同家族折半票。ICML 2025 的證據說明即使真正獨立的家族，其錯誤仍高度相關【B17、B18】。因此第十部的建議之一是把家族數擴到四個以上（例如加入自架的 Llama 4 或 Mistral），而不是把三家族視為足夠。

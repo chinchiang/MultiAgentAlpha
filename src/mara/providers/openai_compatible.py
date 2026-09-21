@@ -37,16 +37,17 @@ class OpenAICompatibleProvider(Provider):
         }
         try:
             r = self.client.post("/chat/completions", json=body)
-        except httpx.HTTPError as e:  # connect/read timeouts, connection refused, protocol errors
-            raise RuntimeError(f"{self.spec.name}: {type(e).__name__}: {e}") from e
+        except httpx.HTTPError:  # connect/read timeouts, connection refused, protocol errors; no message leaks
+            raise RuntimeError("provider_connection_failed") from None
         if r.status_code >= 400:
-            raise RuntimeError(f"{self.spec.name}: HTTP {r.status_code}: {r.text[:300]}")
+            raise RuntimeError(f"provider_http_error:{r.status_code}")
         try:
             payload = r.json()
             choice = payload["choices"][0]
             message = choice["message"]
-        except (ValueError, KeyError, IndexError, TypeError) as e:  # error-shaped or non-JSON body behind a 2xx
-            raise RuntimeError(f"{self.spec.name}: malformed completion payload ({type(e).__name__}): {r.text[:300]}") from e
+        except (ValueError, KeyError, IndexError, TypeError):
+            # error-shaped or non-JSON body behind a 2xx; the body itself never reaches a log or report
+            raise RuntimeError("provider_malformed_payload") from None
         text = message.get("content") or ""
         finish = choice.get("finish_reason", "")
         usage = payload.get("usage", {}) or {}

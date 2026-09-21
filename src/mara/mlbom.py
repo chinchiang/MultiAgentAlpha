@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -469,7 +470,9 @@ def tools_bin(tools_dir: Path | str | None = None) -> Path:
 def cosign_verify_blob_cmd(bom_path: Path | str, bundle: Path | str, identity: str, issuer: str,
                            tools_dir: Path | str | None = None) -> list[str]:
     """Command line for the locked cosign (tools/versions.lock) to verify the BOM's keyless signature."""
-    exe = tools_bin(tools_dir) / "cosign"
+    base = tools_bin(tools_dir) / "cosign"
+    candidates = [base.with_suffix(".exe"), base.with_suffix(".cmd"), base.with_suffix(".bat"), base] if sys.platform == "win32" else [base]
+    exe = next((c for c in candidates if c.exists()), base)
     if not exe.exists():
         raise FileNotFoundError(f"{exe} not installed; run scripts/install_tools.py")
     if not identity or not issuer:

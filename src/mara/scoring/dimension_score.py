@@ -17,7 +17,7 @@ def score_dimension(dimension: str, findings: list[Finding], consensus: dict[str
         c = consensus.get(f.id)
         if c is None:
             continue
-        if c.votes_human > c.votes_tp and c.votes_human > c.votes_fp:
+        if c.needs_human:
             human += 1
         if c.accepted:
             accepted += 1

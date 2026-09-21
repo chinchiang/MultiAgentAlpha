@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import secrets
 from importlib import resources
 from pathlib import Path
@@ -54,36 +53,36 @@ def untrusted_block(ctx: RepoContext, canary: Canary | None, paths: list[str] | 
 
 def verify_quote(ctx: RepoContext, file: str, line: int, quote: str) -> bool:
     """Quote must appear verbatim in the file, within +-3 lines of the claimed line."""
-    text = ctx.content.get(file)
-    if text is None:
-        p = Path(ctx.root) / file
-        if not p.is_file():
-            return False
-        try:
-            text = p.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            return False
-    lines = text.splitlines()
+    if not quote.strip() or file not in ctx.content or ".." in Path(file).parts or Path(file).is_absolute():
+        return False
+    lines = ctx.content[file].splitlines()
+    if not 1 <= line <= len(lines):
+        return False
     lo, hi = max(0, line - 4), min(len(lines), line + 3)
     window = "\n".join(lines[lo:hi])
-    q = " ".join(quote.split())
-    return q in " ".join(window.split())
+    return " ".join(quote.split()) in " ".join(window.split())
 
 
 def call(provider: Provider, *, system_extra: str, user: str, schema: dict, role: str) -> Completion:
     system = COMMON_SYSTEM + "\n\n" + system_extra
-    return provider.complete(system=system, user=user, schema=schema, role=role)
+    try:
+        return provider.complete(system=system, user=user, schema=schema, role=role)
+    except Exception:
+        # Neither exception messages nor remote response bodies belong in prompts/reports.
+        return Completion(data=None, raw_text="provider_call_failed", refused=True)
 
 
 def parse_items(comp: Completion, model_cls, key: str = "items") -> tuple[list, list[str]]:
     """Validate a list of dicts against a pydantic model; return (valid, errors)."""
     if comp.refused or comp.data is None:
         return [], ["refused_or_empty"]
-    items = comp.data.get(key, []) if isinstance(comp.data, dict) else []
+    if not isinstance(comp.data, dict) or not isinstance(comp.data.get(key), list):
+        return [], ["invalid_response_shape"]
+    items = comp.data[key]
     valid, errors = [], []
     for raw in items:
         try:
             valid.append(model_cls.model_validate(raw))
         except ValidationError as e:
-            errors.append(json.dumps(e.errors()[0], default=str)[:200])
+            errors.append("invalid_item:" + e.errors()[0]["type"])
     return valid, errors

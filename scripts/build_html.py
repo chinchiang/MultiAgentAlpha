@@ -7,9 +7,13 @@ tables that scroll horizontally on narrow screens instead of being cut off, ligh
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import html
 import re
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import markdown
 
@@ -59,7 +63,7 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(-
 @media (prefers-reduced-motion: reduce){nav{transition:none}}
 .hits{font-size:12px;color:var(--muted);margin-top:6px}
 .topbar{display:none}
-@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}nav{position:fixed;left:0;top:0;width:82vw;max-width:340px;transform:translateX(-100%);transition:transform .2s;z-index:20}nav.open{transform:none}main{padding:64px 18px 80px}.topbar{display:flex;position:fixed;top:0;left:0;right:0;height:48px;align-items:center;gap:12px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line);z-index:10}.topbar button{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:6px 10px}}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}nav{position:relative;height:auto;width:100%;transform:none}.js-enabled nav{position:fixed;left:0;top:0;height:100vh;width:82vw;max-width:340px;transform:translateX(-100%);transition:transform .2s;z-index:20}.js-enabled nav.open{transform:none}main{padding:64px 18px 80px}.topbar{display:flex;position:fixed;top:0;left:0;right:0;height:48px;align-items:center;gap:12px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line);z-index:10}.topbar button{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:6px;padding:6px 10px}}
 @media print{nav,.topbar{display:none}.layout{display:block}main{max-width:none;padding:0}}
 """
 
@@ -68,7 +72,7 @@ JS = """
   const nav=document.querySelector('nav'), toc=document.getElementById('toc'), q=document.getElementById('q'), hits=document.getElementById('hits');
   const main=document.querySelector('main');
   const heads=[...main.querySelectorAll('h1,h2,h3')];
-  heads.forEach((h,i)=>{ if(!h.id){h.id='s'+i;} const li=document.createElement('li'); li.className=h.tagName.toLowerCase(); const a=document.createElement('a'); a.href='#'+h.id; a.textContent=h.textContent; li.appendChild(a); toc.appendChild(li); });
+  document.documentElement.classList.add('js-enabled');
   const items=[...toc.querySelectorAll('li')];
   const io=new IntersectionObserver(es=>{es.forEach(e=>{ if(e.isIntersecting){ items.forEach(x=>x.classList.remove('active')); const it=items.find(x=>x.querySelector('a').getAttribute('href')==='#'+e.target.id); if(it){it.classList.add('active'); it.scrollIntoView({block:'nearest'});} } });},{rootMargin:'0px 0px -80% 0px'});
   heads.forEach(h=>io.observe(h));
@@ -86,15 +90,98 @@ JS = """
   }
   q.addEventListener('input',()=>search(q.value.trim()));
   q.addEventListener('keydown',e=>{ if(e.key==='Enter'&&search.first){ search.first.scrollIntoView({block:'center'}); } });
-  const btn=document.getElementById('menu'); if(btn){ btn.addEventListener('click',()=>nav.classList.toggle('open')); toc.addEventListener('click',()=>nav.classList.remove('open')); }
+  const btn=document.getElementById('menu'), mobile=matchMedia('(max-width:900px)');
+  function menu(open,restore=true){
+    nav.classList.toggle('open',open); btn.setAttribute('aria-expanded',String(open));
+    nav.inert=mobile.matches&&!open;
+    if(open) q.focus(); else if(restore) btn.focus();
+  }
+  btn.addEventListener('click',()=>menu(!nav.classList.contains('open')));
+  toc.addEventListener('click',e=>{if(e.target.closest('a')&&mobile.matches) menu(false);});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&nav.classList.contains('open')) menu(false);
+    if(e.key==='Tab'&&mobile.matches&&nav.classList.contains('open')){
+      const focusable=[...nav.querySelectorAll('a,input,button')], first=focusable[0], last=focusable.at(-1);
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    }
+  });
+  mobile.addEventListener('change',()=>menu(false,false)); menu(false,false);
 })();
 """
+
+
+class SafeReportHTML(HTMLParser):
+    """Small formatting allowlist; no active HTML, inline handlers or URL-based script sinks."""
+    allowed = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "a", "em", "strong", "code", "pre",
+               "ul", "ol", "li", "blockquote", "table", "thead", "tbody", "tr", "th", "td", "hr", "br", "del"}
+    void = {"br", "hr"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.output, self.stack, self.headings = [], [], []
+        self.heading = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag not in self.allowed:
+            return
+        safe = []
+        if tag in {"h1", "h2", "h3"}:
+            ident = f"s{len(self.headings)}"
+            self.heading = [tag, ident, ""]
+            self.headings.append(self.heading)
+            safe.append(("id", ident))
+        if tag == "a":
+            for key, val in attrs:
+                if key == "href" and val and not any(ord(c) < 32 for c in val):
+                    url = urlsplit(val.strip())
+                    if url.scheme in {"https", "http"} or (not url.scheme and not url.netloc and val.startswith("#")):
+                        safe.extend([("href", val), ("rel", "noopener noreferrer")])
+        self.output.append("<" + tag + "".join(f' {k}="{html.escape(v, quote=True)}"' for k, v in safe) + ">")
+        if tag not in self.void:
+            self.stack.append(tag)
+
+    def handle_endtag(self, tag):
+        if tag in self.stack:
+            while self.stack:
+                closed = self.stack.pop()
+                self.output.append(f"</{closed}>")
+                if closed == tag:
+                    break
+        if self.heading and tag == self.heading[0]:
+            self.heading = None
+
+    def handle_data(self, data):
+        if self.heading:
+            self.heading[2] += data
+        if any(t in self.stack for t in {"code", "pre", "a"}):
+            self.output.append(html.escape(data))
+            return
+        last = 0
+        for match in re.finditer(r"https?://[^\s<>\"'｜|]+", data):
+            self.output.append(html.escape(data[last:match.start()]))
+            url = html.escape(match.group(), quote=True)
+            self.output.append(f'<a href="{url}" rel="noopener noreferrer">{url}</a>')
+            last = match.end()
+        self.output.append(html.escape(data[last:]))
+
+
+def safe_body(md_text: str) -> tuple[str, str]:
+    parser = SafeReportHTML()
+    parser.feed(markdown.markdown(md_text, extensions=["tables", "fenced_code", "sane_lists"], output_format="html5"))
+    toc = "".join(f'<li class="{tag}"><a href="#{ident}">{html.escape(title)}</a></li>'
+                  for tag, ident, title in parser.headings)
+    return "".join(parser.output), toc
+
+
+def csp_hash(text: str) -> str:
+    return "sha256-" + base64.b64encode(hashlib.sha256(text.encode()).digest()).decode()
 
 
 def build() -> Path:
     md_text = SRC.read_text(encoding="utf-8")
     md_text = re.sub(r"^---\ntitle:.*?\n---\n", "", md_text, count=1, flags=re.S)
-    body = markdown.markdown(md_text, extensions=["tables", "fenced_code", "sane_lists"], output_format="html5")
+    body, toc = safe_body(md_text)
     body = body.replace("<table>", '<div class="tablewrap"><table>').replace("</table>", "</table></div>")
     # evidence markers 【級別｜來源】 become small chips; the grade drives the colour token
     def chip(m: re.Match) -> str:
@@ -103,14 +190,26 @@ def build() -> Path:
         return f'<span class="ev {cls}" title="證據級別：{grade}">{grade}<span class="ev-src">{html.escape(rest)}</span></span>'
     body = re.sub(r"【(已證實|廠商主張|第三方評論|尚未證實)((?:[^】])*)】", chip, body)
     title = "多模型多代理資安審查"
-    page = f"""<title>{html.escape(title)}</title>
+    csp = (f"default-src 'none'; script-src '{csp_hash(JS)}'; style-src '{csp_hash(CSS)}'; "
+           "base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'")
+    page = f"""<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="{csp}">
+<title>{html.escape(title)}</title>
 <style>{CSS}</style>
-<div class="topbar"><button id="menu" aria-label="目次">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-01</span></div>
+</head>
+<body>
+<div class="topbar"><button id="menu" aria-label="開啟目次" aria-expanded="false" aria-controls="navigation">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-01</span></div>
 <div class="layout">
-<nav><p class="brand">GSMD-RPT-2026-0908-01 · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits"></div><ol id="toc"></ol></nav>
+<nav id="navigation" aria-label="目次"><p class="brand">GSMD-RPT-2026-0908-01 · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits" aria-live="polite"></div><ol id="toc">{toc}</ol></nav>
 <main>{body}</main>
 </div>
 <script>{JS}</script>
+</body>
+</html>
 """
     OUT.write_text(page, encoding="utf-8")
     return OUT

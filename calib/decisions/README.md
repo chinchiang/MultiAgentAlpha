@@ -1,21 +1,17 @@
 # Human decisions (G-11 write-back)
 
-One JSON file per decided human-queue ticket, written by `scripts/human_queue_issues.py --sync-decisions`
-from closed issues that carry `decision:true-positive` or `decision:false-positive`:
+The ticket is the record; this directory mirrors decisions written by
+`scripts/human_queue_issues.py --sync-decisions`. Each record must have:
 
-```json
-{
-  "key": "<12 hex chars>",           # sha256(file:line:cwe)[:12], the same key the pipeline puts in human_queue.json
-  "decision": "true_positive",      # or false_positive
-  "issue": 42, "url": "https://github.com/.../issues/42", "decided_at": "2026-09-12T08:00:00Z",
-  "target": "/path/reviewed", "finding_id": "F-0007", "cwe": "CWE-89", "file": "app.py", "line": 32
-}
-```
+- a v2 key computed from target ID, revision, context hash, file, line and CWE;
+- the matching identity fields and finding ID;
+- decision, issue URL/number and decision timestamp;
+- the surviving unique decision label, its event ID and actor;
+- adjudicator training status checked on the decision date.
 
-`scripts/calibrate.py` reads this directory: a `true_positive` decision becomes an extra label for the
-matching sample (so a family that found it gets a true positive instead of a false positive), a
-`false_positive` decision confirms a false positive. `backlog.json` records the open ticket count;
-when it is above `human_queue.backlog_limit` the pipeline tightens (higher alpha threshold, tier C not
-queued) instead of letting anything through faster.
+Legacy 12-character keys, target-basename matches and decisions from another revision are not
+applied automatically. Regenerate the review and ticket after migration. Do not fabricate or
+manually relabel old records as current evidence. See [human-queue.md](../../docs/human-queue.md).
 
-Nothing in this directory is edited by hand: the ticket is the record, this is its mirror.
+`backlog.json` records open ticket count. When it exceeds the configured limit the pipeline raises
+the agreement threshold; unresolved findings remain visible and keep the gate blocked.

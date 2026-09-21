@@ -77,7 +77,7 @@ def test_p2_holds_qwen_to_private_endpoints():
                     for k, v in raw["roles"].items()}
     with pytest.raises(ValueError, match="P2"):
         MaraConfig.model_validate(raw)
-    raw["models"][1]["base_url"] = "http://vllm-qwen.internal:8000/v1"
+    raw["models"][1]["base_url"] = "https://vllm-qwen.internal:8000/v1"
     assert MaraConfig.model_validate(raw).models[1].family == ModelFamily.QWEN
 
 

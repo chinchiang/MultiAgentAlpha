@@ -4,7 +4,7 @@
 
 Each `tool=path` names one SARIF produced by the L0 job for the real repository (never the fixture
 scans and never the mock review report, which describe seeded material). For every run in a file:
-  - results that carry a non-empty `suppressions` array are dropped: they are triaged findings whose
+  - results with an accepted suppression are dropped: they are triaged findings whose
     reason lives in the repository (tools/semgrep-triage.yaml, tools/osv-scanner.toml) and must not
     reappear as alerts, whatever GitHub does with the suppressions property;
   - results without a physical location are dropped (Code Scanning needs a file to attach an alert to);
@@ -44,7 +44,7 @@ def prepare_run(run: dict, tool: str, workspace: Path) -> dict:
     """Returns counters; mutates the run."""
     kept, suppressed, unlocated = [], 0, 0
     for r in run.get("results", []):
-        if r.get("suppressions"):
+        if any(s.get("status") == "accepted" for s in r.get("suppressions", [])):
             suppressed += 1
             continue
         locs = r.get("locations") or []

@@ -26,7 +26,7 @@ TRUNCATED_TEXT = json.dumps(GOOD)[:-6]  # cut inside the object: never parses
 
 def _spec(**kw) -> ModelSpec:
     d = {"name": "deepseek-reviewer", "family": "deepseek", "provider": "openai_compatible", "model": "deepseek-v3.2",
-         "base_url": "http://vllm.internal:8000/v1", "data_residency": "on_prem"}
+         "base_url": "https://vllm.internal:8000/v1", "data_residency": "on_prem"}
     d.update(kw)
     return ModelSpec(**d)
 
@@ -80,8 +80,8 @@ def test_openai_compatible_content_filter_and_empty_are_refusals():
 
 
 @pytest.mark.parametrize("status,body", [(500, "upstream exploded"), (401, "bad token"), (429, "slow down"), (503, "loading weights")])
-def test_openai_compatible_http_errors_raise_with_model_name_and_status(status, body):
-    with pytest.raises(RuntimeError, match=rf"deepseek-reviewer: HTTP {status}: {body}"):
+def test_openai_compatible_http_errors_raise_a_sanitised_code_with_the_status(status, body):
+    with pytest.raises(RuntimeError, match=rf"^provider_http_error:{status}$"):  # status only: the body never leaks
         _call(_oai(lambda req: httpx.Response(status, text=body)))
 
 
@@ -90,19 +90,19 @@ def test_openai_compatible_transport_errors_become_runtime_errors(exc):
     def handler(req):
         raise exc
 
-    with pytest.raises(RuntimeError, match=rf"deepseek-reviewer: {type(exc).__name__}"):
+    with pytest.raises(RuntimeError, match=r"^provider_connection_failed$"):
         _call(_oai(handler))
 
 
 @pytest.mark.parametrize("payload", [{"error": {"message": "model not found"}}, {"choices": []}, {"choices": [{"text": "no message key"}]}, "not json at all"])
 def test_openai_compatible_error_shaped_2xx_bodies_raise_instead_of_keyerror(payload):
     resp = httpx.Response(200, json=payload) if not isinstance(payload, str) else httpx.Response(200, text=payload)
-    with pytest.raises(RuntimeError, match="deepseek-reviewer: malformed completion payload"):
+    with pytest.raises(RuntimeError, match=r"^provider_malformed_payload$"):
         _call(_oai(lambda req: resp))
 
 
 def test_openai_compatible_requires_base_url_and_reads_key_from_env(monkeypatch):
-    with pytest.raises(ValueError, match="base_url required"):
+    with pytest.raises(ValueError, match="base_url required|requires a host"):  # ModelSpec now validates the URL first
         OpenAICompatibleProvider(_spec(base_url=None))
     monkeypatch.setenv("DEEPSEEK_LOCAL_KEY", "k-123")
     p = OpenAICompatibleProvider(_spec(api_key_env="DEEPSEEK_LOCAL_KEY"))
@@ -166,7 +166,7 @@ def test_anthropic_sdk_errors_are_wrapped_as_runtime_errors():
         yield  # pragma: no cover
 
     p.client.messages.stream = boom
-    with pytest.raises(RuntimeError, match="anthropic API error 529"):
+    with pytest.raises(RuntimeError, match=r"^provider_http_error:529$"):
         _call(p)
 
     @contextmanager
@@ -175,7 +175,7 @@ def test_anthropic_sdk_errors_are_wrapped_as_runtime_errors():
         yield  # pragma: no cover
 
     p.client.messages.stream = down
-    with pytest.raises(RuntimeError, match="anthropic connection error"):
+    with pytest.raises(RuntimeError, match=r"^provider_connection_failed$"):
         _call(p)
 
 

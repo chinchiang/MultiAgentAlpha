@@ -5,8 +5,8 @@
 standby_for: deepseek
 models:
   - { name: claude-reviewer,   family: anthropic, provider: anthropic,         model: claude-opus-5,           api_key_env: ANTHROPIC_API_KEY, data_residency: vendor_api_zdr }
-  - { name: llama-reviewer,    family: llama,     provider: openai_compatible, model: llama-4-instruct,        base_url: http://vllm-llama.internal:8000/v1, api_key_env: LLAMA_LOCAL_KEY, data_residency: on_prem }
-  - { name: nemotron-reviewer, family: nemotron,  provider: openai_compatible, model: nvidia/nemotron-3-super, base_url: http://nim-nemotron.internal:8000/v1, api_key_env: NIM_LOCAL_KEY, data_residency: on_prem }
+  - { name: llama-reviewer,    family: llama,     provider: openai_compatible, model: llama-4-instruct,        base_url: https://vllm-llama.internal:8000/v1, api_key_env: LLAMA_LOCAL_KEY, data_residency: on_prem }
+  - { name: nemotron-reviewer, family: nemotron,  provider: openai_compatible, model: nvidia/nemotron-3-super, base_url: https://nim-nemotron.internal:8000/v1, api_key_env: NIM_LOCAL_KEY, data_residency: on_prem }
 roles:
   reviewers: [claude-reviewer, llama-reviewer, nemotron-reviewer]
   skeptic: nemotron-reviewer

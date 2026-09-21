@@ -1,12 +1,12 @@
 """G-12 operations around the PSIRT hand-off: a send ledger, the Article 14 stage clock, and the endpoint handshake.
 
-The review produces early-warning payloads (report/psirt_out.py). Three things had to live outside a
+The review produces internal hand-off payloads (report/psirt_out.py). Three things had to live outside a
 single review run:
   * the ledger (`psirt.ledger_file`, default ops/psirt/ledger.json): one item per finding key
     (product + target + file:line:cwe), so a finding re-reviewed tomorrow is not sent to the PSIRT
     again, and every send attempt with its HTTP status is on record;
   * the stage clock: the 72 h notification and the 14 d final report are produced by the PSIRT, not
-    by the review, but their deadlines started at the review; `record` writes the PSIRT's reference
+    by the review, their deadlines require confirmed incident events, never review timestamps; `record` writes the PSIRT's reference
     for each stage and `overdue()` names every open item past a deadline, which governance G-12 reads;
   * the handshake (`psirt.handshake_file`): a clearly-marked test payload POSTed to the webhook with
     the real token, recorded with status and time. `enabled: true` in a config proves nothing about
@@ -27,8 +27,13 @@ from .config import MaraConfig
 
 LEDGER_SCHEMA = "mara-psirt-ledger/1"
 HANDSHAKE_SCHEMA = "mara-psirt/1"
-STAGES = ("early_warning", "notification", "final_report")
-STAGE_DEADLINE = {"early_warning": "early_warning_by", "notification": "notification_by", "final_report": "final_report_by"}
+STAGES = ("internal_handoff", "early_warning", "notification", "final_report")
+STAGE_DEADLINE = {
+    "internal_handoff": "handoff_by",
+    "early_warning": "early_warning_by",
+    "notification": "notification_by",
+    "final_report": "final_report_by",
+}
 
 
 def now_utc() -> dt.datetime:
@@ -50,6 +55,7 @@ def dedupe_key(product: str, target: str, file: str, line: int, cwe: str) -> str
 
 
 # ---------------------------------------------------------------- ledger
+
 
 def load_ledger(path: Path | str) -> dict:
     p = Path(path)
@@ -73,41 +79,72 @@ def item_for(ledger: dict, payload: dict, now: dt.datetime) -> dict:
     if item is None:
         loc = payload.get("location", {})
         item = ledger["items"][key] = {
-            "key": key, "product": payload.get("product", ""), "target": payload.get("target", ""),
-            "finding": {"title": payload.get("title", ""), "file": loc.get("file", ""), "line": loc.get("line", 0), "cwe": payload.get("cwe", ""),
-                        "severity": (payload.get("cvss4") or {}).get("severity", ""), "tier": payload.get("evidence_tier", "")},
-            "first_detected_at": payload.get("detected_at", iso(now)), "deadlines": dict(payload.get("deadlines", {})),
-            "stages": {s: {} for s in STAGES}, "attempts": [], "closed": {},
+            "key": key,
+            "product": payload.get("product", ""),
+            "target": payload.get("target", ""),
+            "finding": {
+                "title": payload.get("title", ""),
+                "file": loc.get("file", ""),
+                "line": loc.get("line", 0),
+                "cwe": payload.get("cwe", ""),
+                "severity": (payload.get("cvss4") or {}).get("severity", ""),
+                "tier": payload.get("evidence_tier", ""),
+            },
+            "first_detected_at": payload.get("detected_at", iso(now)),
+            "deadlines": dict(payload.get("deadlines", {})),
+            "clock_kind": payload.get("clock_kind", "legacy_unverified"),
+            "internal_sla": {"handoff_by": payload.get("internal_sla", {}).get("early_warning_by")},
+            "incident_event": payload.get("incident_event", {}),
+            "stages": {s: {} for s in STAGES},
+            "attempts": [],
+            "closed": {},
         }
     return item
 
 
 def already_sent(ledger: dict, key: str) -> str | None:
-    """The time the early warning was first delivered (HTTP 2xx), or None."""
+    """The time the internal hand-off was first delivered (HTTP 2xx), or None."""
     item = ledger["items"].get(key)
     if not item or item.get("closed"):
         return None
-    return item["stages"]["early_warning"].get("sent_at")
+    return item["stages"].get("internal_handoff", {}).get("sent_at")
 
 
 def record_attempt(ledger: dict, payload: dict, status_code: int, ok: bool, now: dt.datetime | None = None) -> dict:
     now = now or now_utc()
     item = item_for(ledger, payload, now)
     item["attempts"].append({"at": iso(now), "status_code": status_code, "ok": ok})
-    if ok and not item["stages"]["early_warning"].get("sent_at"):
-        item["stages"]["early_warning"] = {"sent_at": iso(now), "status_code": status_code}
+    if ok and not item["stages"].get("internal_handoff", {}).get("sent_at"):
+        item["stages"]["internal_handoff"] = {"sent_at": iso(now), "status_code": status_code}
     return item
 
 
 def record_stage(ledger: dict, key: str, stage: str, reference: str, now: dt.datetime | None = None) -> dict:
-    if stage not in ("notification", "final_report"):
-        raise ValueError(f"stage must be notification or final_report, not {stage!r}")
+    if stage not in ("early_warning", "notification", "final_report"):
+        raise ValueError(f"unsupported legal reporting stage {stage!r}")
     item = ledger["items"].get(key)
     if item is None:
         raise KeyError(f"no ledger item {key}")
     if not reference.strip():
         raise ValueError("a PSIRT reference (ticket, report id) is required")
     item["stages"][stage] = {"recorded_at": iso(now or now_utc()), "reference": reference.strip()}
+    return item
+
+
+def confirm_event(ledger: dict, key: str, event: dict, reference: str, now: dt.datetime | None = None) -> dict:
+    """Explicit PSIRT operation; preserve event history without resetting the internal hand-off."""
+    from .report.psirt_out import legal_deadlines
+
+    if not reference.strip():
+        raise ValueError("a PSIRT event reference is required")
+    deadlines = legal_deadlines(event)
+    if not deadlines:
+        raise ValueError("a confirmed incident event is required")
+    item = ledger["items"].get(key)
+    if item is None:
+        raise KeyError(f"no ledger item {key}")
+    item.setdefault("event_history", []).append({"recorded_at": iso(now or now_utc()), "reference": reference.strip(), "event": dict(event)})
+    item.update(clock_kind="psirt_confirmed_event", incident_event=dict(event), deadlines=deadlines)
     return item
 
 
@@ -132,7 +169,12 @@ def overdue(ledger: dict, now: dt.datetime | None = None) -> list[tuple[str, str
             done = item["stages"].get(stage, {})
             if done.get("sent_at") or done.get("recorded_at"):
                 continue
-            deadline = item.get("deadlines", {}).get(STAGE_DEADLINE[stage])
+            if stage == "internal_handoff":
+                deadline = item.get("internal_sla", {}).get("handoff_by")
+            elif item.get("clock_kind") == "psirt_confirmed_event":
+                deadline = item.get("deadlines", {}).get(STAGE_DEADLINE[stage])
+            else:
+                deadline = None
             if deadline and parse_iso(deadline) < now:
                 out.append((key, stage, deadline))
     return out
@@ -146,26 +188,44 @@ def status_rows(ledger: dict, now: dt.datetime | None = None) -> list[dict]:
         stages = item["stages"]
         if item.get("closed"):
             state = f"closed {item['closed']['at']}: {item['closed']['reason']}"
-        elif not stages["early_warning"].get("sent_at"):
-            state = "early warning NOT delivered"
-        elif not stages["notification"].get("recorded_at"):
+        elif not stages.get("internal_handoff", {}).get("sent_at"):
+            state = "internal hand-off NOT delivered"
+        elif item.get("clock_kind") != "psirt_confirmed_event":
+            state = "awaiting PSIRT event confirmation; legal deadlines unknown"
+        elif not stages.get("early_warning", {}).get("recorded_at"):
+            state = "awaiting legal early warning"
+        elif not stages.get("notification", {}).get("recorded_at"):
             state = "awaiting 72 h notification"
-        elif not stages["final_report"].get("recorded_at"):
-            state = "awaiting 14 d final report"
+        elif not stages.get("final_report", {}).get("recorded_at"):
+            state = "awaiting event-based final report"
         else:
             state = "all stages recorded"
-        rows.append({"key": key, "product": item["product"], "finding": item["finding"], "state": state, "deadlines": item["deadlines"],
-                     "overdue": sorted(s for k, s in late if k == key)})
+        rows.append(
+            {
+                "key": key,
+                "product": item["product"],
+                "finding": item["finding"],
+                "state": state,
+                "deadlines": item["deadlines"],
+                "overdue": sorted(s for k, s in late if k == key),
+            }
+        )
     return rows
 
 
 # ---------------------------------------------------------------- handshake
 
+
 def handshake_payload(cfg: MaraConfig, now: dt.datetime | None = None) -> dict:
     now = now or now_utc()
-    return {"schema": HANDSHAKE_SCHEMA, "stage": "handshake", "product": cfg.psirt.product, "sent_at": iso(now),
-            "dedupe_key": f"handshake-{now.strftime('%Y%m%dT%H%M%SZ')}",
-            "note": "Connectivity test from the MARA review pipeline; NOT an incident and NOT an Article 14 notification."}
+    return {
+        "schema": HANDSHAKE_SCHEMA,
+        "stage": "handshake",
+        "product": cfg.psirt.product,
+        "sent_at": iso(now),
+        "dedupe_key": f"handshake-{now.strftime('%Y%m%dT%H%M%SZ')}",
+        "note": "Connectivity test from the MARA review pipeline; NOT an incident and NOT an Article 14 notification.",
+    }
 
 
 def run_handshake(cfg: MaraConfig, *, client: httpx.Client | None = None, timeout: float = 30.0, now: dt.datetime | None = None) -> dict:
@@ -180,10 +240,20 @@ def run_handshake(cfg: MaraConfig, *, client: httpx.Client | None = None, timeou
     own = client is None
     client = client or httpx.Client(timeout=timeout)
     try:
-        r = client.post(ps.webhook_url, json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
-                                                               "Idempotency-Key": payload["dedupe_key"]})
-        return {"schema": "mara-psirt-handshake/1", "sent_at": payload["sent_at"], "webhook_url": ps.webhook_url, "product": ps.product,
-                "status_code": r.status_code, "ok": r.is_success, "response": r.text[:300]}
+        r = client.post(
+            ps.webhook_url,
+            json=payload,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Idempotency-Key": payload["dedupe_key"]},
+        )
+        return {
+            "schema": "mara-psirt-handshake/1",
+            "sent_at": payload["sent_at"],
+            "webhook_url": ps.webhook_url,
+            "product": ps.product,
+            "status_code": r.status_code,
+            "ok": r.is_success,
+            "response": "accepted" if r.is_success else "endpoint_rejected",
+        }
     finally:
         if own:
             client.close()

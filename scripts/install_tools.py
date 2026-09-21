@@ -66,7 +66,12 @@ def download(url: str, dest: Path, *, retries: int = 3, timeout: int = 600) -> P
     dest.parent.mkdir(parents=True, exist_ok=True)
     if url.startswith("file://"):
         try:
-            shutil.copyfile(url[len("file://"):], dest)
+            raw = url[len("file://"):]
+            if sys.platform == "win32" and raw.startswith("/") and len(raw) > 2 and raw[2] == ":":
+                raw = raw[1:]
+            local_src = Path(raw)
+            if local_src.resolve() != dest.resolve():
+                shutil.copyfile(local_src, dest)
         except OSError as e:
             raise InstallError(f"could not download {url}: {e}") from e
         return dest
@@ -87,7 +92,21 @@ def download(url: str, dest: Path, *, retries: int = 3, timeout: int = 600) -> P
 
 
 def run(cmd: list[str], *, env: dict | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
+    except OSError as e:
+        if sys.platform == "win32" and getattr(e, "winerror", None) == 193:
+            sh = shutil.which("sh")
+            if not sh:
+                git = shutil.which("git")
+                if git:
+                    for cand in (Path(git).parent.parent / "bin" / "sh.exe", Path(git).parent.parent / "usr" / "bin" / "sh.exe"):
+                        if cand.exists():
+                            sh = str(cand)
+                            break
+            if sh:
+                return subprocess.run([sh, *cmd], capture_output=True, text=True, check=False, env=env)
+        raise
 
 
 def load_lock(path: Path) -> dict:
@@ -217,7 +236,7 @@ def extract_member(name: str, archive: Path, member: str, dest: Path) -> None:
 
 def install_binary_or_archive(name: str, spec: dict, *, bin_dir: Path, cache: Path, no_signature_check: bool) -> dict:
     url = spec["url"]
-    asset_name = url.rsplit("/", 1)[-1]
+    asset_name = url.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
     print(f"[{name}] {spec['version']}: downloading {asset_name}")
     asset = download(url, cache / asset_name)
     digest = check_sha256(name, asset, spec["sha256"])
@@ -286,6 +305,23 @@ def verify_commit_gpg(name: str, spec: dict, checkout: Path, cache: Path) -> str
     return f"git-commit-gpg key={key_id} ({v['gpg_key_url']})"
 
 
+def _rmtree(p: Path) -> None:
+    if not p.exists() and not p.is_symlink():
+        return
+    if p.is_symlink() or p.is_file():
+        p.unlink()
+        return
+
+    def _on_err(func, path, exc_info):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except Exception:
+            pass
+
+    shutil.rmtree(p, onerror=_on_err)
+
+
 def install_git(name: str, spec: dict, *, install_dir: Path, cache: Path, no_signature_check: bool) -> dict:
     """Check the repository out at the pinned commit into <install_dir>/<name>, verify the commit id, the
     digest over the pinned paths and (unless skipped) the commit signature. Nothing is copied into the
@@ -293,7 +329,7 @@ def install_git(name: str, spec: dict, *, install_dir: Path, cache: Path, no_sig
     url, commit = spec["url"], str(spec["commit"])
     dest = install_dir / name
     tmp = install_dir / f"{name}.installing"
-    shutil.rmtree(tmp, ignore_errors=True)
+    _rmtree(tmp)
     print(f"[{name}] {spec['version']}: fetching {url} at {commit[:12]}")
     steps = [("git init", ["git", "init", "-q", str(tmp)]),
              ("git remote add", ["git", "-C", str(tmp), "remote", "add", "origin", url]),
@@ -304,37 +340,37 @@ def install_git(name: str, spec: dict, *, install_dir: Path, cache: Path, no_sig
     for label, cmd in steps:
         cp = run(cmd)
         if cp.returncode != 0:
-            shutil.rmtree(tmp, ignore_errors=True)
+            _rmtree(tmp)
             raise InstallError(f"{name}: {label} failed for {url} @ {commit[:12]}\n{(cp.stderr or cp.stdout).strip()[-800:]}")
     head = run(["git", "-C", str(tmp), "rev-parse", "HEAD"]).stdout.strip()
     if head != commit:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree(tmp)
         raise InstallError(f"{name}: checked-out commit {head} is not the pinned {commit}")
     print(f"[{name}] commit ok {commit[:12]}")
     digest = git_paths_digest(tmp, list(spec["paths"]))
     if digest != spec["sha256"]:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree(tmp)
         raise InstallError(f"{name}: digest over {spec['paths']} mismatch\n  expected {spec['sha256']}\n  actual   {digest}\n  The lock or the checkout is wrong; nothing was installed.")
     print(f"[{name}] paths digest ok {digest[:16]}… ({len(spec['paths'])} pinned paths)")
     method = spec["verify"]["method"]
-    if method == "git-commit-gpg" and not no_signature_check:
-        verified_by = verify_commit_gpg(name, spec, tmp, cache)
-        signature_verified = True
-        print(f"[{name}] {verified_by}")
-    elif method == "git-commit-gpg":
-        verified_by = f"{method} SKIPPED (--no-signature-check)"
-        signature_verified = False
-        print(f"[{name}] WARNING: {method} skipped by --no-signature-check")
-    elif method == "git-commit":
-        verified_by = "git-commit (commit id and paths digest matched; no signature checked)"
-        signature_verified = False
-    else:
-        shutil.rmtree(tmp, ignore_errors=True)
-        raise InstallError(f"{name}: unknown verify method {method!r} for a git tool")
-    if dest.is_symlink() or dest.is_file():
-        dest.unlink()
-    else:
-        shutil.rmtree(dest, ignore_errors=True)
+    try:
+        if method == "git-commit-gpg" and not no_signature_check:
+            verified_by = verify_commit_gpg(name, spec, tmp, cache)
+            signature_verified = True
+            print(f"[{name}] {verified_by}")
+        elif method == "git-commit-gpg":
+            verified_by = f"{method} SKIPPED (--no-signature-check)"
+            signature_verified = False
+            print(f"[{name}] WARNING: {method} skipped by --no-signature-check")
+        elif method == "git-commit":
+            verified_by = "git-commit (commit id and paths digest matched; no signature checked)"
+            signature_verified = False
+        else:
+            raise InstallError(f"{name}: unknown verify method {method!r} for a git tool")
+    except Exception:
+        _rmtree(tmp)
+        raise
+    _rmtree(dest)
     tmp.replace(dest)
     return {"version": str(spec["version"]), "kind": "git", "url": url, "commit": commit, "paths": list(spec["paths"]), "sha256": digest,
             "verified_by": verified_by, "signature_verified": signature_verified, "path": str(dest)}

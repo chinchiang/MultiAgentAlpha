@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import hashlib
 import json
 import subprocess
 import sys
@@ -30,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mara.tools.runner import installed_manifest_entry, installed_version, tool_path, tools_dir  # noqa: E402
+from mara.tools.sarif import scan_complete  # noqa: E402
 from mara.tools.semgrep_rules import RULES_DIR_NAME, normalize_sarif, result_keys, rules_dir, scan_args, scan_env  # noqa: E402
 
 
@@ -74,9 +76,11 @@ def load_triage(path: Path) -> tuple[list[dict], list[str]]:
     return entries, [str(x) for x in (d.get("exclude") or [])]
 
 
-def match_triage(rule_id: str, uri: str, entries: list[dict]) -> dict | None:
+def match_triage(rule_id: str, uri: str, entries: list[dict], snippet: str = "") -> dict | None:
     for e in entries:
         if e["rule"] == rule_id and any(fnmatch.fnmatchcase(uri, str(g)) for g in e["paths"]):
+            if e.get("snippet_sha256") and hashlib.sha256(snippet.strip().encode()).hexdigest() != e["snippet_sha256"]:
+                continue
             return e
     return None
 
@@ -90,7 +94,7 @@ def apply_triage(doc: dict, entries: list[dict]) -> tuple[list[str], list[str], 
             uri = loc.get("artifactLocation", {}).get("uri", "")
             line = loc.get("region", {}).get("startLine", "?")
             rid = res.get("ruleId", "")
-            e = match_triage(rid, uri, entries)
+            e = match_triage(rid, uri, entries, loc.get("region", {}).get("snippet", {}).get("text", ""))
             if e is None:
                 untriaged.append(f"{rid}  {uri}:{line}")
                 continue
@@ -134,7 +138,14 @@ def main() -> int:
     if not report.is_file() or not report.read_text(encoding="utf-8").strip():
         print(f"ERROR: semgrep exited {r.returncode} and produced no SARIF", file=sys.stderr)
         return 1
+    # scan_args does not use --error: findings are exit 0; every nonzero code is failure.
+    if r.returncode != 0:
+        print(f"ERROR: semgrep exited {r.returncode}; partial results cannot pass", file=sys.stderr)
+        return 1
     doc = normalize_sarif(report)
+    if not scan_complete(doc):
+        print("ERROR: semgrep SARIF reports an incomplete scan", file=sys.stderr)
+        return 1
     keys = result_keys(doc)
     print(f"{len(keys)} finding(s)")
 

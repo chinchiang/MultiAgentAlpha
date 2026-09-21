@@ -1,0 +1,3 @@
+# Build frontend backend closure; install hashes before --no-build-isolation.
+setuptools==84.0.0
+wheel==0.48.0

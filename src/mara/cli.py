@@ -26,7 +26,8 @@ def review(
     sarif_dir: Path | None = typer.Option(None, "--sarif-dir", help="Ingest pre-recorded L0 SARIF instead of running tools"),
     mock_fixtures: Path | None = typer.Option(None, "--mock-fixtures"),
     fail_on_gate: bool = typer.Option(False, "--fail-on-gate", help="Exit 2 when the gate blocks (implied by rollout.phase: blocking)"),
-    notify_psirt: bool = typer.Option(False, "--notify-psirt", help="POST the CRA Article 14 payloads to the configured PSIRT webhook"),
+    notify_psirt: bool = typer.Option(False, "--notify-psirt", help="POST internal PSIRT hand-off payloads to the configured PSIRT webhook"),
+    psirt_event: Path | None = typer.Option(None, "--psirt-event", help="PSIRT-confirmed incident event JSON for legal clock anchors"),
     psirt_resend: bool = typer.Option(False, "--psirt-resend", help="With --notify-psirt: send even findings the ledger says were already delivered"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
@@ -38,6 +39,9 @@ def review(
         raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock")
     pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out)
     report = pipe.run(target, sarif_dir=sarif_dir, mode=provider)
+    if psirt_event:
+        from .report.psirt_out import build_notifications
+        report.psirt = build_notifications(report, cfg, event=json.loads(psirt_event.read_text(encoding="utf-8")))
     out.mkdir(parents=True, exist_ok=True)
     write_sarif(report, out / "report.sarif")
     write_markdown(report, out / "report.md")
@@ -58,7 +62,8 @@ def review(
                 else:
                     console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: HTTP {s['status_code']} {'ok' if s['ok'] else 'FAILED'}")
 
-    t = Table(title=f"MARA · {target} · overall {report.overall_score}/100 · gate {'PASSED' if report.gate_passed else 'BLOCKED'}")
+    overall = f"{report.overall_score}/100" if report.overall_score is not None else "unavailable (review incomplete)"
+    t = Table(title=f"MARA · {target} · overall {overall} · gate {'PASSED' if report.gate_passed else 'BLOCKED'}")
     for col in ("Dimension", "Score", "Accepted", "Rejected", "Human", "Tool"):
         t.add_column(col)
     for d in report.dimensions:

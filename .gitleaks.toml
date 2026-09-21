@@ -1,16 +1,20 @@
-# gitleaks configuration for CI secret scanning (gitleaks reads this file from the repo root).
-# The seeded secrets under fixtures/ and calib/samples/ are intentional review material; they are
-# exercised through the pre-recorded SARIF path (fixtures/vuln-sample-sarif) and the pipeline tests,
-# not through CI secret scanning, so they are allowlisted here. Everything else is scanned with the
-# default rule set.
+# Exact fake training values only; all fixture paths remain scanned.
 title = "MARA"
-
 [extend]
 useDefault = true
-
 [allowlist]
-description = "Seeded secrets in review fixtures and calibration samples"
-paths = [
-  '''^fixtures/''',
-  '''^calib/samples/''',
+description = "Known synthetic credentials in calibration material"
+regexTarget = "secret"
+regexes = [
+  '^ghp_9fA3kLm2Qw8xZr1TbV6yHn4Ps7Dq0EuCjR5WxYz$',
+  '^ghp_9fA3kLm2Qw8xZr1TbV6yHn4Ps7Dq0EuCjR5W$', # gitleaks matches the fixed-length PAT prefix
+  '^AKIAIOSFODNN7EXAMPLE$',
+  '^wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY$',
+  '^flask-secret-1234567890abcdef$',
+  '^sk-live-9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c$',
+  '^django-insecure-3k2j1h0g9f8e7d6c5b4a$',
+  '^whsec_4f9a1c2b3d4e5f60718293a4b5c6d7e8$',
+  '^sk_live_51H8xJ2KzQ9wR7tY6uI5oP4aS3dF2gH1jK0lM$',
+  '^vendor_api_zdr$', # ModelSpec data-residency enum, never a credential
+  '^vendor_api_30d$', # same noncredential enum declaration
 ]

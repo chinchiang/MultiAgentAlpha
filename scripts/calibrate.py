@@ -47,12 +47,17 @@ def apply_decisions(sample: str, report: dict, labels: list[dict], decisions: li
     """true_positive decisions on this sample's target become extra labels; returns (labels, applied).
     With require_trained (G-13), a decision whose adjudicator held no valid training record when it
     was synced is skipped and counted in SKIPPED_UNTRAINED."""
-    target = report.get("target", "")
+    target_id, revision = report.get("target_id"), report.get("revision")
     applied = 0
     labels = list(labels)
     for d in decisions:
-        d_target = str(d.get("target", "")).rstrip("/")
-        if not (d_target == target.rstrip("/") or d_target.endswith("/" + sample)):
+        if not target_id or not revision or d.get("target_id") != target_id or d.get("revision") != revision:
+            continue
+        if not d.get("decision_event_id") or not d.get("context_hash"):
+            continue
+        from mara.report.human_queue_out import queue_key
+        if d.get("key") != queue_key(d["file"], int(d["line"]), d["cwe"], target_id=target_id,
+                                     revision=revision, context_hash=report.get("coverage", {}).get("content_hash", "")):
             continue
         if require_trained and not d.get("adjudicator_trained"):
             SKIPPED_UNTRAINED.append(f"{sample}: ticket #{d.get('issue')} by {d.get('decided_by') or 'unknown'}")
@@ -109,9 +114,15 @@ def family_metrics(runs):
     stats = defaultdict(lambda: defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0}))
     families = set()
     for _, rep, _labels in runs:
+        families |= {k[len("reviewer_calls["):-1] for k, v in rep.get("bias_audit", {}).items()
+                     if k.startswith("reviewer_calls[") and k.endswith("]") and isinstance(v, (int, float)) and v > 0}
         families |= {f for fnd in rep["findings"] for f in fnd["finder_families"]}
     for _, rep, labels in runs:
         for fam in families:
+            if rep.get("bias_audit", {}).get(f"reviewer_calls[{fam}]", 0) == 0 and not any(
+                fam in f.get("finder_families", []) for f in rep["findings"]
+            ):
+                continue
             found = [f for f in rep["findings"] if fam in f["finder_families"]]
             matched_labels = set()
             for f in found:
@@ -332,6 +343,12 @@ def main() -> int:
     modes = sorted({rep.get("provider_mode", "?") for _, rep, _ in runs})
     if args.mode == "live" and modes != ["live"]:
         raise SystemExit(f"--mode live refused: the runs under {out_dir} were produced in provider mode(s) {modes}; a mock run cannot be labelled live")
+    if args.mode == "live":
+        for _, rep, _ in runs:
+            manifest = rep.get("provider_manifest", [])
+            if (not manifest or any(p.get("type") not in {"anthropic", "openai_compatible"} for p in manifest)
+                    or not rep.get("config_hash") or not rep.get("revision")):
+                raise SystemExit("--mode live refused: missing or non-live provider provenance")
     stats, families = family_metrics(runs)
     rates = audit_rates(runs, families)
     pair, alpha = judge_agreement(runs)

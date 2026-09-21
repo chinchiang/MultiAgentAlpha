@@ -1,6 +1,6 @@
 """The locked gitleaks CLI replaces gitleaks-action: binary only from MARA_TOOLS_DIR (never PATH),
 version must match tools/versions.lock, PR range = the PR's own commits, push range = every new
-commit, unusable base falls back to the head commit, leaks exit 2 with redacted SARIF."""
+commit, unusable base scans all reachable history, leaks exit 2 with redacted SARIF."""
 
 import json
 import os
@@ -49,7 +49,7 @@ def test_clean_range_exits_zero_and_reports_version(tmp_path):
     r = _run(repo, "--base", base, "--head", "HEAD", "--event", "pull_request")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "gitleaks 8.30.1" in r.stdout and "lock 8.30.1" in r.stdout and "no leaks found" in r.stdout
-    assert "--first-parent" in r.stdout and "the PR's own commits" in r.stdout
+    assert "--first-parent" not in r.stdout and "all commits since merge-base" in r.stdout
 
 
 def test_leak_in_range_exits_two_with_redacted_sarif(tmp_path):
@@ -70,29 +70,42 @@ def test_leak_in_range_exits_two_with_redacted_sarif(tmp_path):
     assert r.returncode == 0
 
 
-def test_unusable_base_falls_back_to_head_commit(tmp_path):
+def test_unusable_base_scans_all_reachable_history(tmp_path):
     repo = _repo(tmp_path)
     (repo / "cfg.env").write_text(SECRET_LINE, encoding="utf-8")
     _git(repo, "add", "cfg.env")
     _git(repo, "commit", "-qm", "three")
     r = _run(repo, "--base", "0" * 40, "--head", "HEAD", "--event", "push")
-    assert r.returncode == 2 and "all zeros" in r.stdout and "head commit" in r.stdout
+    assert r.returncode == 2 and "all history reachable from head" in r.stdout
     r = _run(repo, "--base", "", "--head", "HEAD~1", "--event", "push")
-    assert r.returncode == 0 and "no base given" in r.stdout
+    assert r.returncode == 0 and "all history reachable from head" in r.stdout
+
     other = _git(repo, "rev-parse", "HEAD")
     _git(repo, "checkout", "-q", "-b", "side", "HEAD~2")
     (repo / "c.txt").write_text("x\n", encoding="utf-8")
     _git(repo, "add", "c.txt")
     _git(repo, "commit", "-qm", "side")
     r = _run(repo, "--base", other, "--head", "HEAD", "--event", "push")
-    assert r.returncode == 0 and "not an ancestor" in r.stdout
+    assert r.returncode == 0 and "all history reachable from head" in r.stdout
+
+
+def test_fixture_directory_does_not_hide_new_secret_values(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / ".gitleaks.toml").write_text((ROOT / ".gitleaks.toml").read_text())
+    (repo / "fixtures").mkdir()
+    (repo / "fixtures" / "new.env").write_text(SECRET_LINE)
+    base = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "add unexpected secret in training directory")
+    r = _run(repo, "--base", base, "--head", "HEAD", "--event", "pull_request")
+    assert r.returncode == 2 and "fixtures/new.env" in r.stdout
 
 
 def test_push_range_includes_every_new_commit(tmp_path):
     repo = _repo(tmp_path)
     base = _git(repo, "rev-parse", "HEAD~1")
     r = _run(repo, "--base", base, "--head", "HEAD", "--event", "push")
-    assert r.returncode == 0 and "every commit in" in r.stdout and "--first-parent" not in r.stdout
+    assert r.returncode == 0 and "every introduced commit" in r.stdout and "--first-parent" not in r.stdout
 
 
 def test_binary_only_from_tools_dir_and_version_must_match_lock(tmp_path):

@@ -47,7 +47,8 @@ def test_entries_are_sorted_and_carry_hashes():
     assert [e["name"] for e in entries] == ["ecoji", "PyYAML", "rich"]
     assert entries[0]["sdist"] and not entries[1]["sdist"]
     text = rl.render(entries, title="t", source="s", host="h", pip_version="24.0", regenerate="cmd", allow_sdist=True)
-    assert "Source distributions" in text and "ecoji==0.1.1" in text.splitlines()[4]
+    assert any("Source distributions" in line and "ecoji==0.1.1" in line for line in text.splitlines())
+    assert "--no-build-isolation" in text and "tools/build-requirements.txt" in text
     assert _parse_lock(text) == [("ecoji", "0.1.1", "c" * 64), ("PyYAML", "6.0.3", "a" * 64), ("rich", "15.0.0", "b" * 64)]
 
 

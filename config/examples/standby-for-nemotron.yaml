@@ -5,8 +5,8 @@
 standby_for: nemotron
 models:
   - { name: claude-reviewer,   family: anthropic, provider: anthropic,         model: claude-opus-5,    api_key_env: ANTHROPIC_API_KEY, data_residency: vendor_api_zdr }
-  - { name: deepseek-reviewer, family: deepseek,  provider: openai_compatible, model: deepseek-v3.2,    base_url: http://vllm-deepseek.internal:8000/v1, api_key_env: DEEPSEEK_LOCAL_KEY, data_residency: on_prem }
-  - { name: mistral-reviewer,  family: mistral,   provider: openai_compatible, model: mistral-instruct, base_url: http://vllm-mistral.internal:8000/v1, api_key_env: MISTRAL_LOCAL_KEY, data_residency: on_prem }
+  - { name: deepseek-reviewer, family: deepseek,  provider: openai_compatible, model: deepseek-v3.2,    base_url: https://vllm-deepseek.internal:8000/v1, api_key_env: DEEPSEEK_LOCAL_KEY, data_residency: on_prem }
+  - { name: mistral-reviewer,  family: mistral,   provider: openai_compatible, model: mistral-instruct, base_url: https://vllm-mistral.internal:8000/v1, api_key_env: MISTRAL_LOCAL_KEY, data_residency: on_prem }
 roles:
   reviewers: [claude-reviewer, deepseek-reviewer, mistral-reviewer]
   skeptic: mistral-reviewer
