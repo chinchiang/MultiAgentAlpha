@@ -25,8 +25,12 @@ The HTML edition of the report is served by GitHub Pages straight from the `docs
 Token-Permissions floor stay as they are. `docs/.nojekyll` makes GitHub serve the files as they
 are (Jekyll would otherwise try to build the Markdown and mishandle the non-ASCII report file
 name), and `docs/index.html` is a self-contained redirect to the report, so the public address is
-just <https://chinchiang.github.io/MultiAgentAlpha/>. Pages has been live since 2026-09-17 (the
-"pages build and deployment" runs in the Actions tab are the deployment record). Everything under
+just <https://chinchiang.github.io/MultiAgentAlpha/>. Pages was live from 2026-09-17 while the
+repository was public (the "pages build and deployment" runs in the Actions tab are the deployment
+record); since the repository became private on 2026-09-21 that address is unavailable on a personal
+plan, and the HTML edition is read by opening `docs/GSMD-RPT-2026-0908-01_多模型多代理資安審查.html`
+from a checkout. The Pages configuration is left in place so making the repository public again
+republishes it without any change here. Everything under
 `docs/` becomes reachable at that address, so it must contain only intended public documentation:
 the report, its parts, the appendices, the dated assessment, calibration, inventory, governance and
 ground-truth records, the runbooks and the changelog. Before the 2026-09-18 remediation, Pages served
@@ -247,16 +251,20 @@ closures under `tools/` (`--file-patterns pip:.*-requirements\.txt`), failing on
 ignored with a statement and expiry in `tools/trivyignore.yaml`. Upstream publishes no signature
 for the database; `docs/tools-provenance.md` section 3c records what is and is not verified.
 
-## Code Scanning and Scorecard (public repository)
+## Code Scanning and Scorecard
 
-The repository is public since 2026-09-14, which makes GitHub Code Scanning free. The
-read-only L0 job of `mara-review.yml` runs `scripts/code_scanning_prep.py` before publishing the
-`code-scanning` artifact (accepted suppressions and locationless results are filtered, paths are
-repository-relative, and each tool has a category). The separate `code-scanning` job only
-downloads that prepared artifact and uploads it with
-`github/codeql-action/upload-sarif`. It is the only job with `security-events: write`, it runs no
-repository code, and it is skipped for pull requests from forks or Dependabot (read-only token).
-The fixture scans and the mock review report are never uploaded: they describe seeded material.
+GitHub Code Scanning is free for public repositories and needs GitHub Advanced Security for private
+ones. The repository was public from 2026-09-14 and has been private since 2026-09-21, so the upload
+is now conditional: the read-only L0 job of `mara-review.yml` always runs `scripts/code_scanning_prep.py`
+and publishes the `code-scanning` artifact (accepted suppressions and locationless results are
+filtered, paths are repository-relative, and each tool has a category), and the separate
+`code-scanning` job downloads that prepared artifact and uploads it with
+`github/codeql-action/upload-sarif` only while `github.event.repository.private` is false. It is the
+only job with `security-events: write`, it runs no repository code, and it is also skipped for pull
+requests from forks or Dependabot (read-only token). While the repository is private the job shows as
+skipped and the five SARIF files are still available in the `l0-sarif` artifact of every run; the
+Scorecard workflow's upload step is gated the same way. The fixture scans and the mock review report
+are never uploaded: they describe seeded material.
 
 `.github/workflows/scorecard.yml` runs OpenSSF Scorecard on pushes to `main` and weekly with the
 scorecard CLI pinned and SLSA-verified in `tools/versions.lock` (not `ossf/scorecard-action`, whose
