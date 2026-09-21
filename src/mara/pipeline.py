@@ -82,10 +82,12 @@ class Pipeline:
                     findings, audit = reviewer.review_dimension(prov, batch, dim, canary)
                     self.audit["reviewer_calls"] += 1
                     self.audit["reviewer_refusals"] += int(audit["refused"])
+                    self.audit["reviewer_truncations"] += int(audit["truncated"])
                     self.audit["canary_echoes"] += int(audit["canary_echoed"])
                     fam = prov.family.value
                     self.audit[f"reviewer_calls[{fam}]"] += 1
                     self.audit[f"reviewer_refusals[{fam}]"] += int(audit["refused"])
+                    self.audit[f"reviewer_truncations[{fam}]"] += int(audit["truncated"])
                     self.audit[f"canary_echoes[{fam}]"] += int(audit["canary_echoed"])
                     self.audit[f"findings_with_unverified_quotes[{fam}]"] += audit["unverified_quotes"]
                     self.audit[f"invalid_findings_dropped[{fam}]"] += audit["invalid"]
@@ -94,11 +96,9 @@ class Pipeline:
                     self.audit["input_tokens"] += audit["input_tokens"]
                     self.audit["output_tokens"] += audit["output_tokens"]
                     raw.extend(findings)
-                    self._say(
-                        f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)"
-                        + (" [REFUSED]" if audit["refused"] else "")
-                        + (" [CANARY ECHOED]" if audit["canary_echoed"] else "")
-                    )
+                    tags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "canary_echoed": " [CANARY ECHOED]"}
+                    flags = [tag for key, tag in tags.items() if audit[key]]
+                    self._say(f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)" + "".join(flags))
         # assign ids and strip unknown standard references
         out: list[Finding] = []
         for i, f in enumerate(raw, 1):

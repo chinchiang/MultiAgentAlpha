@@ -240,6 +240,18 @@ def test_pipeline_records_ml_bom_status_in_the_report(tmp_path):
     assert {s.status for s in st.values()} == {"pending"} and set(st) == {"deepseek-reviewer", "nemotron-reviewer"}
 
 
+def test_pipeline_logs_ml_bom_status_when_self_hosted_models_are_configured(tmp_path):
+    # Regression: with a non-empty ML-BOM status the pipeline used to call `self.log(...)` (a list)
+    # and die with TypeError just before returning the report, so the documented live topology could
+    # never complete a review. Run the mock panel with the live config's BOM status injected.
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)
+    pipe.ml_bom_status = mlbom.status_for_config(load_config(ROOT / "config" / "mara.yaml"), ROOT)
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    assert set(report.bias_audit["ml_bom"]) == {"deepseek-reviewer", "nemotron-reviewer"}
+    assert any(line.startswith("L0: ML-BOM: ") and "pending" in line for line in pipe.log)
+
+
 # ---------------------------------------------------------------- registry hashes (Hugging Face, no download)
 
 SHA_A, SHA_B = "a" * 64, "b" * 64

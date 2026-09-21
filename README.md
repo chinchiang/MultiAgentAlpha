@@ -30,6 +30,10 @@ at that address, so it must contain only intended public documentation. Before t
 2026-09-18 remediation, Pages served the repository root; it now serves `/docs` only.
 The deliberately vulnerable fixture URLs return 404. `tests/test_docs_site.py` checks
 that the redirect points at a file that exists and loads nothing off-site.
+`.github/workflows/docs-check.yml` (Appendix E prompt 1) runs on every pull request that touches `docs/`:
+it rebuilds the report from `docs/parts/` and requires the result to be byte-identical to the committed
+file, fails when the body is under 20,000 characters, and fails when a citation marker has no row in
+Appendix A. `docs/CHANGELOG.md` records each version with its verification status.
 
 ## Security remediation (2026-09-18)
 

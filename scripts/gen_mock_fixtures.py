@@ -53,7 +53,7 @@ SEED = {
     A: [F("Authorization decided by a client-controlled X-Admin header", "CWE-285", ["ASVS 5.0 V8.2", "OWASP A01:2025"], "app.py", 'X-Admin', V["high"], sketch="Send X-Admin: 1 to /admin/export to obtain the export token."),
         F("Placeholder logic: sanitisation deferred with a TODO on a live path", "CWE-693", ["ASVS 5.0 V15.3", "OWASP A06:2025"], "app.py", "TODO: sanitize", V["medium"], reach="conditional")],
     D: [F("Admin function gated only by a request header", "CWE-285", ["ASVS 5.0 V8.3", "OWASP A01:2025", "ASVS 5.0 V1"], "app.py", 'X-Admin', V["high"])],
-    N: [F("Header-based admin check instead of server-side role", "CWE-285", ["ASVS 5.0 V8.2", "ASVS 5.0 V17.1", "OWASP A11:2025"], "app.py", 'X-Admin', V["high"], conf=0.7)],
+    N: [F("Header-based admin check instead of server-side role", "CWE-285", ["ASVS 5.0 V8.2", "ASVS 5.0 V18.1", "OWASP A11:2025"], "app.py", 'X-Admin', V["high"], conf=0.7)],
   },
   "vulnerabilities": {
     A: [F("SQL injection via string concatenation of order_id", "CWE-89", ["OWASP A05:2025", "ASVS 5.0 V1.2"], "app.py", "SELECT * FROM orders WHERE id = ", V["sqli"], sketch="GET /orders/1%20OR%201=1 returns arbitrary rows."),
