@@ -1,5 +1,5 @@
 {
-  "_source": "OWASP ASVS 5.0.0 (May 2025), chapter/section list transcribed from the official CSV at https://github.com/OWASP/ASVS/tree/master/5.0 ; verified 2026-09-08. NOTE: ASVS 5.0 has no V1 'Architecture' chapter; architecture lives in V15.",
+  "_source": "OWASP ASVS 5.0.0 (May 2025), chapter/section list transcribed from the official CSV at https://github.com/OWASP/ASVS/tree/master/5.0 ; verified 2026-09-08. NOTE: ASVS 5.0 has no V1 'Architecture' chapter; architecture lives in V15. Re-verified 2026-09-21 against tag v5.0.0_release (5cf9b03, 2025-05-30) and master 2b30071 (2026-09-03): the 5.0.0 CSV has 17 chapters; V17 WebRTC (V17.1 TURN Server, V17.2 Media, V17.3 Signaling) and the titles of V4.2 / V10.1 differ from this file, see docs/groundtruth-diff-2026-09-21.md; not applied (quarterly rule: diffs are reviewed by a human before the pinned set changes).",
   "version": "5.0.0",
   "chapters": {
     "1": {"title": "Encoding and Sanitization", "sections": {"1": "Encoding and Sanitization Architecture", "2": "Injection Prevention", "3": "Sanitization", "4": "Memory, String, and Unmanaged Code", "5": "Safe Deserialization"}},
