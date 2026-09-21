@@ -83,7 +83,7 @@ Found a security problem in this repository's own code? See [SECURITY.md](SECURI
 
 ## Quick start (offline)
 
-Step-by-step installation, including the non-Linux fallback and the optional tool and live-model layers, is in [INSTALL.md](INSTALL.md).
+Step-by-step installation (bilingual, 正體中文 / English), including how to obtain the private repository, the non-Linux fallback and the optional tool and live-model layers, is in [INSTALL.md](INSTALL.md).
 
 ```bash
 python -m pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt   # the resolved, hash-pinned closure
