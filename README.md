@@ -262,8 +262,10 @@ filtered, paths are repository-relative, and each tool has a category), and the 
 `github/codeql-action/upload-sarif` only while `github.event.repository.private` is false. It is the
 only job with `security-events: write`, it runs no repository code, and it is also skipped for pull
 requests from forks or Dependabot (read-only token). While the repository is private the job shows as
-skipped and the five SARIF files are still available in the `l0-sarif` artifact of every run; the
-Scorecard workflow's upload step is gated the same way. The fixture scans and the mock review report
+skipped and the five SARIF files are still available in the `l0-sarif` artifact of every run. The
+whole Scorecard job is gated the same way: the read-only token cannot run scorecard's GraphQL queries
+on a private repository (the runs of 2026-09-21 and 2026-09-22 failed with "Resource not accessible by
+integration"), so the job is skipped until the repository is public again. The fixture scans and the mock review report
 are never uploaded: they describe seeded material.
 
 `.github/workflows/scorecard.yml` runs OpenSSF Scorecard on pushes to `main` and weekly with the
