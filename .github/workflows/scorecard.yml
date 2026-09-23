@@ -23,6 +23,11 @@ jobs:
   scorecard:
     name: OpenSSF Scorecard (locked CLI)
     runs-on: ubuntu-latest
+    # Skipped while the repository is private: the read-only GITHUB_TOKEN cannot run scorecard's GraphQL
+    # queries on a private repository ("ListCommits: ... Resource not accessible by integration", runs of
+    # 2026-09-21 and 2026-09-22), and Code Scanning there needs GitHub Advanced Security. Making the
+    # repository public again re-enables the job and the policy in tools/scorecard-policy.yaml unchanged.
+    if: ${{ !github.event.repository.private }}
     permissions:
       contents: read
       security-events: write   # github/codeql-action/upload-sarif
@@ -54,7 +59,7 @@ jobs:
             scorecard.json
             scorecard.sarif
           if-no-files-found: ignore
-      - uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         # not while the repository is private (Code Scanning needs Advanced Security there); the artifact above keeps the SARIF
         if: always() && hashFiles('scorecard.sarif') != '' && !github.event.repository.private
         with:
