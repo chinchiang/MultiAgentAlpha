@@ -37,8 +37,15 @@ minimal input). If the problem involves a model provider or a self-hosted endpoi
 provider class (`anthropic`, `openai_compatible`, `mock`) and never include a real API key.
 
 Private vulnerability reporting was switched on for this repository on 2026-09-17
-(*Settings → Code security → Private vulnerability reporting*), so the link above opens the
-private advisory form directly.
+(*Settings → Code security → Private vulnerability reporting*), so while the repository is public
+the link above opens the private advisory form directly.
+
+**While the repository is private (since 2026-09-21)** GitHub does not offer private vulnerability
+reporting, and the link above returns 404. Everyone who can read the code is then a collaborator:
+report the problem to the maintainer (@chinchiang) directly through a non-public channel (a direct
+message or an internal e-mail, not an issue, pull request or discussion). The maintainer opens a
+draft security advisory for it, and the rest of this policy applies unchanged. When the repository
+is made public again, check that the setting above is still on before relying on the link.
 
 ## What happens next
 
@@ -69,4 +76,7 @@ tools miss is what this file is for.
 reporting 連結，不要開公開 issue。`fixtures/vuln-sample/` 與 `calib/samples/` 是刻意種下漏洞的審查材料，
 不受理。管線把 A 級 Critical finding 交給產品 PSIRT 的流程在 `docs/psirt-integration.md`，與本檔案無關。
 回報後的處理節奏比照該文件的三個階段（預警、通報、報告），時限是內部目標而非承諾。本 repo 已於
-2026-09-17 開啟 private vulnerability reporting，上方連結直接開啟私密回報表單。
+2026-09-17 開啟 private vulnerability reporting，公開期間上方連結直接開啟私密回報表單。自 2026-09-21
+repo 改為私有後，GitHub 不提供該功能、連結回應 404；此時能讀到程式碼的都是協作者，請以私訊或內部
+郵件直接告知維護者（@chinchiang），不要開 issue、PR 或 discussion，由維護者建立 draft security
+advisory 後依本檔案流程處理。重新公開時，先確認該設定仍為開啟。
