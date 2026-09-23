@@ -25,13 +25,14 @@ The HTML edition of the report is served by GitHub Pages straight from the `docs
 Token-Permissions floor stay as they are. `docs/.nojekyll` makes GitHub serve the files as they
 are (Jekyll would otherwise try to build the Markdown and mishandle the non-ASCII report file
 name), and `docs/index.html` is a self-contained redirect to the report, so the public address is
-just <https://chinchiang.github.io/MultiAgentAlpha/>. Pages was live from 2026-09-17 while the
-repository was public (the "pages build and deployment" runs in the Actions tab are the deployment
-record); since the repository became private on 2026-09-21 that address is unavailable on a personal
-plan, and the HTML edition is read by opening `docs/GSMD-RPT-2026-0908-01_多模型多代理資安審查.html`
-from a checkout. The Pages configuration is left in place so making the repository public again
-republishes it without any change here. Everything under
-`docs/` becomes reachable at that address, so it must contain only intended public documentation:
+just <https://chinchiang.github.io/MultiAgentAlpha/>. Pages has been live since 2026-09-17 (the "pages build and deployment" runs in the Actions tab are
+the deployment record). **The site stays public while the repository is private**: after the
+repository became private on 2026-09-21, Pages kept building on every push to `main`, and on
+2026-09-24 the address, the report and the other `docs/` files still answered 200 to an anonymous
+request (the Pages API reports `public: true`). Keeping it public is the owner's decision of
+2026-09-24; to take the report offline instead, unpublish the site under Settings → Pages. The
+private repository therefore protects the source tree, the fixtures and the history, not `docs/`.
+Everything under `docs/` is reachable at that address, so it must contain only intended public documentation:
 the report, its parts, the appendices, the dated assessment, calibration, inventory, governance and
 ground-truth records, the runbooks and the changelog. Before the 2026-09-18 remediation, Pages served
 the repository root; it now serves `/docs` only, and the deliberately vulnerable fixture URLs return
