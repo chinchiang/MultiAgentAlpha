@@ -14,7 +14,7 @@
 | F06 | CVSS 完整解析驗證；無效向量拒收，防禦性回退為 Unknown／null，必須人工處理 | `schemas.py`、惡意向量測試 |
 | F07 | Semgrep 非零結束碼及 OSV 部分失敗皆失敗；SARIF failed invocation 不當成清白；只有 accepted suppression 才排除 | `scripts/semgrep_ci.py`、`osv_ci.py`、`code_scanning_prep.py` |
 | F08 | PR 掃 merge-base 到 head 全部 commits；無可用 base 時掃 head 全部可達歷史 | `scripts/gitleaks_ci.py`、實際 Git 歷史回歸測試 |
-| F09 | 已準備 main 的 PR、1 位獨立核准、stale approval 撤銷、最近一次 push 核准、分支更新及兩個必要 CI checks；GitHub 儲存時要求重新驗證，尚未宣稱生效 | 待 owner 完成 GitHub Confirm access，並重新讀回 protected 設定 |
+| F09 | 2026-09-23 owner 決定不要求 PR 核准人數：本 repo 為單人維護，且 `enforce_admins` 開啟，若要求 1 位核准，任何 PR 都無法合併。main 保護讀回結果：必要 checks `L0 deterministic tools` 與 `tests + mock review`（strict，分支須與 main 同步）、enforce_admins、conversation resolution、禁止 force push 與刪除；無 `required_pull_request_reviews`。缺少的獨立審查列為接受風險，由必要 CI checks 與 owner 自行審查補償；日後有第二位維護者時再加上「1 位核准、stale approval 撤銷、最近一次 push 核准」 | `gh api repos/chinchiang/MultiAgentAlpha/branches/main/protection`（2026-09-23 讀回） |
 | F10 | 自架模型 ML-BOM 的正常輸出路徑修正 TypeError | 含非空 ML-BOM 的 pipeline 測試 |
 | F11 | 執行模式由 provider 設定核對；報告記錄 provider manifest、設定雜湊及版本；live calibration 拒絕 mock／身分缺漏 | `pipeline.py`、`scripts/calibrate.py` |
 | F12 | 引用只對實際 context 核驗；拒絕目錄外、空白及超界行號，不回退讀磁碟 | `agents/base.py` |
@@ -49,7 +49,7 @@
 
 ## 相容性與後續負責事項
 
-1. **合併與分支保護**：PR 必須經獨立審查；GitHub 的重新驗證完成後才能保存 main 保護。尚未合併的 CSP 與程式修正不能視為正式部署完成。
+1. **合併與分支保護**：PR 必須通過兩個必要 CI checks 才能合併。獨立核准不強制（F09，2026-09-23 owner 決定：單人維護下的接受風險），有第二位維護者時應補上。尚未合併的 CSP 與程式修正不能視為正式部署完成。
 2. **報告消費端**：接受 `overall_score: null`、`review_status` 與 `incomplete_reasons`。單筆 `agreement_proxy` 與語料層級 Krippendorff alpha 分開，舊 alpha-named config 暫保留相容性。分數皆為排序啟發式，不是安全機率。
 3. **目標識別與裁決遷移**：target ID 綁定正規化本機路徑；搬移 checkout 或更換 revision 必須重跑與重新裁決，舊紀錄不推測套用。
 4. **自架服務**：部署端需提供有效 TLS 憑證、模型雜湊／簽章與真實 provider 證據。三家族在共同發現問題時可能不足兩個獨立評審，需增加合適家族或人工裁決，不能降低門檻掩蓋限制。
