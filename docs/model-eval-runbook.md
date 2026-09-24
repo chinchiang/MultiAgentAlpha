@@ -22,20 +22,23 @@ Install the tools once:
 ```
 python3 -m pip install --require-hashes --only-binary=:all: -r tools/build-requirements.txt
 python3 -m pip install --require-hashes --no-build-isolation -r tools/model-eval-requirements.txt   # garak 0.17.0 and its whole closure, every file's SHA-256 pinned
-git clone https://github.com/meta-llama/PurpleLlama && cd PurpleLlama && git checkout <commit>   # then pip install -r CybersecurityBenchmarks/requirements.txt
+git clone https://github.com/meta-llama/PurpleLlama && cd PurpleLlama && git checkout 4be64c3a24442b51c76175e6ec67722cc3f5fe38   # then pip install -r CybersecurityBenchmarks/requirements.txt
 export DATASETS=<path with prompt_injection/ and mitre_frr/ from CybersecurityBenchmarks/datasets>
 export CSE_JUDGE_LLM="OPENAI::<judge model>::<key>::<base_url>"      # judge for prompt-injection scoring; an on-prem model is fine
 ```
 
-Record the PurpleLlama commit in `config/mara.yaml` `model_eval.cyberseceval_ref` (it ships as
-`@main`, to be pinned before the first live run). garak's dependency tree (194 distributions,
+The PurpleLlama commit is pinned in `config/mara.yaml` `model_eval.cyberseceval_ref`: `4be64c3a2444`,
+main as of 2026-09-24 (a commit of 2026-08-17). Its `CybersecurityBenchmarks/benchmark/run.py` still takes
+every flag `cyberseceval_commands` emits and ships `datasets/prompt_injection/prompt_injection.json` and
+`datasets/mitre_frr/mitre_frr.json`; moving the pin means re-checking both. garak's dependency tree (194 distributions,
 torch and the CUDA wheels included) is hash-pinned in `tools/model-eval-requirements.txt` since
 2026-09-17, resolved on CPython 3.11 / Linux x86_64; a run host on another platform must relock
 with `scripts/relock_requirements.py` first. Two entries (langdetect, ecoji) are sdists because no
 wheel exists. Install the hash-pinned build closure first and disable build isolation; both
 sdists were built successfully with that backend on 2026-09-18. This pins their source and build
-tools but does not attest the publishers' builds or replace the actual live evaluation. CyberSecEval
-still needs an approved commit and its own resolved hash closure before the live run.
+tools but does not attest the publishers' builds or replace the actual live evaluation. CyberSecEval's
+`requirements.txt` at that commit pins versions but not hashes; it still needs its own resolved hash
+closure before the live run.
 
 Run:
 

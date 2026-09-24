@@ -30,7 +30,7 @@
 | F22 | 實際被呼叫但零 finding 的模型家族仍計入漏報與拒答 | `scripts/calibrate.py` |
 | F23 | 採納需達到實際有效的獨立家族數，每家族具正反序回票；同家族票不補 quorum | `pipeline.py`、quorum 回歸測試 |
 | F24 | HTML tags／attributes／URL scheme allowlist；CSS／JS 精確 hash CSP，無 unsafe-inline 放行 | `scripts/build_html.py`、CSP／注入回歸測試 |
-| F25 | 補 doctype、zh-Hant、charset、viewport、靜態 TOC、來源連結、鍵盤焦點與行動選單狀態 | HTML generator；瀏覽器安全政策禁止本機 HTML 預覽，完整可及性驗收另列待辦 |
+| F25 | 補 doctype、zh-Hant、charset、viewport、靜態 TOC、來源連結、鍵盤焦點與行動選單狀態 | HTML generator；2026-09-24 以 headless Chrome 跑 axe-core 4.11（WCAG 2.0/2.1/2.2 A/AA 與 best-practice，淺色、深色、375 px）：修正證據標記來源文字對比不足（162 處，移除 opacity）、可捲動表格與程式碼區塊無法以鍵盤操作（加 tabindex 與唯一標籤）、頂欄不在 landmark 內；另加跳至內文連結，並修正窄螢幕上 TOC 的 scrollIntoView 把 Tab 起點移進 inert 目次、跳過選單鈕的問題。三種版面 axe 皆 0 違規，Tab 順序已實測；螢幕閱讀器（NVDA／VoiceOver）人工驗收仍待辦 |
 | F26 | SARIF preprocessing 移到唯讀 L0 job；有 security-events:write 的 job 不 checkout、不執行 repo script | `mara-review.yml`、workflow 邊界測試 |
 | F27 | 移除整個教材目錄秘密豁免，改精準已知假值；同目錄新憑證仍使掃描失敗 | `.gitleaks.toml`、實際鎖定 gitleaks 回歸測試 |
 | F28 | 加入每週與手動 SCA，使用同一套 runtime closure 及例外範圍 | `mara-review.yml` |
@@ -53,6 +53,6 @@
 2. **報告消費端**：接受 `overall_score: null`、`review_status` 與 `incomplete_reasons`。單筆 `agreement_proxy` 與語料層級 Krippendorff alpha 分開，舊 alpha-named config 暫保留相容性。分數皆為排序啟發式，不是安全機率。
 3. **目標識別與裁決遷移**：target ID 綁定正規化本機路徑；搬移 checkout 或更換 revision 必須重跑與重新裁決，舊紀錄不推測套用。
 4. **自架服務**：部署端需提供有效 TLS 憑證、模型雜湊／簽章與真實 provider 證據。三家族在共同發現問題時可能不足兩個獨立評審，需增加合適家族或人工裁決，不能降低門檻掩蓋限制。
-5. **G-8 評測建置**：model-eval 的兩個 sdist 已驗證能用 hash-pinned backend 建置，安裝及 relock 停用額外 build isolation。CyberSecEval 尚待選定 commit、產生專屬依賴閉包並執行真正評測；不能將建置成功當成評測通過。
+5. **G-8 評測建置**：model-eval 的兩個 sdist 已驗證能用 hash-pinned backend 建置，安裝及 relock 停用額外 build isolation。CyberSecEval 已於 2026-09-24 固定到 PurpleLlama `4be64c3a2444`（`model_eval.cyberseceval_ref`），仍待產生專屬依賴閉包並執行真正評測；不能將建置成功當成評測通過。
 6. **來源與治理**：逐筆原文核實、G-1 政策核准、G-4 live 換模演練、G-7 權重簽章、G-8／G-9 live 評測校準、G-10 rollout、G-12 真實握手、G-13 訓練紀錄均需要實際責任人與環境。本次沒有偽造這些紀錄。
-7. **網站驗收**：hash CSP 以 meta 提供；GitHub Pages 的 HTTP header 管理能力不在 repo 控制內，`frame-ancestors` 不能靠 meta 生效。鍵盤、窄螢幕、螢幕閱讀器及無 JavaScript 情境需在部署版本另行確認，不能僅由靜態測試宣稱符合 WCAG。
+7. **網站驗收**：hash CSP 以 meta 提供；GitHub Pages 的 HTTP header 管理能力不在 repo 控制內，`frame-ancestors` 不能靠 meta 生效。2026-09-24 已在本機 headless Chrome 以 axe-core 及 Tab 順序實測鍵盤、375 px 窄螢幕與無 JavaScript 情境（見 F25）；螢幕閱讀器人工驗收與部署版本複查仍待辦，自動化工具 0 違規不等於符合 WCAG。

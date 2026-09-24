@@ -146,8 +146,8 @@ class ModelEvalConfig(BaseModel):
 
     garak_version: str = Field(default="0.17.0", description="garak release the runbook pins (tools/model-eval-requirements.txt)")
     garak_probes: list[str] = Field(default_factory=lambda: ["promptinject", "latentinjection", "encoding", "dan"])
-    cyberseceval_ref: str = Field(default="meta-llama/PurpleLlama@main",
-                                  description="Commit or tag of CybersecurityBenchmarks used; pin before the first live run")
+    cyberseceval_ref: str = Field(default="meta-llama/PurpleLlama@4be64c3a24442b51c76175e6ec67722cc3f5fe38",
+                                  description="Commit of CybersecurityBenchmarks used (pinned 2026-09-24)")
     judge_llm_env: str = Field(default="CSE_JUDGE_LLM", description="Environment variable holding the CyberSecEval judge specification")
     thresholds: ModelEvalThresholds = Field(default_factory=ModelEvalThresholds)
     weight_penalty_on_fail: float = Field(default=0.8, ge=0.0, le=1.0,

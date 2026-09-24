@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zb7k31j4xfFxnNoepBFYMQkD+e/3Z30u2jxuL+5dN0M='; style-src 'sha256-A33kcmngsMkm5QAn2p50SvAh+z4gzyPJbh4dUzyTROI='; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wgecX/bDQ+qe3FiPfcNp51quKHB7alyqH+XoAYC2Ej4='; style-src 'sha256-YZs8l36l+Zh7V+45waitFnaRtNon5E9Xjs90r8cuL0A='; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'">
 <title>多模型多代理資安審查</title>
 <style>
 :root{--bg:#f5f6f8;--fg:#1b1f26;--muted:#5b6370;--line:#d5d9e0;--panel:#ffffff;--accent:#2b5d8c;--accent-soft:#e4edf6;--code:#eef1f5;--mark:#ffe58a;--ok:#2f7d4f;--warn:#a2620f;--bad:#b23a3a}
@@ -41,9 +41,10 @@ mark{background:var(--mark);color:inherit;padding:0 1px}
 main h1,main h2,main h3{text-wrap:balance}
 table,.ev{font-variant-numeric:tabular-nums}
 .ev{display:inline-block;font-size:11px;line-height:1.5;padding:0 6px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--muted);vertical-align:middle;white-space:nowrap;margin:0 2px}
-.ev-src{margin-left:4px;opacity:.85}
+.ev-src{margin-left:4px}
 .ev-a{border-color:var(--ok);color:var(--ok)}.ev-v{border-color:var(--warn);color:var(--warn)}.ev-t{border-color:var(--accent);color:var(--accent)}.ev-u{border-color:var(--bad);color:var(--bad)}
-a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,.tablewrap:focus-visible,pre:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.skip{position:absolute;left:8px;top:-48px;z-index:30;padding:6px 12px;border-radius:6px;background:var(--panel);color:var(--accent);border:1px solid var(--line)}.skip:focus{top:8px}
 @media (prefers-reduced-motion: reduce){nav{transition:none}}
 .hits{font-size:12px;color:var(--muted);margin-top:6px}
 .topbar{display:none}
@@ -52,10 +53,11 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(-
 </style>
 </head>
 <body>
-<div class="topbar"><button id="menu" aria-label="開啟目次" aria-expanded="false" aria-controls="navigation">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-01</span></div>
+<a class="skip" href="#content">跳至內文</a>
+<header class="topbar"><button id="menu" aria-label="開啟目次" aria-expanded="false" aria-controls="navigation">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-01</span></header>
 <div class="layout">
 <nav id="navigation" aria-label="目次"><p class="brand">GSMD-RPT-2026-0908-01 · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits" aria-live="polite"></div><ol id="toc"><li class="h1"><a href="#s0">以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查</a></li><li class="h2"><a href="#s1">目次</a></li><li class="h1"><a href="#s2">第一部　管理階層摘要</a></li><li class="h2"><a href="#s3">第 1 章　決策者需要知道的事</a></li><li class="h3"><a href="#s4">1.1 問題</a></li><li class="h3"><a href="#s5">1.2 建議的架構，一句話</a></li><li class="h3"><a href="#s6">1.3 這個架構解決了什麼</a></li><li class="h3"><a href="#s7">1.4 三個需要決策的事項</a></li><li class="h3"><a href="#s8">1.5 成本與代價</a></li><li class="h3"><a href="#s9">1.6 這份報告不能告訴你的事</a></li><li class="h3"><a href="#s10">1.7 建議的批准事項</a></li><li class="h1"><a href="#s11">第二部　背景與問題定義</a></li><li class="h2"><a href="#s12">第 2 章　Vibe Coding 帶來的安全債：實證現況</a></li><li class="h3"><a href="#s13">2.1 什麼是 Vibe Coding，以及它為什麼改變了審查的前提</a></li><li class="h3"><a href="#s14">2.2 AI 生成程式碼的安全性：可查證的量化證據</a></li><li class="h3"><a href="#s15">2.3 供應鏈面的新型風險：套件幻覺</a></li><li class="h3"><a href="#s16">2.4 對跨國 ODM/EMS 的意義</a></li><li class="h2"><a href="#s17">第 3 章　單一 LLM 審查的四類失效</a></li><li class="h3"><a href="#s18">3.1 失效一：幻覺與不可重現</a></li><li class="h3"><a href="#s19">3.2 失效二：偏誤</a></li><li class="h3"><a href="#s20">3.3 失效三：Prompt Injection</a></li><li class="h3"><a href="#s21">3.4 失效四：覆蓋盲區與拒答</a></li><li class="h2"><a href="#s22">第 4 章　為什麼是 Multi-Agent，而不是「一個更強的模型」</a></li><li class="h3"><a href="#s23">4.1 反方證據先講</a></li><li class="h3"><a href="#s24">4.2 增益在哪裡：壓誤報與壓評論量，不是提召回</a></li><li class="h3"><a href="#s25">4.3 「LLM + 確定性工具」的證據為什麼一致偏正</a></li><li class="h3"><a href="#s26">4.4 異質性作為設計原則</a></li><li class="h3"><a href="#s27">4.5 本報告的定位</a></li><li class="h1"><a href="#s28">第三部　技術架構</a></li><li class="h2"><a href="#s29">第 5 章　六層架構總覽</a></li><li class="h3"><a href="#s30">5.1 為什麼是六層而不是一個 agentic loop</a></li><li class="h3"><a href="#s31">5.2 對抗的是誰</a></li><li class="h2"><a href="#s32">第 6 章　各層設計</a></li><li class="h3"><a href="#s33">6.1 L0：確定性錨定層</a></li><li class="h3"><a href="#s34">6.2 L1：情境建構層</a></li><li class="h3"><a href="#s35">6.3 L2：專家審查層</a></li><li class="h3"><a href="#s36">6.4 L3：對抗驗證層</a></li><li class="h3"><a href="#s37">6.5 L4：陪審裁決層</a></li><li class="h3"><a href="#s38">6.6 L5：評分與輸出層</a></li><li class="h2"><a href="#s39">第 7 章　模型家族與部署拓樸</a></li><li class="h3"><a href="#s40">7.1 三個家族的角色與部署方式</a></li><li class="h3"><a href="#s41">7.2 OpenAI 相容端點作為自架模型的共通介面</a></li><li class="h3"><a href="#s42">7.3 可抽換性是採購需求，不是工程偏好</a></li><li class="h2"><a href="#s43">第 8 章　資料流與信任邊界</a></li><li class="h2"><a href="#s44">第 9 章　Prompt Injection 防線</a></li><li class="h1"><a href="#s45">第四部　核心功能與能力</a></li><li class="h2"><a href="#s46">第 10 章　十一個審查面向</a></li><li class="h3"><a href="#s47">10.1 Application architecture</a></li><li class="h3"><a href="#s48">10.2 Security vulnerabilities（一般弱點）</a></li><li class="h3"><a href="#s49">10.3 XSS</a></li><li class="h3"><a href="#s50">10.4 CSP</a></li><li class="h3"><a href="#s51">10.5 Authentication and authorization</a></li><li class="h3"><a href="#s52">10.6 Dependency and supply-chain security（依賴）</a></li><li class="h3"><a href="#s53">10.7 GitHub Actions security</a></li><li class="h3"><a href="#s54">10.8 Secret exposure</a></li><li class="h3"><a href="#s55">10.9 Input validation</a></li><li class="h3"><a href="#s56">10.10 Insecure error handling</a></li><li class="h3"><a href="#s57">10.11 Supply-chain security（廣義）</a></li><li class="h3"><a href="#s58">10.12 十一個面向的交叉關係</a></li><li class="h2"><a href="#s59">第 11 章　評分方法</a></li><li class="h3"><a href="#s60">11.1 設計原則：分數由程式算，模型只提供判斷的輸入</a></li><li class="h3"><a href="#s61">11.2 單一 finding 的四個維度</a></li><li class="h3"><a href="#s62">11.3 為什麼不用 DREAD，也不只用 OWASP Risk Rating</a></li><li class="h3"><a href="#s63">11.4 面向分數與閘門</a></li><li class="h3"><a href="#s64">11.5 校準：從 seeded benchmark 到家族權重</a></li><li class="h2"><a href="#s65">第 12 章　資料可信度模型</a></li><li class="h3"><a href="#s66">12.1 問題的兩個層次</a></li><li class="h3"><a href="#s67">12.2 輸入資料的三種來源與各自的信任規則</a></li><li class="h3"><a href="#s68">12.3 來源證據的三要件</a></li><li class="h3"><a href="#s69">12.4 模型輸出的三重驗證</a></li><li class="h3"><a href="#s70">12.5 拒答與棄權的處理</a></li><li class="h3"><a href="#s71">12.6 本報告自身的證據分級</a></li><li class="h2"><a href="#s72">第 13 章　去偏誤機制目錄</a></li><li class="h1"><a href="#s73">第五部　使用流程</a></li><li class="h2"><a href="#s74">第 14 章　三種觸發模式</a></li><li class="h3"><a href="#s75">14.1 PR 觸發：增量審查</a></li><li class="h3"><a href="#s76">14.2 夜間全庫審查</a></li><li class="h3"><a href="#s77">14.3 手動深度審查</a></li><li class="h2"><a href="#s78">第 15 章　人工裁決佇列與校準迴圈</a></li><li class="h3"><a href="#s79">15.1 什麼會進人工佇列</a></li><li class="h3"><a href="#s80">15.2 審查疲勞與自動核准的陷阱</a></li><li class="h3"><a href="#s81">15.3 校準迴圈</a></li><li class="h3"><a href="#s82">15.4 導入的三個階段</a></li><li class="h1"><a href="#s83">第六部　資安風險</a></li><li class="h2"><a href="#s84">第 16 章　審查系統的六類風險</a></li><li class="h3"><a href="#s85">16.1 原始碼外洩</a></li><li class="h3"><a href="#s86">16.2 Prompt Injection 操縱審查結果</a></li><li class="h3"><a href="#s87">16.3 模型供應鏈</a></li><li class="h3"><a href="#s88">16.4 審查系統自己的 GitHub Actions</a></li><li class="h3"><a href="#s89">16.5 過度信任與責任稀釋</a></li><li class="h3"><a href="#s90">16.6 成本失控與可用性</a></li><li class="h2"><a href="#s91">第 17 章　與 OWASP LLM Top 10 2025 的對應</a></li><li class="h1"><a href="#s92">第七部　方案比較</a></li><li class="h2"><a href="#s93">第 18 章　架構層級的比較</a></li><li class="h2"><a href="#s94">第 19 章　商用與開源方案的比較</a></li><li class="h2"><a href="#s95">第 20 章　三個模型家族在此用途上的適配性</a></li><li class="h1"><a href="#s96">第八部　實務應用</a></li><li class="h2"><a href="#s97">第 21 章　跨國 ODM/EMS 的部署拓樸</a></li><li class="h3"><a href="#s98">21.1 共用管線：台北、桃園、休士頓、Brno/Blučina</a></li><li class="h3"><a href="#s99">21.2 隔離管線：上海浦東與重慶</a></li><li class="h3"><a href="#s100">21.3 客戶稽核時的說明</a></li><li class="h2"><a href="#s101">第 22 章　成本模型</a></li><li class="h3"><a href="#s102">22.1 變數</a></li><li class="h3"><a href="#s103">22.2 估算（以區間呈現）</a></li><li class="h3"><a href="#s104">22.3 成本與去偏誤的取捨</a></li><li class="h2"><a href="#s105">第 23 章　從雛型到生產的差距</a></li><li class="h1"><a href="#s106">第九部　限制</a></li><li class="h2"><a href="#s107">第 24 章　本報告不涵蓋什麼，以及結論的邊界條件</a></li><li class="h3"><a href="#s108">24.1 範圍限制</a></li><li class="h3"><a href="#s109">24.2 方法上的弱點</a></li><li class="h3"><a href="#s110">24.3 查證上的限制</a></li><li class="h3"><a href="#s111">24.4 模型版本漂移</a></li><li class="h3"><a href="#s112">24.5 兩套「證據級別」的混淆風險</a></li><li class="h1"><a href="#s113">第十部　治理建議</a></li><li class="h2"><a href="#s114">第 25 章　全球管線的治理建議</a></li><li class="h3"><a href="#s115">25.1 政策層</a></li><li class="h3"><a href="#s116">25.2 技術層</a></li><li class="h3"><a href="#s117">25.3 流程層</a></li><li class="h3"><a href="#s118">25.4 對應總表</a></li><li class="h2"><a href="#s119">第 26 章　上海浦東與重慶廠區的單獨建議</a></li><li class="h1"><a href="#s120">附錄A　引用來源清單</a></li><li class="h2"><a href="#s121">A 組：工具、產品與文獻</a></li><li class="h2"><a href="#s122">B 組：LLM 評審偏誤、共識方法、模型現況、治理框架</a></li><li class="h2"><a href="#s123">C 組：十一面向的標準、工具與事件</a></li><li class="h1"><a href="#s124">附錄B　查證缺口清單</a></li><li class="h2"><a href="#s125">B-1 方法與環境層缺口</a></li><li class="h2"><a href="#s126">B-2 工具與產品（A 組）</a></li><li class="h2"><a href="#s127">B-3 偏誤與模型（B 組）</a></li><li class="h2"><a href="#s128">B-4 標準與事件（C 組）</a></li><li class="h2"><a href="#s129">B-5 雛型自身的缺口</a></li><li class="h1"><a href="#s130">附錄C　術語對照表</a></li><li class="h1"><a href="#s131">附錄D　成熟度自評問卷（60 題）</a></li><li class="h2"><a href="#s132">L0 確定性錨定層</a></li><li class="h2"><a href="#s133">L1 情境建構層</a></li><li class="h2"><a href="#s134">L2 專家審查層</a></li><li class="h2"><a href="#s135">L3 對抗驗證層</a></li><li class="h2"><a href="#s136">L4 陪審裁決層</a></li><li class="h2"><a href="#s137">L5 評分與輸出層</a></li><li class="h2"><a href="#s138">計分</a></li><li class="h1"><a href="#s139">附錄E　落地 Prompt 套件（Claude Code + GitHub）</a></li></ol></nav>
-<main><h1 id="s0">以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查</h1>
+<main id="content" tabindex="-1"><h1 id="s0">以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查</h1>
 <p><strong>文件編號：GSMD-RPT-2026-0908-01</strong>（登錄簿配號 2026-09-10）
 <strong>版本：v0.1.0</strong>　<strong>日期：2026-09-08</strong>　<strong>類型：RPT 研究報告／專業教學手冊</strong>
 <strong>讀者定位：治理決策與技術落地並重</strong>
@@ -154,7 +156,7 @@ a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(-
 <h1 id="s28">第三部　技術架構</h1>
 <h2 id="s29">第 5 章　六層架構總覽</h2>
 <p>本報告提出的架構命名為 MARA（Multi-Agent Review Architecture）。它把一次審查拆成六層，每一層只透過經過 schema 驗證的資料結構與下一層溝通，層與層之間沒有自由文字的對話。這個設計的直接依據是第 4.4 節引用的三項研究：審查者之間不通訊（MARS）、裁決者看不到先前的分數（錨定偏誤研究）、不同家族組成評審團（PoLL）。</p>
-<pre><code>L0  確定性錨定層   semgrep / CodeQL / gitleaks / TruffleHog / OSV-Scanner / Trivy / zizmor / Scorecard / csp-evaluator → SARIF
+<pre tabindex="0"><code>L0  確定性錨定層   semgrep / CodeQL / gitleaks / TruffleHog / OSV-Scanner / Trivy / zizmor / Scorecard / csp-evaluator → SARIF
 L1  情境建構層     Context Agent：檔案樹、入口點、信任邊界、依賴清單、workflow 清單；只產出事實，並剝除作者訊號
 L2  專家審查層     11 個面向 × ≥2 個模型家族，各自獨立產出結構化 finding（CWE、位置、逐字引用、可達路徑、CVSS 4.0 向量）
 L3  對抗驗證層     Skeptic（否證）+ Red Team（可利用性）；家族必須 ≠ 產出該 finding 的家族
@@ -199,7 +201,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <h3 id="s42">7.3 可抽換性是採購需求，不是工程偏好</h3>
 <p>第 2.4 節提到台灣行政院的公務機關禁令；第 7.1 節提到 DeepSeek 的資料儲存地。此外，義大利 Garante 於 2025 年 1 月 30 日對 DeepSeek 下達即時的資料處理限制令<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜B89</span></span>，澳洲內政部於 2025 年 2 月 4 日發布 PSPF Direction 要求聯邦機關移除 DeepSeek<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜B93、A80</span></span>，美國國會有四項已提出但未通過的法案（S.765、H.R.1121、S.2177、H.R.4142）<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">（congress.gov）｜A82、A83</span></span>。這些都不直接禁止民間企業自架 DeepSeek 權重，但一家跨國 ODM 的客戶（尤其是政府或受管制產業的客戶）在稽核時可能因「模型出處」而拒絕接受以 DeepSeek 參與審查的交付物。因此架構必須從第一天就提供降級路徑：設定檔以「家族」抽象模型，DeepSeek 可換成 Qwen、Llama 4 或 Mistral 的自架模型而不改變任何流程。Meta 的 Llama 4 模型卡明載其授權為自訂的 Community License，含 7 億月活躍使用者的門檻<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（直接讀取 GitHub）｜B106</span></span>；Qwen3 以 Apache 2.0 釋出但同屬中國關聯來源<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B107</span></span>。「可抽換」在這裡不是為了工程整潔，而是為了在客戶提出要求時能在一週內換掉一個家族。</p>
 <h2 id="s43">第 8 章　資料流與信任邊界</h2>
-<pre><code>[開發者 PR] ──► [GitHub] ──► job A: L0 工具（隔離 runner，只讀 checkout，SHA-pinned actions，permissions: contents: read）
+<pre tabindex="0"><code>[開發者 PR] ──► [GitHub] ──► job A: L0 工具（隔離 runner，只讀 checkout，SHA-pinned actions，permissions: contents: read）
                               │  SARIF
                               ▼
                           job B: L1–L5（不 checkout PR head 的可執行內容；模型 job 從不執行 repo 程式碼）
@@ -290,7 +292,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <p><strong>可利用性（Exploitability）。</strong> 依 finding 的類型分流。依賴類 finding 以 EPSS 分數與 KEV 是否收錄為準，兩者都由工具查詢而非模型回憶；EPSS v4（2025 年 3 月）只能作為「可能性」軸<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜C6.7</span></span>。程式碼類 finding 以 L3 Red Team 的類別（yes、conditional、no、unknown）與 L2 的可達性判斷（reachable、conditional、unreachable、unknown）為準。</p>
 <p><strong>共識（Consensus）。</strong> 共識分數範圍 0 到 1，是裁決的彙整指標，尚未校準為正確率或安全機率。計算方式：每個 judge 家族對該 finding 的正序與反序投票取平均（true_positive 記 1、needs_human 記 0.5、false_positive 記 0），再以家族權重加權平均。每一家族必須有且僅有一張正序及反序有效回票；重複、缺漏與未知 finding 的回覆不計入有效票。發現者同家族的票即使折減，也不補足獨立家族數。至少達到 <code>min_independent_judges</code> 個實際獨立家族、正反序一致且無其他待判原因，才可採納。工具佐證不進入共識分數，而是進入證據層級；未解決的工具結果也單獨保留並阻擋 gate。</p>
 <p><strong>證據層級（Evidence tier）。</strong> 這是本架構最重要的輸出，也是「資料可信度」問題的直接答案。四級定義如下，判定順序由上而下：</p>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 1"><table>
 <thead>
 <tr>
 <th>層級</th>
@@ -348,7 +350,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <p>本報告引用的每一項事實都標示四級之一：已證實（法規原文、標準條文、同儕審查論文、官方公告、CVE 條目，且發布日期可驗證）、廠商主張（廠商自述，未經獨立驗證）、第三方評論（分析機構、媒體、研究者評述，預印本歸此類並標明）、尚未證實（有流通但缺乏可驗證來源或來源矛盾）。本次研究環境的一個重要限制是：出口代理伺服器封鎖了 arxiv.org、nist.gov、owasp.org、first.org、w3.org、cisa.gov、github.blog、anthropic.com、openai.com 等大量一手網域，只有 github.com 與 platform.claude.com 可直接讀取。凡未能直接讀取原頁的引用，都在附錄A 標註「依搜尋摘要」，並依技能規範以較嚴的級別標示；arXiv 條目一律標為第三方評論（preprint）。這使附錄B 的查證缺口比往常更多，第九部會說明其對結論的影響。</p>
 <h2 id="s72">第 13 章　去偏誤機制目錄</h2>
 <p>本章把第 3.2 節的偏誤文獻對應到具體機制與雛型模組。ICLR 2025 的 CALM 框架整理的 12 種偏誤是骨架【B8】，本報告依資安審查的情境增補了四種（相關錯誤、拒答、政治敏感 token、語言）。</p>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 2"><table>
 <thead>
 <tr>
 <th>#</th>
@@ -530,7 +532,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <h3 id="s90">16.6 成本失控與可用性</h3>
 <p>三個家族、十一個面向、正反序兩次裁決，一次全庫審查的模型呼叫數是 11 × 3（reviewer）+ 3（skeptic）+ 3（red team）+ 3 × 2（judge）≈ 45 次以上，每次的輸入是整個 bundle。第 22 章估算成本；這裡指出的風險是：成本壓力會誘使組織減少家族數或關掉反序 pass，而這兩者正是去偏誤的核心。治理建議把「家族數不低於三、反序 pass 不關閉」列為政策而非設定。</p>
 <h2 id="s91">第 17 章　與 OWASP LLM Top 10 2025 的對應</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 3"><table>
 <thead>
 <tr>
 <th>LLM Top 10 2025</th>
@@ -596,7 +598,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <p>本部的三張比較表在填表前先固定準則，避免準則被偏好的答案反推。</p>
 <h2 id="s93">第 18 章　架構層級的比較</h2>
 <p>準則：（1）召回率的證據基礎；（2）精確率的證據基礎；（3）對單一模型偏誤的抗性；（4）對 prompt injection 的抗性；（5）可稽核性（能否從中間產物重算結果）；（6）資料主權（原始碼是否離境）；（7）每次審查的成本量級；（8）導入複雜度。</p>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 4"><table>
 <thead>
 <tr>
 <th>準則</th>
@@ -668,7 +670,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <p>結論不是「本報告的架構在每個準則都最好」，它在成本與導入複雜度上明顯最差。它的正當性來自第一、二、三、五列：在 vibe-coded 程式碼的缺陷集中於架構與授權（工具幾乎無召回）且單一 LLM 不可重現的前提下，它是唯一同時提供語意召回與可稽核精確率的選項。若組織的程式碼不是 vibe-coded、缺陷型態以已知 pattern 為主，純確定性工具加單一 LLM 分流是更合理的選擇。</p>
 <h2 id="s94">第 19 章　商用與開源方案的比較</h2>
 <p>準則：（1）核心方法；（2）是否公開精確率或召回率的可驗證數據；（3）多模型或多代理的程度；（4）資料主權選項；（5）與確定性工具的整合；（6）證據級別。</p>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 5"><table>
 <thead>
 <tr>
 <th>方案</th>
@@ -794,7 +796,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <p>三個觀察。第一，沒有任何商用方案公開可獨立驗證的精確率與召回率；「96% 一致」「FP −95%」全是廠商自述，且各自的基準不同。第二，多模型混編在商用產品中已有先例（Semgrep 的文件曾同時列出 OpenAI 與 Claude on Bedrock【A40】），但沒有任何產品公開說明它如何處理家族間的偏誤與相關錯誤。第三，最接近本報告架構的商用先例是 Endor Labs 的三專家代理【A57】，最接近的學術先例是 MARS 的無通訊三審查者【B30】與 Refute-or-Promote 的對抗式階段閘門【B31】；本報告的差異在於把「異質家族」與「盲審」做成硬約束，並把分數計算完全移出模型。</p>
 <h2 id="s95">第 20 章　三個模型家族在此用途上的適配性</h2>
 <p>準則：（1）部署方式與資料主權；（2）授權條款；（3）公開的資安相關評估；（4）採購與稽核風險；（5）在本架構中的建議角色。</p>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 6"><table>
 <thead>
 <tr>
 <th>準則</th>
@@ -898,7 +900,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <p><strong>G-12 A 級 Critical finding 若涉及已出貨產品，直接接入 PSIRT 的 CRA 第 14 條通報流程。</strong> 24 小時預警義務自 2026 年 9 月 11 日適用【C11.9】。對應 IEC 62443-4-1 DM 與 SUM 實務。負責：PSIRT。時程：立即。代價：審查管線的誤報會消耗 PSIRT 的判斷時間，因此只限 A 級。</p>
 <p><strong>G-13 AI 素養訓練。</strong> EU AI Act 第 4 條自 2025 年 2 月 2 日起要求所有 deployer 確保操作 AI 系統的人員具備足夠的 AI 素養，不論風險等級<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">（頁面被擋）｜B123</span></span>。審查管線的使用者（開發者、安全團隊、人工裁決者）都需要理解證據層級、偏誤稽核與「通過不等於安全」。負責：人資與 PSO。時程：第 2 個月起。代價：每人約半天。</p>
 <h3 id="s118">25.4 對應總表</h3>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 7"><table>
 <thead>
 <tr>
 <th>建議</th>
@@ -1027,7 +1029,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <p><strong>核對規則（2026-09-18 修正）：來源類型與聲明真偽分開記錄。僅見摘要者一律待核實；既有「已證實」不代表本次已讀原文。缺少逐項核對摘錄、日期及審查人者，不升級為已核對。機器可讀登錄簿見 <code>docs/source-verification.json</code>。</strong></p>
 <p>編號規則：A 開頭為工具與文獻調查（第二、四、七部主要引用），B 開頭為 LLM 評審偏誤、模型現況與治理框架，C 開頭為十一面向的標準與事件（C 後的第一個數字是面向編號）。「讀取」欄標示本次研究是否直接讀到原頁：是＝直接讀取；摘要＝原頁被出口代理伺服器封鎖，題名、日期與數字來自搜尋引擎摘要。日期無法驗證者列於附錄B。</p>
 <h2 id="s121">A 組：工具、產品與文獻</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 8"><table>
 <thead>
 <tr>
 <th>編號</th>
@@ -1654,7 +1656,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 </tbody>
 </table></div>
 <h2 id="s122">B 組：LLM 評審偏誤、共識方法、模型現況、治理框架</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 9"><table>
 <thead>
 <tr>
 <th>編號</th>
@@ -2311,7 +2313,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 </tbody>
 </table></div>
 <h2 id="s123">C 組：十一面向的標準、工具與事件</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 10"><table>
 <thead>
 <tr>
 <th>編號</th>
@@ -3300,7 +3302,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <li><strong>L0 工具版本未固定</strong>：雛型「有就跑」。關閉方式：附錄E prompt 7。</li>
 </ol>
 <h1 id="s130">附錄C　術語對照表</h1>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 11"><table>
 <thead>
 <tr>
 <th>英文</th>
@@ -3554,7 +3556,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <h1 id="s131">附錄D　成熟度自評問卷（60 題）</h1>
 <p>五級評分：0 = 沒有做；1 = 臨時或個案；2 = 有文件但未全面；3 = 全面執行且有紀錄；4 = 全面執行、有量測、有持續改善。題目問「有沒有做、做到什麼程度」，不問「你覺得夠不夠好」。依六層架構分組，每組 10 題。總分 240。</p>
 <h2 id="s132">L0 確定性錨定層</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 12"><table>
 <thead>
 <tr>
 <th>#</th>
@@ -3616,7 +3618,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 </tbody>
 </table></div>
 <h2 id="s133">L1 情境建構層</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 13"><table>
 <thead>
 <tr>
 <th>#</th>
@@ -3678,7 +3680,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 </tbody>
 </table></div>
 <h2 id="s134">L2 專家審查層</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 14"><table>
 <thead>
 <tr>
 <th>#</th>
@@ -3740,7 +3742,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 </tbody>
 </table></div>
 <h2 id="s135">L3 對抗驗證層</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 15"><table>
 <thead>
 <tr>
 <th>#</th>
@@ -3802,7 +3804,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 </tbody>
 </table></div>
 <h2 id="s136">L4 陪審裁決層</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 16"><table>
 <thead>
 <tr>
 <th>#</th>
@@ -3864,7 +3866,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 </tbody>
 </table></div>
 <h2 id="s137">L5 評分與輸出層</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 17"><table>
 <thead>
 <tr>
 <th>#</th>
@@ -3926,7 +3928,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 </tbody>
 </table></div>
 <h2 id="s138">計分</h2>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 18"><table>
 <thead>
 <tr>
 <th>層</th>
@@ -3983,7 +3985,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
 <p>解讀：合計低於 60 為「未開始」；60 到 120 為「工具階段」（通常 L0 高、其餘低）；120 到 180 為「單模型階段」；180 以上為「異質多代理階段」。任何一層低於 20 都應優先處理該層，因為六層是串聯的，最弱的一層決定整體的可信度。</p>
 <h1 id="s139">附錄E　落地 Prompt 套件（Claude Code + GitHub）</h1>
 <p>八組 prompt 的完整內容在 repo 的 <code>docs/prompts/</code> 目錄，每組一個檔案，可直接貼入 Claude Code 執行；每組都能單獨執行，不假設前一組已跑過。以下為索引與各組的產出物與驗收條件。</p>
-<div class="tablewrap"><table>
+<div class="tablewrap" tabindex="0" role="region" aria-label="表格 19"><table>
 <thead>
 <tr>
 <th>組</th>
@@ -4061,7 +4063,10 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / Krippendo
   const heads=[...main.querySelectorAll('h1,h2,h3')];
   document.documentElement.classList.add('js-enabled');
   const items=[...toc.querySelectorAll('li')];
-  const io=new IntersectionObserver(es=>{es.forEach(e=>{ if(e.isIntersecting){ items.forEach(x=>x.classList.remove('active')); const it=items.find(x=>x.querySelector('a').getAttribute('href')==='#'+e.target.id); if(it){it.classList.add('active'); it.scrollIntoView({block:'nearest'});} } });},{rootMargin:'0px 0px -80% 0px'});
+  // scroll only the nav: scrollIntoView() also moves the sequential focus starting point into the (inert) nav,
+  // so the next Tab skipped the skip link and the menu button on narrow screens
+  function keep(it){ const n=nav.getBoundingClientRect(), r=it.getBoundingClientRect(); if(r.top<n.top||r.bottom>n.bottom) nav.scrollTop+=r.top-n.top-nav.clientHeight/2; }
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{ if(e.isIntersecting){ items.forEach(x=>x.classList.remove('active')); const it=items.find(x=>x.querySelector('a').getAttribute('href')==='#'+e.target.id); if(it){it.classList.add('active'); keep(it);} } });},{rootMargin:'0px 0px -80% 0px'});
   heads.forEach(h=>io.observe(h));
   let marks=[];
   function clear(){ marks.forEach(m=>{const t=document.createTextNode(m.textContent); m.parentNode.replaceChild(t,m);}); marks=[]; main.normalize(); }
