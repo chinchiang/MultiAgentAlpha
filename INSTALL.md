@@ -46,13 +46,13 @@ git archive --format=zip --prefix=MultiAgentAlpha/ -o MultiAgentAlpha-$(git rev-
 
 Deliver the zip through an internal file server or an encrypted attachment. The recipient unpacks it, enters `MultiAgentAlpha/` and continues with section 2. The commit id in the file name lets them say which version a problem was seen on. Never place the zip anywhere public: `fixtures/` and `calib/samples/` contain deliberately planted fake credentials and vulnerable code.
 
-### 1.3 私有化後的三個副作用 / Three side effects of being private
+### 1.3 私有化後的影響 / What changes while the repository is private
 
-- **GitHub Pages 的線上報告會停止**：個人免費方案的 Pages 只能發布公開 repo。報告的 HTML 版仍在 `docs/` 裡，用瀏覽器直接開啟 `docs/GSMD-RPT-2026-0908-01_多模型多代理資安審查.html` 即可。
+- **GitHub Pages 的線上報告仍然公開**：repo 私有後 Pages 照常在每次 push 到 `main` 時重新發布，<https://chinchiang.github.io/MultiAgentAlpha/> 不需登入即可讀取（2026-09-24 確認，owner 決定維持公開）。私有只保護原始碼、fixtures 與歷史紀錄，`docs/` 底下的所有檔案都是公開的，只能放可公開的文件。
 - **Code Scanning 上傳會跳過**：免費的 Code Scanning 只涵蓋公開 repo，私有 repo 需要 GitHub Advanced Security。`mara-review.yml` 的 `code-scanning` job 在私有狀態下自動跳過，SARIF 仍以 `l0-sarif` artifact 保存；Scorecard 的唯讀 token 讀不到私有 repo 的 GraphQL，整個 Scorecard job 也一併跳過。
 - **Private vulnerability reporting 無法使用**：GitHub 只對公開 repo 提供，`SECURITY.md` 的回報表單連結會回應 404；私有期間請直接私訊維護者，見 `SECURITY.md`。
 
-- **The online report on GitHub Pages stops**: on a personal free plan, Pages only publishes public repositories. The HTML edition is still in `docs/`; open `docs/GSMD-RPT-2026-0908-01_多模型多代理資安審查.html` in a browser.
+- **The online report on GitHub Pages stays public**: Pages keeps republishing on every push to `main` after the repository became private, and <https://chinchiang.github.io/MultiAgentAlpha/> is readable without signing in (confirmed 2026-09-24; the owner decided to keep it public). Being private protects the source tree, the fixtures and the history; every file under `docs/` is public and must be fit for publication.
 - **The Code Scanning uploads are skipped**: free Code Scanning covers public repositories only; private ones need GitHub Advanced Security. The `code-scanning` job of `mara-review.yml` skips itself while the repository is private and the SARIF files remain in the `l0-sarif` artifact; the whole Scorecard job is skipped too, because its read-only token cannot run scorecard's GraphQL queries on a private repository.
 - **Private vulnerability reporting is unavailable**: GitHub offers it for public repositories only, so the form link in `SECURITY.md` returns 404; while private, contact the maintainer directly as `SECURITY.md` describes.
 
