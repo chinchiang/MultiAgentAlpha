@@ -57,9 +57,10 @@ mark{background:var(--mark);color:inherit;padding:0 1px}
 main h1,main h2,main h3{text-wrap:balance}
 table,.ev{font-variant-numeric:tabular-nums}
 .ev{display:inline-block;font-size:11px;line-height:1.5;padding:0 6px;border-radius:4px;border:1px solid var(--line);background:var(--panel);color:var(--muted);vertical-align:middle;white-space:nowrap;margin:0 2px}
-.ev-src{margin-left:4px;opacity:.85}
+.ev-src{margin-left:4px}
 .ev-a{border-color:var(--ok);color:var(--ok)}.ev-v{border-color:var(--warn);color:var(--warn)}.ev-t{border-color:var(--accent);color:var(--accent)}.ev-u{border-color:var(--bad);color:var(--bad)}
-a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,.tablewrap:focus-visible,pre:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.skip{position:absolute;left:8px;top:-48px;z-index:30;padding:6px 12px;border-radius:6px;background:var(--panel);color:var(--accent);border:1px solid var(--line)}.skip:focus{top:8px}
 @media (prefers-reduced-motion: reduce){nav{transition:none}}
 .hits{font-size:12px;color:var(--muted);margin-top:6px}
 .topbar{display:none}
@@ -74,7 +75,10 @@ JS = """
   const heads=[...main.querySelectorAll('h1,h2,h3')];
   document.documentElement.classList.add('js-enabled');
   const items=[...toc.querySelectorAll('li')];
-  const io=new IntersectionObserver(es=>{es.forEach(e=>{ if(e.isIntersecting){ items.forEach(x=>x.classList.remove('active')); const it=items.find(x=>x.querySelector('a').getAttribute('href')==='#'+e.target.id); if(it){it.classList.add('active'); it.scrollIntoView({block:'nearest'});} } });},{rootMargin:'0px 0px -80% 0px'});
+  // scroll only the nav: scrollIntoView() also moves the sequential focus starting point into the (inert) nav,
+  // so the next Tab skipped the skip link and the menu button on narrow screens
+  function keep(it){ const n=nav.getBoundingClientRect(), r=it.getBoundingClientRect(); if(r.top<n.top||r.bottom>n.bottom) nav.scrollTop+=r.top-n.top-nav.clientHeight/2; }
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{ if(e.isIntersecting){ items.forEach(x=>x.classList.remove('active')); const it=items.find(x=>x.querySelector('a').getAttribute('href')==='#'+e.target.id); if(it){it.classList.add('active'); keep(it);} } });},{rootMargin:'0px 0px -80% 0px'});
   heads.forEach(h=>io.observe(h));
   let marks=[];
   function clear(){ marks.forEach(m=>{const t=document.createTextNode(m.textContent); m.parentNode.replaceChild(t,m);}); marks=[]; main.normalize(); }
@@ -182,7 +186,11 @@ def build() -> Path:
     md_text = SRC.read_text(encoding="utf-8")
     md_text = re.sub(r"^---\ntitle:.*?\n---\n", "", md_text, count=1, flags=re.S)
     body, toc = safe_body(md_text)
-    body = body.replace("<table>", '<div class="tablewrap"><table>').replace("</table>", "</table></div>")
+    # scrollable regions take keyboard focus so they can be scrolled without a pointer (WCAG 2.1.1)
+    parts = body.split("<table>")
+    body = parts[0] + "".join(f'<div class="tablewrap" tabindex="0" role="region" aria-label="表格 {i}"><table>{p}'
+                              for i, p in enumerate(parts[1:], 1)).replace("</table>", "</table></div>")
+    body = body.replace("<pre>", '<pre tabindex="0">')
     # evidence markers 【級別｜來源】 become small chips; the grade drives the colour token
     def chip(m: re.Match) -> str:
         grade, rest = m.group(1), m.group(2)
@@ -202,10 +210,11 @@ def build() -> Path:
 <style>{CSS}</style>
 </head>
 <body>
-<div class="topbar"><button id="menu" aria-label="開啟目次" aria-expanded="false" aria-controls="navigation">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-01</span></div>
+<a class="skip" href="#content">跳至內文</a>
+<header class="topbar"><button id="menu" aria-label="開啟目次" aria-expanded="false" aria-controls="navigation">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-01</span></header>
 <div class="layout">
 <nav id="navigation" aria-label="目次"><p class="brand">GSMD-RPT-2026-0908-01 · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits" aria-live="polite"></div><ol id="toc">{toc}</ol></nav>
-<main>{body}</main>
+<main id="content" tabindex="-1">{body}</main>
 </div>
 <script>{JS}</script>
 </body>
