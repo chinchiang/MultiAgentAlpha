@@ -34,6 +34,8 @@ def review(
     cfg_path = config
     if provider == "mock" and config == Path("config/mara.yaml") and Path("config/mara.mock.yaml").exists():
         cfg_path = Path("config/mara.mock.yaml")
+    if not cfg_path.is_file():
+        raise typer.BadParameter(f"config file not found: {cfg_path} (run from the repository root or pass --config)", param_hint="--config")
     cfg = load_config(cfg_path)
     if provider == "mock" and any(m.provider != "mock" for m in cfg.models):
         raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock")
@@ -100,6 +102,8 @@ def check_config(
     from .config import GateConfig, MaraConfig, MlBomConfig, ModelEvalConfig, ModelSpec, PsirtConfig, RolesConfig, RolloutConfig
     from .policy import evaluate_policies
 
+    if not config.is_file():
+        raise typer.BadParameter(f"config file not found: {config} (run from the repository root or pass the path)", param_hint="CONFIG")
     raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
     try:
         models = [ModelSpec.model_validate(m) for m in raw.get("models", [])]
