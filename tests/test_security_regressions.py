@@ -192,6 +192,52 @@ def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path, monke
     assert report.bias_audit["reviewer_refusals"] == 33
 
 
+class Truncated(Provider):
+    def complete(self, **kwargs):
+        return Completion(data=None, raw_text='{"findings": [', truncated=True)
+
+
+def test_truncated_reviewer_replies_block_the_gate(tmp_path, monkeypatch):
+    pipe = pipeline(tmp_path)
+    pipe.providers = {n: Truncated(p.spec) for n, p in pipe.providers.items()}
+    (tmp_path / "app.py").write_text("unsafe()")
+    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
+    report = pipe.run(tmp_path, mode="mock")
+    assert report.bias_audit["reviewer_truncations"] == 33 and report.bias_audit["reviewer_refusals"] == 0
+    assert not report.gate_passed and report.overall_score is None and report.review_status == "incomplete"
+    assert "reviewer_truncations" in report.incomplete_reasons
+
+
+def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_path, monkeypatch):
+    pipe, f = pipeline(tmp_path), finding()
+    seen = []
+    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: (seen.append(("skeptic", p.family)), ([], []))[1])
+    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: (seen.append(("redteam", p.family)), ([], []))[1])
+    # the configured skeptic (nemotron) and red team (deepseek) both found it: only anthropic is independent
+    two = {f.id: {ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
+    pipe.run_skeptics(None, [f], two)
+    pipe.run_redteam(None, [f], two)
+    assert seen == [("skeptic", ModelFamily.ANTHROPIC), ("redteam", ModelFamily.ANTHROPIC)]
+    assert not pipe.audit["skeptic_same_family"] and not pipe.audit["redteam_same_family"]
+    every = {f.id: {ModelFamily.ANTHROPIC, ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
+    pipe.run_skeptics(None, [f], every)
+    pipe.run_redteam(None, [f], every)
+    assert pipe.audit["skeptic_same_family"] == 1 and pipe.audit["redteam_same_family"] == 1
+    assert any("no skeptic outside the finder families" in line for line in pipe.log)
+
+
+def test_missing_config_is_a_usage_error_not_a_traceback(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from mara.cli import app
+
+    monkeypatch.chdir(tmp_path)
+    for args in (["review", str(tmp_path), "--provider", "mock"], ["check-config"]):
+        res = CliRunner().invoke(app, args)
+        assert res.exit_code == 2 and not isinstance(res.exception, FileNotFoundError), res.output
+        assert "config file not found" in res.output
+
+
 def test_one_verified_quote_cannot_launder_an_invalid_primary_location(tmp_path):
     pipe, f = pipeline(tmp_path), finding()
     bad = Provenance(file="../outside.py", line=999, quote="fabricated", verified=False)

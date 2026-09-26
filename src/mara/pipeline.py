@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .agents import base, judge, redteam, reviewer, skeptic
 from .bias.blinding import blinded_batches
-from .bias.diversity import pairwise_family_agreement, pick_skeptic
+from .bias.diversity import pairwise_family_agreement, pick_independent
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context
 from .providers import make_provider
@@ -137,14 +137,10 @@ class Pipeline:
         groups: dict[str, list[Finding]] = defaultdict(list)
         for f in findings:
             # the skeptic must not share a family with ANY finder of this finding
-            fams = finders[f.id]
-            spec = None
-            for cand in [self.cfg.roles.skeptic] + self.cfg.roles.judges + self.cfg.roles.reviewers:
-                if self.cfg.model_by_name(cand).family not in fams:
-                    spec = self.cfg.model_by_name(cand)
-                    break
-            if spec is None:
-                spec = pick_skeptic(self.cfg, f.source_family)
+            spec, independent = pick_independent(self.cfg, self.cfg.roles.skeptic, finders[f.id])
+            if not independent:
+                self.audit["skeptic_same_family"] += 1
+                self._say(f"L3: no skeptic outside the finder families of {f.id}; {spec.family.value} reviews it")
             groups[spec.name].append(f)
         verdicts: list[SkepticVerdict] = []
         for name, fs in groups.items():
@@ -157,12 +153,10 @@ class Pipeline:
     def run_redteam(self, ctx: RepoContext, findings: list[Finding], finders: dict[str, set[ModelFamily]]) -> list[RedTeamNote]:
         groups: dict[str, list[Finding]] = defaultdict(list)
         for f in findings:
-            spec = self.cfg.model_by_name(self.cfg.roles.redteam)
-            if spec.family in finders[f.id]:
-                for cand in self.cfg.roles.judges + self.cfg.roles.reviewers:
-                    if self.cfg.model_by_name(cand).family not in finders[f.id]:
-                        spec = self.cfg.model_by_name(cand)
-                        break
+            spec, independent = pick_independent(self.cfg, self.cfg.roles.redteam, finders[f.id])
+            if not independent:
+                self.audit["redteam_same_family"] += 1
+                self._say(f"L3: no red team outside the finder families of {f.id}; {spec.family.value} reviews it")
             groups[spec.name].append(f)
         notes: list[RedTeamNote] = []
         for name, fs in groups.items():
@@ -363,6 +357,7 @@ class Pipeline:
             incomplete.append("required_tool_incomplete")
         for key in (
             "reviewer_refusals",
+            "reviewer_truncations",
             "invalid_findings_dropped",
             "canary_echoes",
             "judge_invalid_items",

@@ -8,16 +8,18 @@ from ..config import MaraConfig, ModelSpec
 from ..schemas import JudgeVote, ModelFamily
 
 
-def pick_skeptic(cfg: MaraConfig, finder_family: ModelFamily) -> ModelSpec:
-    """The skeptic must come from a different family than the finder (anti self-preference)."""
-    preferred = cfg.model_by_name(cfg.roles.skeptic)
-    if preferred.family != finder_family:
-        return preferred
-    for name in cfg.roles.judges + cfg.roles.reviewers:
+def pick_independent(cfg: MaraConfig, preferred: str, finder_families: set[ModelFamily]) -> tuple[ModelSpec, bool]:
+    """An L3 model (skeptic, red team) from a family that found none of the finding (anti self-preference).
+
+    Tries the preferred role, then the judges, then the reviewers. When every configured family is a
+    finder, returns the preferred model and False so the caller can audit it; such a finding has no
+    independent judge either and is left to a human by the quorum rule.
+    """
+    for name in [preferred] + cfg.roles.judges + cfg.roles.reviewers:
         m = cfg.model_by_name(name)
-        if m.family != finder_family:
-            return m
-    raise RuntimeError("no model family available to act as skeptic; configuration violates diversity rule")
+        if m.family not in finder_families:
+            return m, True
+    return cfg.model_by_name(preferred), False
 
 
 def pairwise_family_agreement(votes: list[JudgeVote]) -> dict[str, float]:
