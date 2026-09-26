@@ -10,3 +10,8 @@ dist/
 calib/corpora/
 calib-out/
 .mara-tools/
+
+# CI script outputs written to the repository root (zizmor_ci.py, scorecard_ci.py)
+/zizmor.sarif
+/scorecard.sarif
+/scorecard.json
