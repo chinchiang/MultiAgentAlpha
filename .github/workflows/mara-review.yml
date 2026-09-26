@@ -3,7 +3,9 @@
 #   - trigger is pull_request, never pull_request_target (no pwn-request surface)
 #   - permissions are declared per job and default to read-only
 #   - every third-party action is pinned to a full commit SHA, not a tag
-#   - deterministic tools run in their own job and hand SARIF to the model job; the model job never executes repo code
+#   - deterministic tools run in their own job; the tests + mock review job runs this repository's own code
+#     (pytest, a mock review of the seeded fixture against pre-recorded SARIF) with contents: read only, no
+#     secret and no model endpoint
 #   - no expression from github.event.* is interpolated into a run: step
 #   - no continue-on-error on the L0 tools: a crashed scanner must be red, not green (the 2026-09-12 Actions
 #     inventory found gitleaks-action had crashed with 403 on every PR while the job stayed green)
@@ -13,7 +15,8 @@
 #     which downloaded its own unverified copy; it audits only the real workflows under .github/workflows and
 #     any finding fails the job. The seeded fixture workflow is audited in a separate step whose findings
 #     must match the pre-recorded fixtures/vuln-sample-sarif/zizmor.sarif
-#   - the SARIF of the five scans of this repository (semgrep, osv-scanner, trivy, gitleaks, zizmor) goes to
+#   - the SARIF of the six scans of this repository (semgrep, osv-scanner twice: runtime/build and model-eval
+#     closures, trivy, gitleaks, zizmor) goes to
 #     GitHub Code Scanning from a separate job that runs no repository code and is the only job with
 #     security-events: write; it is skipped for pull requests from forks and from Dependabot (read-only
 #     token). The fixture scans and the mock review report describe seeded material and are never uploaded
@@ -28,7 +31,8 @@
 #   - trivy runs only against a database fetched once by scripts/trivy_db.py (OCI digests, UpdatedAt and the
 #     SHA-256 of trivy.db recorded; refused when stale or tampered) with every network path disabled; the
 #     same flow (export/import a bundle) feeds runners without egress
-#   - live model calls are NOT made in CI by default; the pipeline runs in mock mode unless MARA_LIVE=1 is set by a trusted branch
+#   - live model calls are never made in CI: every review step passes --provider mock and no workflow has a
+#     live switch; a live review runs on a host that reaches the endpoints (docs/model-eval-runbook.md)
 #   - the human-queue job (G-11) is the only job with issues: write (the code-scanning job above has only
 #     security-events: write, and no job has contents: write); it runs on push to
 #     main, never on pull_request, and stays in --dry-run until the repository variable
@@ -42,8 +46,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-# One run per pull request: a newer push cancels the superseded run. Pushes to main queue instead of
-# cancelling, so the human-queue job of an earlier merge is never skipped by a later one.
+# One run per pull request: a newer push cancels the superseded run. Pushes to main do not cancel a running
+# run, but GitHub keeps only one pending run per group: when three merges land while one run is in progress,
+# the middle one's pending run is replaced and its human-queue job does not run (the next run queues the same
+# findings, keyed by file:line:cwe; its commits were scanned by the PR's own gitleaks run).
 concurrency:
   group: mara-review-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
