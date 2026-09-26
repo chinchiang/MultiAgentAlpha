@@ -4,7 +4,7 @@ Reads calib-out/<sample>/report.json produced by `mara review` together with
 calib/samples/<sample>/labels.json and produces docs/calibration-<date>.md with:
 
   - per family, per CWE precision and recall (match = same file and |line diff| <= 3)
-  - per family refusal rate, canary echo rate, unverified-quote rate
+  - per family refusal rate, provider error rate, canary echo rate, unverified-quote rate
   - judge family pairwise agreement (from the pipeline's bias audit) and global alpha
   - Dawid-Skene EM estimate of each judge family's reliability from the votes alone
   - suggested family weights, clamped to [0.2, 2.0], with the sample sizes behind them
@@ -151,6 +151,7 @@ def audit_rates(runs, families):
         rows[fam] = {
             "calls": agg[fam]["reviewer_calls"],
             "refusal_rate": agg[fam]["reviewer_refusals"] / calls,
+            "error_rate": agg[fam]["reviewer_errors"] / calls,  # provider failures, kept out of the refusal rate
             "canary_rate": agg[fam]["canary_echoes"] / calls,
             "unverified_quotes": agg[fam]["findings_with_unverified_quotes"],
             "invalid": agg[fam]["invalid_findings_dropped"],
@@ -282,10 +283,10 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
             L.append(f"| {cwe} | {c['tp']} | {c['fp']} | {c['fn']} | {p:.2f} | {r:.2f} |")
         w = weights[fam]
         L += ["", f"合計：precision {w['precision']:.2f}、recall {w['recall']:.2f}、F1 {w['f1']:.2f}（標籤數 {w['n_labels']}）", ""]
-    L += ["## 2. 拒答率、canary 回應率、無效輸出", "", "| 家族 | 呼叫數 | 拒答率 | canary 回應率 | 未驗證引用 | 無效 finding |", "|---|---:|---:|---:|---:|---:|"]
+    L += ["## 2. 拒答率、canary 回應率、無效輸出", "", "| 家族 | 呼叫數 | 拒答率 | provider 錯誤率 | canary 回應率 | 未驗證引用 | 無效 finding |", "|---|---:|---:|---:|---:|---:|---:|"]
     for fam in families:
         r = rates.get(fam, {})
-        L.append(f"| {fam} | {r.get('calls', 0)} | {r.get('refusal_rate', 0):.2f} | {r.get('canary_rate', 0):.2f} | {r.get('unverified_quotes', 0)} | {r.get('invalid', 0)} |")
+        L.append(f"| {fam} | {r.get('calls', 0)} | {r.get('refusal_rate', 0):.2f} | {r.get('error_rate', 0):.2f} | {r.get('canary_rate', 0):.2f} | {r.get('unverified_quotes', 0)} | {r.get('invalid', 0)} |")
     L += ["", "## 3. judge 家族兩兩一致率與全域 α", "", "| 家族對 | 一致率（樣本平均） | 相關錯誤風險 |", "|---|---:|---|"]
     for k, v in sorted(pair.items()):
         L.append(f"| {k} | {v:.3f} | {'**高（>0.9）**' if v > 0.9 else '可接受'} |")

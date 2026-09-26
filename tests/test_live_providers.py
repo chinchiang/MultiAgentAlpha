@@ -31,9 +31,11 @@ def _spec(**kw) -> ModelSpec:
     return ModelSpec(**d)
 
 
-def _oai(handler) -> OpenAICompatibleProvider:
+def _oai(handler, sleeps: list | None = None) -> OpenAICompatibleProvider:
     spec = _spec()
-    return OpenAICompatibleProvider(spec, client=httpx.Client(base_url=spec.base_url, transport=httpx.MockTransport(handler)))
+    sleeps = [] if sleeps is None else sleeps
+    return OpenAICompatibleProvider(spec, client=httpx.Client(base_url=spec.base_url, transport=httpx.MockTransport(handler)),
+                                    sleep=sleeps.append)  # never really sleeps; the delays are asserted instead
 
 
 def _chat(content, finish_reason="stop", usage=None):
@@ -99,6 +101,60 @@ def test_openai_compatible_error_shaped_2xx_bodies_raise_instead_of_keyerror(pay
     resp = httpx.Response(200, json=payload) if not isinstance(payload, str) else httpx.Response(200, text=payload)
     with pytest.raises(RuntimeError, match=r"^provider_malformed_payload$"):
         _call(_oai(lambda req: resp))
+
+
+def _sequence(*steps):
+    """A handler that plays `steps` in order (a Response, or an exception to raise) and counts calls."""
+    calls = []
+
+    def handler(req):
+        step = steps[min(len(calls), len(steps) - 1)]
+        calls.append(req)
+        if isinstance(step, Exception):
+            raise step
+        return step
+    return handler, calls
+
+
+@pytest.mark.parametrize("first", [httpx.Response(429, text="slow down"), httpx.Response(503, text="loading"), httpx.Response(529),
+                                   httpx.ReadTimeout("600s"), httpx.ConnectError("refused")])
+def test_openai_compatible_retries_a_transient_failure_then_succeeds(first):
+    handler, calls = _sequence(first, _chat(json.dumps(GOOD)))
+    sleeps = []
+    c = _call(_oai(handler, sleeps))
+    assert c.data == GOOD and not c.error and len(calls) == 2
+    assert len(sleeps) == 1 and 2.0 <= sleeps[0] < 3.0, "first backoff: 2 s plus up to 1 s of jitter"
+
+
+def test_openai_compatible_gives_up_after_three_attempts_with_growing_backoff():
+    handler, calls = _sequence(httpx.Response(503, text="still loading"))
+    sleeps = []
+    with pytest.raises(RuntimeError, match=r"^provider_http_error:503$"):
+        _call(_oai(handler, sleeps))
+    assert len(calls) == 3 and len(sleeps) == 2 and 2.0 <= sleeps[0] < 3.0 and 4.0 <= sleeps[1] < 5.0
+    handler, calls = _sequence(httpx.ReadTimeout("600s"))
+    with pytest.raises(RuntimeError, match=r"^provider_connection_failed$"):
+        _call(_oai(handler))
+    assert len(calls) == 3
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422, 501])
+def test_openai_compatible_does_not_retry_a_request_or_configuration_error(status):
+    handler, calls = _sequence(httpx.Response(status, text="no"))
+    sleeps = []
+    with pytest.raises(RuntimeError, match=rf"^provider_http_error:{status}$"):
+        _call(_oai(handler, sleeps))
+    assert len(calls) == 1 and sleeps == []
+
+
+@pytest.mark.parametrize("header,expected", [("7", 7.0), ("0", 0.0), ("999", 30.0), ("-5", 0.0)])
+def test_openai_compatible_honours_retry_after_seconds_capped(header, expected):
+    handler, _ = _sequence(httpx.Response(429, headers={"retry-after": header}), _chat(json.dumps(GOOD)))
+    sleeps = []
+    assert _call(_oai(handler, sleeps)).data == GOOD and sleeps == [expected]
+    handler, _ = _sequence(httpx.Response(429, headers={"retry-after": "Wed, 21 Oct 2026 07:28:00 GMT"}), _chat(json.dumps(GOOD)))
+    sleeps = []
+    assert _call(_oai(handler, sleeps)).data == GOOD and 2.0 <= sleeps[0] < 3.0, "an HTTP date falls back to the backoff"
 
 
 def test_openai_compatible_requires_base_url_and_reads_key_from_env(monkeypatch):
@@ -194,3 +250,26 @@ def test_agent_layer_treats_truncation_as_empty_but_reviewer_audit_tells_it_apar
     _, a1 = review_dimension(trunc, ctx, "xss", canary)
     _, a2 = review_dimension(refused, ctx, "xss", canary)
     assert (a1["truncated"], a1["refused"]) == (True, False) and (a2["truncated"], a2["refused"]) == (False, True)
+
+
+class _Raises(OpenAICompatibleProvider):
+    def __init__(self, exc):
+        self.spec, self.exc = _spec(), exc
+
+    def complete(self, **kwargs):
+        raise self.exc
+
+
+@pytest.mark.parametrize("exc,code", [(RuntimeError("provider_http_error:429"), "provider_http_error:429"),
+                                      (RuntimeError("provider_connection_failed"), "provider_connection_failed"),
+                                      (RuntimeError("provider_http_error:429 body=secret-token"), "provider_call_failed"),
+                                      (ValueError("sk-live-123 leaked in a message"), "provider_call_failed")])
+def test_agent_layer_records_provider_failures_as_errors_not_refusals(exc, code):
+    from mara.agents.reviewer import review_dimension
+    from mara.context.repo_map import RepoContext
+
+    comp = agent_base.call(_Raises(exc), system_extra="", user="u", schema=SCHEMA, role="reviewer:xss")
+    assert comp.error == code and not comp.refused and not comp.truncated and comp.data is None and comp.raw_text == ""
+    assert agent_base.parse_items(comp, dict) == ([], [code])
+    _, audit = review_dimension(_Raises(exc), RepoContext(root=Path(".")), "xss", agent_base.Canary())
+    assert (audit["errored"], audit["refused"], audit["truncated"]) == (True, False, False)

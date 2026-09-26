@@ -17,6 +17,7 @@ class Completion:
     output_tokens: int = 0
     refused: bool = False
     truncated: bool = False  # output hit max_tokens (or was not valid JSON): not a refusal, data is None
+    error: str = ""  # sanitised provider failure code (provider_http_error:429, ...): no model answer, not a refusal
 
 
 class Provider(abc.ABC):

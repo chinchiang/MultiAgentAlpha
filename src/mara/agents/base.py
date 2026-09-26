@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 from importlib import resources
 from pathlib import Path
@@ -17,6 +18,7 @@ def load_prompt(name: str) -> str:
 
 
 COMMON_SYSTEM = load_prompt("_common_system")
+PROVIDER_ERROR_RE = re.compile(r"provider_[a-z_]+(?::\d{3})?")  # the codes the providers raise, nothing else
 
 
 class Canary:
@@ -67,13 +69,18 @@ def call(provider: Provider, *, system_extra: str, user: str, schema: dict, role
     system = COMMON_SYSTEM + "\n\n" + system_extra
     try:
         return provider.complete(system=system, user=user, schema=schema, role=role)
-    except Exception:
-        # Neither exception messages nor remote response bodies belong in prompts/reports.
-        return Completion(data=None, raw_text="provider_call_failed", refused=True)
+    except Exception as e:
+        # Neither exception messages nor remote response bodies belong in prompts/reports: only the
+        # providers' own sanitised codes pass through. A failed call is an error, not a refusal, so the
+        # bias audit does not charge a rate limit or an outage to the model.
+        code = str(e) if isinstance(e, RuntimeError) and PROVIDER_ERROR_RE.fullmatch(str(e)) else "provider_call_failed"
+        return Completion(data=None, raw_text="", error=code)
 
 
 def parse_items(comp: Completion, model_cls, key: str = "items") -> tuple[list, list[str]]:
     """Validate a list of dicts against a pydantic model; return (valid, errors)."""
+    if comp.error:
+        return [], [comp.error]
     if comp.refused or comp.data is None:
         return [], ["refused_or_empty"]
     if not isinstance(comp.data, dict) or not isinstance(comp.data.get(key), list):

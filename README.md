@@ -115,11 +115,18 @@ zero-data-retention agreement, DeepSeek weights self-hosted on vLLM, Nemotron on
 DeepSeek vendor API is never used for source code. See the report, Part VIII, for the site-by-site
 deployment pattern and the separate handling of 上海／重慶.
 
+A failed provider call is recorded as a provider error (`reviewer_errors`, per family), not as a
+refusal, so a rate limit or an outage is never charged to the model in the bias audit or the
+calibration refusal rate; like refusals and truncations it makes the review incomplete and the gate
+fails. The OpenAI-compatible provider retries timeouts, transport errors and 408/429/500/502/503/504/529
+up to three calls in total, with exponential backoff and jitter or the server's `Retry-After`
+(at most 30 s); other statuses fail at once. The Anthropic SDK retries on its own.
+
 ## Calibration (Appendix E, prompt 4)
 
 `calib/samples/` holds five labelled vibe-coded samples (51 labels). The loop runs offline with
 label-driven mock families and produces `docs/calibration-<date>.md` with per-family, per-CWE
-precision and recall, refusal and canary rates, judge-family agreement, a Dawid-Skene reliability
+precision and recall, refusal, provider-error and canary rates, judge-family agreement, a Dawid-Skene reliability
 estimate and suggested weights (never written to the config automatically):
 
 ```bash
