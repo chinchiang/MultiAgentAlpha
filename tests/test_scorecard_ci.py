@@ -69,7 +69,8 @@ sys.exit(0)
         if crash:
             lines.append("echo 'boom' >&2; exit 1")
         else:
-            lines += ["for a in \"$@\"; do case \"$a\" in --output=*) out=\"${a#--output=}\";; esac; done",
+            lines += ["for a in \"$@\"; do case \"$a\" in --output=*) out=\"${a#--output=}\";; "
+                      "--local=*) (cd \"${a#--local=}\" && find . -type f | sort) > \"$(dirname \"$0\")/../tree.txt\";; esac; done",
                       "cp \"$(dirname \"$0\")/../canned.json\" \"$out\""]
         exe.write_text("\n".join(lines) + "\n", encoding="utf-8")
         exe.chmod(0o755)
@@ -180,3 +181,36 @@ def test_cli_refuses_missing_token_bad_repo_wrong_version_and_crash(tmp_path):
     _fake_scorecard(tools, sc.locked_version(), None, crash=True)
     r = _run(tools, "--repo", "github.com/o/r", "--json", str(tmp_path / "none.json"), "--policy", str(pol))
     assert r.returncode == 1 and "wrote no" in r.stderr
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the fake scorecard lists the exported tree with sh/find")
+def test_local_mode_scans_only_the_committed_tree_without_a_token(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / "README.md").write_text("# r\n", encoding="utf-8")
+    (repo / ".gitignore").write_text(".venv/\n", encoding="utf-8")
+    subprocess.run([*git, "add", "."], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "init"], check=True)
+    (repo / "untracked.bin").write_bytes(b"\x7fELF")          # neither of these may reach scorecard
+    (repo / ".venv").mkdir()
+    (repo / ".venv" / "python").write_bytes(b"\x7fELF")
+    tools = tmp_path / "tools"
+    _fake_scorecard(tools, sc.locked_version(), DOC)
+    pol = _policy(tmp_path, "enforce: {Token-Permissions: 10, Binary-Artifacts: 10}\n")
+    r = _run(tools, "--local", str(repo), "--json", str(tmp_path / "s.json"), "--sarif", str(tmp_path / "s.sarif"), "--policy", str(pol), token=None)
+    assert r.returncode == 0, r.stdout + r.stderr
+    argv = (tools / "argv.txt").read_text().split()
+    assert argv[0].startswith("--local=") and not argv[0].endswith(str(repo)) and argv[1:3] == ["--format=json", "--show-details"]
+    assert not any(x.startswith(("--repo", "--commit")) for x in argv)
+    assert (tools / "tree.txt").read_text().split() == ["./.gitignore", "./README.md"]
+    assert "local mode: committed tree of" in r.stdout and "--local runs only the file-based checks" in r.stdout
+    # the policy still gates, and a revision that does not exist is a usage error, not an empty scan
+    pol = _policy(tmp_path, "enforce: {License: 10}\n")
+    r = _run(tools, "--local", str(repo), "--json", str(tmp_path / "s.json"), "--sarif", str(tmp_path / "s.sarif"), "--policy", str(pol), token=None)
+    assert r.returncode == 2 and "License: 0 < 10" in r.stdout
+    r = _run(tools, "--local", str(repo), "--commit", "nope", "--policy", str(pol), token=None)
+    assert r.returncode == 2 and "git archive" in r.stderr
+    r = _run(tools, "--local", str(repo), "--repo", "github.com/o/r", "--policy", str(pol))
+    assert r.returncode == 2 and "not allowed with" in r.stderr

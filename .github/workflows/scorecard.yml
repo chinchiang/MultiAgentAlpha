@@ -7,6 +7,10 @@
 # mara-review.yml: push/schedule/dispatch only, permissions: {} at the top, read-only job token plus
 # security-events: write, every action pinned to a commit SHA, persist-credentials: false, no
 # github.event.* interpolated into a run: line.
+# While the repository is private the API job is skipped and the scorecard-local job below runs instead:
+# the same locked CLI with --local on the committed tree (no token, no GitHub API), enforcing the same
+# policy on the checks that are file-based (all six enforced ones are), with the JSON and SARIF kept as a
+# workflow artifact only.
 name: scorecard
 on:
   push:
@@ -26,7 +30,8 @@ jobs:
     # Skipped while the repository is private: the read-only GITHUB_TOKEN cannot run scorecard's GraphQL
     # queries on a private repository ("ListCommits: ... Resource not accessible by integration", runs of
     # 2026-09-21 and 2026-09-22), and Code Scanning there needs GitHub Advanced Security. Making the
-    # repository public again re-enables the job and the policy in tools/scorecard-policy.yaml unchanged.
+    # repository public again re-enables the job and the policy in tools/scorecard-policy.yaml unchanged;
+    # until then scorecard-local enforces the policy's file-based checks.
     if: ${{ !github.event.repository.private }}
     permissions:
       contents: read
@@ -66,3 +71,40 @@ jobs:
           sarif_file: scorecard.sarif
           category: scorecard
           wait-for-processing: true
+
+  scorecard-local:
+    name: OpenSSF Scorecard (locked CLI, local mode while private)
+    runs-on: ubuntu-latest
+    # The complement of the job above: while private, scorecard --local needs neither a token nor the GitHub
+    # API, so the enforced checks (Dangerous-Workflow, Token-Permissions, Binary-Artifacts, Pinned-
+    # Dependencies, Security-Policy, Dependency-Update-Tool) keep failing the run on a regression. Checks
+    # that need the API (Branch-Protection, Code-Review, Maintained, ...) are not run in this mode. No
+    # security-events permission and no Code Scanning upload (it needs Advanced Security on a private
+    # repository); the artifact keeps the SARIF.
+    if: ${{ github.event.repository.private }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Install the locked scorecard (SLSA provenance verified with the locked slsa-verifier)
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
+          python3 scripts/install_tools.py --only slsa-verifier scorecard
+          cat .mara-tools/manifest.json
+      - name: Scorecard --local on the committed tree; an enforced check below tools/scorecard-policy.yaml fails the job
+        # scorecard_ci.py exports HEAD with git archive first, so .mara-tools/bin (installed above, inside the
+        # workspace) is not scanned as a checked-in binary.
+        run: python3 scripts/scorecard_ci.py --local . --json scorecard.json --sarif scorecard.sarif --policy tools/scorecard-policy.yaml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: scorecard-local
+          path: |
+            scorecard.json
+            scorecard.sarif
+          if-no-files-found: ignore

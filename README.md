@@ -268,7 +268,12 @@ requests from forks or Dependabot (read-only token). While the repository is pri
 skipped and the six SARIF files are still available in the `l0-sarif` artifact of every run. The
 whole Scorecard job is gated the same way: the read-only token cannot run scorecard's GraphQL queries
 on a private repository (the runs of 2026-09-21 and 2026-09-22 failed with "Resource not accessible by
-integration"), so the job is skipped until the repository is public again. The fixture scans and the mock review report
+integration"), so the job is skipped until the repository is public again. In its place the
+`scorecard-local` job of the same workflow runs the same locked CLI with `scorecard_ci.py --local .`:
+the committed tree (exported with `git archive`, so the tools installed into the workspace are not
+scanned) is analysed offline without a token, and the six enforced checks, which are all file-based,
+still fail the run below their minimums; the API-only checks (Branch-Protection, Code-Review,
+Maintained, ...) are not run in that mode and the SARIF stays in the `scorecard-local` artifact. The fixture scans and the mock review report
 are never uploaded: they describe seeded material.
 
 `.github/workflows/scorecard.yml` runs OpenSSF Scorecard on pushes to `main` and weekly with the
