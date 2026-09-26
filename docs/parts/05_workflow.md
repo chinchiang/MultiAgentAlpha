@@ -4,7 +4,7 @@
 
 ### 14.1 PR 觸發：增量審查
 
-這是最常用的模式。開發者開 PR 後，GitHub Actions 以 `pull_request` 事件（絕不用 `pull_request_target`）啟動兩個 job。Job A 在只讀的 checkout 上執行 L0 工具並上傳 SARIF 為 artifact；Job B 讀取 artifact、以 L1 建構情境、呼叫 L2 到 L4，最後由 L5 產出 SARIF 上傳到 code scanning、Markdown 貼為 PR 評論、人工佇列寫入 issue 或看板。整個過程不執行 PR 中的任何程式碼。雛型附的 workflow 就是這個模式的骨架，其中所有第三方 action 都固定到完整 SHA、每個 job 的 permissions 都明示為只讀、模型呼叫預設為 mock 模式，只有受信任分支設定 `MARA_LIVE=1` 時才呼叫真實模型。
+這是最常用的模式。開發者開 PR 後，GitHub Actions 以 `pull_request` 事件（絕不用 `pull_request_target`）啟動兩個 job。Job A 在只讀的 checkout 上執行 L0 工具並上傳 SARIF 為 artifact；Job B 讀取 artifact、以 L1 建構情境、呼叫 L2 到 L4，最後由 L5 產出 SARIF 上傳到 code scanning、Markdown 貼為 PR 評論、人工佇列寫入 issue 或看板。呼叫模型的 job 不執行 PR 中的任何程式碼。雛型附的 workflow（`.github/workflows/mara-review.yml`）只實作了這個模式的一部分：所有第三方 action 都固定到完整 SHA、每個 job 的 permissions 都明示為最小權限、L0 工具在獨立 job 執行；但它不呼叫真實模型，也不貼 PR 評論，第二個 job 以只讀 token、無 secret 的方式執行本 repo 自己的測試，並對內建漏洞範例以 mock 家族與預錄 SARIF 跑一次審查，用來驗證 pipeline 本身。真實模型的審查在能連到各家族端點的主機上執行（`docs/model-eval-runbook.md`），CI 中沒有切換成 live 模式的開關。
 
 增量審查的範圍是「變更的檔案加上 L1 判定與其相關的檔案」，而非只有 diff。原因是 vibe-coded 程式碼的缺陷常在跨檔案的關係中：一個新加的路由本身沒問題，問題在它呼叫的既有函式從未做授權檢查。L1 的入口點與呼叫關係讓 L2 能把相關檔案納入 bundle；bundle 有大小上限（雛型為 40 萬字元），超過時以變更檔案優先。
 

@@ -57,7 +57,7 @@
 45. **Dawid & Skene 1979 的 DOI 與頁碼**依記憶未驗。暫採：已證實但註明。
 46. **多篇 2026 年 arXiv 偏誤論文**（B4、B5、B6、B29、B32、B33、B36）僅題名。暫採：未引用。
 47. **Anthropic Opus 5 系統卡的 cyber 評估內容**未讀。暫採：尚未證實。
-48. **Krippendorff's α 在本雛型的「單一 finding」層級是簡化的 modal-share 代理指標**（見 `pipeline._per_finding_alpha`），不是嚴格的 α；全域 α 才是嚴格計算。暫採：正文第 11.2 節與程式碼註解已標示。
+48. **Krippendorff's α 在本雛型的「單一 finding」層級是簡化的 modal-share 代理指標**（見 `pipeline._agreement_proxy`，2026-09-18 起報告欄位改名為 `agreement_proxy`），不是嚴格的 α；全域 α 才是嚴格計算。暫採：正文第 11.2 節與程式碼註解已標示。
 
 ## B-4 標準與事件（C 組）
 
@@ -89,4 +89,4 @@
 71. **真實模型的精確率與召回率**：雛型只在 mock 家族上驗證行為。關閉方式：以真實三家族在 seeded benchmark 上跑第一次校準（附錄E prompt 4）。
 72. **bias sensitivity 測試**（第 13 章第 16 項）未實作。
 73. **三家族設定的獨立 judge 不足**是固有性質而非缺口，但四家族的效果未驗證。
-74. **L0 工具版本未固定**：雛型「有就跑」。關閉方式：附錄E prompt 7。
+74. **L0 工具版本未固定**：雛型「有就跑」。關閉方式：附錄E prompt 7。已於 2026-09-26 關閉：自 2026-09-12（a9867dc）起 `tools/versions.lock` 以版本、下載 URL 與 SHA-256 固定全部 L0 工具並指定發行者驗證方式，`scripts/install_tools.py` 驗證後裝入 `.mara-tools/bin`，`mara/tools/runner.py` 只從該目錄執行、不查 PATH；CI 每次重新安裝並驗證，治理檢查 G-5 通過（`docs/governance-check-2026-09-26.md`）。

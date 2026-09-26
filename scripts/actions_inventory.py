@@ -410,7 +410,7 @@ def render(invs: list[WorkflowInventory], latest: dict[str, str | None], *, root
           "- `run:` 內插：列出所有 `${{ github.event.* }}`、`github.head_ref`、`github.ref`；其中符合 GitHub Security Lab「不可信輸入」清單（PR 標題／內文／head ref／head label、issue 標題／內文、comment/review 內文、commit message 與作者、`github.head_ref`）者標為攻擊者可控。",
           "- 非 SHA 引用以 `git ls-remote https://github.com/<owner>/<repo>` 解析目前 tag（優先取 peeled `^{}`）或分支的完整 SHA" + ("（本次 `--offline`，未解析）。" if offline else "。"),
           "- SHA 引用若附 `# vX.Y.Z` 註解，一併驗證該 tag 目前是否仍指向這個 SHA。",
-          f"- zizmor：{'已執行（`--offline`，線上稽核如 impostor-commit 與 known-vulnerable-actions 未跑；與 CI 中 zizmor-action 未帶 token 時的行為一致）' if zizmor_present else '未執行：zizmor 不在 PATH'}。actionlint、poutine：未執行（不在 PATH）。",
+          f"- zizmor：{'已執行（`--offline`，線上稽核如 impostor-commit 與 known-vulnerable-actions 未跑；CI 的 `scripts/zizmor_ci.py` 以 workflow token 另跑線上稽核）' if zizmor_present else '未執行：zizmor 不在 PATH'}。actionlint、poutine：未執行（不在 PATH）。",
           "", "**判定準則（報告第 10.7 節）。** pwn request（`pull_request_target` 加 checkout PR head）為 Critical 且 reachable；攻擊者可控 context 內插到 `run:`（標題注入等）同為 Critical；以 tag 或分支引用第三方 action 為 High 但 conditional；`write-all` 為 High；缺 `permissions:`、cache key 含不可信 ref、self-hosted runner 為 Medium；未設 `persist-credentials: false` 為 Low。workflow 的嚴重度取其最高項。", "",
           "## 1. 總表（Critical 在最上方）", "",
           "| 嚴重度 | workflow | 用途 | 觸發 | PRT | checkout PR head | 頂層 permissions | job permissions | uses（sha/tag/branch） | run 內插（可控） | cache key 含 ref | 合法 YAML |",

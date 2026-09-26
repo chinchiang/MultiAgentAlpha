@@ -150,7 +150,8 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 
 ## Gap assessment (Appendix E, prompt 3)
 
-`docs/assessment-2026-09-12.md` scores this repository's review process against the 60-question
+`docs/assessment-2026-09-12.md` (134/240) and its re-run `docs/assessment-2026-09-26.md` (152/240, L0 up
+from 13 to 23 now that the scanners run blocking from the lock) score this repository's review process against the 60-question
 questionnaire in `docs/appendix-d-maturity.md`, with a file-level evidence cell on every row,
 per-layer totals, the two lowest questions per layer mapped to governance items G-1 to G-13, and a
 separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <file>` checks the
@@ -166,7 +167,8 @@ interpolation of attacker-controlled contexts, cache keys built from untrusted r
 per report section 10.7 (Critical rows first), suggested full SHAs for every non-SHA reference
 (via `git ls-remote`; `--offline` to skip), a check that each SHA pin still matches its tag
 comment, and zizmor's SARIF when zizmor is on the PATH. Files that are not valid YAML are still
-inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run;
+inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run
+(`docs/actions-inventory-2026-09-26.md` is the current one: four real workflows, all rated None);
 its section 6 adds what the CI logs showed that the static inventory cannot, and the fixes that
 followed: CI now runs zizmor strictly on the real workflows, checks that zizmor's findings on the
 seeded fixture match `fixtures/vuln-sample-sarif/zizmor.sarif` (now produced by zizmor itself), and
@@ -229,8 +231,8 @@ differs from the lock:
 semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories
 (never `--config auto`), so nothing is sent to semgrep.dev; osv-scanner runs `scan source
 --no-resolve`, so only package names and versions go to api.osv.dev and nothing to deps.dev. All
-SARIF files land in the `l0-sarif` artifact, and the five scans of the repository itself are also
-uploaded to GitHub Code Scanning (see below). `mara review` uses the same pinned rulesets by default
+SARIF files land in the `l0-sarif` artifact, and the six scans of the repository itself (five tools; osv-scanner
+once more for the model-evaluation closure) are also uploaded to GitHub Code Scanning (see below). `mara review` uses the same pinned rulesets by default
 (`MARA_SEMGREP_CONFIG` overrides). zizmor on the real workflows runs the same way since 2026-09-14:
 `scripts/zizmor_ci.py` executes the locked zizmor (online audits with the workflow token), keeps the
 SARIF and fails on any finding; zizmor-action is gone.
@@ -263,7 +265,7 @@ filtered, paths are repository-relative, and each tool has a category), and the 
 `github/codeql-action/upload-sarif` only while `github.event.repository.private` is false. It is the
 only job with `security-events: write`, it runs no repository code, and it is also skipped for pull
 requests from forks or Dependabot (read-only token). While the repository is private the job shows as
-skipped and the five SARIF files are still available in the `l0-sarif` artifact of every run. The
+skipped and the six SARIF files are still available in the `l0-sarif` artifact of every run. The
 whole Scorecard job is gated the same way: the read-only token cannot run scorecard's GraphQL queries
 on a private repository (the runs of 2026-09-21 and 2026-09-22 failed with "Resource not accessible by
 integration"), so the job is skipped until the repository is public again. The fixture scans and the mock review report
@@ -293,8 +295,7 @@ governance items G-1 to G-13 into checks against this repository and `config/mar
 is PASS, FAIL or MANUAL (undecidable from files, with the evidence a human must produce), carries
 the evidence it looked at and the standard clauses from the report's section 25.4, and any FAIL
 makes the script exit non-zero. `.github/workflows/governance.yml` runs it every Monday and posts
-the table to a `governance-check` tracking issue. `docs/governance-check-2026-09-12.md` is the
-first run: G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
+the table to a `governance-check` tracking issue. The first run (2026-09-12) had G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
 calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) failed
 on that first run; G-1, G-4 and G-10 needed human evidence. Since then every item has a mechanism
 and is machine-decidable: G-11 passes; G-12 requires a successful endpoint handshake and no overdue confirmed stage;
@@ -303,7 +304,10 @@ person per role holds a valid training record (`docs/ai-literacy-training.md`); 
 once the policy is approved, live swap drills are recorded and the rollout has started
 (`docs/governance-templates.md`); G-8 and G-9 once the quarterly red-team evaluation and live
 calibration have run on a host with the endpoints (`docs/model-eval-runbook.md`). Nothing is
-marked passed before the fact.
+marked passed before the fact. `docs/governance-check-2026-09-12.md` was regenerated in place as those
+mechanisms landed (last on 2026-09-17), so it shows the later state rather than the first run;
+`docs/governance-check-2026-09-26.md` is the current record: G-2, G-3, G-5, G-6 and G-11 pass, the
+other eight fail for the reasons above, none is MANUAL.
 
 ## PSIRT hand-off (governance item G-12)
 
