@@ -11,6 +11,11 @@
 # reporting; .github/dependabot.yml). Everything else is reported first; tighten a check here once its
 # real score on main is known, and treat a drop below the minimum as a workflow regression to fix, not
 # as a reason to lower the minimum.
+#
+# While the repository is private (since 2026-09-21) the scorecard-local job enforces this same policy with
+# `scorecard --local` on the committed tree; every enforced check below is file-based, so all six still gate.
+# Keep it that way while private, or the new check is enforced by nothing (local mode reports it absent and
+# fails; do not work around that by dropping the check).
 enforce:
   Dangerous-Workflow: 10      # no pull_request_target with untrusted checkout, no script injection
   Token-Permissions: 10       # top-level permissions: {} and read-only per job (except issues/security-events where documented)

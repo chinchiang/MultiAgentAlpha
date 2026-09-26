@@ -2,6 +2,15 @@
 
   GITHUB_AUTH_TOKEN=... python3 scripts/scorecard_ci.py --repo github.com/<owner>/<repo> [--commit <sha>] \\
       --json scorecard.json --sarif scorecard.sarif --policy tools/scorecard-policy.yaml
+  python3 scripts/scorecard_ci.py --local . [--commit <rev>] --json scorecard.json --sarif scorecard.sarif
+
+--local runs `scorecard --local` on the committed tree of a checkout, which needs no token and no GitHub
+API: the file-based checks only (Binary-Artifacts, Dangerous-Workflow, Dependency-Update-Tool, Pinned-
+Dependencies, Security-Policy, Token-Permissions, License, SAST, Fuzzing, Packaging, Vulnerabilities in
+5.5.0), which is what the workflow uses while the repository is private. The tree is exported with
+`git archive <rev>` into a temporary directory first, because scorecard --local reads every file under the
+directory, including untracked and ignored ones (.venv, .mara-tools/bin would count as binaries or fail
+to open), and the committed tree is what the check is about.
 
 The binary comes only from MARA_TOOLS_DIR/bin (scripts/install_tools.py: SHA-256 and SLSA provenance
 verified), never from PATH, and its manifest version must equal the lock. The scorecard CLI has no SARIF
@@ -26,6 +35,8 @@ import os
 import re
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -141,10 +152,25 @@ def to_sarif(doc: dict, rows: list[dict], root: Path | None) -> dict:
                       "properties": {"score": doc.get("score"), "repo": doc.get("repo"), "date": doc.get("date")}}]}
 
 
+def export_tree(checkout: Path, rev: str, dest: Path) -> str:
+    """The tracked files of `rev` in `checkout` extracted into dest; returns the full commit SHA."""
+    sha = subprocess.run(["git", "-C", str(checkout), "rev-parse", "--verify", f"{rev}^{{commit}}"],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    tar = dest.parent / "tree.tar"
+    with tar.open("wb") as out:
+        subprocess.run(["git", "-C", str(checkout), "archive", "--format=tar", sha], stdout=out, check=True)
+    with tarfile.open(tar) as t:
+        t.extractall(dest, filter="data")
+    tar.unlink()
+    return sha
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--repo", required=True, help="github.com/<owner>/<repo>")
-    ap.add_argument("--commit", default="HEAD", help="commit to analyse; anything but HEAD restricts scorecard to commit-capable checks")
+    target = ap.add_mutually_exclusive_group(required=True)
+    target.add_argument("--repo", help="github.com/<owner>/<repo>, analysed through the GitHub API (token required)")
+    target.add_argument("--local", type=Path, help="git checkout whose committed tree is analysed offline (file-based checks only, no token)")
+    ap.add_argument("--commit", default="HEAD", help="commit to analyse; with --repo anything but HEAD restricts scorecard to commit-capable checks; with --local the revision exported")
     ap.add_argument("--json", type=Path, default=Path("scorecard.json"))
     ap.add_argument("--sarif", type=Path, default=Path("scorecard.sarif"))
     ap.add_argument("--policy", type=Path, default=ROOT / "tools" / "scorecard-policy.yaml")
@@ -160,7 +186,7 @@ def main() -> int:
     if not want or have != want:
         print(f"ERROR: installed scorecard {have!r} does not match tools/versions.lock {want!r}; re-run scripts/install_tools.py", file=sys.stderr)
         return 2
-    if not os.environ.get(TOKEN_ENV):
+    if a.repo and not os.environ.get(TOKEN_ENV):
         print(f"ERROR: {TOKEN_ENV} is not set; scorecard --repo needs a GitHub token (the workflow token is enough for a public repository)", file=sys.stderr)
         return 2
     try:
@@ -168,18 +194,29 @@ def main() -> int:
     except (OSError, ValueError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
-    if not re.fullmatch(r"github\.com/[\w.-]+/[\w.-]+", a.repo):
+    if a.repo and not re.fullmatch(r"github\.com/[\w.-]+/[\w.-]+", a.repo):
         print(f"ERROR: --repo must look like github.com/<owner>/<repo>, got {a.repo!r}", file=sys.stderr)
         return 2
     print(f"scorecard {have} from {exe} (lock {want}); policy enforces {policy or 'nothing'}")
 
-    argv = [str(exe), f"--repo={a.repo}", "--format=json", "--show-details", f"--output={a.json}"]
-    if a.commit.upper() != "HEAD":
-        argv.insert(2, f"--commit={a.commit}")
-    if a.checks:
-        argv.append(f"--checks={a.checks}")
-    print("+ " + " ".join(argv))
-    r = subprocess.run(argv, capture_output=True, text=True)
+    with tempfile.TemporaryDirectory(prefix="scorecard-") as tmp:
+        if a.local:
+            tree = Path(tmp) / "tree"
+            try:
+                sha = export_tree(a.local, a.commit, tree)
+            except (OSError, subprocess.CalledProcessError, tarfile.TarError) as e:
+                print(f"ERROR: could not export {a.commit!r} from {a.local} with git archive: {e}", file=sys.stderr)
+                return 2
+            print(f"local mode: committed tree of {sha} from {a.local} exported to {tree} (file-based checks only)")
+            argv = [str(exe), f"--local={tree}", "--format=json", "--show-details", f"--output={a.json}"]
+        else:
+            argv = [str(exe), f"--repo={a.repo}", "--format=json", "--show-details", f"--output={a.json}"]
+            if a.commit.upper() != "HEAD":
+                argv.insert(2, f"--commit={a.commit}")
+        if a.checks:
+            argv.append(f"--checks={a.checks}")
+        print("+ " + " ".join(argv))
+        r = subprocess.run(argv, capture_output=True, text=True)
     for line in (r.stdout + r.stderr).strip().splitlines()[-8:]:
         print("  " + line)
     if not a.json.is_file():
@@ -193,7 +230,8 @@ def main() -> int:
     if r.returncode != 0:
         print(f"note: scorecard exited {r.returncode}; its JSON is used, checks it could not run are -1")
     rows, failures = evaluate(doc, policy)
-    root = a.source if (a.source / "README.md").is_file() else None
+    source = a.local if a.local else a.source
+    root = source if (source / "README.md").is_file() else None
     sarif = to_sarif(doc, rows, root)
     a.sarif.parent.mkdir(parents=True, exist_ok=True)
     a.sarif.write_text(json.dumps(sarif, indent=1, sort_keys=True) + "\n", encoding="utf-8")
@@ -205,7 +243,8 @@ def main() -> int:
         print(f"  {row['name']:<24} {row['score']:>3}{mn:<16} {row['status']}  {row['reason'][:80]}")
     missing = sorted(KNOWN_CHECKS - {row["name"] for row in rows})
     if missing:
-        print(f"not run by scorecard: {', '.join(missing)} (a --commit other than HEAD skips checks without commit-level support)")
+        why = "--local runs only the file-based checks" if a.local else "a --commit other than HEAD skips checks without commit-level support"
+        print(f"not run by scorecard: {', '.join(missing)} ({why})")
     print(f"SARIF: {len(sarif['runs'][0]['results'])} result(s) in {a.sarif} (category scorecard)")
     if failures:
         print(f"POLICY: {len(failures)} enforced check(s) not met:")
