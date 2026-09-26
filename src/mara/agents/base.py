@@ -53,16 +53,30 @@ def untrusted_block(ctx: RepoContext, canary: Canary | None, paths: list[str] | 
     )
 
 
+MIN_QUOTE_CHARS = 8  # non-whitespace characters a quote needs, unless it is the whole claimed line
+
+
 def verify_quote(ctx: RepoContext, file: str, line: int, quote: str) -> bool:
-    """Quote must appear verbatim in the file, within +-3 lines of the claimed line."""
+    """Quote must appear verbatim in the file, within +-3 lines of the claimed line, and pin something.
+
+    A quote such as "}", "==" or "if " occurs almost anywhere, so it proves nothing about the claim: a
+    quote needs a letter or digit and at least MIN_QUOTE_CHARS non-whitespace characters, unless it is
+    exactly the claimed line (whitespace-normalised), which keeps short real lines such as "flask" in a
+    requirements file or "DEBUG = True" verifiable.
+    """
     if not quote.strip() or file not in ctx.content or ".." in Path(file).parts or Path(file).is_absolute():
         return False
     lines = ctx.content[file].splitlines()
     if not 1 <= line <= len(lines):
         return False
+    norm = " ".join(quote.split())
+    if not any(ch.isalnum() for ch in norm):
+        return False
+    if len(norm.replace(" ", "")) < MIN_QUOTE_CHARS and norm != " ".join(lines[line - 1].split()):
+        return False
     lo, hi = max(0, line - 4), min(len(lines), line + 3)
     window = "\n".join(lines[lo:hi])
-    return " ".join(quote.split()) in " ".join(window.split())
+    return norm in " ".join(window.split())
 
 
 def call(provider: Provider, *, system_extra: str, user: str, schema: dict, role: str) -> Completion:
