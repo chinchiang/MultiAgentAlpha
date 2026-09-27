@@ -5,6 +5,7 @@
 
 | 日期 | 版本 | 變更摘要 | 變更者 | 查證狀態 |
 |---|---|---|---|---|
+| 2026-09-27 | v0.3.4 | 新增 `.github/CODEOWNERS`：workflow、`tools/`（鎖定工具與 triage／suppression／policy 檔）、`scripts/*_ci.py` 與安裝腳本、`config/`、policy 與設定程式、`SECURITY.md`；`tests/test_codeowners.py` 確認這些檔案有特定規則覆蓋、沒有失效的 pattern。main 仍不要求 code owner 核准（F09 單人維護）。關閉 `docs/actions-inventory-2026-09-26.md` 6.5 的檔案部分。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |
 | 2026-09-27 | v0.3.3 | 程式：provenance 引文除了在宣稱行 ±3 行內逐字存在，還必須能定位：至少 8 個非空白字元且含英數字，或正好是宣稱的那一整行（`flask`、`DEBUG = True` 仍可驗證，`}`、`if `、`def` 不行）。以 mock 與五個 calibration 樣本重跑，88 條既有引文的驗證結果全部不變。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |
 | 2026-09-27 | v0.3.2 | 程式：provider 呼叫失敗（429、5xx、逾時、連線錯誤）改記為 `reviewer_errors`，不再算成模型拒答，偏誤稽核與 calibration 的拒答率不再受基礎設施問題影響，gate 照樣 fail-closed；OpenAI 相容 provider（vLLM、NIM）對暫時性失敗最多呼叫 3 次，指數退避加 jitter 或依 `Retry-After`（上限 30 秒）。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |
 | 2026-09-27 | v0.3.1 | repo 私有期間補回 Scorecard 強制項：`scorecard.yml` 新增 `scorecard-local` job（只讀 token），`scripts/scorecard_ci.py --local` 以 `git archive` 匯出已提交的樹後跑 `scorecard --local`，六個強制項照 `tools/scorecard-policy.yaml` 把關；關閉 `docs/actions-inventory-2026-09-26.md` 6.4。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |

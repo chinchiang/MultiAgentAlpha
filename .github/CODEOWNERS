@@ -1,0 +1,24 @@
+# Code owners for the files that decide whether a change passes: CI workflows, locked tools and their
+# suppression/triage/policy files, the scripts that apply them, the review configuration and policies,
+# and the install and code-scanning helpers. The last matching pattern wins; every entry names the same
+# owner today.
+#
+# Review by a code owner is NOT required on main (F09 in docs/security-remediation-2026-09-18.md): the
+# repository has a single maintainer and enforce_admins is on, so requiring an approval would block every
+# merge. GitHub still requests the owner's review on pull requests from anyone else. When a second
+# maintainer joins, add them here and turn on "Require review from Code Owners" together with the
+# approval, stale-dismissal and last-push settings F09 lists. tests/test_codeowners.py keeps these paths
+# covered.
+
+*                                   @chinchiang
+
+/.github/                           @chinchiang
+/tools/                             @chinchiang
+/scripts/*_ci.py                    @chinchiang
+/scripts/install_tools.py           @chinchiang
+/scripts/code_scanning_prep.py      @chinchiang
+/scripts/relock_requirements.py     @chinchiang
+/config/                            @chinchiang
+/src/mara/policy.py                 @chinchiang
+/src/mara/config.py                 @chinchiang
+/SECURITY.md                        @chinchiang
