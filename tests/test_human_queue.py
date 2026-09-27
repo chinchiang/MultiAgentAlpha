@@ -92,15 +92,20 @@ state_path = {str(tmp_path / "state.json")!r}
 state = json.load(open(state_path, encoding="utf-8"))
 args = sys.argv[1:]
 state.setdefault("calls", []).append(args)
-if args[:2] == ["issue", "list"]:
-    want = args[args.index("--state") + 1]
-    print(json.dumps(state.get(want, [])))
-elif args[:2] == ["issue", "create"]:
+if args[:2] == ["issue", "create"]:
     body = open(args[args.index("--body-file") + 1], encoding="utf-8").read()
     state.setdefault("open", []).append({{"number": 100 + len(state.get("open", [])), "body": body, "labels": []}})
 elif args[:1] == ["api"]:
-    number = args[1].rsplit("/", 2)[-2]
-    print(json.dumps(state.get("events", {{}}).get(number, [])))
+    path = next(a for a in args[1:] if a.startswith("repos/"))
+    if path.endswith("/events"):
+        number = path.rsplit("/", 2)[-2]
+        print(json.dumps(state.get("events", {{}}).get(number, [])))
+    else:  # GET repos/o/r/issues -f state=... --paginate --slurp: the REST shape, 100 per page
+        want = next(a.split("=", 1)[1] for a in args if a.startswith("state="))
+        rest = [{{"number": i["number"], "body": i["body"], "labels": i.get("labels", []), "closed_at": i.get("closedAt"),
+                  "html_url": i.get("url"), "state_reason": i.get("stateReason")}} for i in state.get(want, [])]
+        rest += [{{"number": 9999, "pull_request": {{}}, "body": "", "labels": []}}]  # the issues endpoint also returns PRs
+        print(json.dumps([rest[i:i + 100] for i in range(0, len(rest), 100)]))
 json.dump(state, open(state_path, "w", encoding="utf-8"))
 '''
     if sys.platform == "win32":
@@ -157,9 +162,10 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
     assert not list(tmp_path.glob(".mara-hq-*.md"))
     register = tmp_path / "records.yaml"
     register.write_text("curriculum_version: '2026-09'\nvalidity_days: 365\npass_mark: 0.8\nrecords: []\n", encoding="utf-8")
-    written, open_count = hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "decisions", tmp_path / "decisions" / "backlog.json",
-                                            dry_run=False, register=register)
+    written, open_count, unrecorded = hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "decisions", tmp_path / "decisions" / "backlog.json",
+                                                        dry_run=False, register=register)
     assert (written, open_count) == (1, 2)
+    assert unrecorded == ["#9: closed with 0 decision labels, need exactly one"]
     rec = json.loads((tmp_path / "decisions" / (queue["items"][1]["key"] + ".json")).read_text())
     checked_on = rec.pop("training_checked_on")
     assert rec == {"key": queue["items"][1]["key"], "decision": "true_positive", "issue": 8, "url": "https://example/8", "decided_at": "2026-09-12T08:00:00Z",
@@ -180,6 +186,81 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
     # a closed ticket without a decision label writes nothing
     assert not (tmp_path / "decisions" / "cccccccccccc.json").exists()
 
+
+
+def _queue_item(n: int) -> dict:
+    item = {"finding_id": f"F-{n:04d}", "reasons": ["tier_c_high"], "title": f"finding {n}", "dimension": "vulnerabilities", "cwe": "CWE-89",
+            "file": "app.py", "line": n, "quote": "q", "tier": "C", "cvss4_score": 9.3, "cvss4_severity": "Critical", "ssvc_decision": "Act",
+            "weighted_score": 0.6, "krippendorff_alpha": 0.5, "votes_tp": 1, "votes_fp": 0, "votes_human": 0, "finder_families": ["anthropic"],
+            "reachability": "reachable", "reachability_argument": "r", "exploit_sketch": "e", "skeptic": None, "redteam": None, "judge_votes": [],
+            "target_id": "target-x", "revision": "revision-x", "context_hash": "context-x"}
+    item["key"] = queue_key("app.py", n, "CWE-89", target_id="target-x", revision="revision-x", context_hash="context-x")
+    return item
+
+
+def test_a_backlog_past_any_page_size_is_neither_refiled_nor_undercounted(tmp_path, monkeypatch):
+    # gh issue list --limit 500 used to cut both lists: ticket 550 was re-filed and the backlog read 500.
+    import human_queue_issues as hq
+
+    items = [_queue_item(n) for n in range(1, 601)]
+    state = {"open": [{"number": n, "body": hq.ticket_body(it, "/t/x"), "labels": [{"name": "mara-human-queue"}]} for n, it in enumerate(items, 1)],
+             "closed": []}
+    _fake_gh(tmp_path, state)
+    monkeypatch.setenv("PATH", str(tmp_path / "bin") + os.pathsep + os.environ["PATH"])
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "hq.json").write_text(json.dumps({"target": "/t/x", "items": [items[549], _queue_item(601)]}))
+    assert hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False) == (1, 1)
+    written, open_count, unrecorded = hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "d", tmp_path / "d" / "backlog.json", dry_run=False)
+    assert (written, open_count, unrecorded) == (0, 601, [])
+    assert json.loads((tmp_path / "d" / "backlog.json").read_text())["open"] == 601
+
+
+def test_a_decision_that_cannot_be_recorded_is_reported_and_fails_the_run(tmp_path, monkeypatch, capsys):
+    import human_queue_issues as hq
+
+    items = [_queue_item(n) for n in range(1, 7)]
+    tp = [{"name": "mara-human-queue"}, {"name": "decision:true-positive"}]
+    label_event = {"id": 1, "event": "labeled", "label": {"name": "decision:true-positive"}, "actor": {"login": "alice"}, "created_at": "2026-09-12T08:00:00Z"}
+    broken_meta = hq.ticket_body(items[4], "/t/x").rsplit("<!-- mara-meta:", 1)[0] + "<!-- mara-meta:bm90LWpzb24= -->"
+    state = {"open": [], "closed": [
+        {"number": 1, "body": hq.ticket_body(items[0], "/t/x"), "labels": tp, "stateReason": "completed"},             # recorded
+        {"number": 2, "body": hq.ticket_body(items[1], "/t/x"), "labels": tp[:1], "stateReason": "completed"},         # no decision label
+        {"number": 3, "body": hq.ticket_body(items[2], "/t/x"), "labels": tp[:1], "stateReason": "not_planned"},       # withdrawn on purpose
+        {"number": 4, "body": hq.ticket_body(items[3], "/t/x"), "labels": tp, "stateReason": "completed"},             # no label event
+        {"number": 5, "body": broken_meta, "labels": tp, "stateReason": "completed"},                                  # damaged metadata
+        {"number": 6, "body": hq.ticket_body(items[5], "/t/x").split("\n<!-- mara-meta:")[0], "labels": tp},          # metadata removed
+        {"number": 7, "body": "filed by hand", "labels": tp[:1]},                                                      # not a MARA ticket
+    ], "events": {"1": [label_event], "5": [label_event], "6": [label_event]}}
+    _fake_gh(tmp_path, state)
+    monkeypatch.setenv("PATH", str(tmp_path / "bin") + os.pathsep + os.environ["PATH"])
+    monkeypatch.chdir(tmp_path)
+    written, open_count, unrecorded = hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "d", tmp_path / "d" / "backlog.json", dry_run=False)
+    assert (written, open_count) == (1, 0)
+    assert unrecorded == ["#2: closed with 0 decision labels, need exactly one",
+                          "#4: label history does not resolve to decision:true-positive with an actor and a time",
+                          "#5: mara-meta block or decision time is unreadable",
+                          "#6: ticket body has no mara-meta block"]
+    out = capsys.readouterr().out
+    assert "UNRECORDED #4" in out and "1 ticket(s) closed as not planned" in out and "1 closed ticket(s) labelled mara-human-queue without a MARA marker" in out
+    monkeypatch.setattr(sys, "argv", ["human_queue_issues.py", "--repo", "o/r", "--sync-decisions", "--decisions-dir", str(tmp_path / "d"),
+                                      "--backlog-file", str(tmp_path / "d" / "backlog.json")])
+    assert hq.main() == 2
+    assert "4 closed ticket(s) carry a decision that was not recorded" in capsys.readouterr().err
+
+
+def test_an_api_failure_while_reading_a_decision_aborts_instead_of_dropping_it(monkeypatch):
+    import human_queue_issues as hq
+
+    def failing(args, **_):
+        raise hq.GhError("gh api repos/o/r/issues/1/events failed: HTTP 502")
+    monkeypatch.setattr(hq, "gh", failing)
+    with pytest.raises(hq.GhError, match="502"):
+        hq.decision_event("o/r", 1, "decision:true-positive")
+    with pytest.raises(hq.GhError, match="502"):
+        hq.list_tickets("o/r", "mara-human-queue", "closed")
+    monkeypatch.setattr(hq, "gh", lambda args, **_: json.dumps({"message": "Not Found"}))
+    with pytest.raises(hq.GhError, match="unexpected response shape"):
+        hq.list_tickets("o/r", "mara-human-queue", "open")
 
 def test_calibration_uses_true_positive_decisions_as_labels(tmp_path):
     import calibrate

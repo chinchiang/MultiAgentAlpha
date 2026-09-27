@@ -6,7 +6,13 @@
   python scripts/human_queue_issues.py --repo owner/repo --sync-decisions [--dry-run]
       closed tickets carrying decision:true-positive or decision:false-positive become
       calib/decisions/<key>.json, and calib/decisions/backlog.json records the open count so the
-      pipeline can tighten when the backlog is over the limit.
+      pipeline can tighten when the backlog is over the limit. A closed ticket whose decision cannot
+      be recorded (no or two decision labels, unresolvable label history, damaged metadata) is listed
+      with its reason and the run exits 2, so no decision is lost without anyone noticing; closing
+      as "not planned" without a decision label withdraws a ticket on purpose and is only logged.
+
+Tickets are listed through the REST API with every page followed: no count limit, so a backlog past
+any page size is neither undercounted nor re-filed.
 
 Uses the `gh` CLI (present on GitHub runners; needs GH_TOKEN with issues: write). Nothing here
 ever approves a finding; humans decide on the ticket, the pipeline only reads the outcome.
@@ -57,10 +63,24 @@ def ensure_labels(repo: str, label: str, dry_run: bool) -> None:
         gh(["label", "create", name, "--force", "--color", color, "--description", desc, "--repo", repo], dry_run=dry_run, mutating=True)
 
 
+def list_tickets(repo: str, label: str, state: str) -> list[dict]:
+    """Every issue (pull requests excluded) carrying `label` in `state`, all pages."""
+    out = gh(["api", "--method", "GET", f"repos/{repo}/issues", "-f", f"labels={label}", "-f", f"state={state}",
+              "-f", "per_page=100", "--paginate", "--slurp"])
+    try:
+        pages = json.loads(out or "[]")
+    except ValueError as e:
+        raise GhError(f"issue list for {repo}: unreadable response ({e})") from None
+    if not isinstance(pages, list) or not all(isinstance(page, list) for page in pages):
+        raise GhError(f"issue list for {repo}: unexpected response shape")
+    return [{"number": i["number"], "body": i.get("body") or "", "labels": i.get("labels") or [],
+             "closedAt": i.get("closed_at"), "url": i.get("html_url"), "stateReason": i.get("state_reason")}
+            for page in pages for i in page if "pull_request" not in i]
+
+
 def open_tickets(repo: str, label: str) -> dict[str, int]:
-    out = gh(["issue", "list", "--repo", repo, "--label", label, "--state", "open", "--limit", "500", "--json", "number,body"])
     keys: dict[str, int] = {}
-    for issue in json.loads(out or "[]"):
+    for issue in list_tickets(repo, label, "open"):
         m = MARKER_RE.search(issue.get("body") or "")
         if m:
             keys[m.group(1)] = issue["number"]
@@ -110,7 +130,7 @@ def create_tickets(queue_path: Path, repo: str, label: str, dry_run: bool) -> tu
     if any(not valid_identity(it) for it in items):
         raise ValueError("legacy or invalid queue identity: regenerate the review before creating tickets")
     ensure_labels(repo, label, dry_run)
-    existing = {} if dry_run else open_tickets(repo, label)
+    existing = open_tickets(repo, label)  # read-only, so a dry run shows what would really be filed
     created = skipped = 0
     for it in items:
         if it["key"] in existing:
@@ -138,11 +158,15 @@ def valid_identity(item: dict) -> bool:
 
 
 def decision_event(repo: str, number: int, label: str) -> dict | None:
-    """Replay adds/removes; bind the surviving exact label to its own actor and event time."""
+    """Replay adds/removes; bind the surviving exact label to its own actor and event time.
+
+    None when the history does not resolve to exactly `label` with an actor and a time. A failed API
+    call raises GhError instead: an outage must not read as "no decision".
+    """
     try:
         pages = json.loads(gh(["api", f"repos/{repo}/issues/{number}/events", "--paginate", "--slurp"]) or "[]")
         events = [e for page in pages for e in page] if pages and isinstance(pages[0], list) else pages
-    except (GhError, ValueError, TypeError):
+    except (ValueError, TypeError):
         return None
     active = {}
     for ev in events:
@@ -179,39 +203,53 @@ def _load_register(register: Path | None):
 
 
 def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Path, dry_run: bool,
-                   register: Path | None = None) -> tuple[int, int]:
+                   register: Path | None = None) -> tuple[int, int, list[str]]:
     """Closed tickets with a decision label become calib/decisions/<key>.json. Each record names who
     applied the label and whether that person holds a valid adjudicator training record (G-13);
-    calibration applies only trained adjudicators' decisions when the config requires it."""
+    calibration applies only trained adjudicators' decisions when the config requires it.
+
+    Returns (written, open backlog, unrecorded): one "#<number>: <reason>" per closed MARA ticket
+    whose decision could not be recorded. Closed tickets without the MARA marker are not ours and
+    are only counted in the log."""
     sys.path.insert(0, str(ROOT / "src"))
     from mara.training import is_trained
 
-    closed = json.loads(gh(["issue", "list", "--repo", repo, "--label", label, "--state", "closed", "--limit", "500",
-                            "--json", "number,body,labels,closedAt,url"]) or "[]")
+    closed = list_tickets(repo, label, "closed")
     decisions_dir.mkdir(parents=True, exist_ok=True)
     reg = _load_register(register)
-    written = 0
+    written = foreign = withdrawn = 0
     untrained = []
+    unrecorded: list[str] = []
     for issue in closed:
         m = MARKER_RE.search(issue.get("body") or "")
         if not m:
+            foreign += 1
             continue
         labels = {lab["name"] for lab in issue.get("labels", [])}
         decisions = labels & DECISION_LABELS.keys()
+        if not decisions and issue.get("stateReason") == "not_planned":
+            withdrawn += 1  # closed as not planned (e.g. the code changed): deliberately no decision
+            continue
         if len(decisions) != 1:
-            print(f"  issue #{issue['number']} closed without a decision label; ignored")
+            unrecorded.append(f"#{issue['number']}: closed with {len(decisions)} decision labels, need exactly one")
             continue
         decision_label = next(iter(decisions))
         event = decision_event(repo, issue["number"], decision_label)
+        if not event:
+            unrecorded.append(f"#{issue['number']}: label history does not resolve to {decision_label} with an actor and a time")
+            continue
         metadata = re.search(r"<!-- mara-meta:([A-Za-z0-9_=-]+) -->", issue.get("body") or "")
-        if not event or not metadata:
+        if not metadata:
+            unrecorded.append(f"#{issue['number']}: ticket body has no mara-meta block")
             continue
         try:
             meta = json.loads(base64.urlsafe_b64decode(metadata.group(1)))
             decision_day = dt.datetime.fromisoformat(event["created_at"].replace("Z", "+00:00")).date()
             if not valid_identity(meta) or meta["key"] != m.group(1):
+                unrecorded.append(f"#{issue['number']}: mara-meta identity does not match the ticket key")
                 continue
-        except (ValueError, TypeError, KeyError):
+        except (ValueError, TypeError, KeyError, AttributeError):
+            unrecorded.append(f"#{issue['number']}: mara-meta block or decision time is unreadable")
             continue
         key = meta["key"]
         decision = DECISION_LABELS[decision_label]
@@ -228,6 +266,12 @@ def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Pat
         else:
             path.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         written += 1
+    if foreign:
+        print(f"  {foreign} closed ticket(s) labelled {label} without a MARA marker; not MARA tickets, ignored")
+    if withdrawn:
+        print(f"  {withdrawn} ticket(s) closed as not planned without a decision label; no decision to record")
+    for line in unrecorded:
+        print(f"  UNRECORDED {line}")
     if untrained:
         print(f"  WARNING: {len(untrained)} decision(s) by adjudicators without a valid training record (G-13): {', '.join(untrained)}; "
               "calibration will not apply them while training.require_trained_adjudicator is true")
@@ -238,7 +282,7 @@ def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Pat
     else:
         backlog_file.parent.mkdir(parents=True, exist_ok=True)
         backlog_file.write_text(json.dumps(backlog, indent=2) + "\n", encoding="utf-8")
-    return written, open_count
+    return written, open_count, unrecorded
 
 
 def main() -> int:
@@ -253,19 +297,25 @@ def main() -> int:
                     help="AI-literacy register (G-13); decisions by people without a valid adjudicator record are flagged")
     ap.add_argument("--dry-run", action="store_true", help="print the gh commands instead of running the mutating ones")
     args = ap.parse_args()
+    status = 0
     try:
         if args.queue:
             created, skipped = create_tickets(args.queue, args.repo, args.label, args.dry_run)
             print(f"tickets: {created} created, {skipped} already open")
         if args.sync_decisions:
-            written, open_count = sync_decisions(args.repo, args.label, args.decisions_dir, args.backlog_file, args.dry_run, args.register)
+            written, open_count, unrecorded = sync_decisions(args.repo, args.label, args.decisions_dir, args.backlog_file,
+                                                             args.dry_run, args.register)
             print(f"decisions: {written} written to {args.decisions_dir}; open backlog {open_count}")
+            if unrecorded:
+                print(f"ERROR: {len(unrecorded)} closed ticket(s) carry a decision that was not recorded (listed above); "
+                      "fix the labels and close again, or reopen them (docs/human-queue.md)", file=sys.stderr)
+                status = 2
         if not args.queue and not args.sync_decisions:
             ap.error("give --queue and/or --sync-decisions")
     except (GhError, ValueError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
-    return 0
+    return status
 
 
 if __name__ == "__main__":
