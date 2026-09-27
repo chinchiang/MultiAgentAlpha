@@ -293,6 +293,24 @@ def test_removed_label_does_not_lend_its_actor_to_remaining_verdict(monkeypatch)
     assert hq.decision_event("o/r", 1, "decision:true-positive") is None
 
 
+class Failing(Provider):
+    def complete(self, **kwargs):
+        raise RuntimeError("provider_http_error:429")
+
+
+def test_provider_errors_block_the_gate_and_are_not_counted_as_refusals(tmp_path, monkeypatch):
+    pipe = pipeline(tmp_path)
+    pipe.providers = {n: Failing(p.spec) for n, p in pipe.providers.items()}
+    (tmp_path / "app.py").write_text("unsafe()")
+    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
+    report = pipe.run(tmp_path, mode="mock")
+    assert report.bias_audit["reviewer_errors"] == 33 and report.bias_audit["reviewer_refusals"] == 0
+    assert not report.gate_passed and report.overall_score is None and "reviewer_errors" in report.incomplete_reasons
+    import calibrate
+    rates = calibrate.audit_rates([("s", {"bias_audit": report.bias_audit}, [])], ["anthropic"])["anthropic"]
+    assert rates["error_rate"] == 1 and rates["refusal_rate"] == 0
+
+
 def test_queue_identity_separates_targets_and_revisions():
     keys = {queue_key("app.py", 1, "CWE-89", target_id=t, revision=r, context_hash="ctx")
             for t in ("repo-a", "repo-b") for r in ("rev1", "rev2")}
