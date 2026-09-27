@@ -5,6 +5,7 @@
 
 | 日期 | 版本 | 變更摘要 | 變更者 | 查證狀態 |
 |---|---|---|---|---|
+| 2026-09-27 | v0.3.3 | 程式：provenance 引文除了在宣稱行 ±3 行內逐字存在，還必須能定位：至少 8 個非空白字元且含英數字，或正好是宣稱的那一整行（`flask`、`DEBUG = True` 仍可驗證，`}`、`if `、`def` 不行）。以 mock 與五個 calibration 樣本重跑，88 條既有引文的驗證結果全部不變。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |
 | 2026-09-27 | v0.3.2 | 程式：provider 呼叫失敗（429、5xx、逾時、連線錯誤）改記為 `reviewer_errors`，不再算成模型拒答，偏誤稽核與 calibration 的拒答率不再受基礎設施問題影響，gate 照樣 fail-closed；OpenAI 相容 provider（vLLM、NIM）對暫時性失敗最多呼叫 3 次，指數退避加 jitter 或依 `Retry-After`（上限 30 秒）。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |
 | 2026-09-27 | v0.3.1 | repo 私有期間補回 Scorecard 強制項：`scorecard.yml` 新增 `scorecard-local` job（只讀 token），`scripts/scorecard_ci.py --local` 以 `git archive` 匯出已提交的樹後跑 `scorecard --local`，六個強制項照 `tools/scorecard-policy.yaml` 把關；關閉 `docs/actions-inventory-2026-09-26.md` 6.4。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |
 | 2026-09-26 | v0.3.0 | 正文第 14.1 節更正雛型 workflow 的描述：呼叫模型的 job 不執行 PR 程式碼是目標模式；雛型的第二個 job 以只讀 token 執行本 repo 自己的測試與 mock 審查，不呼叫真實模型、不貼 PR 評論，CI 沒有 `MARA_LIVE=1` 開關。附錄B 關閉 #74（L0 工具已固定並驗證，G-5 通過），#48 的函式名更新為 `pipeline._agreement_proxy`。新增 `docs/governance-check-2026-09-26.md`（5 通過、8 失敗、0 人工）、`docs/actions-inventory-2026-09-26.md`、`docs/assessment-2026-09-26.md`；`mara-review.yml` 註解更正。程式：PR #39（reviewer 回覆截斷時 gate 不再通過；L3 家族獨立規則統一並稽核）。 | chinchiang（Claude Code 協作） | 附錄A 213 條，引用 202 個編號；附錄B 缺口 74 項，7 項關閉；證據標記 已證實 46／廠商主張 21／第三方評論 38／尚未證實 96；30,340 字 |

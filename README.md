@@ -75,7 +75,7 @@ operated families or complete human review instead of weakening the quorum.
 
 Three rules are enforced by code, not by prompt:
 
-- **Provenance**: every finding must quote a verbatim excerpt that exists in the file (±3 lines). Fabricated quotes are tier D and never accepted.
+- **Provenance**: every finding must quote a verbatim excerpt that exists in the file (±3 lines) and pins something: at least 8 non-whitespace characters including a letter or digit, unless the quote is the whole claimed line (so `flask` in a requirements file still counts, `}` or `if ` never does). Fabricated or trivial quotes are tier D and never accepted.
 - **Pinned ground truth**: standard ids (ASVS 5.0 chapters, OWASP Top 10:2025, API Top 10 2023, LLM Top 10 2025, CWE subset) are validated against `mara/groundtruth/*.json`; unknown ids are stripped.
 - **Data residency**: source code is only sent to models declared `on_prem` or `vendor_api_zdr`. The default config refuses anything else.
 
