@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import stat
 import sys
 import tarfile
@@ -121,6 +122,26 @@ def test_shipped_lock_is_well_formed():
     boot = (ROOT / "tools" / "bootstrap-requirements.txt").read_text()
     assert boot.lower().count("pyyaml==") == 1 and "--hash=sha256:" in boot
 
+
+
+def test_every_pinned_url_names_a_release_or_a_commit_not_a_branch():
+    # A branch URL (slsa-verifier's SHA256SUM.md at main, until 2026-09-27) changes under the pin: the
+    # next release's section comes first and the cross-check fails, or the file is rewritten.
+    lock = load_lock(ROOT / "tools" / "versions.lock")
+    release = re.compile(r"^https://github\.com/[\w.-]+/[\w.-]+/releases/download/v?(?P<tag>[\w.-]+)/[^/]+$")
+    raw_at_commit = re.compile(r"^https://raw\.githubusercontent\.com/[\w.-]+/[\w.-]+/[0-9a-f]{40}/[^?#]+$")
+    checked = 0
+    for name, t in lock["tools"].items():
+        fields = {k: v for k, v in {**t, **t.get("verify", {})}.items() if k.endswith("_url")}
+        if t["kind"] not in {"git", "pip"}:
+            fields["url"] = t["url"]
+        for field, url in fields.items():
+            if field == "gpg_key_url":
+                continue  # GitHub's web-flow key: pinned by gpg_key_id, not by URL
+            m = release.match(url)
+            assert (m and m["tag"] == str(t["version"])) or raw_at_commit.match(url), f"{name}.{field}: {url}"
+            checked += 1
+    assert checked >= 15
 
 def test_runner_only_executes_pinned_tools(tmp_path, monkeypatch):
     mt = tmp_path / "mt"

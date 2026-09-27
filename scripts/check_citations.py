@@ -1,6 +1,8 @@
 """Every 【級別｜Xn】 marker in the body must reference a key that exists as a row in 附錄A.
 
-Keys look like A85, B17, C7.14. Markers may list several keys separated by 、 or ,.
+Keys look like A85, B17, C7.14. Markers may list several keys separated by 、 or , and ranges
+such as B79–B82, which stand for every key in between. A level marker with a source part must name
+at least one key; a level alone (【尚未證實】, e.g. "no independent evaluation found") cites nothing.
 Also flags Part I (executive summary) if it contains CVE ids, version numbers or protocol names
 (skill verification item 7).
 """
@@ -17,32 +19,44 @@ PARTS = ROOT / "docs" / "parts"
 KEY = re.compile(r"\b([ABC]\d+(?:\.\d+)?)\b")
 MARK = re.compile(r"【[^】]*?｜([^】]+)】")
 BARE = re.compile(r"【([ABC]\d+(?:\.\d+)?(?:[、,，]\s*[ABC]\d+(?:\.\d+)?)*)】")
+RANGE = re.compile(r"\b([ABC])(\d+)\s*[–—~-]\s*(?:\1)?(\d+)\b")
+LEVEL_MARK = re.compile(r"【(?:已證實|廠商主張|第三方評論|尚未證實)[^】｜]*｜([^】]*)】")
 
 
-def main() -> int:
-    sources = (PARTS / "A_sources.md").read_text(encoding="utf-8")
+def keys_in(text: str) -> list[str]:
+    """Every key named in a marker's source part, ranges (B79–B82) expanded."""
+    keys = set(KEY.findall(text))
+    for prefix, lo, hi in RANGE.findall(text):
+        keys.update(f"{prefix}{n}" for n in range(int(lo), int(hi) + 1))
+    return sorted(keys)
+
+
+def main(parts: Path = PARTS, ledger_path: Path = ROOT / "docs" / "source-verification.json") -> int:
+    sources = (parts / "A_sources.md").read_text(encoding="utf-8")
     known = {m.group(1) for m in re.finditer(r"^\| ([ABC]\d+(?:\.\d+)?) \|", sources, re.M)}
     missing: dict[str, set[str]] = {}
     used: set[str] = set()
-    for p in sorted(PARTS.glob("*.md")):
+    keyless: list[str] = []
+    for p in sorted(parts.glob("*.md")):
         if p.name in ("A_sources.md", "ORDER.txt"):
             continue
         text = p.read_text(encoding="utf-8")
         refs = []
         for m in MARK.finditer(text):
-            refs += KEY.findall(m.group(1))
+            refs += keys_in(m.group(1))
         for m in BARE.finditer(text):
-            refs += KEY.findall(m.group(1))
+            refs += keys_in(m.group(1))
+        keyless += [f"{p.name}: {m.group(0)}" for m in LEVEL_MARK.finditer(text) if not KEY.search(m.group(1))]
         for r in refs:
             used.add(r)
             if r not in known:
                 missing.setdefault(p.name, set()).add(r)
-    exec_lines = [ln for ln in (PARTS / "01_executive.md").read_text(encoding="utf-8").splitlines() if not ln.startswith("#")]
+    exec_lines = [ln for ln in (parts / "01_executive.md").read_text(encoding="utf-8").splitlines() if not ln.startswith("#")]
     exec_text = "\n".join(exec_lines)
     exec_problems = re.findall(r"CVE-\d{4}-\d+|\bv?\d+\.\d+(?:\.\d+)?\b|\b(?:HTTP|TLS|OAuth|SAML|TCP|SSH)\b", exec_text)
     print(f"附錄A 條目: {len(known)}；正文引用的不同編號: {len(used)}；未被引用的條目: {len(known - used)}")
     ok = True
-    ledger = json.loads((ROOT / "docs" / "source-verification.json").read_text(encoding="utf-8"))
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
     entries = ledger["sources"]
     if {e["id"] for e in entries} != known:
         print("source verification ledger does not match appendix IDs")
@@ -61,6 +75,10 @@ def main() -> int:
         ok = False
         for f, keys in missing.items():
             print(f"MISSING in {f}: {sorted(keys)}")
+    if keyless:
+        ok = False
+        for m in keyless:
+            print(f"marker names no source key: {m}")
     if exec_problems:
         ok = False
         print("第一部含 CVE/版本號/協定名:", exec_problems)
