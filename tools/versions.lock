@@ -50,7 +50,9 @@ tools:
     license: Apache-2.0
     url: https://github.com/slsa-framework/slsa-verifier/releases/download/v2.7.1/slsa-verifier-linux-amd64
     sha256: 946dbec729094195e88ef78e1734324a27869f03e2c6bd2f61cbc06bd5350339
-    publisher_checksums_url: https://raw.githubusercontent.com/slsa-framework/slsa-verifier/main/SHA256SUM.md
+    # the release carries no checksum file; SHA256SUM.md at the commit that added v2.7.1 (#860), not at main,
+    # where the next release's section would come first and the file could change under the pin
+    publisher_checksums_url: https://raw.githubusercontent.com/slsa-framework/slsa-verifier/748161aaed42b2e508301d73c18ccb5be88a948e/SHA256SUM.md
     verify:
       method: slsa-provenance
       provenance_url: https://github.com/slsa-framework/slsa-verifier/releases/download/v2.7.1/slsa-verifier-linux-amd64.intoto.jsonl

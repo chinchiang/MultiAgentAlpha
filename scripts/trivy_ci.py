@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import ignore_expiry  # noqa: E402
 from trivy_db import PinError, load_config, pinned_trivy  # noqa: E402
 
 from mara.tools import trivy_db as tdb  # noqa: E402
@@ -89,6 +90,7 @@ def main() -> int:
             print(f"ERROR: ignore file {a.ignorefile} not found", file=sys.stderr)
             return 2
         argv += ["--ignorefile", str(a.ignorefile.resolve())]
+        ignore_expiry.warn(a.ignorefile, ignore_expiry.trivy_entries(a.ignorefile))
     skip = [d for d in a.skip_dirs.split(",") if d.strip()]
     if skip:
         argv += ["--skip-dirs", ",".join(skip)]

@@ -25,6 +25,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import ignore_expiry  # noqa: E402
 
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
 from mara.tools.sarif import scan_complete  # noqa: E402
@@ -105,6 +108,7 @@ def main() -> int:
             print(f"ERROR: config {a.config} not found", file=sys.stderr)
             return 2
         argv += ["--config", str(a.config.resolve())]
+        ignore_expiry.warn(a.config, ignore_expiry.osv_entries(a.config))
     for lf in a.lockfile:
         if not lf.is_file():
             print(f"ERROR: lockfile {lf} not found", file=sys.stderr)
