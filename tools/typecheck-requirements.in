@@ -1,0 +1,5 @@
+# mypy and the stubs for the untyped third-party imports in src/ (jsonschema, PyYAML). Used by the
+# CPython 3.12 test job on top of tools/dev-requirements-py312.txt, so shared packages keep its versions.
+mypy
+types-jsonschema
+types-PyYAML

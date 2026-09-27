@@ -232,7 +232,7 @@ def drill_status(cfg: MaraConfig, root: Path | str, today: dt.date, drills_path:
         best = max(recent, key=lambda d: d.date) if recent else (max(live, key=lambda d: d.date) if live else None)
         if recent:
             dp = ""
-        elif live:
+        elif best is not None:  # there are live drills, none recent and passing
             dp = (f"last live drill {best.date} outcome {best.outcome}, {best.duration_hours:g} h; "
                   f"need pass within {DRILL_MAX_HOURS} h in the last {DRILL_MAX_AGE_DAYS} days")
         else:

@@ -34,7 +34,7 @@ def render_markdown(r: ReviewReport) -> str:
     tc = tier_counts(r)
     lines += ["", f"Evidence tiers: A={tc['A']} B={tc['B']} C={tc['C']} D={tc['D']}", "", "## Accepted findings", ""]
     accepted = [f for f in r.findings if cons.get(f.id) and cons[f.id].accepted]
-    accepted.sort(key=lambda f: -cons[f.id].cvss4_score)
+    accepted.sort(key=lambda f: -(cons[f.id].cvss4_score or 0.0))  # accepted implies a valid vector
     if not accepted:
         lines.append("_None._")
     for f in accepted:
@@ -58,10 +58,10 @@ def render_markdown(r: ReviewReport) -> str:
         "These findings remain unresolved until explicitly triaged; model silence does not clear them.",
         "",
     ]
-    for tool in r.tool_results:
+    for tr in r.tool_results:
         lines.append(
-            f"- {literal(tool.get('tool'))} · {literal(tool.get('rule_id'))} · "
-            f"{literal(tool.get('file'))}:{tool.get('line')} · {literal(tool.get('message'))}"
+            f"- {literal(tr.get('tool'))} · {literal(tr.get('rule_id'))} · "
+            f"{literal(tr.get('file'))}:{tr.get('line')} · {literal(tr.get('message'))}"
         )
     rejected = [f for f in r.findings if cons.get(f.id) and not cons[f.id].accepted]
     lines += ["## Rejected or unverified findings", ""]
@@ -98,17 +98,17 @@ def render_markdown(r: ReviewReport) -> str:
                 f"- {n['finding_id']} · {literal(n['title'])} · {n['cwe']} · CVSS {cv['score']} {cv['severity']} · tier {n['evidence_tier']}"
                 f" · exploitable: {n['exploitable']} · `{literal(loc['file'])}:{loc['line']}`"
             )
-    ml_bom = r.bias_audit.get("ml_bom") or {}
+    ml_bom = r.bias_audit.get("ml_bom")
     lines += ["", "## Model provenance (ML-BOM, G-7)", ""]
-    if ml_bom:
+    if isinstance(ml_bom, dict) and ml_bom:
         for name, v in ml_bom.items():
             detail = f" {v['component']}@{v['version']} sha256 {v['sha256'][:12]}" if v.get("status") == "complete" else ""
             lines.append(f"- {name} (`{literal(v['model_id'])}`): {v['status']}{detail}")
     else:
         lines.append("_No self-hosted model in this configuration._")
-    me = r.bias_audit.get("model_eval") or {}
+    me = r.bias_audit.get("model_eval")
     lines += ["", "## Model red-team evaluation (garak / CyberSecEval, G-8)", ""]
-    if me:
+    if isinstance(me, dict) and me:
         for fam, v in me.items():
             lines.append(f"- {fam}: {v.get('status', 'none')}" + (f" ({v['date']}, {v['mode']})" if v.get("date") else " (no evaluation recorded)"))
     else:

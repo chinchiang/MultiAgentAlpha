@@ -1,0 +1,26 @@
+# mypy + stubs (CPython 3.12): hash-pinned dependency closure, 11 distribution(s), resolved 2026-09-27
+# on CPython 3.12.3 / linux-x86_64 with pip 24.0 from tools/typecheck-requirements.in. Do not edit by hand; regenerate with
+#   python3 scripts/relock_requirements.py --in tools/typecheck-requirements.in --python 3.12 --same-versions-as tools/dev-requirements-py312.txt --out tools/typecheck-requirements.txt
+# Install: python3 -m pip install --require-hashes --only-binary=:all: -r <this file>
+ast_serialize==0.11.2 \
+    --hash=sha256:a7004ba572f09be34342ccb98dcd4bad5707d3d81adc8cb4c3f685d2a2c51bbc
+attrs==26.1.0 \
+    --hash=sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309
+librt==0.15.0 \
+    --hash=sha256:89cc46cfd15022e35084355478c9ac809d90b1152222706ac9a7655ec21df6fa
+mypy==2.3.1 \
+    --hash=sha256:858fc57d3d91fa728e33e7ad71def60fc6272694607b306cd3292db53ae39080
+mypy_extensions==1.1.0 \
+    --hash=sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505
+pathspec==1.1.1 \
+    --hash=sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189
+referencing==0.37.0 \
+    --hash=sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231
+rpds-py==2026.6.3 \
+    --hash=sha256:ecabd69db66de867690f9797f2f8fa27ba501bbc24540cbdbdc649cd15888ba6
+types-jsonschema==4.26.0.20260518 \
+    --hash=sha256:30b30a518c7fe335df85c919fcbcc631b69c03d4a4b5b632fa916bea03065307
+types-PyYAML==6.0.12.20260906 \
+    --hash=sha256:bca893ff0d51df5c9053137d5d0e6ccd36e939a196356f1d5c16372422f5137b
+typing_extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import math
 from importlib import resources
+from typing import Any
 
 METRIC_ORDER: dict[str, list[str]] = {
     "AV": ["N", "A", "L", "P"],
@@ -50,7 +51,8 @@ METRIC_ORDER: dict[str, list[str]] = {
 }
 BASE_METRICS = ["AV", "AC", "AT", "PR", "UI", "VC", "VI", "VA", "SC", "SI", "SA"]
 
-MAX_COMPOSED = {
+# FIRST reference tables; eq3 (and eq3eq6) nest one level deeper, keyed by eq6
+MAX_COMPOSED: dict[str, dict[int, Any]] = {
     "eq1": {
         0: ["AV:N/PR:N/UI:N/"],
         1: ["AV:A/PR:N/UI:N/", "AV:N/PR:L/UI:N/", "AV:N/PR:N/UI:P/"],
@@ -78,7 +80,7 @@ MAX_COMPOSED = {
     "eq5": {0: ["E:A/"], 1: ["E:P/"], 2: ["E:U/"]},
 }
 
-MAX_SEVERITY = {
+MAX_SEVERITY: dict[str, dict[int, Any]] = {
     "eq1": {0: 1, 1: 4, 2: 5},
     "eq2": {0: 1, 1: 2},
     "eq3eq6": {0: {0: 7, 1: 6}, 1: {0: 8, 1: 8}, 2: {1: 10}},

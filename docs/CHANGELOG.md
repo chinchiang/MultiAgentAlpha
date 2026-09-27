@@ -5,6 +5,7 @@
 
 | 日期 | 版本 | 變更摘要 | 變更者 | 查證狀態 |
 |---|---|---|---|---|
+| 2026-09-27 | v0.3.6 | 程式碼：修正 `src/` 的 73 個 mypy 錯誤。多數是型別標註（`SSVCDecision`、`PassId` 型別別名、mock profile 的 TypedDict、CVSS 參考表、bias audit 的計數器字典）；順帶去除 `tools/runner.py` 在同一函式內 import 兩個不同簽名的 `scan_args`、`MockProvider` 執行期掛上的方法、`markdown_out.py` 重用 `tool` 變數，`save_register` 在沒有路徑時改為明確的 ValueError。CI：`tests (CPython 3.12)` 以新的 hash 鎖定閉包 `tools/typecheck-requirements.txt` 執行 `mypy`（設定在 `pyproject.toml`，以 3.11 語意檢查），osv-scanner 一併掃描。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |
 | 2026-09-27 | v0.3.5 | CI：`mara-review.yml` 新增 `tests (CPython 3.12)` job，安裝新的 hash 鎖定閉包 `tools/dev-requirements-py312.txt`（`relock_requirements.py --python 3.12 --same-versions-as tools/dev-requirements.txt`：37 個版本與 3.11 閉包相同，只有 jiter、pydantic_core、PyYAML、rpds-py 四個編譯套件的 wheel 與 hash 不同）後跑整套測試；L0 的 osv-scanner 一併掃描該閉包。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |
 | 2026-09-27 | v0.3.4 | 新增 `.github/CODEOWNERS`：workflow、`tools/`（鎖定工具與 triage／suppression／policy 檔）、`scripts/*_ci.py` 與安裝腳本、`config/`、policy 與設定程式、`SECURITY.md`；`tests/test_codeowners.py` 確認這些檔案有特定規則覆蓋、沒有失效的 pattern。main 仍不要求 code owner 核准（F09 單人維護）。關閉 `docs/actions-inventory-2026-09-26.md` 6.5 的檔案部分。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |
 | 2026-09-27 | v0.3.3 | 程式：provenance 引文除了在宣稱行 ±3 行內逐字存在，還必須能定位：至少 8 個非空白字元且含英數字，或正好是宣稱的那一整行（`flask`、`DEBUG = True` 仍可驗證，`}`、`if `、`def` 不行）。以 mock 與五個 calibration 樣本重跑，88 條既有引文的驗證結果全部不變。報告正文未變。 | chinchiang（Claude Code 協作） | 同 v0.3.0 |

@@ -10,6 +10,7 @@ import hashlib
 from collections import Counter, defaultdict
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 from .agents import base, judge, redteam, reviewer, skeptic
 from .bias.blinding import blinded_batches
@@ -42,7 +43,8 @@ class Pipeline:
         self.cfg = cfg
         self.out_dir = out_dir or Path("out")
         self.providers: dict[str, Provider] = {m.name: make_provider(m, mock_fixtures) for m in cfg.models}
-        self.audit: dict[str, float | int | str] = defaultdict(int)
+        # Counters (default 0) plus a few labels and nested tables; becomes the report's bias_audit
+        self.audit: defaultdict[str, Any] = defaultdict(int)
         self.log: list[str] = []
         # G-11: the human queue tightens when its ticket backlog is over the limit (never loosens)
         from .report.human_queue_out import read_backlog, tightening
@@ -348,7 +350,7 @@ class Pipeline:
         for d in self.cfg.dimensions:
             tool_ran = any(d in TOOL_DIMENSIONS.get(t, []) for t in tools_ran)
             dims.append(score_dimension(d, findings, cons_by_id, tool_ran))
-        overall = round(sum(x.score for x in dims) / len(dims), 1) if dims else 0.0
+        overall: float | None = round(sum(x.score for x in dims) / len(dims), 1) if dims else 0.0
         incomplete = []
         if not ctx.complete:
             incomplete.append("context_coverage_incomplete")
@@ -429,14 +431,15 @@ class Pipeline:
             revision=ctx.revision,
             context_hash=ctx.content_hash,
         )
-        for k, v in (
-            ("human_queue_size", len(report.human_queue)),
-            ("human_queue_backlog", self.backlog if self.backlog is not None else "unknown"),
-            ("human_queue_tightened", int(self.queue_tightened)),
-            ("human_alpha_threshold", self.human_alpha_threshold),
-        ):
-            self.audit[k] = v
-            report.bias_audit[k] = v
+        queue_audit: dict[str, float | int | str] = {
+            "human_queue_size": len(report.human_queue),
+            "human_queue_backlog": self.backlog if self.backlog is not None else "unknown",
+            "human_queue_tightened": int(self.queue_tightened),
+            "human_alpha_threshold": self.human_alpha_threshold,
+        }
+        for k, qv in queue_audit.items():
+            self.audit[k] = qv
+            report.bias_audit[k] = qv
         self._say(
             f"L5: human queue: {len(report.human_queue)} item(s)"
             + (

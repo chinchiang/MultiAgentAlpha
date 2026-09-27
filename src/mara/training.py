@@ -78,7 +78,10 @@ def load_register(path: Path | str) -> Register:
 def save_register(reg: Register, path: Path | str | None = None) -> None:
     import yaml
 
-    p = Path(path or reg.path)
+    target = path or reg.path
+    if target is None:
+        raise ValueError("register has no path: pass one to save_register")
+    p = Path(target)
     text = p.read_text(encoding="utf-8") if p.exists() else ""
     head = text.split("records:")[0].rstrip("\n") if "records:" in text else ""
     body = yaml.safe_dump({"records": [{

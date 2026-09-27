@@ -16,8 +16,18 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import TypedDict
 
-PROFILES = {
+
+class Profile(TypedDict):
+    recall: float
+    skip_dims: set[str]
+    refuse_dims: set[str]
+    fake_fp: bool
+    hygiene_fp: bool
+
+
+PROFILES: dict[str, Profile] = {
     "anthropic": {"recall": 0.85, "skip_dims": set(), "refuse_dims": set(), "fake_fp": True, "hygiene_fp": False},
     "deepseek": {"recall": 0.70, "skip_dims": {"csp"}, "refuse_dims": set(), "fake_fp": False, "hygiene_fp": False},
     "nemotron": {"recall": 0.55, "skip_dims": set(), "refuse_dims": {"error_handling"}, "fake_fp": False, "hygiene_fp": True},

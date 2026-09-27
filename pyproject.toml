@@ -42,6 +42,10 @@ ignore = ["B008"]
 "tests/*" = ["E501"]
 "scripts/*" = ["E501"]
 
+[tool.mypy]
+files = ["src"]
+python_version = "3.11"  # the oldest supported interpreter, even when run on 3.12
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
