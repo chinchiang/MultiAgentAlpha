@@ -14,7 +14,7 @@
 | F06 | CVSS 完整解析驗證；無效向量拒收，防禦性回退為 Unknown／null，必須人工處理 | `schemas.py`、惡意向量測試 |
 | F07 | Semgrep 非零結束碼及 OSV 部分失敗皆失敗；SARIF failed invocation 不當成清白；只有 accepted suppression 才排除 | `scripts/semgrep_ci.py`、`osv_ci.py`、`code_scanning_prep.py` |
 | F08 | PR 掃 merge-base 到 head 全部 commits；無可用 base 時掃 head 全部可達歷史 | `scripts/gitleaks_ci.py`、實際 Git 歷史回歸測試 |
-| F09 | 2026-09-23 owner 決定不要求 PR 核准人數：本 repo 為單人維護，且 `enforce_admins` 開啟，若要求 1 位核准，任何 PR 都無法合併。main 保護讀回結果：必要 checks `L0 deterministic tools` 與 `tests + mock review`（strict，分支須與 main 同步）、enforce_admins、conversation resolution、禁止 force push 與刪除；無 `required_pull_request_reviews`。缺少的獨立審查列為接受風險，由必要 CI checks 與 owner 自行審查補償；日後有第二位維護者時再加上「1 位核准、stale approval 撤銷、最近一次 push 核准」 | `gh api repos/chinchiang/MultiAgentAlpha/branches/main/protection`（2026-09-23 讀回） |
+| F09 | 2026-09-23 owner 決定不要求 PR 核准人數：本 repo 為單人維護，且 `enforce_admins` 開啟，若要求 1 位核准，任何 PR 都無法合併。main 保護讀回結果：必要 checks `L0 deterministic tools` 與 `tests + mock review`（strict，分支須與 main 同步）、enforce_admins、conversation resolution、禁止 force push 與刪除；無 `required_pull_request_reviews`。缺少的獨立審查列為接受風險，由必要 CI checks 與 owner 自行審查補償；日後有第二位維護者時再加上「1 位核准、stale approval 撤銷、最近一次 push 核准」。2026-09-27 起 `.github/CODEOWNERS` 已列出 CI、鎖定工具、規則檔與設定的擁有者，屆時一併開啟「需要 code owner 核准」 | `gh api repos/chinchiang/MultiAgentAlpha/branches/main/protection`（2026-09-23 讀回） |
 | F10 | 自架模型 ML-BOM 的正常輸出路徑修正 TypeError | 含非空 ML-BOM 的 pipeline 測試 |
 | F11 | 執行模式由 provider 設定核對；報告記錄 provider manifest、設定雜湊及版本；live calibration 拒絕 mock／身分缺漏 | `pipeline.py`、`scripts/calibrate.py` |
 | F12 | 引用只對實際 context 核驗；拒絕目錄外、空白及超界行號，不回退讀磁碟 | `agents/base.py` |
