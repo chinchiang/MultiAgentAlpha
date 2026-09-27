@@ -76,6 +76,7 @@ def test_pyproject_requirements_include_the_dev_extra():
 
 @pytest.mark.parametrize("lock, top_level, wheels_only", [
     ("tools/dev-requirements.txt", ["anthropic", "pydantic", "pyyaml", "httpx", "typer", "rich", "pytest", "ruff", "markdown", "jsonschema"], True),
+    ("tools/dev-requirements-py312.txt", ["anthropic", "pydantic", "pyyaml", "httpx", "typer", "rich", "pytest", "ruff", "markdown", "jsonschema"], True),
     ("tools/model-eval-requirements.txt", ["garak"], False),
 ])
 def test_repository_lockfiles_are_complete(lock, top_level, wheels_only):
@@ -90,6 +91,25 @@ def test_repository_lockfiles_are_complete(lock, top_level, wheels_only):
         assert "Source distributions" not in text
     else:
         assert "garak==0.17.0" in text, "the garak version pinned in config/mara.yaml model_eval.garak_version"
+
+
+def test_the_312_closure_pins_the_same_versions_as_the_311_one():
+    """Only wheels and hashes may differ: the 3.12 job must test the versions the 3.11 job and L0 check."""
+    base = _parse_lock((ROOT / "tools/dev-requirements.txt").read_text(encoding="utf-8"))
+    text = (ROOT / "tools/dev-requirements-py312.txt").read_text(encoding="utf-8")
+    assert [(n, v) for n, v, _ in _parse_lock(text)] == [(n, v) for n, v, _ in base], "relock with --same-versions-as tools/dev-requirements.txt"
+    assert "CPython 3.12" in text.splitlines()[1] and "--same-versions-as tools/dev-requirements.txt" in text.splitlines()[2]
+
+
+def test_pins_from_lock_and_python_choice(tmp_path):
+    assert rl.pins_from_lock(ROOT / "tools/dev-requirements.txt")[0].startswith("annotated-doc==")
+    bad = tmp_path / "x.txt"
+    bad.write_text("rich>=1\n", encoding="utf-8")
+    with pytest.raises(rl.RelockError, match="not an exact pin"):
+        rl.pins_from_lock(bad)
+    other = (3, 12) if sys.version_info[:2] != (3, 12) else (3, 11)
+    with pytest.raises(rl.RelockError, match=f"resolve on CPython {other[0]}.{other[1]}"):
+        rl.check_host(False, other)
 
 
 def test_workflows_never_pip_install_without_hashes():
