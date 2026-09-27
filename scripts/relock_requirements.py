@@ -2,6 +2,8 @@
 
   python3 scripts/relock_requirements.py --from-pyproject dev --out tools/dev-requirements.txt
   python3 scripts/relock_requirements.py --in tools/model-eval-requirements.in --out tools/model-eval-requirements.txt --allow-sdist
+  python3.12 scripts/relock_requirements.py --from-pyproject dev --python 3.12 --same-versions-as tools/dev-requirements.txt \
+      --out tools/dev-requirements-py312.txt
 
 pip resolves the closure with `pip install --dry-run --report` (nothing is installed) and reports, for
 every distribution it picked, the exact file it would download and that file's SHA-256 as published
@@ -9,7 +11,10 @@ by the index. The output lists every distribution as `name==version --hash=sha25
 that `pip install --require-hashes -r <file>` refuses anything that differs from what was resolved
 here. The closure is specific to the interpreter and platform it was resolved on (CPython 3.11 /
 Linux x86_64, the CI and L0 hosts); the script refuses to run elsewhere unless --any-platform is
-given, and the header records what it was resolved on.
+given, and the header records what it was resolved on. --python 3.12 selects the other supported
+interpreter (the 3.12 test job). --same-versions-as <lock> constrains the resolution to exactly the
+name==version pins of an existing closure, so a second interpreter's closure differs from it only in
+the wheel files and their hashes, never in the versions under test.
 
 --only-binary=:all: is the default: every entry must be a wheel, so an install needs no build step.
 --allow-sdist admits source distributions for projects that publish no wheel (their hash is pinned
@@ -32,6 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_PYTHON = (3, 11)
+SUPPORTED_PYTHONS = {(3, 11), (3, 12)}
 EXPECTED_PLATFORM_PREFIX = "linux-x86_64"
 
 
@@ -62,18 +68,32 @@ def requirements_from_file(path: Path) -> list[str]:
     return reqs
 
 
-def check_host(any_platform: bool) -> str:
+def pins_from_lock(path: Path) -> list[str]:
+    """The name==version lines of a closure written by this script (hash lines and comments dropped)."""
+    pins = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip().rstrip("\\").strip()
+        if line and not line.startswith(("#", "--hash")):
+            if "==" not in line:
+                raise RelockError(f"{path}: not an exact pin: {line!r}")
+            pins.append(line)
+    if not pins:
+        raise RelockError(f"{path}: no pins")
+    return pins
+
+
+def check_host(any_platform: bool, expected: tuple[int, int] = EXPECTED_PYTHON) -> str:
     plat = sysconfig.get_platform()
     py = ".".join(str(v) for v in sys.version_info[:3])
     if not any_platform:
-        if sys.version_info[:2] != EXPECTED_PYTHON:
-            raise RelockError(f"resolve on CPython {EXPECTED_PYTHON[0]}.{EXPECTED_PYTHON[1]} (this is {py}); the closure is interpreter-specific")
+        if sys.version_info[:2] != expected:
+            raise RelockError(f"resolve on CPython {expected[0]}.{expected[1]} (this is {py}); the closure is interpreter-specific")
         if not plat.startswith(EXPECTED_PLATFORM_PREFIX):
             raise RelockError(f"resolve on {EXPECTED_PLATFORM_PREFIX} (this is {plat}); the closure is platform-specific")
     return f"CPython {py} / {plat}"
 
 
-def resolve(reqs: list[str], allow_sdist: bool, workdir: Path) -> dict:
+def resolve(reqs: list[str], allow_sdist: bool, workdir: Path, constraints: list[str] | None = None) -> dict:
     req_file = workdir / "requirements.in"
     req_file.write_text("".join(r + "\n" for r in reqs), encoding="utf-8")
     report = workdir / "report.json"
@@ -83,6 +103,10 @@ def resolve(reqs: list[str], allow_sdist: bool, workdir: Path) -> dict:
         argv.append("--only-binary=:all:")
     else:
         argv.append("--no-build-isolation")
+    if constraints:
+        con_file = workdir / "constraints.txt"
+        con_file.write_text("".join(c + "\n" for c in constraints), encoding="utf-8")
+        argv += ["-c", str(con_file)]
     argv += ["-r", str(req_file)]
     print("+ " + " ".join(argv))
     r = subprocess.run(argv, capture_output=True, text=True)
@@ -139,25 +163,31 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--title", default="", help="first words of the header (default: derived from --out)")
     ap.add_argument("--allow-sdist", action="store_true", help="admit source distributions (default: wheels only)")
-    ap.add_argument("--any-platform", action="store_true", help="skip the CPython 3.11 / linux-x86_64 host check")
+    ap.add_argument("--any-platform", action="store_true", help="skip the CPython / linux-x86_64 host check")
+    ap.add_argument("--python", default="3.11", choices=sorted(f"{a}.{b}" for a, b in SUPPORTED_PYTHONS),
+                    help="interpreter the closure is for; the script must run on it")
+    ap.add_argument("--same-versions-as", type=Path, metavar="LOCK", help="constrain the resolution to this closure's exact versions")
     ap.add_argument("--report", type=Path, help="use this pip --report JSON instead of resolving (tests)")
     a = ap.parse_args()
 
     try:
-        host = check_host(a.any_platform)
+        expected = tuple(int(x) for x in a.python.split("."))
+        host = check_host(a.any_platform, expected)  # type: ignore[arg-type]
+        constraints = pins_from_lock(a.same_versions_as) if a.same_versions_as else None
+        extra = (f" --python {a.python}" if a.python != "3.11" else "") + (f" --same-versions-as {a.same_versions_as.as_posix()}" if a.same_versions_as else "")
         if a.infile is not None:
             reqs = requirements_from_file(a.infile)
             source = a.infile.as_posix()
-            regenerate = f"python3 scripts/relock_requirements.py --in {source} --out {a.out.as_posix()}" + (" --allow-sdist" if a.allow_sdist else "")
+            regenerate = f"python3 scripts/relock_requirements.py --in {source}{extra} --out {a.out.as_posix()}" + (" --allow-sdist" if a.allow_sdist else "")
         else:
             reqs = requirements_from_pyproject(ROOT / "pyproject.toml", a.from_pyproject)
             source = "pyproject.toml" + (f" [{', '.join(a.from_pyproject)}]" if a.from_pyproject else "")
-            regenerate = f"python3 scripts/relock_requirements.py --from-pyproject {' '.join(a.from_pyproject)} --out {a.out.as_posix()}".rstrip() + (" --allow-sdist" if a.allow_sdist else "")
+            regenerate = f"python3 scripts/relock_requirements.py --from-pyproject {' '.join(a.from_pyproject)}{extra} --out {a.out.as_posix()}" + (" --allow-sdist" if a.allow_sdist else "")
         if a.report is not None:
             report = json.loads(a.report.read_text(encoding="utf-8"))
         else:
             with tempfile.TemporaryDirectory(prefix="relock-") as tmp:
-                report = resolve(reqs, a.allow_sdist, Path(tmp))
+                report = resolve(reqs, a.allow_sdist, Path(tmp), constraints)
         entries = entries_from_report(report)
         if not a.allow_sdist and any(e["sdist"] for e in entries):
             raise RelockError("the report contains source distributions; pass --allow-sdist to admit them")

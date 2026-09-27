@@ -80,9 +80,9 @@ python -m pip install --require-hashes --only-binary=:all: -r tools/build-requir
 python -m pip install --no-deps --no-build-isolation -e .                                    # this repository's own code only / 只裝本 repo 自己的程式碼
 ```
 
-`tools/dev-requirements.txt` 是在 CPython 3.11／Linux x86_64 上解析的閉包，每個套件只有該平台的 wheel hash。在其他平台或 Python 版本上，`--require-hashes` 會因為 wheel 不同而失敗，這是預期行為，改用 2.3 節。
+`tools/dev-requirements.txt` 是在 CPython 3.11／Linux x86_64 上解析的閉包，每個套件只有該平台的 wheel hash。CPython 3.12／Linux x86_64 請改用 `tools/dev-requirements-py312.txt`（版本與 3.11 閉包完全相同，只有 wheel 與 hash 不同，CI 的 `tests (CPython 3.12)` job 用的就是它），其餘兩行不變。在其他平台或 Python 版本上，`--require-hashes` 會因為 wheel 不同而失敗，這是預期行為，改用 2.3 節。
 
-`tools/dev-requirements.txt` was resolved on CPython 3.11 / Linux x86_64 and carries only that platform's wheel hashes. On any other platform or Python version `--require-hashes` fails because the wheels differ; that is expected, use section 2.3.
+`tools/dev-requirements.txt` was resolved on CPython 3.11 / Linux x86_64 and carries only that platform's wheel hashes. On CPython 3.12 / Linux x86_64 use `tools/dev-requirements-py312.txt` instead (the same versions as the 3.11 closure, only the wheels and hashes differ; the CI job `tests (CPython 3.12)` installs it); the other two lines stay the same. On any other platform or Python version `--require-hashes` fails because the wheels differ; that is expected, use section 2.3.
 
 ### 2.3 一般安裝（macOS、Windows、其他 Python 版本）/ Plain install (macOS, Windows, other Python versions)
 
