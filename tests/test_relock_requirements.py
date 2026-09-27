@@ -77,6 +77,7 @@ def test_pyproject_requirements_include_the_dev_extra():
 @pytest.mark.parametrize("lock, top_level, wheels_only", [
     ("tools/dev-requirements.txt", ["anthropic", "pydantic", "pyyaml", "httpx", "typer", "rich", "pytest", "ruff", "markdown", "jsonschema"], True),
     ("tools/dev-requirements-py312.txt", ["anthropic", "pydantic", "pyyaml", "httpx", "typer", "rich", "pytest", "ruff", "markdown", "jsonschema"], True),
+    ("tools/typecheck-requirements.txt", ["mypy", "types-jsonschema", "types-pyyaml"], True),
     ("tools/model-eval-requirements.txt", ["garak"], False),
 ])
 def test_repository_lockfiles_are_complete(lock, top_level, wheels_only):
@@ -99,6 +100,17 @@ def test_the_312_closure_pins_the_same_versions_as_the_311_one():
     text = (ROOT / "tools/dev-requirements-py312.txt").read_text(encoding="utf-8")
     assert [(n, v) for n, v, _ in _parse_lock(text)] == [(n, v) for n, v, _ in base], "relock with --same-versions-as tools/dev-requirements.txt"
     assert "CPython 3.12" in text.splitlines()[1] and "--same-versions-as tools/dev-requirements.txt" in text.splitlines()[2]
+
+
+def test_the_typecheck_closure_agrees_with_the_312_closure_it_is_installed_over():
+    # Installed on top of tools/dev-requirements-py312.txt: a shared package with another version would
+    # replace the tested one (or fail the hash check), so every shared name must carry the same pin.
+    base = {n.lower(): (v, h) for n, v, h in _parse_lock((ROOT / "tools/dev-requirements-py312.txt").read_text(encoding="utf-8"))}
+    text = (ROOT / "tools/typecheck-requirements.txt").read_text(encoding="utf-8")
+    shared = [(n, v, h) for n, v, h in _parse_lock(text) if n.lower() in base]
+    assert shared, "expected shared packages (typing_extensions, referencing, ...)"
+    assert all(base[n.lower()] == (v, h) for n, v, h in shared), "relock with --same-versions-as tools/dev-requirements-py312.txt"
+    assert "--same-versions-as tools/dev-requirements-py312.txt" in text.splitlines()[2]
 
 
 def test_pins_from_lock_and_python_choice(tmp_path):

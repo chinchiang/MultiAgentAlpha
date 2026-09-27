@@ -30,7 +30,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .config import MaraConfig
@@ -202,7 +202,7 @@ class Thresholds:
 
 def evaluate_family(garak: dict | None, pi: dict | None, frr: dict | None, th: Thresholds) -> dict:
     """Per-metric verdicts; a missing input is 'missing', never a pass."""
-    out = {}
+    out: dict[str, Any] = {}  # metric -> {value, threshold, status}, plus "overall" -> str
     if garak is None or garak.get("pass_rate") is None:
         out["garak_pass_rate"] = {"value": None, "threshold": th.garak_pass_rate_min, "status": "missing"}
     else:

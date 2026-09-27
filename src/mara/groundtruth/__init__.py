@@ -50,4 +50,4 @@ def validate_ref(ref: str) -> tuple[bool, str]:
 
 def cwe_known(cwe: str) -> bool:
     m = _CWE_RE.match(cwe)
-    return bool(m) and int(m.group(1)) in load("cwe_known")["ids"]
+    return m is not None and int(m.group(1)) in load("cwe_known")["ids"]

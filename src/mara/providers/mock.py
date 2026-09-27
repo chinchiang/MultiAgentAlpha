@@ -42,7 +42,7 @@ class MockProvider(Provider):
         fam = self.spec.family.value
         kind, _, arg = role.partition(":")
         if self.labels is not None:
-            return self._label_driven(kind, arg, fam, user)
+            return _label_driven(self, kind, arg, fam, user)
         data = self._load(f"{kind}_{arg}_{fam}") if arg else None
         if data is None:
             data = self._load(f"{kind}_{fam}")
@@ -60,7 +60,7 @@ class MockProvider(Provider):
         return Completion(data=data, raw_text=json.dumps(data))
 
 
-def _label_driven_impl(self: MockProvider, kind: str, arg: str, fam: str, user: str) -> Completion:
+def _label_driven(self: MockProvider, kind: str, arg: str, fam: str, user: str) -> Completion:
     from . import mock_labels
 
     if kind == "reviewer":
@@ -78,8 +78,6 @@ def _label_driven_impl(self: MockProvider, kind: str, arg: str, fam: str, user: 
         data = {"items": []}
     return Completion(data=data, raw_text=json.dumps(data))
 
-
-MockProvider._label_driven = _label_driven_impl
 
 
 def _parse_batch(user: str) -> list[dict]:

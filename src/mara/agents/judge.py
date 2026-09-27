@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from ..providers.base import Provider
-from ..schemas import JudgeVote
+from ..schemas import JudgeVote, PassId
 from . import base
 
 JUDGE_SCHEMA = {
@@ -30,7 +30,7 @@ class _JudgeRaw(BaseModel):
     reason: str = Field(max_length=400)
 
 
-def run_judge(provider: Provider, batch: list[dict], pass_id: str, self_ids: set[str] | None = None) -> tuple[list[JudgeVote], list[str]]:
+def run_judge(provider: Provider, batch: list[dict], pass_id: PassId, self_ids: set[str] | None = None) -> tuple[list[JudgeVote], list[str]]:
     if not batch:
         return [], []
     user = f"pass_id: {pass_id}\nBlinded findings, judge each independently.\nBEGIN_JSON_ARRAY\n" + json.dumps(batch, ensure_ascii=False)

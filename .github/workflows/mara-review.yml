@@ -110,7 +110,7 @@ jobs:
       - name: osv-scanner must report the seeded fixture's known-vulnerable dependency (requests==2.19.0)
         run: python3 scripts/osv_ci.py --target fixtures/vuln-sample --report fixture-osv.sarif --expect-package requests
       - name: osv-scanner on the hash-locked closures this repository installs; any un-ignored advisory fails the job
-        run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/dev-requirements-py312.txt --lockfile tools/semgrep-requirements.txt --lockfile tools/build-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
+        run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/dev-requirements-py312.txt --lockfile tools/typecheck-requirements.txt --lockfile tools/semgrep-requirements.txt --lockfile tools/build-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
       - name: osv-scanner on the isolated model-evaluation closure only
         run: python3 scripts/osv_ci.py --lockfile tools/model-eval-requirements.txt --config tools/osv-model-eval.toml --report osv-model-eval.sarif
       - name: trivy offline database — fetch once, record its digests, refuse a stale or tampered copy
@@ -231,7 +231,8 @@ jobs:
     # pyproject allows >=3.11; this job keeps 3.12 working. tools/dev-requirements-py312.txt holds the same
     # versions as tools/dev-requirements.txt (--same-versions-as), only the 3.12 wheels and their hashes
     # differ. The L0 tool tests skip here (the 3.11 job runs them against the locked binaries), and lint,
-    # the mock review and the ML-BOM check stay in the 3.11 job.
+    # the mock review and the ML-BOM check stay in the 3.11 job. mypy runs here, from its own 3.12 closure
+    # (tools/typecheck-requirements.txt, same versions for the packages it shares), checking as 3.11.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -244,6 +245,9 @@ jobs:
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/dev-requirements-py312.txt
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/build-requirements.txt
           python3 -m pip install --quiet --disable-pip-version-check --no-deps --no-build-isolation -e .
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/typecheck-requirements.txt
+      - name: Type check (mypy, configured in pyproject.toml)
+        run: python3 -m mypy
       - name: Unit and end-to-end tests (mock providers, no network)
         run: pytest -q -rs
 

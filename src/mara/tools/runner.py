@@ -118,9 +118,10 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 # Pinned local rulesets (tools/versions.lock `semgrep-rules`) unless MARA_SEMGREP_CONFIG says
                 # otherwise; never `--config auto`, which turns metrics on and sends project identity to
                 # semgrep.dev (data-residency policy P5). Rule ids are normalised to the registry form.
-                from .semgrep_rules import default_configs, normalize_sarif, scan_args, scan_env
+                from .semgrep_rules import default_configs, normalize_sarif, scan_env
+                from .semgrep_rules import scan_args as semgrep_args
 
-                cp = _run(scan_args(exe, default_configs(), sarif) + ["."], target, env=scan_env())
+                cp = _run(semgrep_args(exe, default_configs(), sarif) + ["."], target, env=scan_env())
                 if sarif.exists() and sarif.read_text(encoding="utf-8").strip():
                     normalize_sarif(sarif)
             elif tool == "gitleaks":
@@ -144,14 +145,15 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                     sarif.write_text(cp.stdout, encoding="utf-8")
             elif tool == "trivy":
                 # Offline only: the database recorded by scripts/trivy_db.py (never downloaded during a review)
-                from .trivy_db import cache_dir, db_path, read_metadata, scan_args
+                from .trivy_db import cache_dir, db_path, read_metadata
+                from .trivy_db import scan_args as trivy_args
 
                 cache = cache_dir()
                 if not db_path(cache).is_file():
                     note = f"no offline database under {cache}; run scripts/trivy_db.py download (or import a bundle)"
                     runs.append(ToolRun(tool=tool, ran=False, note=note))
                     continue
-                cp = _run(scan_args(exe, cache, sarif) + ["."], target)
+                cp = _run(trivy_args(exe, cache, sarif) + ["."], target)
                 updated = (read_metadata(cache) or {}).get("UpdatedAt", "?")
                 version = f"{version}, db {str(updated)[:10]}" if version else f"db {str(updated)[:10]}"
             if not sarif.exists() or not sarif.read_text(encoding="utf-8").strip():

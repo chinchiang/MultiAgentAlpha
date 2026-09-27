@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..schemas import EvidenceTier, ModelFamily
+from ..schemas import EvidenceTier, ModelFamily, SSVCDecision
 
 
 def assign_tier(
@@ -29,7 +29,7 @@ def assign_tier(
     return EvidenceTier.D
 
 
-def ssvc_decision(*, severity: str, exploitable: str, tier: EvidenceTier, internet_exposed: bool = True) -> str:
+def ssvc_decision(*, severity: str, exploitable: str, tier: EvidenceTier, internet_exposed: bool = True) -> SSVCDecision:
     """Simplified SSVC (CISA deployer tree) outcome: Track / Track* / Attend / Act.
 
     Exploitation evidence in our setting is the red-team assessment, not KEV, so

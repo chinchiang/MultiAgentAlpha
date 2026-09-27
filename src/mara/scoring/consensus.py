@@ -23,7 +23,7 @@ def krippendorff_alpha_nominal(units: dict[str, list[str]]) -> float | None:
     if len(pairable) < 2:
         return None
     n = sum(len(v) for v in pairable.values())
-    total = Counter()
+    total: Counter[str] = Counter()
     for labels in pairable.values():
         total.update(labels)
     # observed disagreement

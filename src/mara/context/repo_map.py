@@ -260,7 +260,7 @@ def build_context(root: str | Path) -> RepoContext:
         h.update(json.dumps([rel, sanitized], ensure_ascii=False).encode())
         for pat, fmt in _ENTRY_PATTERNS:
             for m in pat.finditer(sanitized):
-                ctx.entry_points.append(fmt.format(m.group(m.lastindex)))
+                ctx.entry_points.append(fmt.format(m.group(pat.groups)))  # the route is the last group
     ctx.content_hash = h.hexdigest()
     head = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "HEAD"], capture_output=True, text=True, check=False)
     commit = head.stdout.strip() if head.returncode == 0 else "non-git"

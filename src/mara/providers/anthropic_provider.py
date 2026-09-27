@@ -42,18 +42,18 @@ class AnthropicProvider(Provider):
             raise RuntimeError(f"provider_http_error:{e.status_code}") from None
         except anthropic.APIConnectionError:
             raise RuntimeError("provider_connection_failed") from None
-        tokens = {"input_tokens": msg.usage.input_tokens, "output_tokens": msg.usage.output_tokens}
+        tokens_in, tokens_out = msg.usage.input_tokens, msg.usage.output_tokens
         if msg.stop_reason == "refusal":
-            return Completion(data=None, raw_text="", refused=True, **tokens)
+            return Completion(data=None, raw_text="", refused=True, input_tokens=tokens_in, output_tokens=tokens_out)
         text = next((b.text for b in msg.content if b.type == "text"), "")
         if msg.stop_reason == "max_tokens":
             # Output budget exhausted: the JSON text block is cut off. Distinguished from a refusal so
             # the bias audit does not attribute a too-small max_tokens to the model.
-            return Completion(data=None, raw_text=text, truncated=True, **tokens)
+            return Completion(data=None, raw_text=text, truncated=True, input_tokens=tokens_in, output_tokens=tokens_out)
         if not text:
-            return Completion(data=None, raw_text="", **tokens)
+            return Completion(data=None, raw_text="", input_tokens=tokens_in, output_tokens=tokens_out)
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        return Completion(data=data, raw_text=text, **tokens)
+            return Completion(data=None, raw_text=text, truncated=True, input_tokens=tokens_in, output_tokens=tokens_out)
+        return Completion(data=data, raw_text=text, input_tokens=tokens_in, output_tokens=tokens_out)

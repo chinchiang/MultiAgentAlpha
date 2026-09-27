@@ -210,7 +210,9 @@ distributions, two of them sdists because no wheel exists). Both are written by
 `scripts/relock_requirements.py` from a `pip install --dry-run --report` resolution on CPython 3.11 /
 Linux x86_64 and installed with `--require-hashes`. `tools/dev-requirements-py312.txt` is the same
 closure for CPython 3.12, resolved with `--same-versions-as tools/dev-requirements.txt` so only the
-wheels and hashes differ; the `tests (CPython 3.12)` job installs it and runs the test suite; the workflows then add this repository's own
+wheels and hashes differ; the `tests (CPython 3.12)` job installs it and runs the test suite, and runs
+`mypy` (configured in `pyproject.toml`) from `tools/typecheck-requirements.txt`, a third closure pinned to the
+same versions for every package it shares; the workflows then add this repository's own
 code with `pip install --no-deps --no-build-isolation -e .` after installing the hashed
 `tools/build-requirements.txt` closure. The runtime CI path does not let build isolation resolve
 unpinned backends. The separate model-evaluation closure contains two source distributions;

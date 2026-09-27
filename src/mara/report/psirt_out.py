@@ -159,6 +159,6 @@ def send_psirt(payloads: list[dict], cfg: MaraConfig, *, client: httpx.Client | 
     finally:
         if own:
             client.close()
-        if ledger is not None:
+        if ledger is not None and ledger_path:
             save_ledger(ledger, ledger_path)
     return results

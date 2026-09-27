@@ -41,6 +41,10 @@ DIMENSION_LABELS: dict[str, str] = {
 }
 
 
+SSVCDecision = Literal["Track", "Track*", "Attend", "Act"]
+PassId = Literal["forward", "reverse"]  # judge pass: findings in presented order, then reversed
+
+
 class ModelFamily(StrEnum):
     ANTHROPIC = "anthropic"
     DEEPSEEK = "deepseek"
@@ -136,7 +140,7 @@ class JudgeVote(BaseModel):
     judge_family: ModelFamily
     judge_model: str
     presentation_order: int = Field(ge=0, description="Position in which the judge saw this finding (bias audit)")
-    pass_id: Literal["forward", "reverse"]
+    pass_id: PassId
     self_family: bool = Field(default=False, description="Judge family co-produced this finding (fallback only; vote discounted)")
 
 
@@ -154,7 +158,7 @@ class ConsensusResult(BaseModel):
     tier: EvidenceTier
     cvss4_score: float | None
     cvss4_severity: str
-    ssvc_decision: Literal["Track", "Track*", "Attend", "Act"]
+    ssvc_decision: SSVCDecision
     accepted: bool
     needs_human: bool = False
     human_reasons: list[str] = Field(default_factory=list)
