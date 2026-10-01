@@ -39,8 +39,11 @@ CONTEXT_SCHEMA = {
     },
 }
 
-_KIND_BY_KEY = (("container", "containers"), ("external_system", "external_systems"),
-                ("trust_boundary", "trust_boundaries"), ("data_store", "data_stores"))
+_ContextKind = Literal["container", "external_system", "trust_boundary", "data_store"]
+
+_KIND_BY_KEY: tuple[tuple[_ContextKind, str], ...] = (
+    ("container", "containers"), ("external_system", "external_systems"),
+    ("trust_boundary", "trust_boundaries"), ("data_store", "data_stores"))
 
 
 class _ContextItemRaw(BaseModel):
@@ -99,7 +102,7 @@ def run_context_agent(provider: Provider, ctx: RepoContext) -> tuple[ContextView
     if not isinstance(comp.data, dict):
         audit["invalid"] += 1
         return None, audit
-    raw: list[tuple[str, dict]] = []
+    raw: list[tuple[_ContextKind, dict]] = []
     for kind, key in _KIND_BY_KEY:
         arr = comp.data.get(key)
         if not isinstance(arr, list):
