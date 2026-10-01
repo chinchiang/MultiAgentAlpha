@@ -16,7 +16,7 @@ from mara.providers.base import Completion, Provider
 from mara.report.human_queue_out import build_queue, queue_key
 from mara.report.markdown_out import render_markdown
 from mara.report.psirt_out import legal_deadlines
-from mara.schemas import Finding, JudgeVote, ModelFamily, Provenance
+from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
 from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
 
@@ -211,7 +211,7 @@ def test_truncated_reviewer_replies_block_the_gate(tmp_path, monkeypatch):
 def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_path, monkeypatch):
     pipe, f = pipeline(tmp_path), finding()
     seen = []
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: (seen.append(("skeptic", p.family)), ([], []))[1])
+    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: (seen.append(("skeptic", p.family)), ([], [], 0))[1])
     monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: (seen.append(("redteam", p.family)), ([], []))[1])
     # the configured skeptic (nemotron) and red team (deepseek) both found it: only anthropic is independent
     two = {f.id: {ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
@@ -236,6 +236,44 @@ def test_missing_config_is_a_usage_error_not_a_traceback(tmp_path, monkeypatch):
         res = CliRunner().invoke(app, args)
         assert res.exit_code == 2 and not isinstance(res.exception, FileNotFoundError), res.output
         assert "config file not found" in res.output
+
+
+def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path, monkeypatch):
+    pipe = pipeline(tmp_path)
+    (tmp_path / "app.py").write_text("unsafe()")
+    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
+    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([], ["refused"], 0))
+    report = pipe.run(tmp_path, mode="mock")
+    assert report.bias_audit["skeptic_refusals"] == report.bias_audit["skeptic_calls"] >= 1
+    assert report.bias_audit["skeptic_invalid_items"] == 0
+    assert "skeptic_refusals" in report.incomplete_reasons and not report.gate_passed
+    assert report.consensus and all(c.skeptic_abstained for c in report.consensus)
+    assert all(c.tier != EvidenceTier.B for c in report.consensus)  # the independent challenge is missing
+
+
+def test_judge_refusal_is_counted_separately_from_invalid_output(tmp_path, monkeypatch):
+    pipe = pipeline(tmp_path)
+    (tmp_path / "app.py").write_text("unsafe()")
+    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
+    monkeypatch.setattr("mara.pipeline.judge.run_judge", lambda p, batch, pass_id, self_ids=None: ([], ["refused"]))
+    report = pipe.run(tmp_path, mode="mock")
+    assert report.bias_audit["judge_refusals"] == 6 and report.bias_audit["judge_invalid_items"] == 0  # 3 families x 2 passes
+    assert "judge_refusals" in report.incomplete_reasons and not report.gate_passed
+
+
+def test_unresolvable_base_ref_is_a_usage_error(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from mara.cli import app
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "app.py").write_text("unsafe()")
+    res = CliRunner().invoke(
+        app, ["review", str(tmp_path), "--provider", "mock", "--config", str(ROOT / "config" / "mara.mock.yaml"),
+              "--base", "no-such-ref"])
+    # exit 2 (usage error) and no report: the message text goes through typer's rich error
+    # panel, whose rendering varies with terminal width and encoding, so assert the outcome
+    assert res.exit_code == 2 and not (tmp_path / "out" / "report.json").exists()
 
 
 def test_one_verified_quote_cannot_launder_an_invalid_primary_location(tmp_path):

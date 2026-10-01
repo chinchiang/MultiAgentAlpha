@@ -8,6 +8,7 @@ roles:
   skeptic: mock-n
   redteam: mock-d
   judges: [mock-a, mock-d, mock-n]
+  context: mock-a
 gate: { block_on_tiers: [A, B], block_on_severity: [High, Critical], min_dimension_score: 60, accept_threshold: 0.6, human_threshold_alpha: 0.4 }
 allow_source_code_to_non_on_prem: false
 require_family_diversity: true

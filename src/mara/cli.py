@@ -29,6 +29,8 @@ def review(
     notify_psirt: bool = typer.Option(False, "--notify-psirt", help="POST internal PSIRT hand-off payloads to the configured PSIRT webhook"),
     psirt_event: Path | None = typer.Option(None, "--psirt-event", help="PSIRT-confirmed incident event JSON for legal clock anchors"),
     psirt_resend: bool = typer.Option(False, "--psirt-resend", help="With --notify-psirt: send even findings the ledger says were already delivered"),
+    base: str | None = typer.Option(None, "--base",
+                                    help="Incremental review: files changed since this git ref, plus import neighbours, manifests and workflows"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
     cfg_path = config
@@ -40,7 +42,13 @@ def review(
     if provider == "mock" and any(m.provider != "mock" for m in cfg.models):
         raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock")
     pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out)
-    report = pipe.run(target, sarif_dir=sarif_dir, mode=provider)
+    try:
+        report = pipe.run(target, sarif_dir=sarif_dir, mode=provider, base_ref=base)
+    except ValueError as e:
+        # a broken base ref is a usage error, not an empty 'nothing changed' review
+        if base is not None:
+            raise typer.BadParameter(str(e), param_hint="--base") from e
+        raise
     if psirt_event:
         from .report.psirt_out import build_notifications
         report.psirt = build_notifications(report, cfg, event=json.loads(psirt_event.read_text(encoding="utf-8")))
@@ -120,7 +128,7 @@ def check_config(
     cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, psirt=psirt, ml_bom=ml_bom, rollout=rollout,
                                      model_eval=model_eval, **extra)
     names = {m.name for m in models}
-    unknown = [n for n in [roles.skeptic, roles.redteam, *roles.reviewers, *roles.judges] if n not in names]
+    unknown = [n for n in [roles.skeptic, roles.redteam, roles.context, *roles.reviewers, *roles.judges] if n and n not in names]
     if unknown:
         console.print(f"[red]roles reference unknown models:[/red] {sorted(set(unknown))}")
         raise typer.Exit(code=1)

@@ -244,7 +244,8 @@ def test_agent_layer_treats_truncation_as_empty_but_reviewer_audit_tells_it_apar
     trunc = _oai(lambda req: _chat(TRUNCATED_TEXT, finish_reason="length"))
     refused = _oai(lambda req: _chat("", finish_reason="content_filter"))
     comp = _call(trunc)
-    assert agent_base.parse_items(comp, dict) == ([], ["refused_or_empty"])
+    assert agent_base.parse_items(comp, dict) == ([], ["empty"])  # truncated output is unusable, not an abstention
+    assert agent_base.parse_items(_call(refused), dict) == ([], ["refused"])  # content_filter is an abstention
     ctx = RepoContext(root=Path("."))
     canary = agent_base.Canary()
     _, a1 = review_dimension(trunc, ctx, "xss", canary)

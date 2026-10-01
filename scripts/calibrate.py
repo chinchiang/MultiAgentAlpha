@@ -148,15 +148,41 @@ def audit_rates(runs, families):
     rows = {}
     for fam in families:
         calls = agg[fam]["reviewer_calls"] or 1
-        rows[fam] = {
+        r = {
             "calls": agg[fam]["reviewer_calls"],
             "refusal_rate": agg[fam]["reviewer_refusals"] / calls,
             "error_rate": agg[fam]["reviewer_errors"] / calls,  # provider failures, kept out of the refusal rate
             "canary_rate": agg[fam]["canary_echoes"] / calls,
             "unverified_quotes": agg[fam]["findings_with_unverified_quotes"],
             "invalid": agg[fam]["invalid_findings_dropped"],
+            "invalid_rate": agg[fam]["invalid_findings_dropped"] / calls,
         }
+        # L3/L4 roles run per finding, not per call; report each role's refusals and invalid
+        # output per family (assessment #30/#38) instead of hiding them in pipeline totals
+        for role in ("skeptic", "redteam", "judge"):
+            role_calls = agg[fam][f"{role}_calls"] or 1
+            r[f"{role}_calls"] = agg[fam][f"{role}_calls"]
+            r[f"{role}_refusal_rate"] = agg[fam][f"{role}_refusals"] / role_calls
+            r[f"{role}_invalid_rate"] = agg[fam][f"{role}_invalid_items"] / role_calls
+        r["skeptic_refuted"] = agg[fam]["skeptic_refuted"]
+        r["skeptic_unverified_controls"] = agg[fam]["skeptic_unverified_controls"]
+        rows[fam] = r
     return rows
+
+
+def refutation_rates(runs, families):
+    """Per family: the share of its findings the skeptic refuted (assessment #38). A family
+    the skeptic keeps refuting over-reports; its suggested weight is discounted."""
+    finder_count: defaultdict[str, int] = defaultdict(int)
+    refuted_count: defaultdict[str, int] = defaultdict(int)
+    for _, rep, _ in runs:
+        refuted_ids = {v.get("finding_id") for v in rep.get("skeptic", []) if v.get("verdict") == "refuted"}
+        for f in rep.get("findings", []):
+            for fam in f.get("finder_families", []):
+                finder_count[fam] += 1
+                if f.get("id") in refuted_ids:
+                    refuted_count[fam] += 1
+    return {fam: (refuted_count[fam] / finder_count[fam]) if finder_count[fam] else 0.0 for fam in families}
 
 
 def judge_agreement(runs):
@@ -235,7 +261,8 @@ def _penalty() -> float:
         return 0.8
 
 
-def suggest_weights(stats, rel, families, model_eval: dict | None = None, penalty: float | None = None):
+def suggest_weights(stats, rel, families, model_eval: dict | None = None, penalty: float | None = None,
+                    rates: dict | None = None, refuted_rates: dict | None = None):
     penalty = _penalty() if penalty is None else penalty
     out = {}
     for fam in families:
@@ -248,12 +275,23 @@ def suggest_weights(stats, rel, families, model_eval: dict | None = None, penalt
         supervised = 0.5 + f1  # 0.5..1.5
         unsup = rel.get(fam, 0.5) * 2  # 0..2
         w = max(0.2, min(2.0, round(0.6 * supervised + 0.4 * unsup, 2)))
+        # skeptic refutations discount an over-reporting family before any other factor (#38)
+        refuted = (refuted_rates or {}).get(fam, 0.0)
+        if refuted:
+            w = round(w * (1 - refuted), 2)
+        # chronically unusable output (invalid shapes, dropped findings) discounts the family too
+        r = (rates or {}).get(fam, {})
+        invalid_rate = max([r.get(k, 0.0) for k in ("invalid_rate", "skeptic_invalid_rate", "judge_invalid_rate", "redteam_invalid_rate")] or [0.0])
+        if invalid_rate > 0.10:
+            w = round(w * 0.8, 2)
         verdict = ((model_eval or {}).get("families", {}).get(fam) or {}).get("verdict", {}).get("overall", "none")
         penalised = verdict == "fail"
         if penalised:
-            w = max(0.2, round(w * penalty, 2))
+            w = round(w * penalty, 2)
+        w = max(0.2, min(2.0, w))
         out[fam] = {"precision": prec, "recall": recall, "f1": f1, "n_labels": tp + fn, "ds_reliability": rel.get(fam), "weight": w,
-                    "model_eval": verdict, "penalised": penalised}
+                    "model_eval": verdict, "penalised": penalised, "skeptic_refuted_rate": round(refuted, 3),
+                    "invalid_output_rate": round(invalid_rate, 3), "invalid_discounted": invalid_rate > 0.10}
     return out
 
 
@@ -287,6 +325,19 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
     for fam in families:
         r = rates.get(fam, {})
         L.append(f"| {fam} | {r.get('calls', 0)} | {r.get('refusal_rate', 0):.2f} | {r.get('error_rate', 0):.2f} | {r.get('canary_rate', 0):.2f} | {r.get('unverified_quotes', 0)} | {r.get('invalid', 0)} |")
+    L += ["", "### 2.1 L3/L4 每角色拒答與無效輸出（每家族）", "",
+          "L3/L4 以 finding 為單位呼叫；拒答（模型拒絕輸出）與無效輸出（格式或引用不可用）分開計數，",
+          "refuted 但控制項引用無法在 bundle 中定位的 skeptic 裁決已降級為 weakened 並計入「未驗證控制」。", "",
+          "| 家族 | skeptic 呼叫 | skeptic 拒答率 | skeptic 無效率 | 未驗證控制 | skeptic 否證數 | redteam 呼叫 | redteam 拒答率 | redteam 無效率 | judge 呼叫 | judge 拒答率 | judge 無效率 |",
+          "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    for fam in families:
+        r = rates.get(fam, {})
+        L.append(
+            f"| {fam} | {r.get('skeptic_calls', 0)} | {r.get('skeptic_refusal_rate', 0):.2f} | {r.get('skeptic_invalid_rate', 0):.2f} | "
+            f"{r.get('skeptic_unverified_controls', 0)} | {r.get('skeptic_refuted', 0)} | {r.get('redteam_calls', 0)} | "
+            f"{r.get('redteam_refusal_rate', 0):.2f} | {r.get('redteam_invalid_rate', 0):.2f} | {r.get('judge_calls', 0)} | "
+            f"{r.get('judge_refusal_rate', 0):.2f} | {r.get('judge_invalid_rate', 0):.2f} |"
+        )
     L += ["", "## 3. judge 家族兩兩一致率與全域 α", "", "| 家族對 | 一致率（樣本平均） | 相關錯誤風險 |", "|---|---:|---|"]
     for k, v in sorted(pair.items()):
         L.append(f"| {k} | {v:.3f} | {'**高（>0.9）**' if v > 0.9 else '可接受'} |")
@@ -294,13 +345,18 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
           "## 4. Dawid-Skene 無監督可靠度（僅用投票，不看標籤）", "", f"項目數 {n_items}", "", "| 家族 | 可靠度 |", "|---|---:|"]
     for fam, v in sorted(rel.items()):
         L.append(f"| {fam} | {v:.3f} |")
-    L += ["", "## 5. 建議家族權重（0.2–2.0；0.6×監督 F1 + 0.4×DS 可靠度；G-8 未達門檻者再乘以懲罰係數）", "",
-          "| 家族 | precision | recall | F1 | DS 可靠度 | G-8 評測 | 建議權重 | 標籤數 |", "|---|---:|---:|---:|---:|---|---:|---:|"]
+    L += ["", "## 5. 建議家族權重（0.2–2.0；0.6×監督 F1 + 0.4×DS 可靠度；先按被否證率折抵，無效率>10% 再 ×0.8，G-8 未達門檻者再乘以懲罰係數）", "",
+          "| 家族 | precision | recall | F1 | DS 可靠度 | 被否證率 | 無效率 | G-8 評測 | 建議權重 | 標籤數 |", "|---|---:|---:|---:|---:|---:|---:|---|---:|---:|"]
     for fam in families:
         w = weights[fam]
-        ev = w.get("model_eval", "none") + ("（已懲罰）" if w.get("penalised") else "")
+        ev = w.get("model_eval", "none")
+        if w.get("penalised"):
+            ev += "（已懲罰）"
+        if w.get("invalid_discounted"):
+            ev += "（無效率懲罰）"
         L.append(f"| {fam} | {w['precision']:.2f} | {w['recall']:.2f} | {w['f1']:.2f} | "
-                 f"{w['ds_reliability'] if w['ds_reliability'] is not None else 'n/a'} | {ev} | **{w['weight']}** | {w['n_labels']} |")
+                 f"{w['ds_reliability'] if w['ds_reliability'] is not None else 'n/a'} | {w.get('skeptic_refuted_rate', 0):.2f} | "
+                 f"{w.get('invalid_output_rate', 0):.2f} | {ev} | **{w['weight']}** | {w['n_labels']} |")
     L += ["", "權重未自動寫入 `config/mara.yaml`；採用與否由人決定。標籤數低於 30 的家族權重只能視為方向，不能視為量測。", ""]
     L += ["## 6. 模型紅隊評測（G-8：garak 與 CyberSecEval 4）", ""]
     if model_eval:
@@ -352,10 +408,11 @@ def main() -> int:
                 raise SystemExit("--mode live refused: missing or non-live provider provenance")
     stats, families = family_metrics(runs)
     rates = audit_rates(runs, families)
+    refuted = refutation_rates(runs, families)
     pair, alpha = judge_agreement(runs)
     rel, n_items = dawid_skene(runs)
     model_eval = load_model_eval()
-    weights = suggest_weights(stats, rel, families, model_eval)
+    weights = suggest_weights(stats, rel, families, model_eval, rates=rates, refuted_rates=refuted)
     date = args.date or dt.date.today().isoformat()
     text = render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, args.mode, date, model_eval)
     out = Path(args.report) if args.report else ROOT / "docs" / f"calibration-{date}.md"

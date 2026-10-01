@@ -44,6 +44,7 @@ class RolesConfig(BaseModel):
     skeptic: str
     redteam: str
     judges: list[str] = Field(min_length=1)
+    context: str = Field(default="", description="Model name used as the L1 context builder; empty disables the context view")
 
 
 class GateConfig(BaseModel):
@@ -191,7 +192,8 @@ class MaraConfig(BaseModel):
             raise ValueError("model names must be unique")
         if len(self.roles.judges) != len(set(self.roles.judges)):
             raise ValueError("judge roles must be unique")
-        for role_names in ([self.roles.skeptic, self.roles.redteam], self.roles.reviewers, self.roles.judges):
+        for role_names in ([self.roles.skeptic, self.roles.redteam] + ([self.roles.context] if self.roles.context else []),
+                           self.roles.reviewers, self.roles.judges):
             for n in role_names:
                 if n not in names:
                     raise ValueError(f"role references unknown model {n!r}")

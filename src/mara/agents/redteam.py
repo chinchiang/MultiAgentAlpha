@@ -61,7 +61,9 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     items, errors = base.parse_items(comp, _RedRaw)
     counts = Counter(i.finding_id for i in items)
     if set(counts) != {f.id for f in findings} or any(n != 1 for n in counts.values()) or errors:
-        return [], errors + ["incomplete_or_duplicate_response"]
+        # a bare refusal is an abstention, not invalid output: keep its error list clean
+        errs = errors if errors == ["refused"] else errors + ["incomplete_or_duplicate_response"]
+        return [], errs
     known = {f.id for f in findings}
     out = [RedTeamNote(**i.model_dump(), source_family=provider.family, source_model=provider.model) for i in items]
     return [n for n in out if n.finding_id in known], errors
