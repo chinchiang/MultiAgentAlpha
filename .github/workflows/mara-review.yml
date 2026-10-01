@@ -15,8 +15,8 @@
 #     which downloaded its own unverified copy; it audits only the real workflows under .github/workflows and
 #     any finding fails the job. The seeded fixture workflow is audited in a separate step whose findings
 #     must match the pre-recorded fixtures/vuln-sample-sarif/zizmor.sarif
-#   - the SARIF of the six scans of this repository (semgrep, osv-scanner twice: runtime/build and model-eval
-#     closures, trivy, gitleaks, zizmor) goes to
+#   - the SARIF of the seven scans of this repository (semgrep, osv-scanner three times: runtime/build,
+#     model-eval and semgrep tool closures, trivy, gitleaks, zizmor) goes to
 #     GitHub Code Scanning from a separate job that runs no repository code and is the only job with
 #     security-events: write; it is skipped for pull requests from forks and from Dependabot (read-only
 #     token). The fixture scans and the mock review report describe seeded material and are never uploaded
@@ -110,9 +110,11 @@ jobs:
       - name: osv-scanner must report the seeded fixture's known-vulnerable dependency (requests==2.19.0)
         run: python3 scripts/osv_ci.py --target fixtures/vuln-sample --report fixture-osv.sarif --expect-package requests
       - name: osv-scanner on the hash-locked closures this repository installs; any un-ignored advisory fails the job
-        run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/dev-requirements-py312.txt --lockfile tools/typecheck-requirements.txt --lockfile tools/semgrep-requirements.txt --lockfile tools/build-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
+        run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/dev-requirements-py312.txt --lockfile tools/typecheck-requirements.txt --lockfile tools/build-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
       - name: osv-scanner on the isolated model-evaluation closure only
         run: python3 scripts/osv_ci.py --lockfile tools/model-eval-requirements.txt --config tools/osv-model-eval.toml --report osv-model-eval.sarif
+      - name: osv-scanner on the semgrep closure only (semgrep pins pyjwt[crypto]~=2.13.0 upstream; dated exceptions in tools/osv-semgrep.toml)
+        run: python3 scripts/osv_ci.py --lockfile tools/semgrep-requirements.txt --config tools/osv-semgrep.toml --report osv-semgrep.sarif
       - name: trivy offline database — fetch once, record its digests, refuse a stale or tampered copy
         run: |
           python3 scripts/trivy_db.py download
@@ -131,7 +133,7 @@ jobs:
         run: python3 scripts/gitleaks_ci.py --base "$BASE_SHA" --head "$HEAD_SHA" --event "$EVENT" --report gitleaks.sarif
       - name: Prepare Code Scanning data with a read-only token
         if: always()
-        run: python3 scripts/code_scanning_prep.py --out code-scanning semgrep=semgrep.sarif osv=osv.sarif osv-model-eval=osv-model-eval.sarif trivy=trivy.sarif gitleaks=gitleaks.sarif zizmor=zizmor.sarif
+        run: python3 scripts/code_scanning_prep.py --out code-scanning semgrep=semgrep.sarif osv=osv.sarif osv-model-eval=osv-model-eval.sarif osv-semgrep=osv-semgrep.sarif trivy=trivy.sarif gitleaks=gitleaks.sarif zizmor=zizmor.sarif
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -147,6 +149,7 @@ jobs:
             fixture-semgrep.sarif
             osv.sarif
             osv-model-eval.sarif
+            osv-semgrep.sarif
             fixture-osv.sarif
             trivy.sarif
             fixture-trivy.sarif
