@@ -153,6 +153,7 @@ class ConsensusResult(BaseModel):
     families_agreeing: list[ModelFamily]
     tool_corroborated: bool
     skeptic_refuted: bool
+    skeptic_abstained: bool = False
     position_consistent: bool
     krippendorff_alpha: float | None
     tier: EvidenceTier

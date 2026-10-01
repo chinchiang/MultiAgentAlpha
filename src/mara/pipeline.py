@@ -12,11 +12,12 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .agents import base, judge, redteam, reviewer, skeptic
+from .agents import base, context_agent, judge, redteam, reviewer, skeptic
+from .agents.context_agent import ContextView
 from .bias.blinding import blinded_batches
 from .bias.diversity import pairwise_family_agreement, pick_independent
 from .config import MaraConfig
-from .context.repo_map import RepoContext, build_context
+from .context.repo_map import RepoContext, build_context, restrict_to_increment
 from .providers import make_provider
 from .providers.base import Provider
 from .schemas import (
@@ -36,6 +37,16 @@ from .scoring.idcheck import check_finding_refs
 from .scoring.tiers import assign_tier, ssvc_decision
 from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
 from .tools.sarif import ToolResult
+
+# error vocabulary of the agent layer: "refused" marks an abstention (model said no), the
+# incomplete_or_duplicate_* entries are summary markers the agents append to signal that a
+# partially-failed call returned no verdicts at all; neither is an unusable item itself
+_ERROR_MARKERS = frozenset({"refused", "incomplete_or_duplicate_response", "incomplete_or_duplicate_judge_response"})
+
+
+def _count_invalid(errors: list[str]) -> int:
+    """Unusable items only: empty responses, bad shapes, per-item schema failures."""
+    return sum(1 for x in errors if x not in _ERROR_MARKERS)
 
 
 class Pipeline:
@@ -73,15 +84,44 @@ class Pipeline:
             self._say(f"L0: {r.tool}: {'ran' if r.ran else 'skipped'} {r.note} ({len(r.results)} results)")
         return runs
 
+    # ------------------------------------------------------------------ L1
+    def run_context(self, ctx: RepoContext) -> ContextView | None:
+        """C4-lite architecture view from a dedicated context agent (assessment #19).
+
+        Every fact must cite a verbatim file:line quote; unverified items are dropped and
+        counted. A refused, empty or echoed call yields no view: reviewers then run without
+        trusted facts and the run is marked incomplete (fail-closed, never fabricated).
+        """
+        name = self.cfg.roles.context
+        if not name:
+            return None
+        prov = self._p(name)
+        fam = prov.family.value
+        self.audit["context_calls"] += 1
+        self.audit[f"context_calls[{fam}]"] += 1
+        view, audit = context_agent.run_context_agent(prov, ctx)
+        for key, counter in (("refused", "context_refusals"), ("truncated", "context_truncations"),
+                             ("errored", "context_errors"), ("canary_echoed", "canary_echoes"),
+                             ("invalid", "context_invalid_items"), ("unverified", "context_unverified_items")):
+            self.audit[counter] += int(audit[key])
+            self.audit[f"{counter}[{fam}]"] += int(audit[key])
+        self.audit["input_tokens"] += audit["input_tokens"]
+        self.audit["output_tokens"] += audit["output_tokens"]
+        flags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "errored": " [PROVIDER ERROR]",
+                 "canary_echoed": " [CANARY ECHOED]"}
+        self._say(f"L1: context {fam}: {len(view.items) if view else 0} fact(s)"
+                  + "".join(tag for key, tag in flags.items() if audit[key]))
+        return view
+
     # ------------------------------------------------------------------ L2
-    def run_reviewers(self, ctx: RepoContext) -> list[Finding]:
+    def run_reviewers(self, ctx: RepoContext, context_view: ContextView | None = None) -> list[Finding]:
         canary = base.Canary()
         raw: list[Finding] = []
         for batch in ctx.batches():
             for dim in self.cfg.dimensions:
                 for name in self.cfg.roles.reviewers:
                     prov = self._p(name)
-                    findings, audit = reviewer.review_dimension(prov, batch, dim, canary)
+                    findings, audit = reviewer.review_dimension(prov, batch, dim, canary, context_view)
                     self.audit["reviewer_calls"] += 1
                     self.audit["reviewer_refusals"] += int(audit["refused"])
                     self.audit["reviewer_truncations"] += int(audit["truncated"])
@@ -137,7 +177,9 @@ class Pipeline:
         return kept, finders
 
     # ------------------------------------------------------------------ L3
-    def run_skeptics(self, ctx: RepoContext, findings: list[Finding], finders: dict[str, set[ModelFamily]]) -> list[SkepticVerdict]:
+    def run_skeptics(
+        self, ctx: RepoContext, findings: list[Finding], finders: dict[str, set[ModelFamily]]
+    ) -> tuple[list[SkepticVerdict], frozenset[str]]:
         groups: dict[str, list[Finding]] = defaultdict(list)
         for f in findings:
             # the skeptic must not share a family with ANY finder of this finding
@@ -147,12 +189,36 @@ class Pipeline:
                 self._say(f"L3: no skeptic outside the finder families of {f.id}; {spec.family.value} reviews it")
             groups[spec.name].append(f)
         verdicts: list[SkepticVerdict] = []
+        abstained: set[str] = set()
         for name, fs in groups.items():
-            v, errors = skeptic.run_skeptic(self._p(name), ctx, fs)
-            self.audit["skeptic_invalid_items"] += len(errors)
+            fam = self._p(name).family.value
+            self.audit["skeptic_calls"] += 1
+            self.audit[f"skeptic_calls[{fam}]"] += 1
+            self.audit[f"skeptic_items[{fam}]"] += len(fs)
+            v, errors, unverified = skeptic.run_skeptic(self._p(name), ctx, fs)
+            refusals = errors.count("refused")
+            invalid = _count_invalid(errors)
+            self.audit["skeptic_invalid_items"] += invalid
+            self.audit[f"skeptic_invalid_items[{fam}]"] += invalid
+            self.audit["skeptic_refusals"] += refusals
+            self.audit[f"skeptic_refusals[{fam}]"] += refusals
+            self.audit["skeptic_unverified_controls"] += unverified
+            self.audit[f"skeptic_unverified_controls[{fam}]"] += unverified
+            for x in v:
+                if x.verdict == "refuted":
+                    self.audit["skeptic_refuted"] += 1
+                    self.audit[f"skeptic_refuted[{fam}]"] += 1
+            if refusals:
+                # a refused call is an abstention: the finding gets no verdict, can no longer
+                # reach tier B on the skeptic's strength, and the run stays incomplete
+                abstained.update(f.id for f in fs)
             verdicts.extend(v)
-            self._say(f"L3: skeptic {self._p(name).family.value} judged {len(fs)} → {sum(x.verdict == 'refuted' for x in v)} refuted")
-        return verdicts
+            self._say(
+                f"L3: skeptic {fam} judged {len(fs)} → {sum(x.verdict == 'refuted' for x in v)} refuted"
+                + (f", {unverified} unverifiable control citation(s) downgraded" if unverified else "")
+                + (" [REFUSED]" if refusals else "")
+            )
+        return verdicts, frozenset(abstained)
 
     def run_redteam(self, ctx: RepoContext, findings: list[Finding], finders: dict[str, set[ModelFamily]]) -> list[RedTeamNote]:
         groups: dict[str, list[Finding]] = defaultdict(list)
@@ -164,9 +230,20 @@ class Pipeline:
             groups[spec.name].append(f)
         notes: list[RedTeamNote] = []
         for name, fs in groups.items():
+            fam = self._p(name).family.value
+            self.audit["redteam_calls"] += 1
+            self.audit[f"redteam_calls[{fam}]"] += 1
+            self.audit[f"redteam_items[{fam}]"] += len(fs)
             n, errors = redteam.run_redteam(self._p(name), ctx, fs)
-            self.audit["redteam_invalid_items"] += len(errors)
+            refusals = errors.count("refused")
+            invalid = _count_invalid(errors)
+            self.audit["redteam_invalid_items"] += invalid
+            self.audit[f"redteam_invalid_items[{fam}]"] += invalid
+            self.audit["redteam_refusals"] += refusals
+            self.audit[f"redteam_refusals[{fam}]"] += refusals
             notes.extend(n)
+            self._say(f"L3: red team {fam} probed {len(fs)} → {sum(x.exploitable == 'yes' for x in n)} exploitable"
+                      + (" [REFUSED]" if refusals else ""))
         return notes
 
     # ------------------------------------------------------------------ L4
@@ -182,6 +259,7 @@ class Pipeline:
 
         for name in self.cfg.roles.judges:
             prov = self._p(name)
+            fam = prov.family.value
             # anti self-preference: a family never judges a finding it (co-)produced, unless too few
             # independent families remain, in which case it votes with a discounted weight (self_family).
             eligible, self_ids = [], set()
@@ -196,15 +274,22 @@ class Pipeline:
             self.audit["self_family_fallback_votes"] += len(self_ids)
             if not eligible:
                 continue
+            self.audit["judge_calls"] += 2
+            self.audit[f"judge_calls[{fam}]"] += 2
+            self.audit[f"judge_items[{fam}]"] += len(eligible)
             fwd, rev = blinded_batches(eligible, skeptic_by_id, ctx.content_hash + prov.family.value)
             v1, e1 = judge.run_judge(prov, fwd, "forward", self_ids)
             v2, e2 = judge.run_judge(prov, rev, "reverse", self_ids)
-            self.audit["judge_invalid_items"] += len(e1) + len(e2)
-            if not v1 and not v2:
-                self.audit["judge_refusals"] += 1
+            refusals = int(e1 == ["refused"]) + int(e2 == ["refused"])
+            invalid = _count_invalid(e1) + _count_invalid(e2)
+            self.audit["judge_invalid_items"] += invalid
+            self.audit[f"judge_invalid_items[{fam}]"] += invalid
+            self.audit["judge_refusals"] += refusals
+            self.audit[f"judge_refusals[{fam}]"] += refusals
             votes.extend(v1 + v2)
             self._say(
-                f"L4: judge {prov.family.value}: {len(eligible)} finding(s) ({len(self_ids)} self-family) × 2 passes → {len(v1) + len(v2)} votes"
+                f"L4: judge {fam}: {len(eligible)} finding(s) ({len(self_ids)} self-family) × 2 passes → {len(v1) + len(v2)} votes"
+                + (" [REFUSED]" if refusals else "")
             )
         return votes
 
@@ -217,6 +302,7 @@ class Pipeline:
         red_by_id: dict[str, RedTeamNote],
         votes: list[JudgeVote],
         tool_results: list[ToolResult],
+        skeptic_abstained_ids: frozenset[str] = frozenset(),
     ) -> list[ConsensusResult]:
         weights = {m.family: m.weight for m in self.cfg.models}
         by_finding: dict[str, list[JudgeVote]] = defaultdict(list)
@@ -238,6 +324,7 @@ class Pipeline:
             alpha = _agreement_proxy(fv)
             sk = skeptic_by_id.get(f.id)
             refuted = bool(sk and sk.verdict == "refuted")
+            abstained = f.id in skeptic_abstained_ids
             prov_ok = bool(f.provenance) and all(p.verified for p in f.provenance)
             corroborated = _tool_corroborates(f, tool_results)
             fams = set(agreeing) | (finders[f.id] if score >= self.cfg.gate.accept_threshold else set())
@@ -248,6 +335,7 @@ class Pipeline:
                 tool_corroborated=corroborated,
                 families_agreeing=sorted(fams, key=lambda x: x.value),
                 skeptic_refuted=refuted,
+                skeptic_abstained=abstained,
                 reachability=f.reachability,
                 consensus_score=score,
                 accept_threshold=self.cfg.gate.accept_threshold,
@@ -267,6 +355,8 @@ class Pipeline:
             reasons = []
             if not prov_ok:
                 reasons.append("unverified_provenance")
+            if abstained:
+                reasons.append("skeptic_abstained")
             if not quorum_ok:
                 reasons.append("insufficient_independent_judges")
             if len(fv) != len(raw_votes):
@@ -293,6 +383,7 @@ class Pipeline:
                     families_agreeing=sorted(fams, key=lambda x: x.value),
                     tool_corroborated=corroborated,
                     skeptic_refuted=refuted,
+                    skeptic_abstained=abstained,
                     position_consistent=consistent,
                     krippendorff_alpha=None,
                     tier=tier,
@@ -311,7 +402,8 @@ class Pipeline:
         return results
 
     # ------------------------------------------------------------------ run
-    def run(self, target: str | Path, *, sarif_dir: Path | None = None, mode: str = "live") -> ReviewReport:
+    def run(self, target: str | Path, *, sarif_dir: Path | None = None, mode: str = "live",
+            base_ref: str | None = None) -> ReviewReport:
         actual_modes = {p.spec.provider for p in self.providers.values()}
         actual_mode = "mock" if actual_modes == {"mock"} else "live"
         if mode not in {"mock", "live"} or actual_mode != mode or (mode == "live" and "mock" in actual_modes):
@@ -319,6 +411,13 @@ class Pipeline:
         target = Path(target).resolve()
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = build_context(target)
+        if base_ref:
+            # incremental review (assessment #14): keep the changed files, their import
+            # neighbours and the manifests/workflows; everything else is excluded, not silently kept
+            changed, related = restrict_to_increment(ctx, base_ref)
+            self.audit["bundle_files_changed"] = len(changed)
+            self.audit["bundle_files_related"] = len(related)
+            self._say(f"L1: incremental review vs {base_ref}: {len(changed)} changed, {len(related)} related file(s) in bundle")
         for prov in self.providers.values():
             prov.bind_target(ctx.root)
         self._say(f"L1: {ctx.summary()}")
@@ -333,18 +432,23 @@ class Pipeline:
         # secret scan is unavailable or reports secrets. The masked manifest remains reviewable.
         secret_runs = [r for r in tool_runs if r.tool == "gitleaks"]
         egress_blocked = mode == "live" and (not secret_runs or any(not r.ran or r.results for r in secret_runs))
-        raw = [] if egress_blocked else self.run_reviewers(ctx)
+        # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked
+        context_view = None if egress_blocked else self.run_context(ctx)
+        if context_view is not None:
+            (self.out_dir / "context.json").write_text(context_view.model_dump_json(indent=2), encoding="utf-8")
+            self.audit["context_view_items"] = len(context_view.items)
+        raw = [] if egress_blocked else self.run_reviewers(ctx, context_view)
         findings, finders = self.dedupe(raw)
         findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
         self.audit["findings_raw"] = len(raw)
         self.audit["findings_deduped"] = len(findings)
-        sk = self.run_skeptics(ctx, findings, finders)
+        sk, abstained_ids = self.run_skeptics(ctx, findings, finders)
         sk_by_id = {v.finding_id: v for v in sk}
         survivors = [f for f in findings if sk_by_id.get(f.id, None) is None or sk_by_id[f.id].verdict != "refuted"]
         rt = self.run_redteam(ctx, survivors, finders)
         rt_by_id = {n.finding_id: n for n in rt}
         votes = self.run_jury(ctx, findings, sk_by_id, finders)
-        consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results)
+        consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=abstained_ids)
         cons_by_id = {c.finding_id: c for c in consensus}
         dims = []
         for d in self.cfg.dimensions:
@@ -366,11 +470,21 @@ class Pipeline:
             "invalid_findings_dropped",
             "canary_echoes",
             "judge_invalid_items",
+            "judge_refusals",
             "skeptic_invalid_items",
+            "skeptic_refusals",
             "redteam_invalid_items",
+            "redteam_refusals",
+            "context_refusals",
+            "context_truncations",
+            "context_errors",
+            "context_invalid_items",
+            "context_unverified_items",
         ):
             if self.audit[key]:
                 incomplete.append(key)
+        if self.cfg.roles.context and context_view is None and not egress_blocked:
+            incomplete.append("context_view_incomplete")
         if any(c.needs_human for c in consensus):
             incomplete.append("unresolved_human_review")
         # Tool evidence remains visible independently of model output. A model's silence or

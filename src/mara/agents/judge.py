@@ -39,7 +39,9 @@ def run_judge(provider: Provider, batch: list[dict], pass_id: PassId, self_ids: 
     order = {b["finding_id"]: i for i, b in enumerate(batch)}
     counts = Counter(i.finding_id for i in items)
     if set(counts) != set(order) or any(n != 1 for n in counts.values()) or errors:
-        return [], errors + ["incomplete_or_duplicate_judge_response"]
+        # a bare refusal is an abstention, not invalid output: keep its error list clean
+        errs = errors if errors == ["refused"] else errors + ["incomplete_or_duplicate_judge_response"]
+        return [], errs
     votes = []
     for i in items:
         if i.finding_id not in order:

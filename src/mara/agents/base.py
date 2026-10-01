@@ -95,8 +95,11 @@ def parse_items(comp: Completion, model_cls, key: str = "items") -> tuple[list, 
     """Validate a list of dicts against a pydantic model; return (valid, errors)."""
     if comp.error:
         return [], [comp.error]
-    if comp.refused or comp.data is None:
-        return [], ["refused_or_empty"]
+    if comp.refused:
+        # a refusal is counted as an abstention, not as invalid output: the two rates stay separate
+        return [], ["refused"]
+    if comp.data is None:
+        return [], ["empty"]
     if not isinstance(comp.data, dict) or not isinstance(comp.data.get(key), list):
         return [], ["invalid_response_shape"]
     items = comp.data[key]

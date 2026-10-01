@@ -1,5 +1,7 @@
 """End-to-end run on the seeded fixture with three mock families."""
 
+import pytest
+
 from mara.report.markdown_out import render_markdown
 from mara.report.sarif_out import to_sarif
 from mara.schemas import EvidenceTier
@@ -111,3 +113,50 @@ def test_tool_corroboration_matches_git_root_relative_paths(mock_report):
     _, cons = _accepted(report)
     gha = [f for f in report.findings if f.dimension == "github_actions" and f.provenance[0].line in (12, 15, 16)]
     assert gha and all(cons[f.id].tool_corroborated and cons[f.id].tier == EvidenceTier.A for f in gha)
+
+
+def test_context_view_is_built_pinned_to_the_bundle(mock_report):
+    """The L1 context agent runs once, its facts are quote-verified and recorded (assessment #19)."""
+    pipe, report = mock_report
+    audit = report.bias_audit
+    assert audit["context_calls"] == 1 and audit["context_refusals"] == 0 and audit["canary_echoes"] == 0
+    assert audit["context_view_items"] >= 3  # container, external systems, data store at minimum
+    assert (pipe.out_dir / "context.json").exists()
+    assert "context_view_incomplete" not in report.incomplete_reasons
+    assert "context" in pipe.providers["mock-a"].calls  # the configured context role produced the view
+
+
+def test_incremental_review_limits_the_bundle_to_changed_files_and_import_neighbours(tmp_path):
+    import subprocess
+
+    from mara.context.repo_map import build_context, restrict_to_increment
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+    git("init")
+    git("config", "user.email", "test@example.com")
+    git("config", "user.name", "test")
+    (repo / "lib.py").write_text("def helper():\n    return 1\n")
+    (repo / "app.py").write_text("import lib\n\nunsafe()\n")
+    (repo / "notes.md").write_text("documentation only\n")
+    git("add", "-A")
+    git("commit", "-m", "init")
+    (repo / "app.py").write_text("import lib\n\nvery_unsafe()\n")
+    git("add", "-A")
+    git("commit", "-m", "touch app only")
+
+    ctx = build_context(repo)
+    before = ctx.content_hash
+    changed, related = restrict_to_increment(ctx, "HEAD~1")
+    assert changed == ["app.py"] and related == ["lib.py"]  # the import neighbour stays in the bundle
+    assert ctx.excluded.get("notes.md") == "out_of_increment" and "notes.md" not in ctx.content
+    assert ctx.content_hash != before and ctx.changed == changed and ctx.related == related
+    assert not ctx.omitted
+
+    # an unresolvable base ref is a usage error, never an empty 'nothing changed'
+    with pytest.raises(ValueError):
+        restrict_to_increment(build_context(repo), "no-such-ref")

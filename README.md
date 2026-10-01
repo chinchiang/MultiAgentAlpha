@@ -122,12 +122,34 @@ fails. The OpenAI-compatible provider retries timeouts, transport errors and 408
 up to three calls in total, with exponential backoff and jitter or the server's `Retry-After`
 (at most 30 s); other statuses fail at once. The Anthropic SDK retries on its own.
 
+### Incremental review
+
+On a git repository, `--base <ref>` narrows the bundle to the files changed since that ref, the
+files they import or that import them (Python and relative JS/TS specifiers), plus the manifests and
+GitHub workflows. Everything else is excluded with the reason `out_of_increment` in the report's
+coverage section — never silently kept; a changed file the bundle cannot show fails the run, and an
+unresolvable ref is a usage error, not an empty "nothing changed":
+
+```bash
+mara review path/to/repo --config config/mara.yaml --base origin/main --out out
+```
+
+Before the reviewers run, a separate context agent builds a C4-lite view of the architecture
+(containers, external systems, trust boundaries, data stores) in one provider call. Every fact must
+cite a bundle file:line with a verbatim quote and passes the same provenance check as findings;
+unverifiable items are dropped and counted, and a refusal, an echoed canary or a view with no
+verifiable fact leaves the reviewers without trusted facts and marks the run incomplete. The
+architecture and authn_authz reviewers receive the verified facts as a `<trusted_context_facts>`
+block that is explicitly not part of the untrusted data.
+
 ## Calibration (Appendix E, prompt 4)
 
 `calib/samples/` holds five labelled vibe-coded samples (51 labels). The loop runs offline with
 label-driven mock families and produces `docs/calibration-<date>.md` with per-family, per-CWE
-precision and recall, refusal, provider-error and canary rates, judge-family agreement, a Dawid-Skene reliability
-estimate and suggested weights (never written to the config automatically):
+precision and recall, refusal, provider-error and canary rates, per-role refusal and invalid-output
+rates, skeptic refutation rates, judge-family agreement, a Dawid-Skene reliability
+estimate and suggested weights (discounted by refutation and invalid-output rates; never written to
+the config automatically):
 
 ```bash
 for s in calib/samples/*/; do mara review "$s" --provider mock --out calib-out/$(basename "$s"); done

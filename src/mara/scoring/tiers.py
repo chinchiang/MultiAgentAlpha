@@ -11,6 +11,7 @@ def assign_tier(
     tool_corroborated: bool,
     families_agreeing: list[ModelFamily],
     skeptic_refuted: bool,
+    skeptic_abstained: bool = False,
     reachability: str,
     consensus_score: float,
     accept_threshold: float,
@@ -22,7 +23,8 @@ def assign_tier(
     model_families = [f for f in families_agreeing if f not in (ModelFamily.TOOL,)]
     if tool_corroborated and len(model_families) >= 1:
         return EvidenceTier.A
-    if len(model_families) >= 2 and reachability in ("reachable", "conditional") and not skeptic_refuted:
+    # a skeptic refusal (abstention) is not agreement: tier B's independent challenge is missing
+    if len(model_families) >= 2 and reachability in ("reachable", "conditional") and not skeptic_refuted and not skeptic_abstained:
         return EvidenceTier.B
     if consensus_score >= accept_threshold:
         return EvidenceTier.C

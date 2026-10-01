@@ -4,10 +4,12 @@ who wrote the code (authority/sycophancy bias)."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import subprocess
+from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from html import escape
 from pathlib import Path
@@ -76,6 +78,8 @@ class RepoContext:
     omitted: dict[str, str] = field(default_factory=dict)
     excluded: dict[str, str] = field(default_factory=dict)
     redacted: list[str] = field(default_factory=list)
+    changed: list[str] = field(default_factory=list)
+    related: list[str] = field(default_factory=list)
 
     @property
     def complete(self) -> bool:
@@ -90,6 +94,8 @@ class RepoContext:
             "complete": self.complete,
             "content_hash": self.content_hash,
             "revision": self.revision,
+            "changed": self.changed,
+            "related": self.related,
         }
 
     def batches(self):
@@ -193,9 +199,158 @@ def _read_bounded(root: Path, rel: Path) -> str:
         return data.decode("utf-8")
 
 
-def build_context(root: str | Path) -> RepoContext:
-    import hashlib
+def _content_hash(content: dict[str, str]) -> str:
+    """Stable hash over the bundled (rel path, sanitized text) pairs, in bundle order."""
+    h = hashlib.sha256()
+    for rel, sanitized in content.items():
+        h.update(json.dumps([rel, sanitized], ensure_ascii=False).encode())
+    return h.hexdigest()
 
+
+def git_changed_files(root: str | Path, base: str) -> list[str]:
+    """Files changed between `base` and HEAD (three-dot: since the merge base), relative
+    to the review target directory (assessment #14).
+
+    `git diff` runs from the repository toplevel so its paths are unambiguously
+    repo-root-relative; the review target's prefix is then stripped and paths outside the
+    target are dropped. An unresolvable base ref is a usage error, never an empty
+    'nothing changed'.
+    """
+    root = Path(root).resolve()
+    top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False)
+    prefix = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-prefix"], capture_output=True, text=True, check=False)
+    diff = subprocess.run(["git", "-C", str(top.stdout.strip() if top.returncode == 0 else root), "diff", "--name-only", "-z", f"{base}...HEAD"],
+                          capture_output=True, check=False)
+    if top.returncode != 0 or prefix.returncode != 0 or diff.returncode != 0:
+        raise ValueError(f"cannot resolve base ref {base!r} for incremental review")
+    pre = prefix.stdout.strip().replace("\\", "/")
+    out = []
+    for raw in diff.stdout.split(b"\0"):
+        p = os.fsdecode(raw).replace("\\", "/")
+        if not p:
+            continue
+        if pre:
+            if not p.startswith(pre):
+                continue
+            p = p[len(pre):]
+        if p:
+            out.append(p)
+    return out
+
+
+_PY_IMPORT = re.compile(r"^[ \t]*(?:from[ \t]+([.\w]+)[ \t]+import\b|import[ \t]+([\w.]+(?:[ \t]*,[ \t]*[\w.]+)*))", re.M)
+# JS/TS: only relative specifiers are resolvable inside the bundle; bare specifiers are node_modules
+_JS_IMPORT = re.compile(r"""(?:require\(\s*|from\s+|import\s+)['"](\.{1,2}/[^'"]+)['"]""")
+_JS_SUFFIXES = ("", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js", "/index.jsx")
+
+
+def _py_module_names(rel: str) -> set[str]:
+    """Dotted module names a bundle file can be imported as: full package path + bare name."""
+    if not rel.endswith(".py"):
+        return set()
+    parts = rel[:-3].replace("\\", "/").split("/")
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return {".".join(parts), parts[-1]}
+
+
+def _py_import_specs(rel: str, text: str) -> set[str]:
+    """Dotted module names imported by a Python file; relative imports are resolved against
+    the importer's package."""
+    pkg = rel[:-3].replace("\\", "/").split("/")[:-1]
+    if pkg and pkg[-1] == "__init__":
+        pkg = pkg[:-1]
+    out: set[str] = set()
+    for m in _PY_IMPORT.finditer(text):
+        names = [m.group(1)] if m.group(1) else [s.strip().split(" as ")[0] for s in m.group(2).split(",")]
+        for spec in names:
+            if not spec:
+                continue
+            dots = len(spec) - len(spec.lstrip("."))
+            if dots:
+                if dots - 1 > len(pkg):
+                    continue  # imports above the bundle root: no in-bundle target
+                base = pkg[: len(pkg) - (dots - 1)]
+                rest = [p for p in spec[dots:].split(".") if p]
+                out.add(".".join([*base, *rest]) if rest else ".".join(base))
+            else:
+                out.add(spec)
+    return out
+
+
+def _js_import_specs(rel: str, text: str) -> set[str]:
+    out: set[str] = set()
+    for m in _JS_IMPORT.finditer(text):
+        target = os.path.normpath(os.path.join(os.path.dirname(rel), m.group(1))).replace("\\", "/")
+        if not target.startswith(".."):
+            out.update(target + suffix for suffix in _JS_SUFFIXES)
+    return out
+
+
+def _import_specs(rel: str, text: str) -> set[str]:
+    if rel.endswith(".py"):
+        return _py_import_specs(rel, text)
+    if rel.endswith((".js", ".ts", ".tsx", ".jsx")):
+        return _js_import_specs(rel, text)
+    return set()
+
+
+def import_neighbours(ctx: RepoContext, changed: list[str]) -> list[str]:
+    """Bundle files related to the changed set by imports, in both directions (assessment #14):
+    files the changed files import, and files that import them. Over-inclusion is safe — a
+    wider bundle only adds context; under-inclusion would hide it."""
+    specs_of = {rel: _import_specs(rel, text) for rel, text in ctx.content.items()}
+    names_of = {rel: _py_module_names(rel) for rel in ctx.content}
+    by_name: dict[str, set[str]] = defaultdict(set)
+    for rel, names in names_of.items():
+        for n in names:
+            by_name[n].add(rel)
+    related: set[str] = set()
+    for c in changed:
+        if c not in ctx.content:
+            continue
+        for spec in specs_of[c]:
+            related |= by_name.get(spec, set())
+            related |= by_name.get(spec.rsplit(".", 1)[-1], set())
+            related |= {p for p in ctx.content if p.startswith(spec)}
+        names = names_of[c]
+        for other, specs in specs_of.items():
+            if other == c or other in related:
+                continue
+            for spec in specs:
+                if spec in names or spec.rsplit(".", 1)[-1] in names or spec == c:
+                    related.add(other)
+                    break
+    related -= set(changed)
+    return sorted(related)
+
+
+def restrict_to_increment(ctx: RepoContext, base: str) -> tuple[list[str], list[str]]:
+    """Narrow the bundle to the changed files, their import neighbours and the
+    manifests/workflows (assessment #14). Everything else moves to ctx.excluded with the
+    reason 'out_of_increment' — visible in coverage, never silently kept; a changed file the
+    bundle cannot show (deleted, unreadable) lands in ctx.omitted so the run fails closed.
+
+    Returns (changed, related). The tree-level revision is unchanged; content_hash is
+    recomputed for the narrowed bundle.
+    """
+    changed = git_changed_files(ctx.root, base)
+    in_bundle = [rel for rel in changed if rel in ctx.content]
+    for rel in changed:
+        if rel not in ctx.content and rel not in ctx.excluded and rel not in ctx.omitted:
+            ctx.omitted[rel] = "changed_file_not_in_bundle"
+    related = [rel for rel in import_neighbours(ctx, in_bundle) if rel not in in_bundle]
+    keep = set(in_bundle) | set(related) | {ctx.rel(m) for m in ctx.manifests} | {ctx.rel(w) for w in ctx.workflows}
+    for rel in [rel for rel in ctx.content if rel not in keep]:
+        ctx.excluded[rel] = "out_of_increment"
+        del ctx.content[rel]
+    ctx.changed = in_bundle
+    ctx.related = related
+    ctx.content_hash = _content_hash(ctx.content)
+    return in_bundle, related
+
+
+def build_context(root: str | Path) -> RepoContext:
     root = Path(root).resolve()
     ctx = RepoContext(root=root)
     # git ls-files honors the target subdirectory and excludes untracked/ignored local files.
@@ -216,7 +371,6 @@ def build_context(root: str | Path) -> RepoContext:
         return (2 if p.suffix in {".md", ".txt", ".html"} and p.name not in MANIFESTS else 0, str(p))
 
     total = 0
-    h = hashlib.sha256()
     raw_hash = hashlib.sha256()
     for relpath in sorted(set(paths), key=priority):
         rel = relpath.as_posix()
@@ -257,11 +411,10 @@ def build_context(root: str | Path) -> RepoContext:
             continue
         total += len(sanitized)
         ctx.content[rel] = sanitized
-        h.update(json.dumps([rel, sanitized], ensure_ascii=False).encode())
         for pat, fmt in _ENTRY_PATTERNS:
             for m in pat.finditer(sanitized):
                 ctx.entry_points.append(fmt.format(m.group(pat.groups)))  # the route is the last group
-    ctx.content_hash = h.hexdigest()
+    ctx.content_hash = _content_hash(ctx.content)
     head = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "HEAD"], capture_output=True, text=True, check=False)
     commit = head.stdout.strip() if head.returncode == 0 else "non-git"
     raw_hash.update(json.dumps(ctx.omitted, sort_keys=True).encode())
