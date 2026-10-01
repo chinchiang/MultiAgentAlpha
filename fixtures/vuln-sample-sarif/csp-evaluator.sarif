@@ -1,0 +1,89 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "csp-evaluator",
+          "informationUri": "https://github.com/google/csp-evaluator",
+          "version": "1.1.8",
+          "rules": []
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "properties": {
+            "policies": 1,
+            "truncated": false,
+            "note": "1 policy(ies) evaluated"
+          },
+          "toolExecutionNotifications": []
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "SCRIPT_UNSAFE_INLINE",
+          "level": "error",
+          "message": {
+            "text": "[HIGH] 'unsafe-inline' allows the execution of unsafe in-page scripts and event handlers. (value: 'unsafe-inline')"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "static/index.html",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "PLAIN_WILDCARD",
+          "level": "error",
+          "message": {
+            "text": "[HIGH] default-src should not allow '*' as source (value: *)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "static/index.html",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "SCRIPT_ALLOWLIST_BYPASS",
+          "level": "warning",
+          "message": {
+            "text": "[MEDIUM_MAYBE] No bypass found; make sure that this URL doesn't serve JSONP replies or Angular libraries. (value: https://cdn.example-cdn.com)"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "static/index.html",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 5
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

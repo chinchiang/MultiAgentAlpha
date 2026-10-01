@@ -127,6 +127,23 @@ tools:
       source_uri: github.com/ossf/scorecard
       source_tag: v5.5.0
 
+  # Google's CSP Evaluator as an npm package (the upstream publishes no release assets and no CLI:
+  # since v1.0 the project is a TypeScript library, dist/ is prebuilt CommonJS inside the tarball and
+  # has no runtime dependencies). npm tarballs are immutable once published; the publisher-side check
+  # is the registry's own dist.integrity (SHA-512, base64) for this exact version. Executed with the
+  # platform's node (>= 18) via the driver installed next to the package; the driver and the package
+  # both live under the install dir, never PATH. gitHead of the publish: 9189d07a58c40490fd21190541a9fbfd8fc3ad4b (tag v1.1.8).
+  csp-evaluator:
+    version: 1.1.8
+    kind: npm
+    homepage: https://github.com/google/csp-evaluator
+    license: Apache-2.0
+    url: https://registry.npmjs.org/csp_evaluator/-/csp_evaluator-1.1.8.tgz
+    sha256: 2b4f2a30ed67a39908708c05ba559accbad0b5a6c0fa29f1761a641a342fd904
+    publisher_checksums_url: https://registry.npmjs.org/csp_evaluator/1.1.8
+    verify:
+      method: npm-integrity   # registry metadata carries no artifact signature for the tarball itself (checked 2026-10-01)
+
   semgrep:
     version: 1.177.0
     kind: pip

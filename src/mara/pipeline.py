@@ -234,15 +234,18 @@ class Pipeline:
             self.audit["redteam_calls"] += 1
             self.audit[f"redteam_calls[{fam}]"] += 1
             self.audit[f"redteam_items[{fam}]"] += len(fs)
-            n, errors = redteam.run_redteam(self._p(name), ctx, fs)
+            n, errors, stripped = redteam.run_redteam(self._p(name), ctx, fs)
             refusals = errors.count("refused")
             invalid = _count_invalid(errors)
             self.audit["redteam_invalid_items"] += invalid
             self.audit[f"redteam_invalid_items[{fam}]"] += invalid
             self.audit["redteam_refusals"] += refusals
             self.audit[f"redteam_refusals[{fam}]"] += refusals
+            self.audit["redteam_exploit_code_stripped"] += stripped
+            self.audit[f"redteam_exploit_code_stripped[{fam}]"] += stripped
             notes.extend(n)
             self._say(f"L3: red team {fam} probed {len(fs)} → {sum(x.exploitable == 'yes' for x in n)} exploitable"
+                      + (f", {stripped} preconditions had exploit code removed" if stripped else "")
                       + (" [REFUSED]" if refusals else ""))
         return notes
 
@@ -475,6 +478,7 @@ class Pipeline:
             "skeptic_refusals",
             "redteam_invalid_items",
             "redteam_refusals",
+            "redteam_exploit_code_stripped",
             "context_refusals",
             "context_truncations",
             "context_errors",

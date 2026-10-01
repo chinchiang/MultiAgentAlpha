@@ -59,6 +59,7 @@ TOOL_DIMENSIONS = {
     "osv-scanner": ["dependencies", "supply_chain"],
     "zizmor": ["github_actions"],
     "trivy": ["dependencies", "supply_chain"],
+    "csp-evaluator": ["csp"],
 }
 
 
@@ -156,13 +157,19 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 cp = _run(trivy_args(exe, cache, sarif) + ["."], target)
                 updated = (read_metadata(cache) or {}).get("UpdatedAt", "?")
                 version = f"{version}, db {str(updated)[:10]}" if version else f"db {str(updated)[:10]}"
+            elif tool == "csp-evaluator":
+                # Parses CSPs out of the target and grades them with the pinned npm package; the
+                # SARIF is written by the wrapper itself (node runs the driver inside the package dir).
+                from .csp_eval import run_csp_eval
+                cp = run_csp_eval(target, sarif, version=version)
             if not sarif.exists() or not sarif.read_text(encoding="utf-8").strip():
                 tail = " ".join((cp.stderr or cp.stdout).strip().splitlines()[-2:])[:300]
                 note = f"exit {cp.returncode}, no SARIF produced" + (f": {tail}" if tail else "")
                 runs.append(ToolRun(tool=tool, ran=False, note=note))
                 continue
             doc = json.loads(sarif.read_text(encoding="utf-8"))
-            allowed = {"semgrep": {0}, "gitleaks": {0, 1}, "osv-scanner": {0, 1}, "zizmor": {0, 11, 12, 13, 14}, "trivy": {0}}
+            allowed = {"semgrep": {0}, "gitleaks": {0, 1}, "osv-scanner": {0, 1}, "zizmor": {0, 11, 12, 13, 14},
+                       "trivy": {0}, "csp-evaluator": {0}}
             if cp.returncode not in allowed[tool] or not scan_complete(doc):
                 runs.append(ToolRun(tool=tool, ran=False, results=read_sarif(sarif, tool), note="scanner_incomplete"))
                 continue

@@ -212,7 +212,7 @@ def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_pa
     pipe, f = pipeline(tmp_path), finding()
     seen = []
     monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: (seen.append(("skeptic", p.family)), ([], [], 0))[1])
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: (seen.append(("redteam", p.family)), ([], []))[1])
+    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: (seen.append(("redteam", p.family)), ([], [], 0))[1])
     # the configured skeptic (nemotron) and red team (deepseek) both found it: only anthropic is independent
     two = {f.id: {ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
     pipe.run_skeptics(None, [f], two)

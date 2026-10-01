@@ -8,8 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CODEOWNERS = ROOT / ".github" / "CODEOWNERS"
 # workflows, locked tools and their triage/suppression/policy files, the scripts applying them, review config and policies
 MUST_OWN = [".github/workflows/mara-review.yml", ".github/CODEOWNERS", "tools/versions.lock", "tools/semgrep-triage.yaml",
-            "tools/trivyignore.yaml", "tools/osv-scanner.toml", "tools/scorecard-policy.yaml", "scripts/semgrep_ci.py",
-            "scripts/scorecard_ci.py", "scripts/install_tools.py", "config/mara.yaml", "src/mara/policy.py", "SECURITY.md"]
+            "tools/csp-triage.yaml", "tools/trivyignore.yaml", "tools/osv-scanner.toml", "tools/scorecard-policy.yaml",
+            "scripts/semgrep_ci.py", "scripts/csp_ci.py", "scripts/scorecard_ci.py", "scripts/install_tools.py",
+            "config/mara.yaml", "src/mara/policy.py", "SECURITY.md"]
 
 
 def _rules() -> list[tuple[str, list[str]]]:
