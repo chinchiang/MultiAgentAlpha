@@ -1,5 +1,5 @@
 # Cold standby for the deepseek family (G-4): a self-hosted Llama endpoint takes over the reviewer,
-# red-team and judge seats DeepSeek holds in config/mara.yaml; nothing else changes. Passes P1-P7.
+# red-team and judge seats DeepSeek holds in config/mara.yaml; nothing else changes. Passes P1-P8.
 # `served_model` must match the model id the standby vLLM deployment exposes; confirm it against the
 # deployment before a live drill and record the drill in ops/model-swap-drills.yaml.
 standby_for: deepseek

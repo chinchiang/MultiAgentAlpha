@@ -7,9 +7,11 @@
       on every sample with the live config, then scripts/calibrate.py --mode live. Refused when the
       config contains a mock provider, so a mock run can never be labelled live.
 
-The report carries YAML front matter (mode, date, families, samples, labels, model_eval) that
-governance check G-9 reads; calibrate.py also refuses --mode live when any run's provider_mode is
-not live.
+The report carries YAML front matter (mode, date, families, samples, labels, tool_labels,
+model_eval) that governance check G-9 reads; calibrate.py also refuses --mode live when any run's
+provider_mode is not live. After the reviews, the locked deterministic tools (semgrep, osv-scanner,
+gitleaks) scan every sample and their SARIF is stored under calib-out/<sample>/tools/ as a second
+reference label set for calibrate.py (assessment #10).
 """
 
 from __future__ import annotations
@@ -65,6 +67,17 @@ def main() -> int:
             print(r.stdout[-800:] + r.stderr[-800:], file=sys.stderr)
             print(f"ERROR: review of {s.name} failed (exit {r.returncode})", file=sys.stderr)
             return 1
+
+    # assessment #10: the calibration reference set must not rely on human labels alone. Run the
+    # locked deterministic tools on every sample; calibrate.py uses their SARIF as a second
+    # reference label set and reports each family's recall against it. The SARIF lives under
+    # calib-out/<sample>/tools/ — never inside the sample directory, so the reference labels cannot
+    # leak into a later review's bundle. A tool that cannot run is reported and skipped.
+    from mara.tools.runner import run_all
+
+    for s in samples:
+        for t in run_all(s, a.out_dir / s.name / "tools", enabled=["semgrep", "osv-scanner", "gitleaks"]):
+            print(f"  {s.name} · {t.tool}: {'ok' if t.ran else t.note}")
     report = a.report or ROOT / "docs" / f"calibration-{a.date}.md"
     cmd = [sys.executable, str(ROOT / "scripts" / "calibrate.py"), "--mode", a.mode, "--out-dir", str(a.out_dir), "--samples-dir", str(a.samples_dir),
            "--report", str(report), "--date", a.date.isoformat()]

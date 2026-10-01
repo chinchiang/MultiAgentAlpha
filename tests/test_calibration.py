@@ -84,3 +84,128 @@ def test_suggested_weights_discount_refutations_and_invalid_output():
     assert disc["b"]["weight"] == round(base["b"]["weight"] * 0.8, 2) and disc["b"]["invalid_discounted"]
     assert disc["c"]["weight"] == base["c"]["weight"]  # no discount without cause
     assert disc["a"]["skeptic_refuted_rate"] == 0.5 and disc["b"]["invalid_output_rate"] == 0.2
+
+
+# ------------------------------------------------------------------ assessment #60: Alternative Annotator Test
+
+def _aat_run(sample, findings):
+    return (sample, {"target_id": "target-s9", "revision": "rev", "coverage": {"content_hash": "ctx"}, "findings": findings}, [])
+
+
+def _dec(file, line, cwe, decision, trained=True):
+    from mara.report.human_queue_out import queue_key
+
+    return {"key": queue_key(file, line, cwe, target_id="target-s9", revision="rev", context_hash="ctx"),
+            "decision": decision, "file": file, "line": line, "cwe": cwe, "issue": line, "decided_by": "alice",
+            "target_id": "target-s9", "revision": "rev", "context_hash": "ctx", "decision_event_id": line,
+            "adjudicator_trained": trained}
+
+
+def _post(sample, fid, argmax):
+    p = [0.1, 0.1, 0.1]
+    p[argmax] = 0.7
+    return (sample, fid), p
+
+
+def test_aat_agrees_with_human_decisions_and_needs_ten_items():
+    import calibrate
+
+    findings = [{"id": f"F-{i}", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": i * 10}]} for i in range(1, 13)]
+    decisions = [_dec("app.py", i * 10, "CWE-79", "true_positive" if i % 2 else "false_positive") for i in range(1, 12)]
+    post = dict([_post("s9", f"F-{i}", 0 if i % 2 else 1) for i in range(1, 11)])
+    post[_post("s9", "F-11", 2)[0]] = _post("s9", "F-11", 2)[1]   # pipeline abstains: excluded, not tested
+    post[_post("s9", "F-12", 1)[0]] = _post("s9", "F-12", 1)[1]   # no human decision: not tested
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post)
+    assert aat["n"] == 10 and aat["agreement"] == 1.0 and aat["p_value"] == 0.002
+    assert aat["passed"] and aat["excluded"] == 1
+    weak = calibrate.alternative_annotator_test([_aat_run("s9", findings[:2])], decisions[:2],
+                                                {_post("s9", "F-1", 0)[0]: _post("s9", "F-1", 0)[1],
+                                                 _post("s9", "F-2", 1)[0]: _post("s9", "F-2", 1)[1]})
+    assert weak["n"] == 2 and weak["agreement"] == 1.0 and not weak["passed"]  # significant needs n >= 10
+
+
+def test_aat_ignores_untrained_adjudicators():
+    import calibrate
+
+    findings = [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 26}]}]
+    untrained = _dec("app.py", 26, "CWE-79", "true_positive", trained=False)
+    post = {_post("s9", "F-1", 1)[0]: _post("s9", "F-1", 1)[1]}
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [untrained], post)
+    assert aat["n"] == 0 and not aat["passed"] and aat["why"]  # G-13: the decision is not bound at all
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [untrained], post, require_trained=False)
+    assert aat["n"] == 1 and aat["agreement"] == 0.0 and not aat["passed"]
+
+
+def test_aat_disagreement_fails_and_empty_decisions_report_why():
+    import calibrate
+
+    findings = [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 26}]}]
+    decisions = [_dec("app.py", 26, "CWE-79", "true_positive")]
+    post = {_post("s9", "F-1", 1)[0]: _post("s9", "F-1", 1)[1]}  # pipeline says false_positive, human said tp
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post)
+    assert aat["n"] == 1 and aat["agreement"] == 0.0 and not aat["passed"]
+    empty = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [], post)
+    assert empty["n"] == 0 and not empty["passed"] and empty["why"]
+
+
+# ------------------------------------------------------------------ assessment #49: alpha history
+
+def test_history_is_live_only_deduplicated_and_comparable(tmp_path):
+    import calibrate
+
+    path = tmp_path / "calib" / "history.json"
+    calibrate.append_history(path, "2026-10-01", "mock", 0.5, {"anthropic-deepseek": 0.9})
+    assert not path.exists()  # mock numbers never enter the time series
+    calibrate.append_history(path, "2026-10-01", "live", 0.5, {"anthropic-deepseek": 0.9})
+    calibrate.append_history(path, "2026-10-01", "live", 0.6, {"anthropic-deepseek": 0.8})  # same date+mode: replace
+    calibrate.append_history(path, "2026-10-02", "live", 0.45, {"anthropic-deepseek": 0.75})
+    hist = calibrate.load_history(path)
+    assert [h["global_alpha"] for h in hist] == [0.6, 0.45]
+    assert hist[0]["judge_agreement"] == {"anthropic-deepseek": 0.8}
+    assert calibrate.load_history(tmp_path / "missing.json") == []
+
+
+# ------------------------------------------------------------------ assessment #10: tools as a second reference label set
+
+_SEMGREP_SARIF = {
+    "version": "2.1.0",
+    "runs": [{"tool": {"driver": {"name": "semgrep", "rules": [{"id": "python.django_sql", "properties": {"tags": ["CWE-89: sql"]}}]}},
+              "results": [
+                  {"ruleId": "python.django_sql", "level": "error", "message": {"text": "sql"},
+                   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app.py"}, "region": {"startLine": 33}}}]},
+                  {"ruleId": "python.django_sql", "level": "error", "message": {"text": "sql elsewhere"},
+                   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app.py"}, "region": {"startLine": 100}}}]},
+                  {"ruleId": "python.django_sql", "message": {"text": "suppressed"},
+                   "suppressions": [{"status": "accepted"}],
+                   "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app.py"}, "region": {"startLine": 5}}}]}]}],
+}
+
+
+def test_load_tool_labels_reads_calib_out_tools(tmp_path):
+    import calibrate
+
+    tools_dir = tmp_path / "s1" / "tools"
+    tools_dir.mkdir(parents=True)
+    (tools_dir / "semgrep.sarif").write_text(json.dumps(_SEMGREP_SARIF), encoding="utf-8")
+    labels = calibrate.load_tool_labels(tmp_path)
+    assert set(labels) == {"s1"} and set(labels["s1"]) == {"semgrep"}
+    rs = labels["s1"]["semgrep"]
+    assert len(rs) == 2 and rs[0].line == 33 and rs[0].cwe == "CWE-89" and rs[0].tool == "semgrep"  # suppression skipped
+    assert calibrate.load_tool_labels(tmp_path / "nope") == {}
+
+
+def test_tool_recall_matches_by_location_within_three_lines():
+    import calibrate
+
+    runs = [("s1", {"findings": [{"provenance": [{"file": "./app.py", "line": 30}], "finder_families": ["anthropic"]},
+                                 {"provenance": [{"file": "app.py", "line": 60}], "finder_families": ["deepseek"]}]}, [])]
+    tool_labels = {"s1": {"semgrep": []}}
+    from mara.tools.sarif import ToolResult
+
+    hits = [ToolResult(tool="semgrep", rule_id="r", level="error", message="m", file="app.py", line=33),
+            ToolResult(tool="semgrep", rule_id="r", level="error", message="m", file="app.py", line=100)]
+    tool_labels["s1"]["semgrep"] = hits
+    rows = calibrate.tool_recall(runs, tool_labels)
+    assert rows["anthropic"]["semgrep"] == {"found": 1, "total": 2}   # line 33 is within 3 of 30; 100 is not
+    assert rows["deepseek"]["semgrep"] == {"found": 0, "total": 2}
+    assert calibrate.tool_recall(runs, {}) == {"anthropic": {}, "deepseek": {}}  # no tool labels: nothing to report

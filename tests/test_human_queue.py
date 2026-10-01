@@ -61,6 +61,19 @@ def test_selection_reasons_and_full_context(cfg):
     assert tightened == {"F-1", "F-2"}
 
 
+def test_rejected_non_d_findings_are_queued_until_p8_allows_silence(cfg):
+    # assessment #60: without a passing AAT (policy P8) no non-D finding is dropped unsupervised
+    fs = [_finding("F-1", 10), _finding("F-2", 20), _finding("F-3", 30)]
+    cons = {"F-1": _cons("F-1", accepted=False), "F-2": _cons("F-2", accepted=False, tier=EvidenceTier.D),
+            "F-3": _cons("F-3", accepted=False)}
+    items = {i.finding_id: i for i in build_queue(fs, cons, {}, {}, [], cfg)}
+    assert items["F-1"].reasons == ["unsupervised_reject_unverified"] and items["F-3"].reasons == ["unsupervised_reject_unverified"]
+    assert "F-2" not in items  # tier D is a normal drop, not an unsupervised rejection
+    cfg_true = cfg.model_copy(deep=True)
+    cfg_true.gate.unsupervised_reject_allowed = True
+    assert build_queue(fs, cons, {}, {}, [], cfg_true) == []
+
+
 def test_tightening_only_when_backlog_is_over_the_limit(cfg):
     base = cfg.gate.human_threshold_alpha
     assert tightening(cfg, None) == (base, False, False)

@@ -4,9 +4,15 @@ Reads calib-out/<sample>/report.json produced by `mara review` together with
 calib/samples/<sample>/labels.json and produces docs/calibration-<date>.md with:
 
   - per family, per CWE precision and recall (match = same file and |line diff| <= 3)
+  - per family, recall against the deterministic tools' own findings used as a second reference
+    label set (assessment #10; SARIF under calib-out/<sample>/tools/, written by calibration_run.py)
   - per family refusal rate, provider error rate, canary echo rate, unverified-quote rate
-  - judge family pairwise agreement (from the pipeline's bias audit) and global alpha
+  - judge family pairwise agreement (from the pipeline's bias audit) and global alpha,
+    appended to calib/history.json on live runs with the delta to the previous period (assessment #49)
   - Dawid-Skene EM estimate of each judge family's reliability from the votes alone
+  - the Alternative Annotator Test of the unsupervised label against human adjudications
+    (assessment #60); a passing live result is written to calib/latest.json and is what policy P8
+    checks before allowing gate.unsupervised_reject_allowed
   - suggested family weights, clamped to [0.2, 2.0], with the sample sizes behind them
 
 It never edits config/mara.yaml: the suggested weights are for a human to adopt.
@@ -22,7 +28,9 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 VERDICT_IDX = {"true_positive": 0, "false_positive": 1, "needs_human": 2}
+TOOL_LABEL_TOOLS = ("semgrep", "osv-scanner", "gitleaks")
 
 
 def load_decisions(decisions_dir: Path) -> list[dict]:
@@ -199,14 +207,17 @@ def judge_agreement(runs):
 
 
 def dawid_skene(runs, iters: int = 30):
-    """Unsupervised reliability of each judge family from votes only (3 classes)."""
+    """Unsupervised reliability of each judge family from votes only (3 classes).
+
+    Also returns the posterior per (sample, finding_id); the Alternative Annotator Test uses its
+    argmax as the pipeline's unsupervised label."""
     items = {}  # (sample, finding_id) -> {family: [verdict idx...]}
     for sample, rep, _ in runs:
         for v in rep["votes"]:
             items.setdefault((sample, v["finding_id"]), defaultdict(list))[v["judge_family"]].append(VERDICT_IDX[v["verdict"]])
     fams = sorted({f for votes in items.values() for f in votes})
     if not items or not fams:
-        return {}, 0
+        return {}, 0, {}
     # init: majority vote
     post = {}
     for key, votes in items.items():
@@ -240,7 +251,141 @@ def dawid_skene(runs, iters: int = 30):
             post[key] = [x / s for x in p]
     # reliability = P(vote TP | truth TP) * P(vote FP | truth FP), a simple diagonal summary
     rel = {f: round((conf[f][0][0] + conf[f][1][1]) / 2, 3) for f in fams}
-    return rel, len(items)
+    return rel, len(items), post
+
+
+def _binomial_two_sided(k: int, n: int, p: float = 0.5) -> float:
+    """Exact two-sided binomial test: double the smaller one-sided tail."""
+    from math import comb
+
+    def pmf(i: int) -> float:
+        return comb(n, i) * p**i * (1 - p) ** (n - i)
+
+    lower = sum(pmf(i) for i in range(k + 1))
+    upper = sum(pmf(i) for i in range(k, n + 1))
+    return min(1.0, 2 * min(lower, upper))
+
+
+def alternative_annotator_test(runs, decisions, post, require_trained: bool | None = None, *,
+                               min_items: int = 10, min_agreement: float = 0.8) -> dict:
+    """Assessment #60: the Alternative Annotator Test.
+
+    Compares the pipeline's unsupervised label (Dawid-Skene posterior argmax) with the human
+    adjudication for every finding a human decided (calib/decisions/, bound to this target's
+    revision and context hash like apply_decisions; G-13's trained-adjudicator rule applies).
+    Passes when agreement >= min_agreement on >= min_items binary items and the exact two-sided
+    binomial p-value against chance (0.5) is < 0.05. A passing live result is written to
+    calib/latest.json, which policy P8 checks before allowing unsupervised rejection."""
+    require_trained = _require_trained() if require_trained is None else require_trained
+    from mara.report.human_queue_out import queue_key
+
+    n = agree = excluded = 0
+    for sample, rep, _labels in runs:
+        target_id, revision = rep.get("target_id"), rep.get("revision")
+        ctx = rep.get("coverage", {}).get("content_hash", "")
+        bound = []
+        for d in decisions:
+            if not target_id or not revision or d.get("target_id") != target_id or d.get("revision") != revision:
+                continue
+            if not d.get("decision_event_id") or not d.get("context_hash"):
+                continue
+            if d.get("key") != queue_key(d["file"], int(d["line"]), d["cwe"], target_id=target_id,
+                                         revision=revision, context_hash=ctx):
+                continue
+            if require_trained and not d.get("adjudicator_trained"):
+                continue
+            bound.append(d)
+        for f in rep.get("findings", []):
+            hit = next((d for d in bound if _match(f, {"file": d["file"], "line": d["line"], "cwe": d["cwe"]})), None)
+            if hit is None:
+                continue
+            posterior = post.get((sample, f["id"]))
+            argmax = max(range(3), key=lambda t: posterior[t]) if posterior else None
+            if argmax is None or argmax == VERDICT_IDX["needs_human"]:
+                excluded += 1  # the pipeline abstained; there is no unsupervised decision to test
+                continue
+            n += 1
+            agree += int((argmax == VERDICT_IDX["true_positive"]) == (hit["decision"] == "true_positive"))
+    if n == 0:
+        return {"n": 0, "agreement": None, "p_value": None, "passed": False, "excluded": excluded,
+                "why": "沒有可對照的人工裁決（calib/decisions/ 為空，或沒有裁決綁定到本次樣本）"}
+    p_value = _binomial_two_sided(agree, n)
+    return {"n": n, "agreement": round(agree / n, 4), "p_value": round(p_value, 4),
+            "passed": bool(n >= min_items and agree / n >= min_agreement and p_value < 0.05),
+            "excluded": excluded, "min_items": min_items, "min_agreement": min_agreement}
+
+
+def load_history(path: Path) -> list[dict]:
+    try:
+        hist = json.loads(path.read_text(encoding="utf-8"))
+        return hist if isinstance(hist, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def append_history(path: Path, date: str, mode: str, alpha, pair: dict) -> None:
+    """Assessment #49: keep alpha and judge agreement comparable across quarters. Live runs only —
+    mock numbers verify the method, they are not a quality time series."""
+    if mode != "live" or alpha is None:
+        return
+    hist = load_history(path)
+    hist = [h for h in hist if not (h.get("date") == date and h.get("mode") == mode)]
+    hist.append({"date": date, "mode": mode, "global_alpha": round(alpha, 4),
+                 "judge_agreement": {k: round(v, 4) for k, v in sorted(pair.items())}})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(hist, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def load_tool_labels(out_dir: Path, tools: tuple[str, ...] = TOOL_LABEL_TOOLS) -> dict[str, dict[str, list]]:
+    """Assessment #10: per-sample deterministic-tool SARIF, written by calibration_run.py under
+    calib-out/<sample>/tools/ — deliberately outside the sample directory, so the reference labels
+    can never leak into a later review's bundle."""
+    from mara.tools.sarif import read_sarif
+
+    out: dict[str, dict[str, list]] = {}
+    if not out_dir.is_dir():
+        return out
+    for sample_dir in sorted(p for p in out_dir.iterdir() if p.is_dir()):
+        tools_dir = sample_dir / "tools"
+        if not tools_dir.is_dir():
+            continue
+        per: dict[str, list] = {}
+        for tool in tools:
+            sarif = tools_dir / f"{tool}.sarif"
+            if sarif.is_file():
+                try:
+                    per[tool] = read_sarif(sarif, tool_hint=tool)
+                except (OSError, ValueError):
+                    per[tool] = []
+        if per:
+            out[sample_dir.name] = per
+    return out
+
+
+def tool_recall(runs, tool_labels):
+    """Assessment #10: per family recall against the tools' findings. A tool finding counts as
+    covered by a family when some finding of that family sits on the same file within 3 lines
+    (tool SARIF names no CWE, so the match is location-only). Returns {family: {tool: {found, total}}}."""
+    fams = sorted({f for _, rep, _ in runs for fnd in rep.get("findings", []) for f in fnd.get("finder_families", [])})
+    tools = sorted({t for per in tool_labels.values() for t in per})
+    rows = {fam: {t: {"found": 0, "total": 0} for t in tools} for fam in fams}
+    for sample, rep, _ in runs:
+        per_tool = tool_labels.get(sample, {})
+        if not per_tool:
+            continue
+        by_fam: dict[str, list[tuple[str, int]]] = defaultdict(list)
+        for f in rep.get("findings", []):
+            p = f["provenance"][0]
+            for fam in f.get("finder_families", []):
+                by_fam[fam].append((p["file"].lstrip("./"), int(p["line"])))
+        for fam in fams:
+            locs = by_fam.get(fam, [])
+            for tool, results in per_tool.items():
+                for r in results:
+                    rows[fam][tool]["total"] += 1
+                    if any(x[0] == r.file.lstrip("./") and abs(x[1] - r.line) <= 3 for x in locs):
+                        rows[fam][tool]["found"] += 1
+    return rows
 
 
 def load_model_eval() -> dict | None:
@@ -295,20 +440,23 @@ def suggest_weights(stats, rel, families, model_eval: dict | None = None, penalt
     return out
 
 
-def front_matter(mode: str, date: str, families, runs, model_eval: dict | None) -> str:
+def front_matter(mode: str, date: str, families, runs, model_eval: dict | None, tool_labels: int = 0) -> str:
     import yaml
 
     meta = {"report": "calibration", "date": date, "mode": mode, "families": list(families),
             "samples": [s for s, _, _ in runs], "labels": sum(len(labs) for _, _, labs in runs),
+            "tool_labels": tool_labels,
             "provider_modes": sorted({rep.get("provider_mode", "?") for _, rep, _ in runs}),
             "model_eval": (model_eval or {}).get("date"), "governance": "G-9"}
     return "---\n" + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True) + "---\n"
 
 
 def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mode: str, date: str | None = None,
-           model_eval: dict | None = None) -> str:
+           model_eval: dict | None = None, aat: dict | None = None, history: list[dict] | None = None,
+           tool_recall_rows: dict | None = None, tool_labels: int = 0) -> str:
     today = date or dt.date.today().isoformat()
-    L = [front_matter(mode, today, families, runs, model_eval), f"# 校準報告（{today}）", "",
+    L = [front_matter(mode, today, families, runs, model_eval, tool_labels),
+         f"# 校準報告（{today}）", "",
          f"執行模式：**{mode}**。" + (" 本次以 mock 家族跑通校準迴圈，數字只驗證方法，不代表任何真實模型。" if mode == "mock" else ""),
          f"樣本：{', '.join(s for s, _, _ in runs)}（共 {sum(len(labs) for _, _, labs in runs)} 個標籤）。", "",
          "## 1. 每家族每 CWE 的精確度與召回率", ""]
@@ -321,6 +469,23 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
             L.append(f"| {cwe} | {c['tp']} | {c['fp']} | {c['fn']} | {p:.2f} | {r:.2f} |")
         w = weights[fam]
         L += ["", f"合計：precision {w['precision']:.2f}、recall {w['recall']:.2f}、F1 {w['f1']:.2f}（標籤數 {w['n_labels']}）", ""]
+    tools = sorted({t for per in (tool_recall_rows or {}).values() for t in per})
+    if tools:
+        def _cell(fam: str, tool: str) -> str:
+            c = (tool_recall_rows.get(fam) or {}).get(tool) or {"found": 0, "total": 0}
+            if not c["total"]:
+                return "n/a"
+            return f"{c['found']}/{c['total']}（{c['found'] / c['total']:.2f}）"
+
+        L += ["## 1a. 工具結果作為第二組參考標籤（assessment #10）", "",
+              "calibration_run.py 對每個樣本以鎖定的 semgrep／osv-scanner／gitleaks 掃描，SARIF 存在 `calib-out/<sample>/tools/`",
+              "（刻意不放在樣本目錄內，避免參考標籤洩漏進下一次審查的 bundle）。下表是每個家族對工具 finding 的召回率：",
+              "工具 finding 被視為「該家族也報告了」當該家族的某個 finding 落在同一檔案 ±3 行內（工具 SARIF 不帶 CWE，僅以位置比對）。",
+              "工具結果不是真值，只是第二組參考；離線主機上 osv-scanner 可能缺席。", "",
+              "| 家族 | " + " | ".join(tools) + " |", "|---" + "|---:" * len(tools) + "|"]
+        for fam in families:
+            L.append(f"| {fam} | " + " | ".join(_cell(fam, t) for t in tools) + " |")
+        L.append("")
     L += ["## 2. 拒答率、canary 回應率、無效輸出", "", "| 家族 | 呼叫數 | 拒答率 | provider 錯誤率 | canary 回應率 | 未驗證引用 | 無效 finding |", "|---|---:|---:|---:|---:|---:|---:|"]
     for fam in families:
         r = rates.get(fam, {})
@@ -374,11 +539,43 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
             L += ["", "**該評測不是對真實端點的執行結果（mode ≠ live），不滿足 G-8；權重懲罰仍依其判定套用以示範機制。**"]
     else:
         L.append("尚無 `calib/model-eval-<date>.json`：G-8 從未執行，權重未受評測結果調整。")
-    L += ["", "## 7. Alternative Annotator Test（無監督「不採納」的驗收門檻）", "",
-          "報告第 15.3 節與 G-9 要求以 Alternative Annotator Test 證明管線的判斷在統計上可替代人類標註者，才允許無監督的「不採納」。"
-          "該檢定需要每個項目至少兩位獨立的人工標註者；本 repo 的標籤集只有一份標籤，裁決登錄簿（G-11）每張工單只有一位裁決者。"
-          "**目前無法計算；在取得第二位獨立標註前，管線的所有「不採納」都應被人工抽查。**", ""]
-    L += ["## 8. 如何重跑（真實模型）", "", "```bash",
+    L += ["", "## 7. Alternative Annotator Test（無監督「不採納」的驗收門檻，assessment #60）", "",
+          "報告第 15.3 節與 G-9 要求：在允許管線無監督地「不採納」之前，須以 `calib/decisions/` 的人工裁決為對照，",
+          "檢定管線的無監督標籤（Dawid-Skene 後驗 argmax）與人工裁決是否一致且顯著高於隨機：一致率 ≥ 0.8、n ≥ 10、",
+          "雙尾二項檢定 p < 0.05。通過的 live 校準會把結果寫入 `calib/latest.json`，政策 P8 據此才允許 "
+          "`gate.unsupervised_reject_allowed: true`；在此之前，非 D 級的「不採納」一律進人工佇列。", ""]
+    if aat is None or not aat.get("n"):
+        why = (aat or {}).get("why") or "本次沒有可對照的人工裁決。"
+        L += [f"本次結果：**未通過**（{why}）管線的所有「不採納」繼續由人工抽查。", ""]
+    else:
+        verdict = "**通過**" if aat.get("passed") else "**未通過**"
+        L += [f"本次結果：{verdict} — n={aat['n']}、一致率 {aat['agreement']}、雙尾 p 值 {aat['p_value']}"
+              f"（門檻：n ≥ {aat.get('min_items', 10)}、一致率 ≥ {aat.get('min_agreement', 0.8)}、p < 0.05；"
+              f"{aat.get('excluded', 0)} 個項目因無監督標籤為 needs_human 而未納入）。", ""]
+    L += ["## 8. α 跨期追蹤（assessment #49）", ""]
+    if mode != "live":
+        L += ["僅 live 校準寫入 `calib/history.json`；本次為 mock，數字只驗證方法，不追加、不比較。", ""]
+    elif not history or alpha is None:
+        L += ["尚無跨期紀錄：這是第一次 live 校準（或本次缺 α），`calib/history.json` 從下次起可比較。", ""]
+    else:
+        prev = history[-1]
+        delta = round(alpha - prev["global_alpha"], 4)
+        L += ["| 日期 | 全域 α |", "|---|---:|"]
+        for h in history[-5:]:
+            L.append(f"| {h['date']} | {h['global_alpha']:.4f} |")
+        L += [f"| {today}（本次） | {alpha:.4f} |", "",
+              f"與前期（{prev['date']}）差值：**{delta:+.4f}**。"]
+        if delta <= -0.1:
+            L += ["", "**α 較上次 live 校準下降超過 0.1 — 採用本次建議權重前，先調查 panel 組成、模型版本或提示詞的變更。**"]
+        prev_pair = prev.get("judge_agreement") or {}
+        if prev_pair:
+            L += ["", "| 家族對 | 本次一致率 | 前期 | 差值 |", "|---|---:|---:|---:|"]
+            for k in sorted(pair):
+                pv = prev_pair.get(k)
+                L.append(f"| {k} | {pair[k]:.3f} | {pv:.3f} | {pair[k] - pv:+.3f} |" if pv is not None
+                         else f"| {k} | {pair[k]:.3f} | n/a | n/a |")
+        L.append("")
+    L += ["## 9. 如何重跑（真實模型）", "", "```bash",
           "python3 scripts/calibration_run.py --mode live --config config/mara.yaml   # check-config → mara review 每個樣本 → calibrate --mode live",
           "```", ""]
     return "\n".join(L)
@@ -410,14 +607,31 @@ def main() -> int:
     rates = audit_rates(runs, families)
     refuted = refutation_rates(runs, families)
     pair, alpha = judge_agreement(runs)
-    rel, n_items = dawid_skene(runs)
+    rel, n_items, post = dawid_skene(runs)
     model_eval = load_model_eval()
     weights = suggest_weights(stats, rel, families, model_eval, rates=rates, refuted_rates=refuted)
+    aat = alternative_annotator_test(runs, load_decisions(ROOT / "calib" / "decisions"), post)
+    tool_labels = load_tool_labels(out_dir)
+    recall_rows = tool_recall(runs, tool_labels)
+    history_path = ROOT / "calib" / "history.json"
+    history = load_history(history_path)
+    n_tool_labels = sum(len(rs) for per in tool_labels.values() for rs in per.values())
     date = args.date or dt.date.today().isoformat()
-    text = render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, args.mode, date, model_eval)
+    text = render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, args.mode, date, model_eval,
+                  aat=aat, history=history, tool_recall_rows=recall_rows, tool_labels=n_tool_labels)
     out = Path(args.report) if args.report else ROOT / "docs" / f"calibration-{date}.md"
     out.write_text(text, encoding="utf-8")
+    append_history(history_path, date, args.mode, alpha, pair)
+    if args.mode == "live":
+        latest = ROOT / "calib" / "latest.json"
+        latest.write_text(
+            json.dumps({"date": date, "mode": args.mode, "aat": aat, "global_alpha": alpha}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
     print(f"wrote {out}")
+    print(f"AAT: n={aat['n']} agreement={aat.get('agreement')} p={aat.get('p_value')} passed={aat['passed']}"
+          + (f"（{aat['why']}）" if aat.get("why") else ""))
+    print(f"tool reference labels: {n_tool_labels} finding(s) from {len(tool_labels)} sample(s)")
     for fam in families:
         w = weights[fam]
         print(f"{fam:10s} P={w['precision']:.2f} R={w['recall']:.2f} F1={w['f1']:.2f} DS={w['ds_reliability']} weight={w['weight']}")

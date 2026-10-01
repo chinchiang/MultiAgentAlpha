@@ -4,7 +4,7 @@ import pytest
 
 from mara.report.markdown_out import render_markdown
 from mara.report.sarif_out import to_sarif
-from mara.schemas import EvidenceTier
+from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, SkepticVerdict
 
 SEEDED = {  # (dimension, cwe, file) that must be accepted
     ("vulnerabilities", "CWE-89", "app.py"),
@@ -49,6 +49,35 @@ def test_fabricated_quote_is_rejected_as_tier_d(mock_report):
     assert cons[fake.id].tier == EvidenceTier.D
     assert not cons[fake.id].accepted
     assert cons[fake.id].skeptic_refuted
+
+
+def test_refuted_finding_the_jury_overrode_goes_to_human(mock_report):
+    """assessment #37: a skeptic-refuted finding with high jury consensus must not re-enter the
+    blocking logic; it is forced to the human queue instead of being accepted."""
+    pipe, _ = mock_report
+    f = Finding(
+        id="F-9001", dimension="vulnerabilities", title="SQL injection in search", cwe="CWE-89",
+        provenance=[Provenance(file="app.py", line=32, quote="cursor.execute(q)", verified=True)],
+        reachability="reachable", reachability_argument="user input reaches the query",
+        exploit_sketch="inject via the search parameter",
+        cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:L/SC:N/SI:N/SA:N",
+        model_confidence=0.9, source_family=ModelFamily.MOCK, source_model="mock-a",
+        finder_families=[ModelFamily.MOCK],
+    )
+    votes = [
+        JudgeVote(finding_id="F-9001", verdict="true_positive", severity_band="High", reason="reachable",
+                  judge_family=fam, judge_model=f"{fam.value}-judge", presentation_order=0, pass_id=pas)
+        for fam in (ModelFamily.ANTHROPIC, ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON)
+        for pas in ("forward", "reverse")
+    ]
+    sk = SkepticVerdict(finding_id="F-9001", verdict="refuted", reason="query is parameterised",
+                        sanitizer_or_control="app.py:41 prepared statements",
+                        source_family=ModelFamily.MOCK, source_model="mock-skeptic")
+    cons = pipe.score([f], {f.id: {ModelFamily.MOCK}}, {"F-9001": sk}, {}, votes, [])[0]
+    assert cons.skeptic_refuted
+    assert cons.tier != EvidenceTier.D  # the jury did override the refutation
+    assert cons.needs_human and not cons.accepted
+    assert "skeptic_refuted_jury_overrode" in cons.human_reasons
 
 
 def test_tool_corroboration_yields_tier_a(mock_report):

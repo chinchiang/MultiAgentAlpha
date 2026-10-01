@@ -135,7 +135,7 @@ def check_g2(root: Path, config_path: Path) -> CheckResult:
     cfg = load_config(config_path)
     rev = {cfg.model_by_name(n).family.value for n in cfg.roles.reviewers}
     jud = {cfg.model_by_name(n).family.value for n in cfg.roles.judges}
-    evidence.append(f"`{config_path.relative_to(root)}`：reviewer 家族 {sorted(rev)}，judge 家族 {sorted(jud)}")
+    evidence.append(f"`{config_path.relative_to(root).as_posix()}`：reviewer 家族 {sorted(rev)}，judge 家族 {sorted(jud)}")
     if len(rev) < 3:
         problems.append(f"reviewer 家族數 {len(rev)} < 3")
     if len(jud) < 3:
@@ -182,7 +182,7 @@ def check_g3(root: Path, config_path: Path) -> CheckResult:
             problems.append(f"{m.name} 的 data_residency={res} 不在 {sorted(ALLOWED_RESIDENCY)}")
         if any(k in m.model.lower() for k in COVERED_MARKERS):
             problems.append(f"{m.name} 使用 Fable/Mythos 級模型 {m.model}")
-    ev = f"`{config_path.relative_to(root)}` 模型：{', '.join(rows)}；`src/mara/policy.py` P1/P2/P5 在載入時強制"
+    ev = f"`{config_path.relative_to(root).as_posix()}` 模型：{', '.join(rows)}；`src/mara/policy.py` P1/P2/P5 在載入時強制"
     return CheckResult("G-3", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + ev)
 
 
@@ -198,7 +198,7 @@ def check_g4(root: Path, config_path: Path | None = None, today: dt.date | None 
     ev, problems = [], []
     for st in statuses:
         if st.config_ok:
-            ev.append(f"{st.family}→{st.standby_family} `{st.standby_config}` 可載入")
+            ev.append(f"{st.family}→{st.standby_family} `{Path(st.standby_config).as_posix()}` 可載入")
         else:
             problems.append(f"{st.family}：冷備設定{st.config_problem}")
         if st.drill_ok and st.drill:
@@ -307,7 +307,7 @@ def check_g7(root: Path, config_path: Path) -> CheckResult:
             "`ml_bom.py build` 產生 BOM，以 `cosign sign-blob --bundle` 簽章後提交，並把 `ml_bom.required` 設為 true 讓政策 P7 強制")
     if not boms:
         return CheckResult("G-7", FAIL, f"找不到 CycloneDX ML-BOM（`sbom/*.cdx.json`、`bom.json`）。自架模型 {[m for _, m in self_hosted]} 的權重未列冊。{need}")
-    ev = [f"`{p.relative_to(root)}`" for p in boms]
+    ev = [f"`{p.relative_to(root).as_posix()}`" for p in boms]
     if (root / "sbom" / "models.yaml").exists():
         ev.append("manifest `sbom/models.yaml`")
     problems = []
@@ -444,7 +444,7 @@ def check_g11(root: Path, config_path: Path) -> CheckResult:
         text = p.read_text(encoding="utf-8")
         # only a workflow that names the human queue counts; the governance tracking issue is not one
         if re.search(r"human[_-]queue", text):
-            ev.append(f"`{p.relative_to(root)}` 含人工佇列的工單整合")
+            ev.append(f"`{p.relative_to(root).as_posix()}` 含人工佇列的工單整合")
     if len(ev) >= 2:
         return CheckResult("G-11", PASS, "；".join(ev))
     return CheckResult("G-11", FAIL, (("已有：" + "；".join(ev) + "。") if ev else "") + "人工佇列未接工單、裁決未回寫。需要：workflow 把 needs_human finding 建成帶標籤的 issue、`calib/decisions/` 的裁決格式與 `calibrate.py` 讀取、佇列超量時收緊門檻的規則")
@@ -538,7 +538,7 @@ def render(results: list[CheckResult], *, root: Path, config_path: Path, date: s
     L = [f"# 治理合規檢查（{date}）", "",
          "依附錄 E 的 prompt 8，對報告第十部治理建議 G-1 到 G-13 做可自動判定的檢查。本檔由 `scripts/governance_check.py` 產生；"
          "「需人工」表示無法從檔案判定，該列的證據欄寫明需要什麼證據。任一「失敗」使腳本以非零結束。", "",
-         f"- 掃描根目錄：`{root.name}/`；設定檔：`{config_path.relative_to(root) if config_path.is_relative_to(root) else config_path}`；報告與紀錄的新鮮度門檻：{FRESH_DAYS} 天。",
+         f"- 掃描根目錄：`{root.name}/`；設定檔：`{config_path.relative_to(root).as_posix() if config_path.is_relative_to(root) else config_path.as_posix()}`；報告與紀錄的新鮮度門檻：{FRESH_DAYS} 天。",
          "- 標準條文取自報告第 25.4 節對應總表；標 * 者的 ISO 控制項標題尚未對照正本（附錄 B）。", "",
          "| 建議 | 內容 | 狀態 | 證據 | 對應標準條文 |", "|---|---|---|---|---|"]
     for r in results:

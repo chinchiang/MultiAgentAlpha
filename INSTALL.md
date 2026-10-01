@@ -168,7 +168,7 @@ Needed only for reviews with real models. `config/mara.yaml` documents the topol
 ```bash
 export ANTHROPIC_API_KEY=...
 export DEEPSEEK_LOCAL_KEY=... NIM_LOCAL_KEY=...
-mara check-config config/mara.yaml          # the seven policy checks first / 先過七條政策檢查
+mara check-config config/mara.yaml          # the eight policy checks first / 先過八條政策檢查
 mara review path/to/repo --config config/mara.yaml --out out
 ```
 
