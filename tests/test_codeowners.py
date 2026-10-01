@@ -57,6 +57,6 @@ def test_the_gating_files_have_an_owner_by_a_specific_rule():
 
 
 def test_no_pattern_is_stale():
-    tracked = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts]
+    tracked = [p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts]
     for pattern, _ in _rules():
         assert any(_matches(pattern, t) for t in tracked), f"{pattern} matches no file"

@@ -234,16 +234,18 @@ differs from the lock:
   record, and entries that no longer match anything are reported as stale.
 - `scripts/osv_ci.py --target fixtures/vuln-sample --expect-package requests` must see the
   fixture's `requests==2.19.0` flagged, so a silent scanner or database regression is caught.
-- The bootstrap, dev, semgrep and build closures use `tools/osv-scanner.toml` with no advisory
-  exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`;
-  its dated exceptions cannot suppress an advisory in runtime or build dependencies. These scans
+- The bootstrap, dev, typecheck and build closures use `tools/osv-scanner.toml` with no advisory
+  exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`,
+  and the semgrep tool closure with `tools/osv-semgrep.toml` (semgrep pins `pyjwt[crypto]~=2.13.0`
+  upstream, so its PyJWT advisories carry dated exceptions there); their dated exceptions cannot
+  suppress an advisory in the other runtime or build dependencies. These scans
   also run weekly and on manual workflow dispatch.
 
 semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories
 (never `--config auto`), so nothing is sent to semgrep.dev; osv-scanner runs `scan source
 --no-resolve`, so only package names and versions go to api.osv.dev and nothing to deps.dev. All
-SARIF files land in the `l0-sarif` artifact, and the six scans of the repository itself (five tools; osv-scanner
-once more for the model-evaluation closure) are also uploaded to GitHub Code Scanning (see below). `mara review` uses the same pinned rulesets by default
+SARIF files land in the `l0-sarif` artifact, and the seven scans of the repository itself (five tools; osv-scanner
+twice more: the model-evaluation and semgrep tool closures) are also uploaded to GitHub Code Scanning (see below). `mara review` uses the same pinned rulesets by default
 (`MARA_SEMGREP_CONFIG` overrides). zizmor on the real workflows runs the same way since 2026-09-14:
 `scripts/zizmor_ci.py` executes the locked zizmor (online audits with the workflow token), keeps the
 SARIF and fails on any finding; zizmor-action is gone.

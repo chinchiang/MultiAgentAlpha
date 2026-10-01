@@ -444,4 +444,8 @@ def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():
     runs = [s.get("run", "") for s in data["jobs"]["deterministic-tools"]["steps"]]
     model_scan = [s for s in runs if "osv_ci.py" in s and "osv-model-eval.toml" in s]
     assert len(model_scan) == 1 and model_scan[0].count("--lockfile") == 1
+    semgrep_scan = [s for s in runs if "osv_ci.py" in s and "osv-semgrep.toml" in s]
+    assert len(semgrep_scan) == 1 and semgrep_scan[0].count("--lockfile") == 1 and "semgrep-requirements.txt" in semgrep_scan[0]
+    main_scan = [s for s in runs if "osv_ci.py" in s and "osv-scanner.toml" in s]
+    assert len(main_scan) == 1 and "semgrep-requirements.txt" not in main_scan[0]
     assert "IgnoredVulns" not in (ROOT / "tools/osv-scanner.toml").read_text(encoding="utf-8")

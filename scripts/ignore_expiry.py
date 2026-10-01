@@ -60,5 +60,5 @@ def expiring(entries: list[tuple[str, dt.date | None]], today: dt.date, days: in
 def warn(path: Path, entries: list[tuple[str, dt.date | None]], today: dt.date | None = None) -> int:
     msgs = expiring(entries, today or dt.date.today())
     for m in msgs:
-        print(f"::warning file={path}::{m}")
+        print(f"::warning file={path.as_posix()}::{m}")
     return len(msgs)

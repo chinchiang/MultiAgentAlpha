@@ -14,13 +14,22 @@ import ignore_expiry as ie  # noqa: E402
 D = dt.date
 
 
-def test_model_eval_exceptions_are_the_same_in_osv_and_trivy():
-    # One unfixable advisory in tools/model-eval-requirements.txt is excepted in both scanners; the two
-    # entries must name the same ids and expire together, or one scanner fails while the other passes.
-    osv = sorted(ie.osv_entries(ROOT / "tools" / "osv-model-eval.toml"))
-    trivy = sorted(ie.trivy_entries(ROOT / "tools" / "trivyignore.yaml"))
-    assert osv == trivy
-    assert all(until is not None for _, until in osv)
+def test_closure_exceptions_are_the_same_in_osv_and_trivy():
+    # Every closure config (the isolated model-evaluation closure, and the semgrep tool closure whose
+    # pyjwt is pinned upstream) must appear in tools/trivyignore.yaml with the same ids and expiries, or
+    # one scanner fails while the other passes.
+    trivy: dict[str, object] = {}
+    for vid, until in ie.trivy_entries(ROOT / "tools" / "trivyignore.yaml"):
+        assert vid not in trivy, f"{vid} listed twice in trivyignore.yaml"
+        trivy[vid] = until
+    osv_ids: set[str] = set()
+    for name in ("osv-model-eval.toml", "osv-semgrep.toml"):
+        for vid, until in ie.osv_entries(ROOT / "tools" / name):
+            assert until is not None, f"{name}: {vid} has no expiry"
+            assert vid not in osv_ids, f"{vid} listed in two osv configs"
+            osv_ids.add(vid)
+            assert trivy.get(vid) == until, f"{vid}: osv expiry {until} but trivy expiry {trivy.get(vid)}"
+    assert set(trivy) == osv_ids, f"trivyignore ids with no osv entry: {sorted(set(trivy) - osv_ids)}"
 
 
 def test_every_exception_has_an_expiry_and_the_main_osv_list_stays_empty():
