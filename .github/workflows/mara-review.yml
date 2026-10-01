@@ -15,11 +15,16 @@
 #     which downloaded its own unverified copy; it audits only the real workflows under .github/workflows and
 #     any finding fails the job. The seeded fixture workflow is audited in a separate step whose findings
 #     must match the pre-recorded fixtures/vuln-sample-sarif/zizmor.sarif
-#   - the SARIF of the seven scans of this repository (semgrep, osv-scanner three times: runtime/build,
-#     model-eval and semgrep tool closures, trivy, gitleaks, zizmor) goes to
+#   - the SARIF of the eight scans of this repository (semgrep, osv-scanner three times: runtime/build,
+#     model-eval and semgrep tool closures, trivy, gitleaks, zizmor, csp-evaluator) goes to
 #     GitHub Code Scanning from a separate job that runs no repository code and is the only job with
 #     security-events: write; it is skipped for pull requests from forks and from Dependabot (read-only
 #     token). The fixture scans and the mock review report describe seeded material and are never uploaded
+#   - csp-evaluator is the npm package pinned and verified in tools/versions.lock (SHA-256 + the
+#     registry's own dist.integrity for the exact version; scripts/csp_ci.py drives it with the node
+#     interpreter and the repository's driver, never from PATH). The seeded fixture must reproduce
+#     fixtures/vuln-sample-sarif/csp-evaluator.sarif exactly, and the repository scan fails on any
+#     finding not triaged with a reason in tools/csp-triage.yaml
 #   - L0 tool binaries come only from tools/versions.lock via scripts/install_tools.py (SHA-256 + publisher
 #     signature/provenance verified); nothing is taken from PATH or installed unpinned
 #   - semgrep runs with the semgrep-rules checkout pinned in the lock (commit + content digest + GitHub's
@@ -73,7 +78,8 @@ jobs:
         # SHA-256 for every asset, then the publisher's signature/provenance: cosign keyless (trivy, cosign),
         # SLSA provenance (osv-scanner, slsa-verifier, scorecard), GitHub attestation via gh (zizmor), publisher
         # checksums (gitleaks), pip --require-hashes (semgrep), pinned commit + content digest + GPG commit
-        # signature (semgrep-rules). Any failure fails the job. See docs/tools-provenance.md.
+        # signature (semgrep-rules), registry dist.integrity (csp-evaluator). Any failure fails the job.
+        # See docs/tools-provenance.md.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # gh attestation verify
         run: |
@@ -107,6 +113,10 @@ jobs:
         run: python3 scripts/semgrep_ci.py --target fixtures/vuln-sample --report fixture-semgrep.sarif --expect fixtures/vuln-sample-sarif/semgrep.sarif
       - name: semgrep on this repository; any finding not triaged in tools/semgrep-triage.yaml fails the job
         run: python3 scripts/semgrep_ci.py --target . --report semgrep.sarif --triage tools/semgrep-triage.yaml
+      - name: csp-evaluator (locked npm package) must trip on the seeded fixture exactly as pre-recorded
+        run: python3 scripts/csp_ci.py --target fixtures/vuln-sample --report fixture-csp.sarif --expect fixtures/vuln-sample-sarif/csp-evaluator.sarif
+      - name: csp-evaluator on this repository; any finding not triaged in tools/csp-triage.yaml fails the job
+        run: python3 scripts/csp_ci.py --target . --report csp-evaluator.sarif --triage tools/csp-triage.yaml
       - name: osv-scanner must report the seeded fixture's known-vulnerable dependency (requests==2.19.0)
         run: python3 scripts/osv_ci.py --target fixtures/vuln-sample --report fixture-osv.sarif --expect-package requests
       - name: osv-scanner on the hash-locked closures this repository installs; any un-ignored advisory fails the job
@@ -133,7 +143,7 @@ jobs:
         run: python3 scripts/gitleaks_ci.py --base "$BASE_SHA" --head "$HEAD_SHA" --event "$EVENT" --report gitleaks.sarif
       - name: Prepare Code Scanning data with a read-only token
         if: always()
-        run: python3 scripts/code_scanning_prep.py --out code-scanning semgrep=semgrep.sarif osv=osv.sarif osv-model-eval=osv-model-eval.sarif osv-semgrep=osv-semgrep.sarif trivy=trivy.sarif gitleaks=gitleaks.sarif zizmor=zizmor.sarif
+        run: python3 scripts/code_scanning_prep.py --out code-scanning semgrep=semgrep.sarif osv=osv.sarif osv-model-eval=osv-model-eval.sarif osv-semgrep=osv-semgrep.sarif trivy=trivy.sarif gitleaks=gitleaks.sarif zizmor=zizmor.sarif csp=csp-evaluator.sarif
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -155,6 +165,8 @@ jobs:
             fixture-trivy.sarif
             gitleaks.sarif
             zizmor.sarif
+            csp-evaluator.sarif
+            fixture-csp.sarif
           if-no-files-found: ignore
 
   code-scanning:

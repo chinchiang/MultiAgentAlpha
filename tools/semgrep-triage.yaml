@@ -11,12 +11,15 @@ exclude:
 
 accepted:
   - rule: python.lang.security.audit.dangerous-subprocess-use-audit
-    paths: ["scripts/*.py", "src/mara/tools/runner.py", "tests/*.py"]
+    paths: ["scripts/*.py", "src/mara/tools/*.py", "tests/*.py"]
     reason: >
       Audit-only rule (LOW confidence) that fires on every subprocess call whose argv is not a literal.
       Every call in this repository passes an argv list (never shell=True); the executable is a tool
-      installed from tools/versions.lock, git, gh or sys.executable, and the arguments are fixed flags plus
-      values the caller validated. Reviewed 2026-09-13 with the scan that introduced this file.
+      installed from tools/versions.lock, git, gh, sys.executable or the node interpreter resolved from
+      PATH, and the arguments are fixed flags plus values the caller validated. csp_eval.py feeds the
+      serialized request to the pinned csp-evaluator driver over stdin and synthesizes CompletedProcess
+      results when the driver or node is missing. Reviewed 2026-09-13 with the scan that introduced this
+      file; csp_eval.py reviewed 2026-10-01 with the scan that introduced it.
   - rule: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
     paths: [scripts/calibration_run.py, scripts/gitleaks_ci.py, scripts/osv_ci.py, scripts/scorecard_ci.py, scripts/semgrep_ci.py, scripts/trivy_ci.py, scripts/zizmor_ci.py]
     reason: >

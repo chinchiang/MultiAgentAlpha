@@ -17,12 +17,15 @@ Usage:
 Kinds: binary / archive (a release asset), pip (a hash-pinned requirements file), git (a repository
 checked out at a pinned commit, e.g. the semgrep rules: the lock's sha256 is a digest over the rule
 files themselves, and verify.method git-commit-gpg checks the commit's GPG signature against the key
-named in the lock).
+named in the lock), npm (an immutable registry tarball: SHA-256 pinned by us and cross-checked
+against the registry's own dist.integrity SHA-512 for that exact version; the package is unpacked
+under the install dir and driven by the repository's driver script, never by anything from PATH).
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as dt
 import hashlib
 import json
@@ -44,6 +47,9 @@ DEFAULT_LOCK = ROOT / "tools" / "versions.lock"
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 SIGNATURE_METHODS = {"cosign-keyless", "slsa-provenance", "github-attestation", "git-commit-gpg"}
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+NPM_TARBALL_RE = re.compile(r"^https://registry\.npmjs\.org/[\w.-]+/-/[\w.-]+\.tgz$")
+NPM_DOC_RE = re.compile(r"^https://registry\.npmjs\.org/[\w.-]+/[\w.-]+$")
+NPM_INTEGRITY_RE = re.compile(r"^sha512-([A-Za-z0-9+/]+={0,2})$")
 
 
 class InstallError(RuntimeError):
@@ -134,6 +140,18 @@ def load_lock(path: Path) -> dict:
                 raise InstallError(f"{path}: tool {name} has a malformed sha256")
             if not isinstance(t["paths"], list) or not t["paths"] or any(".." in Path(p).parts or Path(p).is_absolute() for p in t["paths"]):
                 raise InstallError(f"{path}: tool {name} needs a non-empty list of relative 'paths'")
+        elif t.get("kind") == "npm":
+            for key in ("version", "url", "sha256", "publisher_checksums_url", "verify"):
+                if key not in t:
+                    raise InstallError(f"{path}: tool {name} lacks '{key}'")
+            if not SHA_RE.match(str(t["sha256"])):
+                raise InstallError(f"{path}: tool {name} has a malformed sha256")
+            if not NPM_TARBALL_RE.match(str(t["url"])):
+                raise InstallError(f"{path}: tool {name} is not an immutable registry tarball URL")
+            if f"-{t['version']}.tgz" not in str(t["url"]):
+                raise InstallError(f"{path}: tool {name} tarball URL does not pin version {t['version']}")
+            if not NPM_DOC_RE.match(str(t["publisher_checksums_url"])):
+                raise InstallError(f"{path}: tool {name} needs a registry metadata URL as publisher_checksums_url")
         else:
             raise InstallError(f"{path}: tool {name} has unknown kind {t.get('kind')!r}")
     return lock
@@ -305,6 +323,97 @@ def verify_commit_gpg(name: str, spec: dict, checkout: Path, cache: Path) -> str
     return f"git-commit-gpg key={key_id} ({v['gpg_key_url']})"
 
 
+def check_npm_integrity(name: str, tarball: Path, spec: dict, cache: Path) -> str:
+    """The registry's own metadata for this exact version must list the tarball's SHA-512. npm tarballs
+    are immutable once published, so this is the publisher-side checksum check (the registry document
+    also carries npm's ECDSA signature over the metadata, which is produced and verified by npm itself)."""
+    doc_path = download(spec["publisher_checksums_url"], cache / f"{name}.registry-doc.json")
+    try:
+        doc = json.loads(doc_path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        raise InstallError(f"{name}: registry metadata {doc_path} is not valid JSON") from e
+    # <name> comes from the tarball URL's `<name>/-/<name>-<version>.tgz` shape and the version from the
+    # metadata URL's last segment, so even hyphenated or scoped package names parse unambiguously
+    tar_url = str(spec["url"]).replace("\\", "/")
+    if "/-/" not in tar_url:
+        raise InstallError(f"{name}: {tar_url} is not a registry tarball URL (<...>/<name>/-/<name>-<version>.tgz)")
+    pkg = tar_url.split("/-/")[0].rstrip("/").rsplit("/", 1)[-1]
+    doc_url = str(spec["publisher_checksums_url"]).replace("\\", "/").rstrip("/")
+    doc_version = doc_url.rsplit("/", 1)[-1]
+    if doc.get("name") != pkg or str(doc.get("version")) != doc_version:
+        raise InstallError(f"{name}: registry metadata is for {doc.get('name')}@{doc.get('version')}, not {pkg}@{doc_version}")
+    if str(doc.get("version")) != str(spec["version"]) or not tar_url.endswith(f"/{pkg}/-/{pkg}-{spec['version']}.tgz"):
+        raise InstallError(f"{name}: registry metadata {pkg}@{doc.get('version')} does not match the pinned tarball {spec['url']}")
+    integrity = (doc.get("dist") or {}).get("integrity", "")
+    m = NPM_INTEGRITY_RE.match(integrity)
+    if not m:
+        raise InstallError(f"{name}: registry metadata has no sha512 dist.integrity for {pkg}@{spec['version']}")
+    expected = base64.b64decode(m.group(1))
+    actual = hashlib.sha512(tarball.read_bytes()).digest()
+    if actual != expected:
+        raise InstallError(f"{name}: registry dist.integrity mismatch for {pkg}@{spec['version']}\n"
+                           f"  registry {integrity}\n  tarball  sha512-{base64.b64encode(actual).decode()}")
+    return f"npm-integrity (registry dist.integrity sha512 matched for {pkg}@{spec['version']})"
+
+
+def install_npm(name: str, spec: dict, *, install_dir: Path, bin_dir: Path, cache: Path) -> dict:
+    """Unpack the pinned npm tarball into <install_dir>/<name>/ and install the runner shims. The driver
+    (src/mara/tools/csp_driver.js in this repository) is copied next to the package: it is the only code
+    that requires the package, and it is executed by node, never by whatever is on PATH."""
+    url = spec["url"]
+    asset_name = url.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    print(f"[{name}] {spec['version']}: downloading {asset_name}")
+    asset = download(url, cache / asset_name)
+    digest = check_sha256(name, asset, spec["sha256"])
+    print(f"[{name}] sha256 ok {digest[:16]}…")
+    verified_by = check_npm_integrity(name, asset, spec, cache)
+    print(f"[{name}] {verified_by}")
+    dest = install_dir / name
+    tmp = install_dir / f"{name}.installing"
+    _rmtree(tmp)
+    try:
+        with tarfile.open(asset, "r:*") as tf:
+            members = tf.getmembers()
+            for m in members:
+                if m.issym() or m.islnk() or ".." in Path(m.name).parts or Path(m.name).is_absolute():
+                    _rmtree(tmp)
+                    raise InstallError(f"{name}: refusing unsafe tarball member {m.name}")
+            for m in members:
+                if not m.isfile() or not m.name.startswith("package/"):
+                    continue
+                rel = m.name[len("package/"):]
+                if not rel:
+                    continue
+                out = tmp / rel
+                out.parent.mkdir(parents=True, exist_ok=True)
+                src = tf.extractfile(m)
+                assert src is not None
+                with out.open("wb") as f:
+                    shutil.copyfileobj(src, f)
+        for required in ("dist/evaluator.js", "dist/parser.js", "package.json"):
+            if not (tmp / required).is_file():
+                _rmtree(tmp)
+                raise InstallError(f"{name}: tarball has no {required}")
+        driver_src = ROOT / "src" / "mara" / "tools" / "csp_driver.js"
+        if not driver_src.is_file():
+            _rmtree(tmp)
+            raise InstallError(f"{name}: driver source {driver_src} missing")
+        shutil.copyfile(driver_src, tmp / "mara_driver.js")
+    except Exception:
+        _rmtree(tmp)
+        raise
+    _rmtree(dest)
+    tmp.replace(dest)
+    shim = bin_dir / name
+    shim.write_text("#!/bin/sh\n" + f'exec node "$(dirname "$0")/../{name}/mara_driver.js" "$@"\n', encoding="utf-8", newline="\n")
+    shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    (bin_dir / f"{name}.cmd").write_text(
+        "@echo off\r\n" + f'node "%~dp0..\\{name}\\mara_driver.js" %*\r\n', encoding="ascii", newline="\r\n")
+    return {"version": str(spec["version"]), "kind": "npm", "url": url, "sha256": digest,
+            "verified_by": verified_by, "signature_verified": False, "path": str(shim),
+            "package_dir": str(dest)}
+
+
 def _rmtree(p: Path) -> None:
     if not p.exists() and not p.is_symlink():
         return
@@ -443,6 +552,8 @@ def install(lock: dict, *, install_dir: Path, only: list[str] | None = None, no_
             entry = install_pip(n, spec, install_dir=install_dir, bin_dir=bin_dir, python=python)
         elif spec["kind"] == "git":
             entry = install_git(n, spec, install_dir=install_dir, cache=cache, no_signature_check=no_signature_check)
+        elif spec["kind"] == "npm":
+            entry = install_npm(n, spec, install_dir=install_dir, bin_dir=bin_dir, cache=cache)
         else:
             entry = install_binary_or_archive(n, spec, bin_dir=bin_dir, cache=cache, no_signature_check=no_signature_check)
         entry["installed_at"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")

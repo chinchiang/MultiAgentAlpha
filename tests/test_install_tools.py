@@ -106,12 +106,19 @@ def test_lock_validation_rejects_malformed_sha(tmp_path, assets):
 
 def test_shipped_lock_is_well_formed():
     lock = load_lock(ROOT / "tools" / "versions.lock")
-    assert set(lock["tools"]) >= {"cosign", "slsa-verifier", "gitleaks", "osv-scanner", "zizmor", "trivy", "semgrep"}
+    assert set(lock["tools"]) >= {"cosign", "slsa-verifier", "gitleaks", "osv-scanner", "zizmor", "trivy", "semgrep", "csp-evaluator"}
     for name, t in lock["tools"].items():
         if t["kind"] == "git":
             assert t["url"].startswith("https://github.com/") and t["url"].endswith(".git"), name
             assert t["verify"]["method"] in {"git-commit-gpg", "git-commit"} and len(t["commit"]) == 40 and len(t["sha256"]) == 64, name
             assert t["paths"] and all(p.endswith("/security") for p in t["paths"]), "only security rulesets are pinned"
+        elif t["kind"] == "npm":
+            # the tarball and the registry metadata must both pin the exact immutable version
+            assert re.match(r"^https://registry\.npmjs\.org/[\w.-]+/-/[\w.-]+\.tgz$", t["url"]), name
+            assert f"-{t['version']}.tgz" in t["url"], name
+            assert re.match(r"^https://registry\.npmjs\.org/[\w.-]+/[\w.-]+$", t["publisher_checksums_url"]), name
+            assert t["publisher_checksums_url"].rstrip("/").endswith(f"/{t['version']}"), name
+            assert t["verify"]["method"] == "npm-integrity", name
         elif t["kind"] != "pip":
             assert t["url"].startswith("https://github.com/"), name
             assert t["verify"]["method"] in {"cosign-keyless", "slsa-provenance", "github-attestation", "checksums-file"}, name
@@ -126,10 +133,13 @@ def test_shipped_lock_is_well_formed():
 
 def test_every_pinned_url_names_a_release_or_a_commit_not_a_branch():
     # A branch URL (slsa-verifier's SHA256SUM.md at main, until 2026-09-27) changes under the pin: the
-    # next release's section comes first and the cross-check fails, or the file is rewritten.
+    # next release's section comes first and the cross-check fails, or the file is rewritten. npm
+    # tarballs and their registry metadata are immutable once published for a given version.
     lock = load_lock(ROOT / "tools" / "versions.lock")
     release = re.compile(r"^https://github\.com/[\w.-]+/[\w.-]+/releases/download/v?(?P<tag>[\w.-]+)/[^/]+$")
     raw_at_commit = re.compile(r"^https://raw\.githubusercontent\.com/[\w.-]+/[\w.-]+/[0-9a-f]{40}/[^?#]+$")
+    npm_tarball = re.compile(r"^https://registry\.npmjs\.org/[\w.-]+/-/[\w.-]+\.tgz$")
+    npm_doc = re.compile(r"^https://registry\.npmjs\.org/[\w.-]+/[\w.-]+$")
     checked = 0
     for name, t in lock["tools"].items():
         fields = {k: v for k, v in {**t, **t.get("verify", {})}.items() if k.endswith("_url")}
@@ -138,10 +148,133 @@ def test_every_pinned_url_names_a_release_or_a_commit_not_a_branch():
         for field, url in fields.items():
             if field == "gpg_key_url":
                 continue  # GitHub's web-flow key: pinned by gpg_key_id, not by URL
-            m = release.match(url)
-            assert (m and m["tag"] == str(t["version"])) or raw_at_commit.match(url), f"{name}.{field}: {url}"
+            ok = bool((m := release.match(url)) and m["tag"] == str(t["version"])) or bool(raw_at_commit.match(url))
+            if t["kind"] == "npm" and field == "url":
+                ok = ok or bool(npm_tarball.match(url) and f"-{t['version']}.tgz" in url)
+            if t["kind"] == "npm" and field == "publisher_checksums_url":
+                ok = ok or bool(npm_doc.match(url) and url.rstrip("/").endswith(f"/{t['version']}"))
+            assert ok, f"{name}.{field}: {url}"
             checked += 1
     assert checked >= 15
+
+
+# ----------------------------------------------------------------------------- npm kind (csp-evaluator)
+
+
+def _npm_package(version: str = "1.2.3", *, complete: bool = True) -> bytes:
+    buf = io.BytesIO()
+    files = [("package/package.json", json.dumps({"name": "fake-evaluator", "version": version}).encode()),
+             ("package/dist/evaluator.js", b'"use strict";\nmodule.exports = {};\n'),
+             ("package/dist/parser.js", b'"use strict";\nmodule.exports = {};\n')]
+    if not complete:
+        files = [f for f in files if f[0] != "package/dist/evaluator.js"]
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        for fname, data in files:
+            info = tarfile.TarInfo(fname)
+            info.size = len(data)
+            info.mode = 0o644
+            tf.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def _npm_lock(src: Path, tarball: Path, **override) -> dict:
+    # registry-shaped file:// URLs — <...>/<name>/-/<name>-<version>.tgz and <...>/<name>/<version> —
+    # the same shapes the https URLs in the shipped lock have
+    reg = src / "registry.npmjs.org" / "fake-evaluator"
+    spec = {"version": "1.2.3", "kind": "npm",
+            "url": f"file:///{(reg / '-' / tarball.name).as_posix()}",
+            "sha256": _sha(tarball.read_bytes()),
+            "publisher_checksums_url": f"file:///{(reg / '1.2.3').as_posix()}",
+            "verify": {"method": "npm-integrity"}}
+    spec.update(override)
+    return {"schema": 1, "tools": {"fake-evaluator": spec}}
+
+
+def _registry_doc(reg: Path, name: str, version: str, tarball: Path) -> None:
+    import base64
+
+    integrity = "sha512-" + base64.b64encode(hashlib.sha512(tarball.read_bytes()).digest()).decode()
+    reg.mkdir(parents=True, exist_ok=True)
+    (reg / version).write_text(json.dumps({"name": name, "version": version, "dist": {"integrity": integrity}}), encoding="utf-8")
+
+
+def test_npm_kind_installs_package_driver_and_shims(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    reg = src / "registry.npmjs.org" / "fake-evaluator"
+    tarball = reg / "-" / "fake-evaluator-1.2.3.tgz"
+    tarball.parent.mkdir(parents=True, exist_ok=True)
+    tarball.write_bytes(_npm_package())
+    _registry_doc(reg, "fake-evaluator", "1.2.3", tarball)
+    dest = tmp_path / "mt"
+    manifest = install(_npm_lock(src, tarball), install_dir=dest)
+    entry = manifest["tools"]["fake-evaluator"]
+    assert entry["kind"] == "npm" and entry["signature_verified"] is False
+    assert (dest / "fake-evaluator" / "dist" / "evaluator.js").is_file()
+    assert (dest / "fake-evaluator" / "mara_driver.js").is_file(), "the repository's driver is installed next to the package"
+    assert (dest / "fake-evaluator" / "mara_driver.js").read_bytes() == (ROOT / "src" / "mara" / "tools" / "csp_driver.js").read_bytes()
+    assert (dest / "bin" / "fake-evaluator").is_file() and "mara_driver.js" in (dest / "bin" / "fake-evaluator").read_text()
+    assert (dest / "bin" / "fake-evaluator.cmd").is_file() and "mara_driver.js" in (dest / "bin" / "fake-evaluator.cmd").read_text()
+    assert "npm-integrity" in entry["verified_by"]
+
+
+def test_npm_kind_refuses_registry_integrity_mismatch(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    reg = src / "registry.npmjs.org" / "fake-evaluator"
+    tarball = reg / "-" / "fake-evaluator-1.2.3.tgz"
+    tarball.parent.mkdir(parents=True, exist_ok=True)
+    tarball.write_bytes(_npm_package())
+    _registry_doc(reg, "fake-evaluator", "1.2.3", tarball)
+    # the same SHA-256 as pinned, but the registry metadata names a different digest
+    doc = json.loads((reg / "1.2.3").read_text())
+    doc["dist"]["integrity"] = "sha512-" + "A" * 88
+    (reg / "1.2.3").write_text(json.dumps(doc))
+    with pytest.raises(InstallError, match="dist.integrity mismatch"):
+        install(_npm_lock(src, tarball), install_dir=tmp_path / "mt")
+    assert not (tmp_path / "mt" / "fake-evaluator").exists()
+
+
+def test_npm_kind_refuses_metadata_for_another_version(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    reg = src / "registry.npmjs.org" / "fake-evaluator"
+    tarball = reg / "-" / "fake-evaluator-1.2.3.tgz"
+    tarball.parent.mkdir(parents=True, exist_ok=True)
+    tarball.write_bytes(_npm_package())
+    # the metadata URL is pinned at 1.2.3 but the registry serves a document for 9.9.9
+    _registry_doc(reg, "fake-evaluator", "9.9.9", tarball)
+    (reg / "1.2.3").write_text((reg / "9.9.9").read_text(encoding="utf-8"), encoding="utf-8")
+    with pytest.raises(InstallError, match="not fake-evaluator@1.2.3|does not match"):
+        install(_npm_lock(src, tarball), install_dir=tmp_path / "mt")
+
+
+def test_npm_kind_refuses_an_incomplete_package(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    reg = src / "registry.npmjs.org" / "fake-evaluator"
+    tarball = reg / "-" / "fake-evaluator-1.2.3.tgz"
+    tarball.parent.mkdir(parents=True, exist_ok=True)
+    tarball.write_bytes(_npm_package(complete=False))
+    _registry_doc(reg, "fake-evaluator", "1.2.3", tarball)
+    with pytest.raises(InstallError, match="tarball has no dist/evaluator.js"):
+        install(_npm_lock(src, tarball), install_dir=tmp_path / "mt")
+    assert not (tmp_path / "mt" / "fake-evaluator").exists()
+
+
+def test_lock_validation_rejects_bad_npm_entries(tmp_path):
+    tarball = tmp_path / "x.tgz"
+    tarball.write_bytes(b"x")
+    base = {"version": "1.0", "kind": "npm", "url": f"file:///{tarball.as_posix()}", "sha256": _sha(b"x"),
+            "publisher_checksums_url": "https://registry.npmjs.org/pkg/1.0", "verify": {"method": "npm-integrity"}}
+    for bad in ({"url": "https://example.com/pkg/-/pkg-1.0.tgz"},
+                {"url": "https://registry.npmjs.org/pkg/-/pkg-9.9.9.tgz"},
+                {"sha256": "nope"},
+                {"publisher_checksums_url": "https://example.com/doc.json"}):
+        p = tmp_path / "bad.lock"
+        p.write_text(yaml.safe_dump({"schema": 1, "tools": {"pkg": {**base, **bad}}}))
+        with pytest.raises(InstallError):
+            load_lock(p)
 
 def test_runner_only_executes_pinned_tools(tmp_path, monkeypatch):
     mt = tmp_path / "mt"
