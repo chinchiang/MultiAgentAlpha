@@ -104,7 +104,7 @@ def check_config(
     config: Path = typer.Argument(Path("config/mara.yaml")),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
 ):
-    """Evaluate every configuration policy (P1-P7) and exit non-zero if any fails."""
+    """Evaluate every configuration policy (P1-P8) and exit non-zero if any fails."""
     import yaml
 
     from .config import GateConfig, MaraConfig, MlBomConfig, ModelEvalConfig, ModelSpec, PsirtConfig, RolesConfig, RolloutConfig

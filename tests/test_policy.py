@@ -1,6 +1,9 @@
 """Policy-as-code (Appendix E prompt 6): each policy has a passing and a failing case, and
 `mara check-config` lists every violation of the deliberately broken example config."""
 
+import datetime as dt
+import json
+
 import pytest
 from typer.testing import CliRunner
 
@@ -107,6 +110,43 @@ def test_check_config_lists_every_violation(root):
     assert res.output.count("FAIL") == 5
     ok = runner.invoke(app, ["check-config", str(root / "config" / "mara.yaml")])
     assert ok.exit_code == 0, ok.output
-    assert "7/7 policies pass" in ok.output
+    assert "8/8 policies pass" in ok.output
     js = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml"), "--json"])
     assert js.exit_code == 1 and '"passed": false' in js.output
+
+
+def _p8(cfg):
+    return [r for r in evaluate_policies(cfg) if r.id == "P8"][0]
+
+
+def _allow(**gate_over):
+    return MaraConfig.model_validate(dict(_base(), gate=dict(unsupervised_reject_allowed=True, **gate_over)))
+
+
+def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # P8 reads calib/latest.json relative to the working directory
+    assert _p8(MaraConfig.model_validate(_base())).passed  # the default (false) is always allowed
+    calib = tmp_path / "calib"
+    calib.mkdir()
+    evidence = {"date": dt.date.today().isoformat(), "mode": "live", "aat": {"passed": True, "n": 12, "agreement": 1.0, "p_value": 0.002}}
+    (calib / "latest.json").write_text(json.dumps(evidence), encoding="utf-8")
+    assert _p8(_allow()).passed and "Alternative Annotator Test passed" in _p8(_allow()).reason
+
+    def bad(mutate, match):
+        ev = json.loads(json.dumps(evidence))
+        mutate(ev)
+        (calib / "latest.json").write_text(json.dumps(ev), encoding="utf-8")
+        with pytest.raises(ValueError, match=match):  # P8 also blocks the config from loading at all
+            _allow()
+
+    (calib / "latest.json").unlink()
+    with pytest.raises(ValueError, match="P8 unsupervised-reject"):
+        _allow()  # no evidence at all
+    (calib / "latest.json").write_text(json.dumps(evidence), encoding="utf-8")
+    bad(lambda ev: ev["aat"].update(passed=False), "did not pass")
+    bad(lambda ev: ev.update(mode="mock"), "not live")
+    bad(lambda ev: ev.update(date=(dt.date.today() - dt.timedelta(days=91)).isoformat()), "rerun the calibration")
+    ev = json.loads(json.dumps(evidence))
+    ev["date"] = (dt.date.today() - dt.timedelta(days=90)).isoformat()
+    (calib / "latest.json").write_text(json.dumps(ev), encoding="utf-8")
+    assert _p8(_allow()).passed  # exactly 90 days is still within the window

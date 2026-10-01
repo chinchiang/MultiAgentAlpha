@@ -83,6 +83,15 @@ def build_queue(
             and c.accepted
         ):
             reasons.append("tier_c_high")
+        if (
+            not reasons
+            and not c.accepted
+            and c.tier != EvidenceTier.D
+            and not cfg.gate.unsupervised_reject_allowed
+        ):
+            # assessment #60: without a passing Alternative Annotator Test (policy P8) the pipeline
+            # may not drop a non-D finding unsupervised; a human sees every rejection.
+            reasons.append("unsupervised_reject_unverified")
         if not reasons:
             continue
         p = f.provenance[0]

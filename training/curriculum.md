@@ -75,7 +75,7 @@ Records expire after `validity_days` (365) and are invalidated by a new curricul
 
 ## 5. Operating the pipeline (security, 60 min)
 
-- Policies P1–P7 (`mara check-config`): covered models, DeepSeek on-prem only, panel size, gate
+- Policies P1–P8 (`mara check-config`): covered models, DeepSeek on-prem only, panel size, gate
   bounds, data residency, PSIRT scope, ML-BOM. `docs/…` and report chapter 25.
 - Calibration (`scripts/calibrate.py`, report section 15.3): quarterly and after any model upgrade;
   inputs are seeded samples and human decisions; outputs are weights and family agreement. Until

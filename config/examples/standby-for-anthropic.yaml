@@ -1,6 +1,6 @@
 # Cold standby for the anthropic family (G-4): a self-hosted Mistral endpoint takes over the reviewer
 # and judge seats Claude holds in config/mara.yaml, so the panel stays at three families with no
-# cross-border model at all; nothing else changes. Passes P1-P7. Confirm the served model id against
+# cross-border model at all; nothing else changes. Passes P1-P8. Confirm the served model id against
 # the standby deployment before a live drill and record the drill in ops/model-swap-drills.yaml.
 standby_for: anthropic
 models:

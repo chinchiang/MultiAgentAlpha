@@ -174,6 +174,7 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 | P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr` unless `allow_source_code_to_non_on_prem` is set |
 | P6 psirt-scope | when the PSIRT hand-off is enabled: HTTPS webhook, product set, token from the environment, trigger tiers within A/B and severities within Critical/High |
 | P7 ml-bom | when `ml_bom.required`: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature method), signed when `require_signature` |
+| P8 unsupervised-reject | `gate.unsupervised_reject_allowed` may be `true` only while `calib/latest.json` records a passing Alternative Annotator Test on a live calibration within 90 days; while `false` every rejected non-D finding goes to the human queue |
 
 `config/examples/violating.yaml` breaks the first five and is what the tests run against.
 

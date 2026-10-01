@@ -7,8 +7,11 @@ the parsed configuration and never consult the network.
 
 from __future__ import annotations
 
+import datetime as dt
 import ipaddress
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -22,6 +25,8 @@ PRIVATE_SUFFIXES = (".internal", ".local", ".lan")
 MAX_SELF_JUDGE_DISCOUNT = 0.5
 MIN_HUMAN_THRESHOLD_ALPHA = 0.3
 MIN_FAMILIES = 3
+AAT_MAX_AGE_DAYS = 90
+AAT_EVIDENCE = Path("calib/latest.json")
 
 
 @dataclass(frozen=True)
@@ -195,7 +200,58 @@ def p7_ml_bom(cfg: MaraConfig) -> PolicyResult:
     return PolicyResult("P7", "ml-bom", True, f"{len(complete)}/{len(statuses)} self-hosted models complete in {mb.path}{sig}: {summary}")
 
 
-POLICIES = (p1_covered_models, p2_deepseek_on_prem, p3_panel_size, p4_gate_bounds, p5_data_residency, p6_psirt_scope, p7_ml_bom)
+def p8_unsupervised_reject(cfg: MaraConfig) -> PolicyResult:
+    """Assessment #60: unsupervised rejection needs a passing Alternative Annotator Test.
+
+    `gate.unsupervised_reject_allowed: true` is only valid while `calib/latest.json` (written by
+    scripts/calibrate.py) records a passing test on a live calibration within the last 90 days.
+    While it is false - the default - every rejected non-D finding goes to the human queue
+    instead of being dropped without review.
+    """
+    if not cfg.gate.unsupervised_reject_allowed:
+        return PolicyResult(
+            "P8", "unsupervised-reject", True,
+            "unsupervised_reject_allowed is false: every rejected non-D finding goes to the human queue",
+        )
+    try:
+        latest = json.loads(AAT_EVIDENCE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return PolicyResult(
+            "P8", "unsupervised-reject", False,
+            "unsupervised_reject_allowed is true but calib/latest.json is missing or unreadable; "
+            "run scripts/calibrate.py --mode live first",
+        )
+    aat = latest.get("aat") or {}
+    if latest.get("mode") != "live":
+        return PolicyResult("P8", "unsupervised-reject", False,
+                            f"the recorded test ran in mode {latest.get('mode')!r}, not live; a mock run can never justify unsupervised rejection")
+    if not aat.get("passed"):
+        return PolicyResult("P8", "unsupervised-reject", False, "the recorded Alternative Annotator Test did not pass")
+    try:
+        when = dt.date.fromisoformat(str(latest.get("date")))
+    except ValueError:
+        return PolicyResult("P8", "unsupervised-reject", False, "calib/latest.json has no valid date")
+    age = (dt.date.today() - when).days
+    if age > AAT_MAX_AGE_DAYS:
+        return PolicyResult("P8", "unsupervised-reject", False,
+                            f"the test passed {age} days ago (limit {AAT_MAX_AGE_DAYS}); rerun the calibration")
+    return PolicyResult(
+        "P8", "unsupervised-reject", True,
+        f"Alternative Annotator Test passed {when.isoformat()} ({age} days ago, n={aat.get('n')}, "
+        f"agreement={aat.get('agreement')}, p={aat.get('p_value')})",
+    )
+
+
+POLICIES = (
+    p1_covered_models,
+    p2_deepseek_on_prem,
+    p3_panel_size,
+    p4_gate_bounds,
+    p5_data_residency,
+    p6_psirt_scope,
+    p7_ml_bom,
+    p8_unsupervised_reject,
+)
 
 
 def evaluate_policies(cfg: MaraConfig) -> list[PolicyResult]:

@@ -374,6 +374,10 @@ class Pipeline:
                 reasons.append("position_inconsistent")
             if tier == EvidenceTier.C and sev in {"High", "Critical"}:
                 reasons.append("tier_c_high")
+            if refuted and tier != EvidenceTier.D:
+                # assessment #37: a refuted finding never re-enters the blocking logic on the
+                # jury's vote alone; the jury may speak, but a human decides.
+                reasons.append("skeptic_refuted_jury_overrode")
             needs_human = bool(reasons)
             accepted = tier != EvidenceTier.D and score >= self.cfg.gate.accept_threshold and not needs_human
             results.append(

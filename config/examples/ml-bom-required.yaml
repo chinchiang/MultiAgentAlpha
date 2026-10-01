@@ -1,6 +1,6 @@
 # Example: policy P7 enforced. The single self-hosted model must have a complete component in the
 # ML-BOM; here it points at the synthetic example BOM (real hashes of two stand-in files, not real
-# weights) so `mara check-config config/examples/ml-bom-required.yaml` passes P1-P7.
+# weights) so `mara check-config config/examples/ml-bom-required.yaml` passes P1-P8.
 # With config/mara.yaml (both production models pending) the same setting would fail P7.
 models:
   - { name: claude-reviewer,   family: anthropic, provider: anthropic,         model: claude-opus-5,      api_key_env: ANTHROPIC_API_KEY, data_residency: vendor_api_zdr }

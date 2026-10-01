@@ -1,5 +1,5 @@
 # Cold standby for the nemotron family (G-4): a self-hosted Mistral endpoint takes over the reviewer,
-# skeptic and judge seats Nemotron holds in config/mara.yaml; nothing else changes. Passes P1-P7.
+# skeptic and judge seats Nemotron holds in config/mara.yaml; nothing else changes. Passes P1-P8.
 # Confirm the served model id against the standby deployment before a live drill and record the drill
 # in ops/model-swap-drills.yaml.
 standby_for: nemotron

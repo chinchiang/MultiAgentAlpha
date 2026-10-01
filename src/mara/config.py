@@ -59,6 +59,12 @@ class GateConfig(BaseModel):
     self_judge_discount: float = Field(
         default=0.5, ge=0.0, le=1.0, description="Weight multiplier for a judge voting on its own family's finding (policy P4: <= 0.5)"
     )
+    unsupervised_reject_allowed: bool = Field(
+        default=False,
+        description="Policy P8: may the pipeline reject a non-D finding without a human? Only valid while calib/latest.json "
+        "records a passing Alternative Annotator Test (live mode) within 90 days; when false every rejected non-D "
+        "finding is queued for a human instead",
+    )
 
 
 class PsirtConfig(BaseModel):

@@ -52,6 +52,7 @@ require_family_diversity: true
 #   P5 data-residency   non-mock models must be on_prem or vendor_api_zdr
 #   P6 psirt-scope      when the PSIRT hand-off is enabled: https webhook, product set, token from env, tiers within A/B, severities within Critical/High
 #   P7 ml-bom           when ml_bom.required: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature)
+#   P8 unsupervised-reject  gate.unsupervised_reject_allowed=true only while calib/latest.json records a passing Alternative Annotator Test (live, < 90 days); false queues every rejected non-D finding for a human
 anthropic_covered_models_authorized: false
 anthropic_covered_models_authorization_ref: ""
 reduced_panel_reason: ""
