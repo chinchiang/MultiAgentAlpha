@@ -187,7 +187,7 @@ def build_sarif(policies: list[CspPolicy], results: list[ToolResult], *, version
                 note: str = "", truncated: bool = False, parse_errors: list[str] | None = None) -> dict:
     notifications = [{"level": "note", "descriptor": {"id": "CSP_PARSE_ERROR"}, "message": {"text": m}}
                      for m in (parse_errors or [])]
-    props = {"policies": len(policies), "truncated": truncated}
+    props: dict[str, str | int | bool] = {"policies": len(policies), "truncated": truncated}
     if note:
         props["note"] = note
     return {
