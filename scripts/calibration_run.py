@@ -11,7 +11,7 @@ The report carries YAML front matter (mode, date, families, samples, labels, too
 model_eval) that governance check G-9 reads; calibrate.py also refuses --mode live when any run's
 provider_mode is not live. After the reviews, the locked deterministic tools (semgrep, osv-scanner,
 gitleaks) scan every sample and their SARIF is stored under calib-out/<sample>/tools/ as a second
-reference label set for calibrate.py (assessment #10).
+reference label set for calibrate.py (assessment #10). After a live run, commit calib/history.json and calib/latest.json together with the report: policy P8 verifies calib/latest.json from the repository.
 """
 
 from __future__ import annotations
