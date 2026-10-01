@@ -15,7 +15,7 @@ calib/samples/<sample>/labels.json and produces docs/calibration-<date>.md with:
     checks before allowing gate.unsupervised_reject_allowed
   - suggested family weights, clamped to [0.2, 2.0], with the sample sizes behind them
 
-It never edits config/mara.yaml: the suggested weights are for a human to adopt.
+It never edits config/mara.yaml: the suggested weights are for a human to adopt. Live runs append calib/history.json and, when the test passes, write calib/latest.json; commit both together with the report, since policy P8 verifies calib/latest.json from the repository.
 """
 
 from __future__ import annotations
