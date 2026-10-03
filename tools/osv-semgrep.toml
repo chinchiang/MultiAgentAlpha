@@ -1,77 +1,10 @@
 # osv-scanner configuration for the semgrep tool closure (tools/semgrep-requirements.txt), scanned as its
 # own scripts/osv_ci.py invocation. tools/osv-scanner.toml stays empty: the bootstrap, dev, typecheck and
-# build closures must have no advisory exceptions at all. The semgrep closure is here because semgrep
-# itself pins its dependencies: 1.177.0 (and the latest 1.178.0) declare pyjwt[crypto]~=2.13.0, so no
-# fixed PyJWT release can enter the closure until upstream relaxes the pin. Every advisory that cannot be
-# relocked away is listed with a reason and an expiry; the job fails again after ignoreUntil. Keep this
-# list as short as possible: the fix is to bump semgrep and relock.
+# build closures must have no advisory exceptions at all.
 #
-# PyJWT in this closure is used by semgrep for its own app-session token handling. The advisories concern
-# PyJWKClient/JWKS fetching, key-confusion guards and token-parsing paths; the L0 job runs semgrep offline
-# with local rules, --metrics=off and no authentication, so those paths are not exercised here. Re-check
-# for a semgrep release that allows pyjwt>=2.14 before the expiry.
-
-[[IgnoredVulns]]
-id = "CVE-2026-101917"
-ignoreUntil = 2026-12-31
-reason = "PyJWKClient JWKS fetch amplification (incomplete fix of CVE-2026-48524); fixed in pyjwt 2.14.0, but semgrep 1.177.0/1.178.0 pin pyjwt[crypto]~=2.13.0 so the closure cannot take it. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-101918"
-ignoreUntil = 2026-12-31
-reason = "RecursionError DoS in PyJWKClient pre-verification payload parse; fixed in pyjwt 2.15.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102265"
-ignoreUntil = 2026-12-31
-reason = "Uncaught RecursionError in jwt.decode() on deeply nested token headers; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102266"
-ignoreUntil = 2026-12-31
-reason = "PyJWK accepts empty HMAC keys, bypassing PyJWT's empty-key validation; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102267"
-ignoreUntil = 2026-12-31
-reason = "PyJWKClient follows redirects when fetching JWKS; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102268"
-ignoreUntil = 2026-12-31
-reason = "Asymmetric-PEM detection bypass via whitespace/line-ending-mutated public keys; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102269"
-ignoreUntil = 2026-12-31
-reason = "Non-canonical signature segments enable raw-token revocation bypass; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102270"
-ignoreUntil = 2026-12-31
-reason = "ReDoS in the is_pem_format helper; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102271"
-ignoreUntil = 2026-12-31
-reason = "DER-form public keys accepted as HMAC secrets, bypassing the CVE-2022-29217 guard; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102272"
-ignoreUntil = 2026-12-31
-reason = "BOM bypass in token parsing; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102273"
-ignoreUntil = 2026-12-31
-reason = "Public JWK containers accepted as HMAC secrets; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-102274"
-ignoreUntil = 2026-12-31
-reason = "Malformed RSA JWK aborts parsing of an entire JWK Set; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
-
-[[IgnoredVulns]]
-id = "CVE-2026-103001"
-ignoreUntil = 2026-12-31
-reason = "Alias record (GHSA-gvp8-978c-rx2q) of CVE-2026-102274, reported as a separate result; fixed in pyjwt 2.14.0, unreachable while semgrep pins pyjwt[crypto]~=2.13.0. Re-check at a semgrep release that relaxes the pin."
+# The semgrep closure needed its own config only while semgrep pinned pyjwt[crypto]~=2.13.0 (1.177.0 and
+# 1.178.0), which made thirteen PyJWT advisories unrelockable; they carried dated exceptions here until
+# 2026-12-31. semgrep 1.179.0 relaxed the pin to pyjwt[crypto]>=2.15.0, the closure now takes pyjwt
+# 2.15.1 (relocked 2026-10-03), and every exception was removed instead of renewed — the advisories'
+# fixed releases (2.14.0 / 2.15.0) are all in the closure. Keep this file exception-free: a new advisory
+# that relocking cannot fix gets a dated entry with a reason, and the fix is to bump semgrep and relock.

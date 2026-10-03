@@ -68,7 +68,7 @@ def test_sarif_reader_extracts_cwe_id_and_default_level(tmp_path):
 def test_recorded_fixture_sarif_is_the_normalised_real_thing():
     doc = json.loads((ROOT / "fixtures" / "vuln-sample-sarif" / "semgrep.sarif").read_text())
     run = doc["runs"][0]
-    assert run["tool"]["driver"]["semanticVersion"] == "1.177.0"
+    assert run["tool"]["driver"]["semanticVersion"] == "1.179.0"
     keys = result_keys(doc)
     assert ("python.flask.security.injection.tainted-sql-string", "app.py", 32) in keys
     assert ("python.flask.security.audit.render-template-string", "app.py", 26) in keys
@@ -111,7 +111,7 @@ def _run(*args: str, tools: Path = TOOLS) -> subprocess.CompletedProcess:
 def test_fixture_scan_matches_the_recording(tmp_path):
     r = _run("--target", "fixtures/vuln-sample", "--report", str(tmp_path / "fx.sarif"), "--expect", "fixtures/vuln-sample-sarif/semgrep.sarif")
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "semgrep 1.177.0" in r.stdout and "matches the recording" in r.stdout and "--metrics=off --disable-version-check" in r.stdout
+    assert "semgrep 1.179.0" in r.stdout and "matches the recording" in r.stdout and "--metrics=off --disable-version-check" in r.stdout
     doc = json.loads((tmp_path / "fx.sarif").read_text())
     assert result_keys(doc) == result_keys(json.loads((ROOT / "fixtures" / "vuln-sample-sarif" / "semgrep.sarif").read_text()))
 
@@ -146,7 +146,7 @@ def test_binary_and_rules_only_from_the_tools_dir(tmp_path):
     fake = tmp_path / "tools"
     (fake / "bin").mkdir(parents=True)
     (fake / "bin" / "semgrep").symlink_to(TOOLS / "bin" / "semgrep")
-    (fake / "manifest.json").write_text(json.dumps({"tools": {"semgrep": {"version": "1.177.0"}}}))
+    (fake / "manifest.json").write_text(json.dumps({"tools": {"semgrep": {"version": "1.179.0"}}}))
     r = _run("--target", "fixtures/vuln-sample", "--report", str(tmp_path / "y.sarif"), "--expect", "fixtures/vuln-sample-sarif/semgrep.sarif", tools=fake)
     assert r.returncode == 2 and "semgrep-rules is not installed" in r.stderr
 

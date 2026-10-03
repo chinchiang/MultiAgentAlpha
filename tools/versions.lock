@@ -145,7 +145,7 @@ tools:
       method: npm-integrity   # registry metadata carries no artifact signature for the tarball itself (checked 2026-10-01)
 
   semgrep:
-    version: 1.177.0
+    version: 1.179.0
     kind: pip
     homepage: https://github.com/semgrep/semgrep
     license: LGPL-2.1

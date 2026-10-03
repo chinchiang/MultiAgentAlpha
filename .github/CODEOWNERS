@@ -19,6 +19,11 @@
 /scripts/install_tools.py           @chinchiang
 /scripts/code_scanning_prep.py      @chinchiang
 /scripts/relock_requirements.py     @chinchiang
+/scripts/governance_check.py        @chinchiang
+/scripts/calibrate.py               @chinchiang
+/scripts/calibration_run.py         @chinchiang
+/scripts/model_swap_drill.py        @chinchiang
+/scripts/training_register.py       @chinchiang
 /config/                            @chinchiang
 /fixtures/                          @chinchiang
 /calib/                             @chinchiang

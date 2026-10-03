@@ -144,7 +144,11 @@ class Pipeline:
                     tags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "errored": " [PROVIDER ERROR]", "canary_echoed": " [CANARY ECHOED]"}
                     flags = [tag for key, tag in tags.items() if audit[key]]
                     self._say(f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)" + "".join(flags))
-        # assign ids and strip unknown standard references
+        # assign ids and strip unknown standard references. Ids are content-ordered (file, line,
+        # cwe, dimension, title) rather than call-ordered: consecutive ids no longer reveal which
+        # findings shared a reviewer call, so the blinded view leaks no grouping (judge.md promises
+        # no source identity; id clusters are a subtle channel back to it).
+        raw.sort(key=lambda f: (_norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))
         out: list[Finding] = []
         for i, f in enumerate(raw, 1):
             f = f.model_copy(update={"id": f"F-{i:04d}"})
@@ -635,6 +639,11 @@ def _norm_path(path: str) -> str:
 
 def _tool_corroborates(f: Finding, tool_results: list[ToolResult]) -> bool:
     for t in tool_results:
+        # a tool only corroborates findings in the dimensions it scans for (TOOL_DIMENSIONS):
+        # csp-evaluator emits results without CWEs, and without this guard any such result would
+        # corroborate any finding that happens to sit within +-3 lines
+        if f.dimension not in TOOL_DIMENSIONS.get(t.tool, []):
+            continue
         for p in f.provenance:
             # tools run from the git root report paths relative to it (e.g. zizmor emits
             # fixtures/vuln-sample/.github/workflows/deploy.yml); the review target may be a subdirectory

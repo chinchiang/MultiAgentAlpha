@@ -205,8 +205,9 @@ per report section 10.7 (Critical rows first), suggested full SHAs for every non
 (via `git ls-remote`; `--offline` to skip), a check that each SHA pin still matches its tag
 comment, and zizmor's SARIF when zizmor is on the PATH. Files that are not valid YAML are still
 inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run
-(`docs/actions-inventory-2026-09-26.md` is the current one: four real workflows, all rated None);
-its section 6 adds what the CI logs showed that the static inventory cannot, and the fixes that
+(`docs/actions-inventory-2026-10-03.md` is the current one: four real workflows, all rated None, with
+the new job-level `timeout-minutes` detection — the seeded fixtures keep their deliberate gaps and
+stay Critical); its section 6 adds what the CI logs showed that the static inventory cannot, and the fixes that
 followed: CI now runs zizmor strictly on the real workflows, checks that zizmor's findings on the
 seeded fixture match `fixtures/vuln-sample-sarif/zizmor.sarif` (now produced by zizmor itself), and
 no longer hides a crashed or leaking gitleaks run behind `continue-on-error` (`.gitleaks.toml`
@@ -257,7 +258,8 @@ differs from the lock:
 
 - `scripts/semgrep_ci.py --target fixtures/vuln-sample --expect fixtures/vuln-sample-sarif/semgrep.sarif`
   scans the seeded fixture with the pinned rulesets and fails on any drift from the recording
-  (which is real semgrep 1.177.0 output, 15 findings, rule ids normalised to the registry form).
+  (which is real semgrep 1.179.0 output, 15 findings — identical to the 1.177.0 recording it replaced,
+  rule ids normalised to the registry form).
 - `scripts/semgrep_ci.py --target . --triage tools/semgrep-triage.yaml` scans the repository
   (minus the seeded `fixtures/` and `calib/samples/`); every finding must be covered by a triage
   entry with a reason or the job fails, covered findings are uploaded with a SARIF `suppressions`
@@ -265,10 +267,10 @@ differs from the lock:
 - `scripts/osv_ci.py --target fixtures/vuln-sample --expect-package requests` must see the
   fixture's `requests==2.19.0` flagged, so a silent scanner or database regression is caught.
 - The bootstrap, dev, typecheck and build closures use `tools/osv-scanner.toml` with no advisory
-  exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`,
-  and the semgrep tool closure with `tools/osv-semgrep.toml` (semgrep pins `pyjwt[crypto]~=2.13.0`
-  upstream, so its PyJWT advisories carry dated exceptions there); their dated exceptions cannot
-  suppress an advisory in the other runtime or build dependencies. These scans
+  exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`
+  (its dated exceptions cover garak's nltk/datasets pins); the semgrep tool closure is scanned with
+  `tools/osv-semgrep.toml`, which has been exception-free since semgrep 1.179.0 relaxed the
+  `pyjwt[crypto]~=2.13.0` pin and the closure relocked to pyjwt 2.15.1. These scans
   also run weekly and on manual workflow dispatch.
 
 semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories

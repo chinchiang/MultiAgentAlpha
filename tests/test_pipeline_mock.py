@@ -89,6 +89,27 @@ def test_tool_corroboration_yields_tier_a(mock_report):
     assert cons[sqli.id].cvss4_severity in ("High", "Critical")
 
 
+def test_tool_corroboration_respects_tool_dimensions():
+    # csp-evaluator emits results without CWEs; without the dimension guard such a result would
+    # corroborate any finding within +-3 lines, whatever the dimension
+    from mara.pipeline import _tool_corroborates
+    from mara.tools.sarif import ToolResult
+
+    result = ToolResult(tool="csp-evaluator", rule_id="csp.test", level="high", message="weak CSP",
+                        file="static/index.html", line=5, cwe=None, cwes=[])
+
+    def finding(dim, cwe):
+        return Finding(id="F-0001", dimension=dim, title="t", cwe=cwe,
+                       provenance=[Provenance(file="static/index.html", line=6, quote="abc", verified=True)],
+                       reachability_argument="r", exploit_sketch="e",
+                       cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+                       model_confidence=0.9, source_family=ModelFamily.MOCK, source_model="m",
+                       finder_families=[ModelFamily.MOCK])
+
+    assert _tool_corroborates(finding("csp", "CWE-1021"), [result])
+    assert not _tool_corroborates(finding("xss", "CWE-79"), [result])
+
+
 def test_multi_family_agreement_without_tool_yields_tier_b(mock_report):
     _, report = mock_report
     _, cons = _accepted(report)

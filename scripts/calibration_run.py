@@ -83,6 +83,16 @@ def main() -> int:
            "--report", str(report), "--date", a.date.isoformat()]
     print(f"+ {' '.join(cmd)}")
     r = subprocess.run(cmd, text=True)
+    if a.mode == "live" and r.returncode == 0:
+        # the docstring's commit policy, enforced as a reminder: policy P8 later verifies
+        # calib/latest.json from the repository, and an uncommitted run wastes its AAT evidence
+        # with a confusing check-config failure long after the run itself.
+        evidence = [p for p in (ROOT / "calib" / "history.json", ROOT / "calib" / "latest.json", report) if p.is_file()]
+        print("\nLIVE RUN COMMIT POLICY: commit together with the report:")
+        for p in evidence:
+            print(f"  git add {p.relative_to(ROOT)}")
+        if not (ROOT / "calib" / "latest.json").is_file():
+            print("  WARNING: calib/latest.json was not written; policy P8 will refuse unsupervised_reject_allowed until a live run records it")
     return r.returncode
 
 
