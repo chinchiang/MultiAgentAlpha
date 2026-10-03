@@ -43,7 +43,7 @@ def to_sarif(report: ReviewReport) -> dict:
                 "evidenceTier": c.tier.value, "cvss4Vector": f.cvss4_vector, "cvss4Score": c.cvss4_score,
                 "ssvc": c.ssvc_decision, "consensus": c.weighted_score, "familiesAgreeing": [x.value for x in c.families_agreeing],
                 "toolCorroborated": c.tool_corroborated, "skepticRefuted": c.skeptic_refuted,
-                "krippendorffAlpha": c.krippendorff_alpha, "agreementProxy": c.agreement_proxy,
+                "agreementProxy": c.agreement_proxy,
                 "standardRefs": f.standard_refs, "sourceFamily": f.source_family.value,
                 "humanQueue": q is not None, "humanQueueKey": None if q is None else q.key,
                 "humanQueueReasons": [] if q is None else q.reasons,

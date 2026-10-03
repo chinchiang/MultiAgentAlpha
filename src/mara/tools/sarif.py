@@ -36,11 +36,21 @@ def scan_complete(doc: dict) -> bool:
     return True
 
 
+# SARIF driver names are product labels, not the lock's tool ids; normalize the known ones so
+# TOOL_DIMENSIONS lookups (corroboration, dimension wiring) match whatever named the run.
+TOOL_NAME_ALIASES = {
+    "semgrep oss": "semgrep",
+}
+
+
 def read_sarif(path: str | Path, tool_hint: str = "") -> list[ToolResult]:
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
     out: list[ToolResult] = []
     for run in doc.get("runs", []):
-        tool = run.get("tool", {}).get("driver", {}).get("name", tool_hint or "unknown")
+        driver = run.get("tool", {}).get("driver", {}).get("name", "")
+        # every internal caller passes the canonical tool id as the hint; the driver name is the
+        # fallback for hint-less callers, normalized through the alias table
+        tool = tool_hint or TOOL_NAME_ALIASES.get(driver.strip().lower(), driver or "unknown")
         rules = {r.get("id"): r for r in run.get("tool", {}).get("driver", {}).get("rules", [])}
         for res in run.get("results", []):
             if any(s.get("status") == "accepted" for s in res.get("suppressions", [])):

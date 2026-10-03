@@ -109,9 +109,9 @@ The first line runs the whole test suite (a few tool-integration tests skip whil
 
 ## 3. L0 掃描工具（可選）/ L0 scanning tools (optional)
 
-要對自己的 repo 做真實的 semgrep、gitleaks、osv-scanner、zizmor、trivy 掃描才需要。工具版本、下載 URL 與 SHA-256 都固定在 `tools/versions.lock`，安裝器會核對雜湊並執行發行者的簽章或 provenance 驗證，裝進 repo 內的 `.mara-tools/`；程式只從那裡執行工具，永遠不看系統 PATH。目前只鎖定 Linux x86_64 的二進位。
+要對自己的 repo 做真實的 semgrep、gitleaks、osv-scanner、zizmor、trivy、csp-evaluator 掃描才需要。工具版本、下載 URL 與 SHA-256 都固定在 `tools/versions.lock`，安裝器會核對雜湊並執行發行者的簽章或 provenance 驗證，裝進 repo 內的 `.mara-tools/`；程式只從那裡執行工具，永遠不看系統 PATH。目前只鎖定 Linux x86_64 的二進位；csp-evaluator 是 npm 套件，另外需要 node ≥ 18（直譯器路徑可用 `MARA_NODE` 覆寫）。
 
-Needed only for real semgrep, gitleaks, osv-scanner, zizmor and trivy scans of your own repository. Versions, download URLs and SHA-256 digests are pinned in `tools/versions.lock`; the installer checks the digests, runs each publisher's signature or provenance verification and installs into `.mara-tools/` inside the repository. The code executes tools from there only and never consults PATH. Only Linux x86_64 binaries are locked.
+Needed only for real semgrep, gitleaks, osv-scanner, zizmor, trivy and csp-evaluator scans of your own repository. Versions, download URLs and SHA-256 digests are pinned in `tools/versions.lock`; the installer checks the digests, runs each publisher's signature or provenance verification and installs into `.mara-tools/` inside the repository. The code executes tools from there only and never consults PATH. Only Linux x86_64 binaries are locked; csp-evaluator is an npm package and additionally needs node ≥ 18 (override the interpreter with `MARA_NODE`).
 
 ```bash
 python -m pip install --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
@@ -150,10 +150,10 @@ After that, `pytest -q` also runs the gitleaks and semgrep integration tests.
 The code itself runs on Windows: the 2026-09-18 remediation made the tool runner, the installer and the tests Windows-aware (`.exe`/`.cmd` resolution, directory reads without `O_DIRECTORY`), so the plain install of section 2.3 and the offline mock review of section 2.4 work there. Two limits remain:
 
 - **hash 鎖定安裝不適用**：`tools/dev-requirements.txt` 只含 Linux x86_64 的 wheel hash，Windows 上 `--require-hashes` 必定失敗，只能走 2.3 節。
-- **L0 工具安裝器沒有 Windows 版本**：`tools/versions.lock` 只鎖定 Linux x86_64 的二進位（cosign、gitleaks、osv-scanner、zizmor、trivy、scorecard 都是 `linux-amd64` 資產），`scripts/install_tools.py` 在 Windows 上無法安裝任何工具，所以真實掃描做不到，`mara review` 對所有工具都會回報 "not installed"，報告永遠是 incomplete。
+- **L0 工具的 Windows 資產不齊**：`tools/versions.lock` 的二進位工具（cosign、gitleaks、osv-scanner、zizmor、trivy、scorecard）都是 `linux-amd64` 資產，Windows 上裝不起來，所以真實掃描做不到、`mara review` 對這些工具都會回報 "not installed"、報告永遠是 incomplete。唯一的例外是 npm 類型的 csp-evaluator：安裝器會寫 `.cmd` shim，只要有 node ≥ 18 就能在 Windows 上安裝並執行，但單靠它不足以完成審查。
 
 - **The hash-pinned install does not apply**: `tools/dev-requirements.txt` holds Linux x86_64 wheel hashes only, so `--require-hashes` always fails on Windows; use section 2.3.
-- **The L0 tool installer has no Windows assets**: `tools/versions.lock` pins Linux x86_64 binaries only (cosign, gitleaks, osv-scanner, zizmor, trivy and scorecard are all `linux-amd64` assets), so `scripts/install_tools.py` cannot install anything on Windows, real scans are impossible, `mara review` reports every tool as "not installed" and the review stays incomplete.
+- **The L0 tool set has no Windows binaries**: the binary tools in `tools/versions.lock` (cosign, gitleaks, osv-scanner, zizmor, trivy and scorecard) are all `linux-amd64` assets and cannot be installed on Windows, so real scans are impossible, `mara review` reports every one of them as "not installed" and the review stays incomplete. The one exception is the npm-kind csp-evaluator: the installer writes a `.cmd` shim, so with node ≥ 18 it installs and runs on Windows — but on its own it is not enough for a complete review.
 
 要在 Windows 機器上得到完整功能，用 **WSL 2**（Ubuntu）：在 WSL 裡照第 1 到 3 節做，就是 Linux x86_64 環境，hash 鎖定與工具安裝都能用。Docker Desktop 跑一個 `python:3.11` 容器也可以。
 

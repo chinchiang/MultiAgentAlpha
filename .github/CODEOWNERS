@@ -1,5 +1,6 @@
 # Code owners for the files that decide whether a change passes: CI workflows, locked tools and their
 # suppression/triage/policy files, the scripts that apply them, the review configuration and policies,
+# the seeded vulnerable material (fixtures/, calib/ — Dependabot pull requests must never touch it),
 # and the install and code-scanning helpers. The last matching pattern wins; every entry names the same
 # owner today.
 #
@@ -18,7 +19,14 @@
 /scripts/install_tools.py           @chinchiang
 /scripts/code_scanning_prep.py      @chinchiang
 /scripts/relock_requirements.py     @chinchiang
+/scripts/governance_check.py        @chinchiang
+/scripts/calibrate.py               @chinchiang
+/scripts/calibration_run.py         @chinchiang
+/scripts/model_swap_drill.py        @chinchiang
+/scripts/training_register.py       @chinchiang
 /config/                            @chinchiang
+/fixtures/                          @chinchiang
+/calib/                             @chinchiang
 /src/mara/policy.py                 @chinchiang
 /src/mara/config.py                 @chinchiang
 /SECURITY.md                        @chinchiang

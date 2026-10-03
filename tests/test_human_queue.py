@@ -18,12 +18,14 @@ from mara.pipeline import Pipeline  # noqa: E402
 from mara.report.human_queue_out import build_queue, queue_key, render_human_queue, tightening  # noqa: E402
 from mara.schemas import ConsensusResult, EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, ReviewReport, SkepticVerdict  # noqa: E402
 
-VEC = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+VEC = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"  # 9.3, Critical
+HIGH_VEC = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:L/VA:L/SC:N/SI:N/SA:N"  # 8.7, High
 
 
-def _finding(fid, line, cwe="CWE-89"):
-    return Finding(id=fid, dimension="vulnerabilities", title=f"t{fid}", cwe=cwe, provenance=[Provenance(file="app.py", line=line, quote="abc")],
-                   reachability_argument="r", exploit_sketch="e", cvss4_vector=VEC, model_confidence=0.9,
+def _finding(fid, line, cwe="CWE-89", vec=VEC):
+    return Finding(id=fid, dimension="vulnerabilities", title=f"t{fid}", cwe=cwe,
+                   provenance=[Provenance(file="app.py", line=line, quote="abc")],
+                   reachability_argument="r", exploit_sketch="e", cvss4_vector=vec, model_confidence=0.9,
                    source_family=ModelFamily.ANTHROPIC, source_model="m", finder_families=[ModelFamily.ANTHROPIC])
 
 
@@ -93,6 +95,69 @@ def test_pipeline_reads_backlog_and_records_tightening(cfg, tmp_path, monkeypatc
     assert "human_queue_size" in report.bias_audit and "## Human queue" in render_human_queue(report) or True
     md = render_human_queue(report)
     assert md.startswith("# Human queue")
+
+
+def _score_cfg():
+    """Three distinct model families so two independent judges reach quorum (a P3-compliant panel)."""
+    return MaraConfig.model_validate({
+        "models": [
+            {"name": "a", "family": "anthropic", "provider": "anthropic", "model": "claude-opus-5", "data_residency": "vendor_api_zdr"},
+            {"name": "d", "family": "deepseek", "provider": "openai_compatible", "model": "deepseek-v3.2",
+             "base_url": "https://vllm-deepseek.internal:8000/v1", "data_residency": "on_prem"},
+            {"name": "n", "family": "nemotron", "provider": "openai_compatible", "model": "nvidia/nemotron-3-super",
+             "base_url": "https://192.168.10.5:8000/v1", "data_residency": "on_prem"},
+        ],
+        "roles": {"reviewers": ["a", "d", "n"], "skeptic": "n", "redteam": "d", "judges": ["a", "d", "n"]},
+    })
+
+
+def _votes(fid):
+    # two independent families plus the finder's own family, all consistent across both passes:
+    # quorum holds and the consensus is unanimous; reachability stays unknown, so the tier lands on C
+    return [_vote(fid, fam, pid, "true_positive") for fam in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON, ModelFamily.ANTHROPIC)
+            for pid in ("forward", "reverse")]
+
+
+def _tier_c_finding(vec=VEC):
+    f = _finding("F-1", 10, vec=vec)
+    for p in f.provenance:
+        p.verified = True
+    return f
+
+
+def test_tier_c_high_needs_a_human_until_the_queue_tightens(tmp_path, monkeypatch):
+    cfg = _score_cfg()
+    monkeypatch.chdir(tmp_path)  # no backlog file: not tightened
+    pipe = Pipeline(cfg, out_dir=tmp_path / "out")
+    f = _tier_c_finding()
+    (c,) = pipe.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
+    assert c.tier == EvidenceTier.C and "tier_c_high" in c.human_reasons and not c.accepted
+    items = build_queue([f], {"F-1": c}, {}, {}, _votes("F-1"), cfg)
+    assert [i.reasons for i in items] == [["tier_c_high"]]
+
+    (tmp_path / "calib" / "decisions").mkdir(parents=True)
+    (tmp_path / "calib" / "decisions" / "backlog.json").write_text(json.dumps({"open": 999}), encoding="utf-8")
+    tightened = Pipeline(cfg, out_dir=tmp_path / "out2")
+    assert tightened.queue_tightened and tightened.exclude_tier_c
+    (c2,) = tightened.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
+    assert c2.tier == EvidenceTier.C and c2.accepted and c2.human_reasons == []
+    assert build_queue([f], {"F-1": c2}, {}, {}, _votes("F-1"), cfg, exclude_tier_c=True) == []
+    # tighten_exclude_tier_c: false keeps tier C in the queue even while tightened
+    kept = build_queue([f], {"F-1": c2}, {}, {}, _votes("F-1"), cfg, exclude_tier_c=False)
+    assert [i.reasons for i in kept] == [["tier_c_high"]]
+
+
+def test_queue_tier_c_min_severity_configures_the_trigger(tmp_path, monkeypatch):
+    f = _tier_c_finding(vec=HIGH_VEC)  # severity High
+    monkeypatch.chdir(tmp_path)
+    pipe = Pipeline(_score_cfg(), out_dir=tmp_path / "out")
+    (c,) = pipe.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
+    assert "tier_c_high" in c.human_reasons  # the default trigger is High
+    cfg = _score_cfg()
+    cfg.human_queue.queue_tier_c_min_severity = "Critical"
+    pipe2 = Pipeline(cfg, out_dir=tmp_path / "out2")
+    (c2,) = pipe2.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
+    assert "tier_c_high" not in c2.human_reasons and c2.accepted
 
 
 def _fake_gh(tmp_path: Path, state: dict) -> Path:

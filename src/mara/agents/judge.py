@@ -44,8 +44,7 @@ def run_judge(provider: Provider, batch: list[dict], pass_id: PassId, self_ids: 
         return [], errs
     votes = []
     for i in items:
-        if i.finding_id not in order:
-            continue
+        # every finding_id of the batch is covered exactly once (checked above), so no lookup guard is needed
         votes.append(JudgeVote(finding_id=i.finding_id, verdict=i.verdict, severity_band=i.severity_band,
                                reason=i.reason, judge_family=provider.family, judge_model=provider.model,
                                presentation_order=order[i.finding_id], pass_id=pass_id,

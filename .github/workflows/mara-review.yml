@@ -64,6 +64,7 @@ jobs:
   deterministic-tools:
     name: L0 deterministic tools
     runs-on: ubuntu-latest
+    timeout-minutes: 45   # tool install + trivy DB download + eight scans; a hung step must burn minutes, not hours
     permissions:
       contents: read
     steps:
@@ -71,9 +72,26 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0      # gitleaks scans the change's commit range (base..head), so it needs the history
+      - name: Dependabot pull requests must not touch the seeded material
+        # Dependabot's github-actions ecosystem has no path exclusion, so its scanner can pick up the
+        # deliberately vulnerable workflows under fixtures/ and calib/samples/ and open a bump PR that
+        # would mutate the seeded material the pipeline is calibrated against. Fail those PRs outright.
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- fixtures/ calib/)
+          if [ -n "$changed" ]; then
+            echo "Dependabot pull requests must not modify the seeded vulnerable material:" >&2
+            echo "$changed" >&2
+            exit 1
+          fi
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.11"   # tools/versions.lock pins semgrep's wheel hashes for CPython 3.11
+          python-version: "3.11"
+          cache: pip   # wheels are re-verified by --require-hashes on every install, so a shared cache cannot substitute a pinned package
+          cache-dependency-path: tools/*.txt   # tools/versions.lock pins semgrep's wheel hashes for CPython 3.11
       - name: Install pinned, verified L0 tools (tools/versions.lock)
         # SHA-256 for every asset, then the publisher's signature/provenance: cosign keyless (trivy, cosign),
         # SLSA provenance (osv-scanner, slsa-verifier, scorecard), GitHub attestation via gh (zizmor), publisher
@@ -172,6 +190,7 @@ jobs:
   code-scanning:
     name: L0 SARIF → GitHub Code Scanning
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: deterministic-tools
     # Runs even when L0 went red (its findings are what the Security tab should show), never on a cancelled
     # run, and only where GITHUB_TOKEN can write security events: pushes to main and same-repository pull
@@ -188,7 +207,7 @@ jobs:
         with:
           name: code-scanning
           path: code-scanning
-      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: code-scanning
           wait-for-processing: true
@@ -196,6 +215,7 @@ jobs:
   tests-and-mock-review:
     name: tests + mock review
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: deterministic-tools
     permissions:
       contents: read
@@ -203,9 +223,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0      # the incremental mock review below needs the merge base
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
+          cache: pip   # wheels are re-verified by --require-hashes on every install, so a shared cache cannot substitute a pinned package
+          cache-dependency-path: tools/*.txt
       - name: Install (hash-pinned closure, then the package itself without dependencies)
         # tools/dev-requirements.txt is the resolved closure of pyproject's dependencies plus the dev
         # extra, every wheel pinned by SHA-256 (scripts/relock_requirements.py); the editable install
@@ -230,16 +253,34 @@ jobs:
         run: |
           mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out
           test -s out/report.sarif
+      - name: Mock review in incremental mode vs the merge base (assessment L1 #14)
+        # The same fixture, with the bundle narrowed to the files changed since the base commit
+        # plus their import neighbours and the manifests/workflows; everything else is excluded
+        # with the reason out_of_increment (never silently kept). Schedule and dispatch runs have
+        # no base commit and skip the step: the mode must run on every PR and push, which is
+        # exactly where there is a change to narrow to.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            echo "no base commit for this event; skipping the incremental review"
+            exit 0
+          fi
+          mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out-incremental --base "$BASE_SHA"
+          test -s out-incremental/report.sarif
       - name: ML-BOM validates against CycloneDX 1.6 and matches its manifest (G-7)
         run: python3 scripts/ml_bom.py validate --bom sbom/ml-bom.cdx.json --manifest sbom/models.yaml
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mara-report
-          path: out/
+          path: |
+            out/
+            out-incremental/
 
   tests-py312:
     name: tests (CPython 3.12)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: deterministic-tools
     permissions:
       contents: read
@@ -255,6 +296,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
+          cache: pip   # wheels are re-verified by --require-hashes on every install, so a shared cache cannot substitute a pinned package
+          cache-dependency-path: tools/*.txt
       - name: Install (hash-pinned 3.12 closure, then the package itself without dependencies)
         run: |
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/dev-requirements-py312.txt
@@ -269,6 +312,7 @@ jobs:
   human-queue:
     name: human queue → tickets (G-11)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: tests-and-mock-review
     if: github.event_name == 'push'
     permissions:
@@ -281,6 +325,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
+          cache: pip   # wheels are re-verified by --require-hashes on every install, so a shared cache cannot substitute a pinned package
+          cache-dependency-path: tools/*.txt
       - name: Install
         run: |
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/dev-requirements.txt

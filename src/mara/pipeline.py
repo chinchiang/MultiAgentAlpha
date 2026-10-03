@@ -21,6 +21,7 @@ from .context.repo_map import RepoContext, build_context, restrict_to_increment
 from .providers import make_provider
 from .providers.base import Provider
 from .schemas import (
+    SEVERITY_ORDER,
     ConsensusResult,
     EvidenceTier,
     Finding,
@@ -143,13 +144,18 @@ class Pipeline:
                     tags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "errored": " [PROVIDER ERROR]", "canary_echoed": " [CANARY ECHOED]"}
                     flags = [tag for key, tag in tags.items() if audit[key]]
                     self._say(f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)" + "".join(flags))
-        # assign ids and strip unknown standard references
+        # assign ids and strip unknown standard references. Ids are content-ordered (file, line,
+        # cwe, dimension, title) rather than call-ordered: consecutive ids no longer reveal which
+        # findings shared a reviewer call, so the blinded view leaks no grouping (judge.md promises
+        # no source identity; id clusters are a subtle channel back to it).
+        raw.sort(key=lambda f: (_norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))
         out: list[Finding] = []
         for i, f in enumerate(raw, 1):
             f = f.model_copy(update={"id": f"F-{i:04d}"})
-            f, reasons = check_finding_refs(f)
-            self.audit["standard_refs_stripped"] += len(reasons)
-            out.append(f)
+            ref = check_finding_refs(f)
+            self.audit["standard_refs_stripped"] += len(ref.stripped)
+            self.audit["unknown_cwe"] += int(ref.unknown_cwe)
+            out.append(ref.finding)
         return out
 
     @staticmethod
@@ -350,9 +356,8 @@ class Pipeline:
                 num, sev = None, "Unknown"
                 self.audit["invalid_cvss_vectors"] += 1
             # Keep mathematical CVSS severity separate from the jury's operational opinion.
-            order = ["None", "Low", "Medium", "High", "Critical"]
-            family_bands = [max((v.severity_band for v in fv if v.judge_family == fam), key=order.index) for fam in valid_families]
-            operational = sorted(family_bands, key=order.index)[len(family_bands) // 2] if family_bands else None
+            family_bands = [max((v.severity_band for v in fv if v.judge_family == fam), key=SEVERITY_ORDER.index) for fam in valid_families]
+            operational = sorted(family_bands, key=SEVERITY_ORDER.index)[len(family_bands) // 2] if family_bands else None
             rt = red_by_id.get(f.id)
             ssvc = ssvc_decision(severity=sev, exploitable=rt.exploitable if rt else "unknown", tier=tier)
             reasons = []
@@ -372,7 +377,13 @@ class Pipeline:
                 reasons.append("majority_needs_human")
             if not consistent and fv:
                 reasons.append("position_inconsistent")
-            if tier == EvidenceTier.C and sev in {"High", "Critical"}:
+            # G-11: tier C at or above the configured severity goes to a human - unless the queue is
+            # tightened over its backlog limit (config tighten_exclude_tier_c), in which case the
+            # jury's consensus decides and build_queue stops queuing tier C. An unknown severity
+            # ranks above every band so the queue trigger stays fail-closed.
+            min_c = SEVERITY_ORDER.index(self.cfg.human_queue.queue_tier_c_min_severity)
+            sev_rank = SEVERITY_ORDER.index(sev) if sev in SEVERITY_ORDER else len(SEVERITY_ORDER)
+            if tier == EvidenceTier.C and not self.exclude_tier_c and sev_rank >= min_c:
                 reasons.append("tier_c_high")
             if refuted and tier != EvidenceTier.D:
                 # assessment #37: a refuted finding never re-enters the blocking logic on the
@@ -392,7 +403,6 @@ class Pipeline:
                     skeptic_refuted=refuted,
                     skeptic_abstained=abstained,
                     position_consistent=consistent,
-                    krippendorff_alpha=None,
                     tier=tier,
                     cvss4_score=num,
                     cvss4_severity=sev,
@@ -610,6 +620,10 @@ def _agreement_proxy(votes: list[JudgeVote]) -> float | None:
     per_family = defaultdict(set)
     for v in votes:
         per_family[v.judge_family].add(v.verdict)
+    if len(per_family) < 2:
+        # a single rater family agreeing with itself is not "perfect agreement": undefined, like
+        # alpha with fewer than two raters; quorum reasons still gate the acceptance
+        return None
     c = Counter(next(iter(values)) if len(values) == 1 else "needs_human" for values in per_family.values())
     modal = c.most_common(1)[0][1]
     return round((modal / len(per_family) - 1 / 3) / (1 - 1 / 3), 3)  # chance-corrected for 3 categories
@@ -625,6 +639,11 @@ def _norm_path(path: str) -> str:
 
 def _tool_corroborates(f: Finding, tool_results: list[ToolResult]) -> bool:
     for t in tool_results:
+        # a tool only corroborates findings in the dimensions it scans for (TOOL_DIMENSIONS):
+        # csp-evaluator emits results without CWEs, and without this guard any such result would
+        # corroborate any finding that happens to sit within +-3 lines
+        if f.dimension not in TOOL_DIMENSIONS.get(t.tool, []):
+            continue
         for p in f.provenance:
             # tools run from the git root report paths relative to it (e.g. zizmor emits
             # fixtures/vuln-sample/.github/workflows/deploy.yml); the review target may be a subdirectory

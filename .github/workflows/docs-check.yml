@@ -24,7 +24,7 @@ on:
       - ".github/workflows/docs-check.yml"
   workflow_dispatch:
 concurrency:
-  group: docs-check-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 permissions: {}
 
@@ -32,6 +32,7 @@ jobs:
   docs-check:
     name: report build, word count, citations
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:

@@ -5,6 +5,7 @@ import datetime as dt
 import json
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from mara.cli import app
@@ -87,6 +88,52 @@ def test_p4_gate_bounds():
     assert MaraConfig.model_validate(_base(gate={"self_judge_discount": 0.5, "human_threshold_alpha": 0.3}))
 
 
+def test_gate_rejects_out_of_bounds_unknown_and_empty_values():
+    """A typo in the blocking lists or thresholds must fail loudly: lowercase tiers or a negative
+    accept_threshold would otherwise silently turn the blocking gate into a no-op."""
+    for gate in (
+        {"block_on_tiers": ["a", "B"]},  # lowercase typo
+        {"block_on_tiers": []},
+        {"block_on_severity": ["high"]},
+        {"block_on_severity": []},
+        {"accept_threshold": -0.1},
+        {"accept_threshold": 1.1},
+        {"min_dimension_score": -1},
+        {"min_dimension_score": 101},
+        {"unknown_gate_key": True},
+    ):
+        with pytest.raises(ValueError):
+            MaraConfig.model_validate(_base(gate=gate))
+    assert MaraConfig.model_validate(_base(gate={"block_on_tiers": ["A", "B", "C", "D"], "block_on_severity": ["Medium"]}))
+
+
+def test_top_level_unknown_keys_are_refused():
+    # `gates:` instead of `gate:` would otherwise fall back to the default gate and disable the bounds
+    with pytest.raises(ValueError, match="gates"):
+        MaraConfig.model_validate(dict(_base(), gates={"self_judge_discount": 0.9}))
+    assert MaraConfig.model_validate(dict(_base(), standby_for="anthropic")).standby_for == "anthropic"
+
+
+def test_check_config_refuses_structurally_invalid_configs(tmp_path):
+    """check-config validates the whole structure first: it can never report "policies pass" for a
+    file load_config would refuse (duplicate names, unknown keys, out-of-bounds gate values)."""
+    runner = CliRunner()
+    dup = _base()
+    dup["models"].append(dict(dup["models"][0]))
+    p = tmp_path / "dup-models.yaml"
+    p.write_text(yaml.safe_dump(dup), encoding="utf-8")
+    res = runner.invoke(app, ["check-config", str(p)])
+    assert res.exit_code == 1 and "invalid config structure" in res.output and "model names must be unique" in res.output
+    p = tmp_path / "unknown-key.yaml"
+    p.write_text(yaml.safe_dump(dict(_base(), gates={})), encoding="utf-8")
+    res = runner.invoke(app, ["check-config", str(p)])
+    assert res.exit_code == 1 and "gates" in res.output
+    p = tmp_path / "bad-gate.yaml"
+    p.write_text(yaml.safe_dump(_base(gate={"block_on_tiers": ["a"]})), encoding="utf-8")
+    res = runner.invoke(app, ["check-config", str(p)])
+    assert res.exit_code == 1 and "block_on_tiers" in res.output
+
+
 def test_p5_data_residency():
     bad = _base()
     bad["models"][0]["data_residency"] = "vendor_api_30d"
@@ -146,6 +193,7 @@ def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkey
     bad(lambda ev: ev["aat"].update(passed=False), "did not pass")
     bad(lambda ev: ev.update(mode="mock"), "not live")
     bad(lambda ev: ev.update(date=(dt.date.today() - dt.timedelta(days=91)).isoformat()), "rerun the calibration")
+    bad(lambda ev: ev.update(date=(dt.date.today() + dt.timedelta(days=1)).isoformat()), "in the future")
     ev = json.loads(json.dumps(evidence))
     ev["date"] = (dt.date.today() - dt.timedelta(days=90)).isoformat()
     (calib / "latest.json").write_text(json.dumps(ev), encoding="utf-8")

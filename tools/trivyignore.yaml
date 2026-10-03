@@ -24,61 +24,7 @@ vulnerabilities:
       release, so relocking cannot remove it without a garak upgrade. The closure is installed only on the
       isolated G-8 evaluation host, never in CI or the review pipeline. Re-check before the expiry.
     expired_at: 2026-12-17
-  # PyJWT in the semgrep tool closure: semgrep 1.177.0 (latest 1.178.0) pins pyjwt[crypto]~=2.13.0, so no
-  # fixed release (2.14.0+; CVE-2026-101918 in 2.15.0) can enter the closure. PyJWT there only serves
-  # semgrep's own app-session token handling; the L0 job runs semgrep offline with local rules,
-  # --metrics=off and no authentication, so the PyJWKClient/JWKS and token-parsing paths are not
-  # exercised. Mirrors tools/osv-semgrep.toml; re-check for a semgrep release that relaxes the pin.
-  - id: CVE-2026-101917
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "PyJWKClient JWKS fetch amplification; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-101918
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "RecursionError DoS in PyJWKClient pre-verification parse; fixed in pyjwt 2.15.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102265
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "Uncaught RecursionError in jwt.decode() on deeply nested headers; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102266
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "PyJWK accepts empty HMAC keys; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102267
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "PyJWKClient follows redirects when fetching JWKS; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102268
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "PEM detection bypass via whitespace-mutated public keys; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102269
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "Non-canonical signature segments enable revocation bypass; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102270
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "ReDoS in is_pem_format; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102271
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "DER public keys accepted as HMAC secrets; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102272
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "BOM bypass in token parsing; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102273
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "Public JWK containers accepted as HMAC secrets; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-102274
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "Malformed RSA JWK aborts parsing of an entire JWK Set; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
-  - id: CVE-2026-103001
-    paths: ["tools/semgrep-requirements.txt"]
-    statement: "Alias record (GHSA-gvp8-978c-rx2q) of CVE-2026-102274; fixed in pyjwt 2.14.0 but semgrep pins pyjwt[crypto]~=2.13.0. See tools/osv-semgrep.toml."
-    expired_at: 2026-12-31
+  # The thirteen PyJWT entries scoped to tools/semgrep-requirements.txt were removed on 2026-10-03:
+  # semgrep 1.179.0 relaxed the pyjwt[crypto]~=2.13.0 pin, the closure relocked to pyjwt 2.15.1, and the
+  # fixed releases (2.14.0 / 2.15.0) cover every advisory. See tools/osv-semgrep.toml.
 misconfigurations: []

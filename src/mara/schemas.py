@@ -66,6 +66,10 @@ class EvidenceTier(StrEnum):
     D = "D"  # unverified: provenance failed, judges disagree, or skeptic refuted
 
 
+SEVERITY_ORDER: list[str] = ["None", "Low", "Medium", "High", "Critical"]
+"""CVSS 4.0 severity bands, low to high; the single source for gate and queue comparisons."""
+
+
 class Provenance(BaseModel):
     file: str
     line: int = Field(ge=1)
@@ -92,7 +96,6 @@ class Finding(BaseModel):
     model_confidence: float = Field(ge=0.0, le=1.0, description="Self-reported; never used directly (see consensus)")
     source_family: ModelFamily
     source_model: str
-    canary_echoed: bool = Field(default=False, description="Set by the harness if the model repeated the injection canary")
     finder_families: list[ModelFamily] = Field(default_factory=list, description="Families whose reviewers produced this (deduplicated) finding")
 
     @field_validator("title")
@@ -155,7 +158,6 @@ class ConsensusResult(BaseModel):
     skeptic_refuted: bool
     skeptic_abstained: bool = False
     position_consistent: bool
-    krippendorff_alpha: float | None
     tier: EvidenceTier
     cvss4_score: float | None
     cvss4_severity: str
@@ -200,7 +202,6 @@ class HumanQueueItem(BaseModel):
     cvss4_severity: str
     ssvc_decision: str
     weighted_score: float
-    krippendorff_alpha: float | None
     agreement_proxy: float | None = None
     votes_tp: int
     votes_fp: int

@@ -85,6 +85,7 @@ class WorkflowInventory:
     head_checkout_lines: list[int] = field(default_factory=list)
     top_permissions: str = "（缺失）"
     job_permissions: dict[str, str] = field(default_factory=dict)
+    jobs_without_timeout: list[str] = field(default_factory=list)
     uses: list[Uses] = field(default_factory=list)
     run_interpolations: list[Interpolation] = field(default_factory=list)
     cache_keys: list[tuple[int, str, bool]] = field(default_factory=list)
@@ -217,15 +218,32 @@ def inventory_workflow(path: Path, root: Path) -> WorkflowInventory:
 
     current_job = None
     last_cache_uses = -100
+    timeout_seen = False
+    section = ""   # top-level key currently in (on / jobs / permissions / ...)
+
+    def _close_job():
+        if current_job is not None and not timeout_seen:
+            inv.jobs_without_timeout.append(current_job)
+
     for i, ln in enumerate(lines, 1):
         stripped = ln.strip()
         if stripped.startswith("#"):
             continue
+        top = re.match(r"^(\"on\"|'on'|true|[A-Za-z_][A-Za-z0-9_\-]*):", ln)
+        if top:   # a top-level key ends the previous job's block
+            if section == "jobs":
+                _close_job()
+                current_job, timeout_seen = None, False
+            section = top.group(1)
         if PERM_TOP_RE.match(ln):
             inv.top_permissions = _block_value(lines, i - 1, 0)
         jm = JOB_RE.match(ln)
-        if jm and jm.group(1) not in ("on", "jobs", "env", "defaults", "concurrency", "permissions"):
+        if section == "jobs" and jm and jm.group(1) not in ("on", "jobs", "env", "defaults", "concurrency", "permissions"):
+            _close_job()
             current_job = jm.group(1)
+            timeout_seen = False
+        if section == "jobs" and re.match(r"^ {4}timeout-minutes:\s*\S", ln):
+            timeout_seen = True
         if PERM_JOB_RE.match(ln) and current_job:
             inv.job_permissions[current_job] = _block_value(lines, i - 1, 4)
         um = USES_RE.match(ln)
@@ -247,6 +265,8 @@ def inventory_workflow(path: Path, root: Path) -> WorkflowInventory:
             inv.self_hosted = True
         if re.match(r"^\s*persist-credentials:\s*false", ln):
             inv.persist_credentials_false += 1
+    if section == "jobs":
+        _close_job()
 
     for line_no, body in _run_bodies(lines):
         for m in EXPR_RE.finditer(body):
@@ -282,6 +302,8 @@ def _assess(inv: WorkflowInventory) -> None:
             f.append(("Medium", f"actions/cache 的 key 含不可信 ref（第 {line} 行：`{key}`）：cache poisoning 面"))
     if inv.self_hosted:
         f.append(("Medium", "使用 self-hosted runner：若 repo 公開且觸發含 PR，fork PR 可在 runner 上執行程式"))
+    if inv.jobs_without_timeout:
+        f.append(("Low", f"job 未設 `timeout-minutes`（{', '.join(inv.jobs_without_timeout)}）：卡住的步驟會燒到 360 分鐘的預設上限"))
     checkouts = [u for u in inv.uses if u.action == "actions/checkout"]
     if checkouts and inv.persist_credentials_false < len(checkouts):
         f.append(("Low", f"{len(checkouts) - inv.persist_credentials_false} 個 actions/checkout 未設 `persist-credentials: false`（zizmor artipacked）"))
@@ -411,7 +433,7 @@ def render(invs: list[WorkflowInventory], latest: dict[str, str | None], *, root
           "- 非 SHA 引用以 `git ls-remote https://github.com/<owner>/<repo>` 解析目前 tag（優先取 peeled `^{}`）或分支的完整 SHA" + ("（本次 `--offline`，未解析）。" if offline else "。"),
           "- SHA 引用若附 `# vX.Y.Z` 註解，一併驗證該 tag 目前是否仍指向這個 SHA。",
           f"- zizmor：{'已執行（`--offline`，線上稽核如 impostor-commit 與 known-vulnerable-actions 未跑；CI 的 `scripts/zizmor_ci.py` 以 workflow token 另跑線上稽核）' if zizmor_present else '未執行：zizmor 不在 PATH'}。actionlint、poutine：未執行（不在 PATH）。",
-          "", "**判定準則（報告第 10.7 節）。** pwn request（`pull_request_target` 加 checkout PR head）為 Critical 且 reachable；攻擊者可控 context 內插到 `run:`（標題注入等）同為 Critical；以 tag 或分支引用第三方 action 為 High 但 conditional；`write-all` 為 High；缺 `permissions:`、cache key 含不可信 ref、self-hosted runner 為 Medium；未設 `persist-credentials: false` 為 Low。workflow 的嚴重度取其最高項。", "",
+          "", "**判定準則（報告第 10.7 節）。** pwn request（`pull_request_target` 加 checkout PR head）為 Critical 且 reachable；攻擊者可控 context 內插到 `run:`（標題注入等）同為 Critical；以 tag 或分支引用第三方 action 為 High 但 conditional；`write-all` 為 High；缺 `permissions:`、cache key 含不可信 ref、self-hosted runner 為 Medium；未設 `persist-credentials: false`、job 未設 `timeout-minutes` 為 Low。workflow 的嚴重度取其最高項。", "",
           "## 1. 總表（Critical 在最上方）", "",
           "| 嚴重度 | workflow | 用途 | 觸發 | PRT | checkout PR head | 頂層 permissions | job permissions | uses（sha/tag/branch） | run 內插（可控） | cache key 含 ref | 合法 YAML |",
           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -449,6 +471,8 @@ def render(invs: list[WorkflowInventory], latest: dict[str, str | None], *, root
                 L.append(f"| {it.line} | `${{{{ {it.expression} }}}}` | {'**是**' if it.untrusted else '否'} |")
         else:
             L.append("無。")
+        if inv.jobs_without_timeout:
+            L += ["", f"**未設 `timeout-minutes` 的 job**：{', '.join(f'`{j}`' for j in inv.jobs_without_timeout)}"]
         if inv.zizmor is not None:
             z = inv.zizmor
             L += ["", f"**zizmor**（{z['version']}，`--offline`，exit {z['exit_code']}）", ""]

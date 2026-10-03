@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
-from .schemas import DIMENSIONS, ModelFamily
+from .schemas import DIMENSIONS, SEVERITY_ORDER, EvidenceTier, ModelFamily
 
 
 class ModelSpec(BaseModel):
@@ -48,10 +48,15 @@ class RolesConfig(BaseModel):
 
 
 class GateConfig(BaseModel):
+    """The blocking gate. Tier and severity lists are validated so a typo can never turn the
+    blocking conjunction into a silent no-op (fail closed: unknown values are refused, not ignored)."""
+
+    model_config = ConfigDict(extra="forbid")
+
     block_on_tiers: list[str] = Field(default_factory=lambda: ["A", "B"])
     block_on_severity: list[str] = Field(default_factory=lambda: ["High", "Critical"])
-    min_dimension_score: float = 60.0
-    accept_threshold: float = Field(default=0.6, description="Weighted consensus needed to accept a finding")
+    min_dimension_score: float = Field(default=60.0, ge=0.0, le=100.0)
+    accept_threshold: float = Field(default=0.6, ge=0.0, le=1.0, description="Weighted consensus needed to accept a finding")
     human_threshold_alpha: float = Field(
         default=0.4, ge=0.0, le=1.0, description="Legacy key: single-finding agreement proxy threshold (policy P4: >= 0.3)"
     )
@@ -65,6 +70,17 @@ class GateConfig(BaseModel):
         "records a passing Alternative Annotator Test (live mode) within 90 days; when false every rejected non-D "
         "finding is queued for a human instead",
     )
+
+    @model_validator(mode="after")
+    def _valid_block_lists(self) -> GateConfig:
+        tiers = {t.value for t in EvidenceTier}
+        bad_t = [t for t in self.block_on_tiers if t not in tiers]
+        if not self.block_on_tiers or bad_t:
+            raise ValueError(f"gate.block_on_tiers must be a non-empty subset of {sorted(tiers)}, got {self.block_on_tiers}")
+        bad_s = [s for s in self.block_on_severity if s not in SEVERITY_ORDER]
+        if not self.block_on_severity or bad_s:
+            raise ValueError(f"gate.block_on_severity must be a non-empty subset of {SEVERITY_ORDER}, got {self.block_on_severity}")
+        return self
 
 
 class PsirtConfig(BaseModel):
@@ -162,9 +178,15 @@ class ModelEvalConfig(BaseModel):
 
 
 class MaraConfig(BaseModel):
+    """Unknown top-level keys are refused: a typo like `gates:` would otherwise silently fall
+    back to the default gate and disable the configured blocking bounds."""
+
+    model_config = ConfigDict(extra="forbid")
+
     models: list[ModelSpec]
     roles: RolesConfig
-    dimensions: list[str] = Field(default_factory=lambda: list(DIMENSIONS))
+    dimensions: list[str] = Field(default_factory=lambda: list(DIMENSIONS), min_length=1,
+                                  description="Reviewed dimensions; an empty list would mean zero reviewer calls")
     gate: GateConfig = Field(default_factory=GateConfig)
     allow_source_code_to_non_on_prem: bool = Field(
         default=False,
@@ -178,6 +200,10 @@ class MaraConfig(BaseModel):
         default="", description="Policy P1: reference of the authorization (ticket, contract clause)"
     )
     reduced_panel_reason: str = Field(default="", description="Policy P3: why only two model families are available (e.g. PRC in-country pipeline)")
+    standby_for: str = Field(
+        default="",
+        description="G-4: production family this cold-standby config replaces (e.g. 'anthropic'); empty for a production config",
+    )
     psirt: PsirtConfig = Field(default_factory=PsirtConfig, description="G-12: PSIRT / CRA Article 14 hand-off")
     human_queue: HumanQueueConfig = Field(default_factory=HumanQueueConfig, description="G-11: ticketed human queue with decision write-back")
     ml_bom: MlBomConfig = Field(default_factory=MlBomConfig, description="G-7: ML-BOM for the self-hosted model weights")
@@ -192,7 +218,7 @@ class MaraConfig(BaseModel):
         raise KeyError(name)
 
     @model_validator(mode="after")
-    def _validate(self) -> MaraConfig:
+    def _validate(self, info: ValidationInfo) -> MaraConfig:
         names = {m.name for m in self.models}
         if len(names) != len(self.models):
             raise ValueError("model names must be unique")
@@ -206,6 +232,10 @@ class MaraConfig(BaseModel):
         for d in self.dimensions:
             if d not in DIMENSIONS:
                 raise ValueError(f"unknown dimension {d!r}")
+        # `mara check-config` validates the structure first and then renders every policy result;
+        # load_config runs the policies here so a violating file is refused outright.
+        if info.context and info.context.get("skip_policies"):
+            return self
         from .policy import evaluate_policies
 
         failed = [r for r in evaluate_policies(self) if not r.passed]

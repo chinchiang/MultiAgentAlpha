@@ -493,7 +493,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.django.security.injection.raw-html-format"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.django.security.injection.raw-html-format"
        }
       },
       {
@@ -520,7 +520,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.avoid_app_run_with_bad_host"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.avoid_app_run_with_bad_host"
        }
       },
       {
@@ -546,7 +546,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.debug-enabled"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.debug-enabled"
        }
       },
       {
@@ -573,7 +573,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.render-template-string"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.render-template-string"
        }
       },
       {
@@ -600,7 +600,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.secure-set-cookie"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.audit.secure-set-cookie"
        }
       },
       {
@@ -628,7 +628,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.injection.raw-html-format"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.injection.raw-html-format"
        }
       },
       {
@@ -656,7 +656,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.injection.tainted-sql-string"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.injection.tainted-sql-string"
        }
       },
       {
@@ -683,7 +683,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.open-redirect"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.flask.security.open-redirect"
        }
       },
       {
@@ -710,7 +710,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.lang.security.audit.logging.python-logger-credential-disclosure"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.lang.security.audit.logging.python-logger-credential-disclosure"
        }
       },
       {
@@ -738,7 +738,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.python.sqlalchemy.security.sqlalchemy-execute-raw-query"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.python.sqlalchemy.security.sqlalchemy-execute-raw-query"
        }
       },
       {
@@ -765,7 +765,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.audit.third-party-action-not-pinned-to-commit-sha"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.audit.third-party-action-not-pinned-to-commit-sha"
        }
       },
       {
@@ -793,7 +793,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.github-actions-mutable-action-tag"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.github-actions-mutable-action-tag"
        }
       },
       {
@@ -820,7 +820,7 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.pull-request-target-code-checkout"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.pull-request-target-code-checkout"
        }
       },
       {
@@ -848,11 +848,11 @@
         ]
        },
        "shortDescription": {
-        "text": "Semgrep Finding: home.user.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.run-shell-injection"
+        "text": "Semgrep Finding: home.jungle.localgit.MultiAgentAlpha..mara-tools.semgrep-rules.yaml.github-actions.security.run-shell-injection"
        }
       }
      ],
-     "semanticVersion": "1.177.0"
+     "semanticVersion": "1.179.0"
     }
    }
   }

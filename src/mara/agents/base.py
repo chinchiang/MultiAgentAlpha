@@ -99,6 +99,12 @@ def parse_items(comp: Completion, model_cls, key: str = "items") -> tuple[list, 
         # a refusal is counted as an abstention, not as invalid output: the two rates stay separate
         return [], ["refused"]
     if comp.data is None:
+        # a bare empty response (HTTP 200, no text). Deliberately role-dependent downstream, and
+        # both readings fail closed: the reviewer and context layers treat it as an abstention
+        # (refusal counters - the model said nothing, which biases refusal-rate audits the same
+        # way an explicit "no" does), while the skeptic/judge/red-team layers treat it as an
+        # invalid item (a ballot without a verdict cannot be an abstention from one). Never a
+        # silent pass either way.
         return [], ["empty"]
     if not isinstance(comp.data, dict) or not isinstance(comp.data.get(key), list):
         return [], ["invalid_response_shape"]

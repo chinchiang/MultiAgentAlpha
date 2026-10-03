@@ -66,7 +66,7 @@ operated families or complete human review instead of weakening the quorum.
 
 | Layer | What it does | Where |
 |---|---|---|
-| L0 deterministic anchors | semgrep, gitleaks, osv-scanner, zizmor, trivy → SARIF. Ground truth and calibration set. | `mara/tools` |
+| L0 deterministic anchors | semgrep, gitleaks, osv-scanner, zizmor, trivy, csp-evaluator → SARIF. Ground truth and calibration set. | `mara/tools` |
 | L1 context | Repo map, entry points, workflows, manifests; strips authorship signals. Facts, not judgements. | `mara/context` |
 | L2 reviewers | 11 dimensions × ≥2 model families, independent, structured JSON only. | `mara/agents/reviewer.py`, `mara/prompts` |
 | L3 adversarial | Skeptic (must be a different family than the finder) tries to refute; red team states exploitability. | `mara/agents/skeptic.py`, `redteam.py` |
@@ -134,6 +134,11 @@ unresolvable ref is a usage error, not an empty "nothing changed":
 mara review path/to/repo --config config/mara.yaml --base origin/main --out out
 ```
 
+CI exercises the mode on every pull request and push: the `tests + mock review` job runs the seeded
+fixture a second time with `--base` set to the merge-base commit (the report lands in the
+`mara-report` artifact next to the full review; schedule and dispatch runs have no base commit and
+skip that step).
+
 Before the reviewers run, a separate context agent builds a C4-lite view of the architecture
 (containers, external systems, trust boundaries, data stores) in one provider call. Every fact must
 cite a bundle file:line with a verbatim quote and passes the same provenance check as findings;
@@ -162,7 +167,7 @@ and WebGoat; they need human-authored `labels.json` files before they count.
 
 ## Policies enforced by the config
 
-`mara check-config <yaml>` evaluates six policies and exits non-zero if any fails; `MaraConfig`
+`mara check-config <yaml>` evaluates eight policies and exits non-zero if any fails; `MaraConfig`
 refuses to load a violating file, so the pipeline cannot run outside policy:
 
 | Policy | Rule |
@@ -180,11 +185,16 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 
 ## Gap assessment (Appendix E, prompt 3)
 
-`docs/assessment-2026-09-12.md` (134/240) and its re-run `docs/assessment-2026-09-26.md` (152/240, L0 up
-from 13 to 23 now that the scanners run blocking from the lock) score this repository's review process against the 60-question
-questionnaire in `docs/appendix-d-maturity.md`, with a file-level evidence cell on every row,
-per-layer totals, the two lowest questions per layer mapped to governance items G-1 to G-13, and a
-separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <file>` checks the
+Four runs score this repository's review process against the 60-question questionnaire in
+`docs/appendix-d-maturity.md`: `docs/assessment-2026-09-12.md` (134/240), `docs/assessment-2026-09-26.md`
+(152/240, L0 up from 13 to 23 now that the scanners run blocking from the lock), `docs/assessment-2026-10-01.md`
+(170/240, twelve questions up after v0.3.10–v0.3.12) and the current `docs/assessment-2026-10-03.md` (171/240,
+incremental review now runs in CI; the v0.3.13–v0.3.15 hardening — gate validation, the semgrep relock that
+removed thirteen expiring exceptions, corroboration dimension limits, content-ordered finding ids — strengthened
+evidence without crossing a scoring line; L5 lowest at 24, L0 next at 27 — the recorded blocker is the first
+real-family run, not code). Each run has a file-level
+evidence cell on every row, per-layer totals, the two lowest questions per layer mapped to governance
+items G-1 to G-13, and a separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <file>` checks the
 acceptance criteria (all 60 rows scored with evidence, layer sums consistent, CN rows present) and
 `tests/test_assessment.py` runs the same check in CI.
 
@@ -198,8 +208,9 @@ per report section 10.7 (Critical rows first), suggested full SHAs for every non
 (via `git ls-remote`; `--offline` to skip), a check that each SHA pin still matches its tag
 comment, and zizmor's SARIF when zizmor is on the PATH. Files that are not valid YAML are still
 inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run
-(`docs/actions-inventory-2026-09-26.md` is the current one: four real workflows, all rated None);
-its section 6 adds what the CI logs showed that the static inventory cannot, and the fixes that
+(`docs/actions-inventory-2026-10-03.md` is the current one: four real workflows, all rated None, with
+the new job-level `timeout-minutes` detection — the seeded fixtures keep their deliberate gaps and
+stay Critical); its section 6 adds what the CI logs showed that the static inventory cannot, and the fixes that
 followed: CI now runs zizmor strictly on the real workflows, checks that zizmor's findings on the
 seeded fixture match `fixtures/vuln-sample-sarif/zizmor.sarif` (now produced by zizmor itself), and
 no longer hides a crashed or leaking gitleaks run behind `continue-on-error` (`.gitleaks.toml`
@@ -211,7 +222,7 @@ L0 job needs no `pull-requests` permission.
 ## Pinned, verified L0 tools (Appendix E, prompt 7)
 
 `tools/versions.lock` pins every deterministic tool (gitleaks, osv-scanner, zizmor, trivy, semgrep,
-plus the verifiers cosign and slsa-verifier) by exact version, download URL and SHA-256, and names
+csp-evaluator, plus the verifiers cosign and slsa-verifier) by exact version, download URL and SHA-256, and names
 the strongest verification the publisher offers. `python scripts/install_tools.py` downloads each
 asset, checks the SHA-256 (never skippable), runs the publisher-side check — cosign keyless bundle,
 SLSA provenance, GitHub attestation, publisher checksum file, or `pip --require-hashes` for semgrep —
@@ -250,7 +261,8 @@ differs from the lock:
 
 - `scripts/semgrep_ci.py --target fixtures/vuln-sample --expect fixtures/vuln-sample-sarif/semgrep.sarif`
   scans the seeded fixture with the pinned rulesets and fails on any drift from the recording
-  (which is real semgrep 1.177.0 output, 15 findings, rule ids normalised to the registry form).
+  (which is real semgrep 1.179.0 output, 15 findings — identical to the 1.177.0 recording it replaced,
+  rule ids normalised to the registry form).
 - `scripts/semgrep_ci.py --target . --triage tools/semgrep-triage.yaml` scans the repository
   (minus the seeded `fixtures/` and `calib/samples/`); every finding must be covered by a triage
   entry with a reason or the job fails, covered findings are uploaded with a SARIF `suppressions`
@@ -258,16 +270,16 @@ differs from the lock:
 - `scripts/osv_ci.py --target fixtures/vuln-sample --expect-package requests` must see the
   fixture's `requests==2.19.0` flagged, so a silent scanner or database regression is caught.
 - The bootstrap, dev, typecheck and build closures use `tools/osv-scanner.toml` with no advisory
-  exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`,
-  and the semgrep tool closure with `tools/osv-semgrep.toml` (semgrep pins `pyjwt[crypto]~=2.13.0`
-  upstream, so its PyJWT advisories carry dated exceptions there); their dated exceptions cannot
-  suppress an advisory in the other runtime or build dependencies. These scans
+  exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`
+  (its dated exceptions cover garak's nltk/datasets pins); the semgrep tool closure is scanned with
+  `tools/osv-semgrep.toml`, which has been exception-free since semgrep 1.179.0 relaxed the
+  `pyjwt[crypto]~=2.13.0` pin and the closure relocked to pyjwt 2.15.1. These scans
   also run weekly and on manual workflow dispatch.
 
 semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories
 (never `--config auto`), so nothing is sent to semgrep.dev; osv-scanner runs `scan source
 --no-resolve`, so only package names and versions go to api.osv.dev and nothing to deps.dev. All
-SARIF files land in the `l0-sarif` artifact, and the seven scans of the repository itself (five tools; osv-scanner
+SARIF files land in the `l0-sarif` artifact, and the eight scans of the repository itself (six tools; osv-scanner
 twice more: the model-evaluation and semgrep tool closures) are also uploaded to GitHub Code Scanning (see below). `mara review` uses the same pinned rulesets by default
 (`MARA_SEMGREP_CONFIG` overrides). zizmor on the real workflows runs the same way since 2026-09-14:
 `scripts/zizmor_ci.py` executes the locked zizmor (online audits with the workflow token), keeps the
@@ -301,7 +313,7 @@ filtered, paths are repository-relative, and each tool has a category), and the 
 `github/codeql-action/upload-sarif` only while `github.event.repository.private` is false. It is the
 only job with `security-events: write`, it runs no repository code, and it is also skipped for pull
 requests from forks or Dependabot (read-only token). While the repository is private the job shows as
-skipped and the six SARIF files are still available in the `l0-sarif` artifact of every run. The
+skipped and the twelve SARIF files are still available in the `l0-sarif` artifact of every run. The
 whole Scorecard job is gated the same way: the read-only token cannot run scorecard's GraphQL queries
 on a private repository (the runs of 2026-09-21 and 2026-09-22 failed with "Resource not accessible by
 integration"), so the job is skipped until the repository is public again. In its place the
@@ -407,7 +419,7 @@ decides and says what is missing: `docs/policy/mara-review-policy.md` (front mat
 `status`/`approved_by`/`approved_on`/`review_by` and six marked mandatory statements; shipped as a
 draft), `config/examples/standby-for-<family>.yaml` plus `ops/model-swap-drills.yaml` and
 `scripts/model_swap_drill.py` (`rehearse` proves the process is unchanged on a mock panel, `record`
-logs a live swap timed from decision to first real PR; shipped empty), and `rollout:` in
+logs a live swap timed from decision to first real PR; mock rehearsals for all three families are recorded, live drills are still missing), and `rollout:` in
 `config/mara.yaml` with `scripts/rollout_phase.py` (`status`, `baseline`, `advance`). The rollout
 phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking`. All three fail
 today for the stated reasons: the policy awaits PSO approval, no live drill has run, the rollout
@@ -436,7 +448,9 @@ GitHub issue per item (deduplicated by a stable `file:line:cwe` key) and, with `
 turns closed tickets labelled `decision:true-positive` / `decision:false-positive` into
 `calib/decisions/<key>.json`, which `scripts/calibrate.py` uses as labels. When
 `calib/decisions/backlog.json` shows more open tickets than `human_queue.backlog_limit`, the pipeline
-raises the alpha threshold and stops queuing tier C; it never loosens. The `human-queue` CI job runs
+raises the alpha threshold and — with `human_queue.tighten_exclude_tier_c`, the default — stops queuing
+tier C at `human_queue.queue_tier_c_min_severity` (the jury's consensus then decides those findings); it
+never loosens. The `human-queue` CI job runs
 on push to `main` with `issues: write` only and stays in dry-run until the repository variable
 `MARA_HUMAN_QUEUE_ISSUES` is `true`. See `docs/human-queue.md`.
 

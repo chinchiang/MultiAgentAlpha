@@ -37,7 +37,8 @@ REDTEAM_SCHEMA = {
 class _RedRaw(BaseModel):
     finding_id: str
     exploitable: Literal["yes", "conditional", "no", "unknown"]
-    preconditions: str = Field(default="", max_length=500)
+    # required, exactly like REDTEAM_SCHEMA (see _SkepticRaw for why there is no default)
+    preconditions: str = Field(max_length=500)
 
 
 # Exploit-code stripping (assessment L3 #35, defence in depth behind the prompt's "do not write
@@ -118,14 +119,12 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         # a bare refusal is an abstention, not invalid output: keep its error list clean
         errs = errors if errors == ["refused"] else errors + ["incomplete_or_duplicate_response"]
         return [], errs, 0
-    known = {f.id for f in findings}
     stripped = 0
     out = []
     for i in items:
         clean, had_code = strip_exploit_code(i.preconditions)
         stripped += int(had_code)
-        note = RedTeamNote(finding_id=i.finding_id, exploitable=i.exploitable, preconditions=clean,
-                           source_family=provider.family, source_model=provider.model)
-        if note.finding_id in known:
-            out.append(note)
+        out.append(RedTeamNote(finding_id=i.finding_id, exploitable=i.exploitable, preconditions=clean,
+                               source_family=provider.family, source_model=provider.model))
+    # every finding_id is covered exactly once (checked above), so no filter is needed here
     return out, errors, stripped
