@@ -139,7 +139,11 @@ def test_calibration_penalty_front_matter_and_live_guard(tmp_path, monkeypatch):
                         "--report", str(tmp_path / "c.md"), "--date", "2026-09-12"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     text = (tmp_path / "c.md").read_text(encoding="utf-8")
-    assert text.startswith("---\nreport: calibration\ndate: '2026-09-12'\nmode: mock\n") and "無法計算" in text and "G-8 從未執行" in text
+    # since a real calib-out run exists on disk, the mock calibration computes concrete suggested
+    # weights from the review data instead of reporting 無法計算; G-8 has still never run
+    assert text.startswith("---\nreport: calibration\ndate: '2026-09-12'\nmode: mock\n")
+    assert "無法計算" not in text and "建議權重" in text and "G-8 從未執行" in text
+    assert "權重未自動寫入" in text
 
 
 def test_calibration_run_refuses_live_with_mock_config():
