@@ -96,7 +96,6 @@ class Finding(BaseModel):
     model_confidence: float = Field(ge=0.0, le=1.0, description="Self-reported; never used directly (see consensus)")
     source_family: ModelFamily
     source_model: str
-    canary_echoed: bool = Field(default=False, description="Set by the harness if the model repeated the injection canary")
     finder_families: list[ModelFamily] = Field(default_factory=list, description="Families whose reviewers produced this (deduplicated) finding")
 
     @field_validator("title")

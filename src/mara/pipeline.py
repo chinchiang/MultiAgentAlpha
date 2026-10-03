@@ -148,9 +148,10 @@ class Pipeline:
         out: list[Finding] = []
         for i, f in enumerate(raw, 1):
             f = f.model_copy(update={"id": f"F-{i:04d}"})
-            f, reasons = check_finding_refs(f)
-            self.audit["standard_refs_stripped"] += len(reasons)
-            out.append(f)
+            ref = check_finding_refs(f)
+            self.audit["standard_refs_stripped"] += len(ref.stripped)
+            self.audit["unknown_cwe"] += int(ref.unknown_cwe)
+            out.append(ref.finding)
         return out
 
     @staticmethod
@@ -615,6 +616,10 @@ def _agreement_proxy(votes: list[JudgeVote]) -> float | None:
     per_family = defaultdict(set)
     for v in votes:
         per_family[v.judge_family].add(v.verdict)
+    if len(per_family) < 2:
+        # a single rater family agreeing with itself is not "perfect agreement": undefined, like
+        # alpha with fewer than two raters; quorum reasons still gate the acceptance
+        return None
     c = Counter(next(iter(values)) if len(values) == 1 else "needs_human" for values in per_family.values())
     modal = c.most_common(1)[0][1]
     return round((modal / len(per_family) - 1 / 3) / (1 - 1 / 3), 3)  # chance-corrected for 3 categories

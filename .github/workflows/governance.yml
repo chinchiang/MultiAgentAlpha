@@ -18,6 +18,7 @@ jobs:
   governance:
     name: G-1..G-13 compliance check
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       issues: write     # gh issue create / gh issue comment / gh label create on the tracking issue; nothing else
@@ -28,6 +29,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
+          cache: pip   # wheels are re-verified by --require-hashes on every install, so a shared cache cannot substitute a pinned package
+          cache-dependency-path: tools/*.txt
       - name: Install
         run: |
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/dev-requirements.txt
@@ -45,9 +48,12 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           gh label create governance-check --force --color 5319e7 --description "Weekly G-1..G-13 compliance check" --repo "$REPO"
-          existing=$(gh issue list --repo "$REPO" --label governance-check --state open --json number --jq '.[0].number')
+          # every open tracking issue gets the result; a second open issue must not silently stop receiving them
+          existing=$(gh issue list --repo "$REPO" --label governance-check --state open --json number --jq '.[].number')
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "$REPO" --body-file governance-check.md
+            for n in $existing; do
+              gh issue comment "$n" --repo "$REPO" --body-file governance-check.md
+            done
           else
             gh issue create --repo "$REPO" --label governance-check --title "Governance compliance check (G-1..G-13)" --body-file governance-check.md
           fi

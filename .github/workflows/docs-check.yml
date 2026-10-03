@@ -32,6 +32,7 @@ jobs:
   docs-check:
     name: report build, word count, citations
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:

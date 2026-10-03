@@ -134,6 +134,11 @@ unresolvable ref is a usage error, not an empty "nothing changed":
 mara review path/to/repo --config config/mara.yaml --base origin/main --out out
 ```
 
+CI exercises the mode on every pull request and push: the `tests + mock review` job runs the seeded
+fixture a second time with `--base` set to the merge-base commit (the report lands in the
+`mara-report` artifact next to the full review; schedule and dispatch runs have no base commit and
+skip that step).
+
 Before the reviewers run, a separate context agent builds a C4-lite view of the architecture
 (containers, external systems, trust boundaries, data stores) in one provider call. Every fact must
 cite a bundle file:line with a verbatim quote and passes the same provenance check as findings;
@@ -409,7 +414,7 @@ decides and says what is missing: `docs/policy/mara-review-policy.md` (front mat
 `status`/`approved_by`/`approved_on`/`review_by` and six marked mandatory statements; shipped as a
 draft), `config/examples/standby-for-<family>.yaml` plus `ops/model-swap-drills.yaml` and
 `scripts/model_swap_drill.py` (`rehearse` proves the process is unchanged on a mock panel, `record`
-logs a live swap timed from decision to first real PR; shipped empty), and `rollout:` in
+logs a live swap timed from decision to first real PR; mock rehearsals for all three families are recorded, live drills are still missing), and `rollout:` in
 `config/mara.yaml` with `scripts/rollout_phase.py` (`status`, `baseline`, `advance`). The rollout
 phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking`. All three fail
 today for the stated reasons: the policy awaits PSO approval, no live drill has run, the rollout

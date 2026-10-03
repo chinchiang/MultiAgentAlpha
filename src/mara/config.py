@@ -185,7 +185,8 @@ class MaraConfig(BaseModel):
 
     models: list[ModelSpec]
     roles: RolesConfig
-    dimensions: list[str] = Field(default_factory=lambda: list(DIMENSIONS))
+    dimensions: list[str] = Field(default_factory=lambda: list(DIMENSIONS), min_length=1,
+                                  description="Reviewed dimensions; an empty list would mean zero reviewer calls")
     gate: GateConfig = Field(default_factory=GateConfig)
     allow_source_code_to_non_on_prem: bool = Field(
         default=False,

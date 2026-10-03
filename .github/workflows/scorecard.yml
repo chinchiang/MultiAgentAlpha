@@ -27,6 +27,7 @@ jobs:
   scorecard:
     name: OpenSSF Scorecard (locked CLI)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # Skipped while the repository is private: the read-only GITHUB_TOKEN cannot run scorecard's GraphQL
     # queries on a private repository ("ListCommits: ... Resource not accessible by integration", runs of
     # 2026-09-21 and 2026-09-22), and Code Scanning there needs GitHub Advanced Security. Making the
@@ -43,6 +44,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
+          cache: pip   # wheels are re-verified by --require-hashes on every install, so a shared cache cannot substitute a pinned package
+          cache-dependency-path: tools/*.txt
       - name: Install the locked scorecard (SLSA provenance verified with the locked slsa-verifier)
         run: |
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
@@ -75,6 +78,7 @@ jobs:
   scorecard-local:
     name: OpenSSF Scorecard (locked CLI, local mode while private)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # The complement of the job above: while private, scorecard --local needs neither a token nor the GitHub
     # API, so the enforced checks (Dangerous-Workflow, Token-Permissions, Binary-Artifacts, Pinned-
     # Dependencies, Security-Policy, Dependency-Update-Tool) keep failing the run on a regression. Checks
@@ -91,6 +95,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
+          cache: pip   # wheels are re-verified by --require-hashes on every install, so a shared cache cannot substitute a pinned package
+          cache-dependency-path: tools/*.txt
       - name: Install the locked scorecard (SLSA provenance verified with the locked slsa-verifier)
         run: |
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt

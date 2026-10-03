@@ -2,6 +2,7 @@ import pytest
 
 from mara.bias.blinding import blind_finding, blinded_batches
 from mara.config import MaraConfig
+from mara.pipeline import _agreement_proxy
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
 from mara.scoring.consensus import krippendorff_alpha_nominal, weighted_consensus
 from mara.scoring.idcheck import check_finding_refs
@@ -55,9 +56,24 @@ def test_config_refuses_source_code_to_vendor_api_without_zdr():
 
 
 def test_idcheck_strips_nonexistent_refs():
-    f, reasons = check_finding_refs(_finding(refs=["ASVS 5.0 V1", "ASVS 5.0 V18", "OWASP A01:2025", "NIST 800-53 AC-3"]))
-    assert f.standard_refs == ["ASVS 5.0 V1", "OWASP A01:2025"]
-    assert len(reasons) == 2
+    ref = check_finding_refs(_finding(refs=["ASVS 5.0 V1", "ASVS 5.0 V18", "OWASP A01:2025", "NIST 800-53 AC-3"]))
+    assert ref.finding.standard_refs == ["ASVS 5.0 V1", "OWASP A01:2025"]
+    assert ref.stripped == ["ASVS 5.0 V18", "NIST 800-53 AC-3"]
+    assert not ref.unknown_cwe
+
+
+def _proxy_vote(fam, verdict):
+    return JudgeVote(finding_id="F-0001", verdict=verdict, severity_band="High", reason="r", judge_family=fam,
+                     judge_model="m", presentation_order=0, pass_id="forward")
+
+
+def test_agreement_proxy_is_undefined_for_a_single_rater_family():
+    # one family voting consistently is not "perfect agreement": quorum still gates the finding
+    assert _agreement_proxy([_proxy_vote(ModelFamily.DEEPSEEK, "true_positive"), _proxy_vote(ModelFamily.DEEPSEEK, "true_positive")]) is None
+    assert _agreement_proxy([_proxy_vote(ModelFamily.DEEPSEEK, "true_positive"), _proxy_vote(ModelFamily.DEEPSEEK, "false_positive")]) is None
+    two = [_proxy_vote(ModelFamily.DEEPSEEK, "true_positive"), _proxy_vote(ModelFamily.DEEPSEEK, "true_positive"),
+           _proxy_vote(ModelFamily.NEMOTRON, "true_positive"), _proxy_vote(ModelFamily.NEMOTRON, "true_positive")]
+    assert _agreement_proxy(two) == 1.0
 
 
 def _vote(fam, verdict, pass_id, self_family=False):

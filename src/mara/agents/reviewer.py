@@ -86,7 +86,7 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
                 standard_refs=raw.get("standard_refs", []), provenance=prov, reachability=raw["reachability"],
                 reachability_argument=raw["reachability_argument"], exploit_sketch=raw["exploit_sketch"],
                 cvss4_vector=raw["cvss4_vector"], model_confidence=raw["model_confidence"],
-                source_family=provider.family, source_model=provider.model, canary_echoed=bool(audit["canary_echoed"]),
+                source_family=provider.family, source_model=provider.model,
             )
             findings.append(f)
         except (KeyError, ValueError, TypeError):

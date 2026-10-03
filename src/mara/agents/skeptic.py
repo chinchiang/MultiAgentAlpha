@@ -71,7 +71,6 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         # a bare refusal is an abstention, not invalid output: keep its error list clean
         errs = errors if errors == ["refused"] else errors + ["incomplete_or_duplicate_response"]
         return [], errs, 0
-    known = {f.id for f in findings}
     unverified = 0
     out = []
     for i in items:
@@ -81,7 +80,8 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
             data["reason"] = (data["reason"] + " [control citation not verifiable in bundle]")[:600]
             unverified += 1
         out.append(SkepticVerdict(**data, source_family=provider.family, source_model=provider.model))
-    return [v for v in out if v.finding_id in known], errors, unverified
+    # every finding_id is covered exactly once (checked above), so no filter is needed here
+    return out, errors, unverified
 
 
 from pydantic import BaseModel, Field  # noqa: E402
@@ -91,4 +91,6 @@ class _SkepticRaw(BaseModel):
     finding_id: str
     verdict: Literal["refuted", "weakened", "stands"]
     reason: str = Field(max_length=600)
-    sanitizer_or_control: str = Field(default="", max_length=300)
+    # required, exactly like SKEPTIC_SCHEMA: a self-hosted endpoint that does not enforce the
+    # schema must not get a silent default here — a missing key makes the item invalid instead
+    sanitizer_or_control: str = Field(max_length=300)

@@ -3,6 +3,12 @@
 # scripts/actions_inventory.py) as any other. The Python closures under tools/*-requirements.txt and the
 # tool binaries in tools/versions.lock are outside Dependabot's scope on purpose: they are relocked by hand
 # with hashes, signatures and provenance re-verified (docs/tools-provenance.md, section 4).
+#
+# The github-actions ecosystem has no path exclusion: `directory: /` scans every workflow file in the
+# tree, including the deliberately vulnerable seeded ones under fixtures/ and calib/samples/ (tag- and
+# branch-pinned on purpose, part of the material the review pipeline is calibrated against). Dependabot
+# pull requests that touch fixtures/ or calib/ must be closed without merging; the L0 job fails such pull
+# requests outright (guard step in mara-review.yml) and CODEOWNERS routes them to the maintainer.
 version: 2
 updates:
   - package-ecosystem: github-actions

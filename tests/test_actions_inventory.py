@@ -98,3 +98,27 @@ def test_render_puts_critical_first_and_lists_every_workflow():
     for inv in invs:
         assert f"`{inv.path}`" in md
     assert "未執行：zizmor 不在 PATH" in md
+
+
+def test_jobs_without_timeout_are_flagged(tmp_path):
+    wf = tmp_path / ".github" / "workflows" / "x.yml"
+    wf.parent.mkdir(parents=True)
+    wf.write_text(
+        "name: x\non:\n  push:\njobs:\n  timed:\n    runs-on: ubuntu-latest\n    timeout-minutes: 30\n    steps:\n      - run: echo ok\n"
+        "  untimed:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n",
+        encoding="utf-8",
+    )
+    inv = inventory_workflow(wf, tmp_path)
+    assert inv.parse_error is None
+    assert inv.jobs_without_timeout == ["untimed"]
+    assert any("timeout-minutes" in t for _, t in inv.findings)
+
+
+def test_real_workflows_set_timeout_on_every_job_and_the_fixture_does_not():
+    for p in find_workflows(ROOT):
+        inv = inventory_workflow(p, ROOT)
+        if inv.path.startswith(".github/workflows/"):
+            assert not inv.jobs_without_timeout, f"{inv.path}: jobs without timeout-minutes: {inv.jobs_without_timeout}"
+        elif "fixtures/vuln-sample" in inv.path:
+            # seeded material stays untouched: the detection must keep flagging it
+            assert inv.jobs_without_timeout, f"{inv.path}: expected the missing-timeout finding on the seeded workflow"

@@ -16,5 +16,34 @@
 #
 # Governance check G-4 passes when every production family has a standby configuration that loads
 # through the policies and a live drill within the last 365 days that passed in 168 hours or less.
-# This register is EMPTY: no drill has been run, and none is invented.
-drills: []
+# The register holds mock rehearsals only (kind: rehearsal, one per production family, 2026-10-03):
+# they prove the standby panels run the unchanged process, but NO live drill has been run and G-4
+# stays red until one has (record with `record`, never by hand).
+drills:
+- date: '2026-10-03'
+  kind: rehearsal
+  replaced_family: anthropic
+  standby_family: mistral
+  config: config/examples/standby-for-anthropic.yaml
+  duration_hours: 0.001
+  outcome: pass
+  performed_by: chinchiang
+  evidence: mock review of fixtures/vuln-sample
+- date: '2026-10-03'
+  kind: rehearsal
+  replaced_family: deepseek
+  standby_family: llama
+  config: config/examples/standby-for-deepseek.yaml
+  duration_hours: 0.001
+  outcome: pass
+  performed_by: chinchiang
+  evidence: mock review of fixtures/vuln-sample
+- date: '2026-10-03'
+  kind: rehearsal
+  replaced_family: nemotron
+  standby_family: mistral
+  config: config/examples/standby-for-nemotron.yaml
+  duration_hours: 0.001
+  outcome: pass
+  performed_by: chinchiang
+  evidence: mock review of fixtures/vuln-sample

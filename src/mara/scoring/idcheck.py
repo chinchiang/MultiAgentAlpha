@@ -2,20 +2,27 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 from ..groundtruth import cwe_known, validate_ref
 from ..schemas import Finding
 
 
-def check_finding_refs(f: Finding) -> tuple[Finding, list[str]]:
-    """Return a copy of the finding with invalid refs removed and a list of rejection reasons."""
+@dataclass(frozen=True)
+class RefCheck:
+    finding: Finding
+    stripped: list[str] = field(default_factory=list)  # refs removed because they are not in the pinned lists
+    unknown_cwe: bool = False  # the finding's CWE is not in the pinned subset (a separate signal, not a stripped ref)
+
+
+def check_finding_refs(f: Finding) -> RefCheck:
+    """Return a copy of the finding with invalid refs removed, what was stripped, and whether the CWE is unknown."""
     kept: list[str] = []
-    reasons: list[str] = []
+    stripped: list[str] = []
     for ref in f.standard_refs:
-        ok, why = validate_ref(ref)
+        ok, _why = validate_ref(ref)
         if ok:
             kept.append(ref)
         else:
-            reasons.append(f"{ref}: {why}")
-    if not cwe_known(f.cwe):
-        reasons.append(f"{f.cwe}: not in pinned CWE subset")
-    return f.model_copy(update={"standard_refs": kept}), reasons
+            stripped.append(ref)
+    return RefCheck(f.model_copy(update={"standard_refs": kept}), stripped, not cwe_known(f.cwe))
