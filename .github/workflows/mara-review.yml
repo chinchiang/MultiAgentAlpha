@@ -76,7 +76,7 @@ jobs:
         # Dependabot's github-actions ecosystem has no path exclusion, so its scanner can pick up the
         # deliberately vulnerable workflows under fixtures/ and calib/samples/ and open a bump PR that
         # would mutate the seeded material the pipeline is calibrated against. Fail those PRs outright.
-        if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
