@@ -232,6 +232,11 @@ def p8_unsupervised_reject(cfg: MaraConfig) -> PolicyResult:
     except ValueError:
         return PolicyResult("P8", "unsupervised-reject", False, "calib/latest.json has no valid date")
     age = (dt.date.today() - when).days
+    if age < 0:
+        return PolicyResult(
+            "P8", "unsupervised-reject", False,
+            f"the recorded date {when.isoformat()} is in the future; calib/latest.json must record a real, past run",
+        )
     if age > AAT_MAX_AGE_DAYS:
         return PolicyResult("P8", "unsupervised-reject", False,
                             f"the test passed {age} days ago (limit {AAT_MAX_AGE_DAYS}); rerun the calibration")

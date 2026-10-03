@@ -66,6 +66,10 @@ class EvidenceTier(StrEnum):
     D = "D"  # unverified: provenance failed, judges disagree, or skeptic refuted
 
 
+SEVERITY_ORDER: list[str] = ["None", "Low", "Medium", "High", "Critical"]
+"""CVSS 4.0 severity bands, low to high; the single source for gate and queue comparisons."""
+
+
 class Provenance(BaseModel):
     file: str
     line: int = Field(ge=1)
@@ -155,7 +159,6 @@ class ConsensusResult(BaseModel):
     skeptic_refuted: bool
     skeptic_abstained: bool = False
     position_consistent: bool
-    krippendorff_alpha: float | None
     tier: EvidenceTier
     cvss4_score: float | None
     cvss4_severity: str
@@ -200,7 +203,6 @@ class HumanQueueItem(BaseModel):
     cvss4_severity: str
     ssvc_decision: str
     weighted_score: float
-    krippendorff_alpha: float | None
     agreement_proxy: float | None = None
     votes_tp: int
     votes_fp: int

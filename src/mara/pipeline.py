@@ -21,6 +21,7 @@ from .context.repo_map import RepoContext, build_context, restrict_to_increment
 from .providers import make_provider
 from .providers.base import Provider
 from .schemas import (
+    SEVERITY_ORDER,
     ConsensusResult,
     EvidenceTier,
     Finding,
@@ -350,9 +351,8 @@ class Pipeline:
                 num, sev = None, "Unknown"
                 self.audit["invalid_cvss_vectors"] += 1
             # Keep mathematical CVSS severity separate from the jury's operational opinion.
-            order = ["None", "Low", "Medium", "High", "Critical"]
-            family_bands = [max((v.severity_band for v in fv if v.judge_family == fam), key=order.index) for fam in valid_families]
-            operational = sorted(family_bands, key=order.index)[len(family_bands) // 2] if family_bands else None
+            family_bands = [max((v.severity_band for v in fv if v.judge_family == fam), key=SEVERITY_ORDER.index) for fam in valid_families]
+            operational = sorted(family_bands, key=SEVERITY_ORDER.index)[len(family_bands) // 2] if family_bands else None
             rt = red_by_id.get(f.id)
             ssvc = ssvc_decision(severity=sev, exploitable=rt.exploitable if rt else "unknown", tier=tier)
             reasons = []
@@ -372,7 +372,13 @@ class Pipeline:
                 reasons.append("majority_needs_human")
             if not consistent and fv:
                 reasons.append("position_inconsistent")
-            if tier == EvidenceTier.C and sev in {"High", "Critical"}:
+            # G-11: tier C at or above the configured severity goes to a human - unless the queue is
+            # tightened over its backlog limit (config tighten_exclude_tier_c), in which case the
+            # jury's consensus decides and build_queue stops queuing tier C. An unknown severity
+            # ranks above every band so the queue trigger stays fail-closed.
+            min_c = SEVERITY_ORDER.index(self.cfg.human_queue.queue_tier_c_min_severity)
+            sev_rank = SEVERITY_ORDER.index(sev) if sev in SEVERITY_ORDER else len(SEVERITY_ORDER)
+            if tier == EvidenceTier.C and not self.exclude_tier_c and sev_rank >= min_c:
                 reasons.append("tier_c_high")
             if refuted and tier != EvidenceTier.D:
                 # assessment #37: a refuted finding never re-enters the blocking logic on the
@@ -392,7 +398,6 @@ class Pipeline:
                     skeptic_refuted=refuted,
                     skeptic_abstained=abstained,
                     position_consistent=consistent,
-                    krippendorff_alpha=None,
                     tier=tier,
                     cvss4_score=num,
                     cvss4_severity=sev,

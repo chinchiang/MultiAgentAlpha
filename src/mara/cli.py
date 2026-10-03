@@ -107,31 +107,20 @@ def check_config(
     """Evaluate every configuration policy (P1-P8) and exit non-zero if any fails."""
     import yaml
 
-    from .config import GateConfig, MaraConfig, MlBomConfig, ModelEvalConfig, ModelSpec, PsirtConfig, RolesConfig, RolloutConfig
+    from .config import MaraConfig
     from .policy import evaluate_policies
 
     if not config.is_file():
         raise typer.BadParameter(f"config file not found: {config} (run from the repository root or pass the path)", param_hint="CONFIG")
     raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+    # Full structural validation (fields, cross-field checks, unknown keys) so check-config can
+    # never report "policies pass" for a file load_config would refuse; policies are rendered
+    # separately afterwards instead of failing the whole validation.
     try:
-        models = [ModelSpec.model_validate(m) for m in raw.get("models", [])]
-        roles = RolesConfig.model_validate(raw.get("roles", {}))
-        gate = GateConfig.model_validate(raw.get("gate", {}) or {})
-        psirt = PsirtConfig.model_validate(raw.get("psirt", {}) or {})
-        ml_bom = MlBomConfig.model_validate(raw.get("ml_bom", {}) or {})
-        rollout = RolloutConfig.model_validate(raw.get("rollout", {}) or {})
-        model_eval = ModelEvalConfig.model_validate(raw.get("model_eval", {}) or {})
+        cfg = MaraConfig.model_validate(raw, context={"skip_policies": True})
     except Exception as e:  # structural error: nothing to evaluate
         console.print(f"[red]invalid config structure:[/red] {e}")
         raise typer.Exit(code=1) from e
-    extra = {k: v for k, v in raw.items() if k not in ("models", "roles", "gate", "psirt", "ml_bom", "rollout", "model_eval")}
-    cfg = MaraConfig.model_construct(models=models, roles=roles, gate=gate, psirt=psirt, ml_bom=ml_bom, rollout=rollout,
-                                     model_eval=model_eval, **extra)
-    names = {m.name for m in models}
-    unknown = [n for n in [roles.skeptic, roles.redteam, roles.context, *roles.reviewers, *roles.judges] if n and n not in names]
-    if unknown:
-        console.print(f"[red]roles reference unknown models:[/red] {sorted(set(unknown))}")
-        raise typer.Exit(code=1)
     results = evaluate_policies(cfg)
     if as_json:
         console.print(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1))
@@ -143,7 +132,7 @@ def check_config(
             t.add_row(f"{r.id} {r.name}", "[green]PASS[/green]" if r.passed else "[red]FAIL[/red]", r.reason)
         console.print(t)
     failed = [r for r in results if not r.passed]
-    console.print(f"{len(results) - len(failed)}/{len(results)} policies pass; families {sorted({m.family.value for m in models})}")
+    console.print(f"{len(results) - len(failed)}/{len(results)} policies pass; families {sorted({m.family.value for m in cfg.models})}")
     if failed:
         raise typer.Exit(code=1)
 

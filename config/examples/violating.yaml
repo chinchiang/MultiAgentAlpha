@@ -1,4 +1,4 @@
-# Deliberately violates every policy; used by tests and as a demonstration of `mara check-config`.
+# Deliberately violates P1-P5 (the conditional policies P6-P8 are left unset); used by tests and as a demonstration of `mara check-config`.
 models:
   - name: claude-fable
     family: anthropic

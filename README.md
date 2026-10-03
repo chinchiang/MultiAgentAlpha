@@ -66,7 +66,7 @@ operated families or complete human review instead of weakening the quorum.
 
 | Layer | What it does | Where |
 |---|---|---|
-| L0 deterministic anchors | semgrep, gitleaks, osv-scanner, zizmor, trivy → SARIF. Ground truth and calibration set. | `mara/tools` |
+| L0 deterministic anchors | semgrep, gitleaks, osv-scanner, zizmor, trivy, csp-evaluator → SARIF. Ground truth and calibration set. | `mara/tools` |
 | L1 context | Repo map, entry points, workflows, manifests; strips authorship signals. Facts, not judgements. | `mara/context` |
 | L2 reviewers | 11 dimensions × ≥2 model families, independent, structured JSON only. | `mara/agents/reviewer.py`, `mara/prompts` |
 | L3 adversarial | Skeptic (must be a different family than the finder) tries to refute; red team states exploitability. | `mara/agents/skeptic.py`, `redteam.py` |
@@ -162,7 +162,7 @@ and WebGoat; they need human-authored `labels.json` files before they count.
 
 ## Policies enforced by the config
 
-`mara check-config <yaml>` evaluates six policies and exits non-zero if any fails; `MaraConfig`
+`mara check-config <yaml>` evaluates eight policies and exits non-zero if any fails; `MaraConfig`
 refuses to load a violating file, so the pipeline cannot run outside policy:
 
 | Policy | Rule |
@@ -180,11 +180,13 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 
 ## Gap assessment (Appendix E, prompt 3)
 
-`docs/assessment-2026-09-12.md` (134/240) and its re-run `docs/assessment-2026-09-26.md` (152/240, L0 up
-from 13 to 23 now that the scanners run blocking from the lock) score this repository's review process against the 60-question
-questionnaire in `docs/appendix-d-maturity.md`, with a file-level evidence cell on every row,
-per-layer totals, the two lowest questions per layer mapped to governance items G-1 to G-13, and a
-separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <file>` checks the
+Three runs score this repository's review process against the 60-question questionnaire in
+`docs/appendix-d-maturity.md`: `docs/assessment-2026-09-12.md` (134/240), `docs/assessment-2026-09-26.md`
+(152/240, L0 up from 13 to 23 now that the scanners run blocking from the lock) and the current
+`docs/assessment-2026-10-01.md` (170/240, twelve questions up after v0.3.10–v0.3.12; L5 lowest at 24,
+L0 next at 27 — the recorded blocker is the first real-family run, not code). Each run has a file-level
+evidence cell on every row, per-layer totals, the two lowest questions per layer mapped to governance
+items G-1 to G-13, and a separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <file>` checks the
 acceptance criteria (all 60 rows scored with evidence, layer sums consistent, CN rows present) and
 `tests/test_assessment.py` runs the same check in CI.
 
@@ -211,7 +213,7 @@ L0 job needs no `pull-requests` permission.
 ## Pinned, verified L0 tools (Appendix E, prompt 7)
 
 `tools/versions.lock` pins every deterministic tool (gitleaks, osv-scanner, zizmor, trivy, semgrep,
-plus the verifiers cosign and slsa-verifier) by exact version, download URL and SHA-256, and names
+csp-evaluator, plus the verifiers cosign and slsa-verifier) by exact version, download URL and SHA-256, and names
 the strongest verification the publisher offers. `python scripts/install_tools.py` downloads each
 asset, checks the SHA-256 (never skippable), runs the publisher-side check — cosign keyless bundle,
 SLSA provenance, GitHub attestation, publisher checksum file, or `pip --require-hashes` for semgrep —
@@ -267,7 +269,7 @@ differs from the lock:
 semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories
 (never `--config auto`), so nothing is sent to semgrep.dev; osv-scanner runs `scan source
 --no-resolve`, so only package names and versions go to api.osv.dev and nothing to deps.dev. All
-SARIF files land in the `l0-sarif` artifact, and the seven scans of the repository itself (five tools; osv-scanner
+SARIF files land in the `l0-sarif` artifact, and the eight scans of the repository itself (six tools; osv-scanner
 twice more: the model-evaluation and semgrep tool closures) are also uploaded to GitHub Code Scanning (see below). `mara review` uses the same pinned rulesets by default
 (`MARA_SEMGREP_CONFIG` overrides). zizmor on the real workflows runs the same way since 2026-09-14:
 `scripts/zizmor_ci.py` executes the locked zizmor (online audits with the workflow token), keeps the
@@ -301,7 +303,7 @@ filtered, paths are repository-relative, and each tool has a category), and the 
 `github/codeql-action/upload-sarif` only while `github.event.repository.private` is false. It is the
 only job with `security-events: write`, it runs no repository code, and it is also skipped for pull
 requests from forks or Dependabot (read-only token). While the repository is private the job shows as
-skipped and the six SARIF files are still available in the `l0-sarif` artifact of every run. The
+skipped and the twelve SARIF files are still available in the `l0-sarif` artifact of every run. The
 whole Scorecard job is gated the same way: the read-only token cannot run scorecard's GraphQL queries
 on a private repository (the runs of 2026-09-21 and 2026-09-22 failed with "Resource not accessible by
 integration"), so the job is skipped until the repository is public again. In its place the
@@ -436,7 +438,9 @@ GitHub issue per item (deduplicated by a stable `file:line:cwe` key) and, with `
 turns closed tickets labelled `decision:true-positive` / `decision:false-positive` into
 `calib/decisions/<key>.json`, which `scripts/calibrate.py` uses as labels. When
 `calib/decisions/backlog.json` shows more open tickets than `human_queue.backlog_limit`, the pipeline
-raises the alpha threshold and stops queuing tier C; it never loosens. The `human-queue` CI job runs
+raises the alpha threshold and — with `human_queue.tighten_exclude_tier_c`, the default — stops queuing
+tier C at `human_queue.queue_tier_c_min_severity` (the jury's consensus then decides those findings); it
+never loosens. The `human-queue` CI job runs
 on push to `main` with `issues: write` only and stays in dry-run until the repository variable
 `MARA_HUMAN_QUEUE_ISSUES` is `true`. See `docs/human-queue.md`.
 

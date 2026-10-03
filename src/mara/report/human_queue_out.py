@@ -12,10 +12,8 @@ import json
 from pathlib import Path
 
 from ..config import MaraConfig
-from ..schemas import ConsensusResult, EvidenceTier, Finding, HumanQueueItem, JudgeVote, RedTeamNote, ReviewReport, SkepticVerdict
+from ..schemas import SEVERITY_ORDER, ConsensusResult, EvidenceTier, Finding, HumanQueueItem, JudgeVote, RedTeamNote, ReviewReport, SkepticVerdict
 from .escaping import literal
-
-SEVERITY_ORDER = ["None", "Low", "Medium", "High", "Critical"]
 
 
 def queue_key(file: str, line: int, cwe: str, *, target_id: str = "", revision: str = "", context_hash: str = "") -> str:
@@ -127,7 +125,6 @@ def build_queue(
                 cvss4_severity=c.cvss4_severity,
                 ssvc_decision=c.ssvc_decision,
                 weighted_score=c.weighted_score,
-                krippendorff_alpha=c.krippendorff_alpha,
                 agreement_proxy=c.agreement_proxy,
                 votes_tp=c.votes_tp,
                 votes_fp=c.votes_fp,
