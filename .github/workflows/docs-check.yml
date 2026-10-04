@@ -31,7 +31,7 @@ permissions: {}
 jobs:
   docs-check:
     name: report build, word count, citations
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19; bump deliberately after validating there
     timeout-minutes: 10
     permissions:
       contents: read
