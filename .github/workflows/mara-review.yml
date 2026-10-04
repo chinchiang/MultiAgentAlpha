@@ -63,7 +63,7 @@ permissions: {}
 jobs:
   deterministic-tools:
     name: L0 deterministic tools
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19; bump deliberately after validating there
     timeout-minutes: 45   # tool install + trivy DB download + eight scans; a hung step must burn minutes, not hours
     permissions:
       contents: read
@@ -189,7 +189,7 @@ jobs:
 
   code-scanning:
     name: L0 SARIF → GitHub Code Scanning
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19; bump deliberately after validating there
     timeout-minutes: 10
     needs: deterministic-tools
     # Runs even when L0 went red (its findings are what the Security tab should show), never on a cancelled
@@ -214,7 +214,7 @@ jobs:
 
   tests-and-mock-review:
     name: tests + mock review
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19; bump deliberately after validating there
     timeout-minutes: 30
     needs: deterministic-tools
     permissions:
@@ -279,7 +279,7 @@ jobs:
 
   tests-py312:
     name: tests (CPython 3.12)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19; bump deliberately after validating there
     timeout-minutes: 30
     needs: deterministic-tools
     permissions:
@@ -311,7 +311,7 @@ jobs:
 
   human-queue:
     name: human queue → tickets (G-11)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19; bump deliberately after validating there
     timeout-minutes: 20
     needs: tests-and-mock-review
     if: github.event_name == 'push'

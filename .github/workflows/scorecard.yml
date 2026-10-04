@@ -26,7 +26,7 @@ permissions: {}
 jobs:
   scorecard:
     name: OpenSSF Scorecard (locked CLI)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19; bump deliberately after validating there
     timeout-minutes: 20
     # Skipped while the repository is private: the read-only GITHUB_TOKEN cannot run scorecard's GraphQL
     # queries on a private repository ("ListCommits: ... Resource not accessible by integration", runs of
@@ -77,7 +77,7 @@ jobs:
 
   scorecard-local:
     name: OpenSSF Scorecard (locked CLI, local mode while private)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19; bump deliberately after validating there
     timeout-minutes: 20
     # The complement of the job above: while private, scorecard --local needs neither a token nor the GitHub
     # API, so the enforced checks (Dangerous-Workflow, Token-Permissions, Binary-Artifacts, Pinned-
