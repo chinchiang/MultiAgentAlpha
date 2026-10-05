@@ -3,7 +3,10 @@
 The ticket is the record; this directory mirrors decisions written by
 `scripts/human_queue_issues.py --sync-decisions`. Each record must have:
 
-- a v2 key computed from target ID, revision, context hash, file, line and CWE;
+- a v2 key computed from target ID, revision, context hash, file, line and CWE (target ID: the
+  normalised origin URL plus the path below the repository top level for a committed directory;
+  revision: that directory's tree in HEAD plus the raw text snapshot, so commits elsewhere in the
+  repository, including the one that adds these records, do not unbind them);
 - the matching identity fields and finding ID;
 - decision, issue URL/number and decision timestamp;
 - the surviving unique decision label, its event ID and actor;

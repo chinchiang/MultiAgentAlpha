@@ -3,6 +3,7 @@ and the rollout phase are machine-decidable; the repository state fails each wit
 
 import datetime as dt
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -196,6 +197,39 @@ def test_baseline_report_and_advance_cli(tmp_path):
     r = subprocess.run([sys.executable, str(script), "--config", str(cfg), "--today", "2026-09-12", "advance", "--to", "advisory"],
                        capture_output=True, text=True)
     assert r.returncode == 1 and "baseline report missing" in r.stdout and "only" not in r.stdout
+
+
+def test_advance_to_blocking_needs_the_live_calibration_g9_accepts(tmp_path):
+    """The repository holds only mock calibration reports; the 2026-09-11 one says `執行模式：**mock**`
+    in its body (no front matter), which the old filename scan could not read as mock and so took
+    for live. Every other precondition is met here, so only the calibration can block."""
+    raw = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    raw["rollout"] = {"phase": "advisory", "started_on": "2026-01-02", "baseline_report": "docs/CHANGELOG.md"}
+    cfg = tmp_path / "advisory.yaml"
+    cfg.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "rollout_phase.py"), "--config", str(cfg), "--today", "2026-10-05",
+                        "advance", "--to", "blocking"], capture_output=True, text=True, encoding="utf-8",
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})  # the G-9 evidence is Chinese; Windows consoles are not UTF-8
+    assert r.returncode == 1 and "no live calibration that passes G-9" in r.stdout, r.stdout + r.stderr
+
+
+def test_live_calibration_rule_is_g9(tmp_path):
+    import rollout_phase
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    today = dt.date(2026, 10, 5)
+    (docs / "calibration-2026-09-11.md").write_text("# 校準報告\n\n執行模式：**mock**。\n", encoding="utf-8")
+    assert not rollout_phase._live_calibration(tmp_path, today, ROOT / "config" / "mara.yaml")[0]
+    live = "---\nmode: live\nfamilies: [anthropic, deepseek, nemotron]\nprovider_modes: [live]\nlabels: 51\n---\n# 校準報告\n"
+    (docs / "calibration-2026-09-30.md").write_text(live, encoding="utf-8")
+    assert rollout_phase._live_calibration(tmp_path, today, ROOT / "config" / "mara.yaml")[0]
+    partial = live.replace("[anthropic, deepseek, nemotron]", "[anthropic, deepseek]")
+    (docs / "calibration-2026-09-30.md").write_text(partial, encoding="utf-8")
+    assert not rollout_phase._live_calibration(tmp_path, today, ROOT / "config" / "mara.yaml")[0], "a family is missing"
+    (docs / "calibration-2026-09-30.md").unlink()
+    (docs / "calibration-2026-05-01.md").write_text(live, encoding="utf-8")
+    assert not rollout_phase._live_calibration(tmp_path, today, ROOT / "config" / "mara.yaml")[0], "older than 90 days"
 
 
 # ---------------------------------------------------------------- governance rows

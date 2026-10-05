@@ -100,8 +100,12 @@ def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = Non
         sample = rep.parent.name
         labels_path = samples_dir / sample / "labels.json"
         if not labels_path.exists():
-            labels_path = ROOT / "fixtures" / "vuln-sample" / "labels.json"
-        labels = json.loads(labels_path.read_text(encoding="utf-8"))["labels"] if labels_path.exists() else []
+            # never score a run against someone else's labels (or none): every finding would count as a
+            # false positive and every family's precision would collapse. A stale calib-out directory or
+            # an unlabelled corpus (calib/corpora/* before its labels.json is written) is skipped, loudly.
+            print(f"{sample}: SKIPPED, no {labels_path}; the run is not scored", file=sys.stderr)
+            continue
+        labels = json.loads(labels_path.read_text(encoding="utf-8"))["labels"]
         report = json.loads(rep.read_text(encoding="utf-8"))
         labels, applied = apply_decisions(sample, report, labels, decisions, require_trained)
         if applied:
@@ -254,38 +258,71 @@ def dawid_skene(runs, iters: int = 30):
     return rel, len(items), post
 
 
-def _binomial_two_sided(k: int, n: int, p: float = 0.5) -> float:
-    """Exact two-sided binomial test: double the smaller one-sided tail."""
+def _binomial_pmf(i: int, n: int, p: float) -> float:
     from math import comb
 
-    def pmf(i: int) -> float:
-        return comb(n, i) * p**i * (1 - p) ** (n - i)
+    return comb(n, i) * p**i * (1 - p) ** (n - i)
 
-    lower = sum(pmf(i) for i in range(k + 1))
-    upper = sum(pmf(i) for i in range(k, n + 1))
-    return min(1.0, 2 * min(lower, upper))
+
+def binomial_upper_tail(k: int, n: int, p: float) -> float:
+    """P(X >= k) for X ~ Binomial(n, p): the exact one-sided test of agreement above chance."""
+    return min(1.0, sum(_binomial_pmf(i, n, p) for i in range(k, n + 1)))
+
+
+def clopper_pearson_upper(k: int, n: int, confidence: float = 0.95) -> float:
+    """Exact one-sided upper confidence bound of a binomial proportion with k events in n trials:
+    the p at which P(X <= k) falls to 1 - confidence (bisection; 1 - (1-confidence)**(1/n) for k = 0)."""
+    if n <= 0 or k >= n:
+        return 1.0
+    lo, hi = k / n, 1.0
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        if sum(_binomial_pmf(i, n, mid) for i in range(k + 1)) > 1 - confidence:
+            lo = mid
+        else:
+            hi = mid
+    return hi
 
 
 def alternative_annotator_test(runs, decisions, post, require_trained: bool | None = None, *,
-                               min_items: int = 10, min_agreement: float = 0.8) -> dict:
-    """Assessment #60: the Alternative Annotator Test.
+                               min_items: int = 10, min_agreement: float = 0.8,
+                               max_miss_rate: float = 0.05, confidence: float = 0.95) -> dict:
+    """Assessment #60: the evidence policy P8 needs before the pipeline may reject a non-D finding
+    without a human. Both parts must pass.
 
-    Compares the pipeline's unsupervised label (Dawid-Skene posterior argmax) with the human
-    adjudication for every finding a human decided (calib/decisions/, bound to this target's
-    revision and context hash like apply_decisions; G-13's trained-adjudicator rule applies).
-    Passes when agreement >= min_agreement on >= min_items binary items and the exact two-sided
-    binomial p-value against chance (0.5) is < 0.05. A passing live result is written to
-    calib/latest.json, which policy P8 checks before allowing unsupervised rejection."""
-    require_trained = _require_trained() if require_trained is None else require_trained
+    1. Agreement beyond chance. The unsupervised label (Dawid-Skene posterior argmax) against the
+       human decision on every bound item where the pipeline did not abstain: agreement >=
+       min_agreement on >= min_items items, and the exact one-sided binomial test against the chance
+       agreement of the two label distributions (as in Cohen's kappa; not a fixed 0.5) at p < 0.05.
+       A labeller that always gives the same answer agrees exactly at chance and never passes, however
+       lopsided the human decisions are.
+    2. Rejection safety, the decision P8 actually unlocks. Among bound items the pipeline itself
+       would drop unsupervised (consensus: not accepted, no human reason, tier not D - the set
+       build_queue marks unsupervised_reject_unverified), a human true_positive is a vulnerability
+       the pipeline would have dropped. The exact one-sided Clopper-Pearson upper bound of that miss
+       rate at `confidence` must be <= max_miss_rate; with no miss at all that takes
+       ceil(ln(1 - confidence) / ln(1 - max_miss_rate)) decided rejections (59 at 0.95 / 0.05).
+
+    A single-adjudicator variant: each finding carries one human decision, so the published
+    leave-one-annotator-out procedure (several annotators per item) does not apply. Decisions bind
+    to findings by their v2 queue key (primary location, CWE, target, revision, context hash), one
+    decision per finding, never by line proximity; contradictory decisions on one key are excluded.
+    G-13's trained-adjudicator rule applies. A passing live result goes to calib/latest.json, and
+    policy P8 accepts only results tagged with this method (mara.policy.AAT_METHOD)."""
+    from mara.policy import AAT_METHOD
     from mara.report.human_queue_out import queue_key
 
-    n = agree = excluded = 0
+    require_trained = _require_trained() if require_trained is None else require_trained
+    pairs: list[tuple[bool, bool]] = []  # (pipeline says true_positive, human says true_positive)
+    rejected = misses = excluded = 0
     for sample, rep, _labels in runs:
         target_id, revision = rep.get("target_id"), rep.get("revision")
         ctx = rep.get("coverage", {}).get("content_hash", "")
-        bound = []
+        if not target_id or not revision or not ctx:
+            continue
+        verdicts_by_key: dict[str, set[str]] = defaultdict(set)
         for d in decisions:
-            if not target_id or not revision or d.get("target_id") != target_id or d.get("revision") != revision:
+            if d.get("target_id") != target_id or d.get("revision") != revision:
                 continue
             if not d.get("decision_event_id") or not d.get("context_hash"):
                 continue
@@ -294,25 +331,55 @@ def alternative_annotator_test(runs, decisions, post, require_trained: bool | No
                 continue
             if require_trained and not d.get("adjudicator_trained"):
                 continue
-            bound.append(d)
+            verdicts_by_key[d["key"]].add(d["decision"])
+        consensus = {c.get("finding_id"): c for c in rep.get("consensus", [])}
         for f in rep.get("findings", []):
-            hit = next((d for d in bound if _match(f, {"file": d["file"], "line": d["line"], "cwe": d["cwe"]})), None)
-            if hit is None:
+            p = f["provenance"][0]
+            verdicts = verdicts_by_key.get(queue_key(p["file"], int(p["line"]), f["cwe"], target_id=target_id,
+                                                     revision=revision, context_hash=ctx))
+            if not verdicts:
                 continue
+            if len(verdicts) != 1:
+                excluded += 1  # contradictory human decisions on one finding: no ground truth to test against
+                continue
+            human_tp = next(iter(verdicts)) == "true_positive"
+            c = consensus.get(f["id"])
+            if c and not c.get("accepted") and not c.get("needs_human") and c.get("tier") != "D":
+                rejected += 1
+                misses += int(human_tp)
             posterior = post.get((sample, f["id"]))
             argmax = max(range(3), key=lambda t: posterior[t]) if posterior else None
             if argmax is None or argmax == VERDICT_IDX["needs_human"]:
-                excluded += 1  # the pipeline abstained; there is no unsupervised decision to test
+                excluded += 1  # the pipeline abstained; there is no unsupervised label to test
                 continue
-            n += 1
-            agree += int((argmax == VERDICT_IDX["true_positive"]) == (hit["decision"] == "true_positive"))
+            pairs.append((argmax == VERDICT_IDX["true_positive"], human_tp))
+    upper = clopper_pearson_upper(misses, rejected, confidence) if rejected else None
+    rejection = {"n": rejected, "misses": misses, "miss_rate_upper": round(upper, 4) if upper is not None else None,
+                 "max_miss_rate": max_miss_rate, "confidence": confidence,
+                 "passed": bool(upper is not None and upper <= max_miss_rate)}
+    out = {"method": AAT_METHOD, "excluded": excluded, "min_items": min_items, "min_agreement": min_agreement,
+           "rejection": rejection}
+    n = len(pairs)
     if n == 0:
-        return {"n": 0, "agreement": None, "p_value": None, "passed": False, "excluded": excluded,
+        return {**out, "n": 0, "agreement": None, "chance_agreement": None, "kappa": None, "p_value": None,
+                "agreement_passed": False, "passed": False,
                 "why": "沒有可對照的人工裁決（calib/decisions/ 為空，或沒有裁決綁定到本次樣本）"}
-    p_value = _binomial_two_sided(agree, n)
-    return {"n": n, "agreement": round(agree / n, 4), "p_value": round(p_value, 4),
-            "passed": bool(n >= min_items and agree / n >= min_agreement and p_value < 0.05),
-            "excluded": excluded, "min_items": min_items, "min_agreement": min_agreement}
+    agree = sum(a == b for a, b in pairs)
+    q_pipe, q_human = sum(a for a, _ in pairs) / n, sum(b for _, b in pairs) / n
+    chance = q_pipe * q_human + (1 - q_pipe) * (1 - q_human)
+    observed = agree / n
+    kappa = (observed - chance) / (1 - chance) if chance < 1 else 0.0
+    p_value = binomial_upper_tail(agree, n, chance)
+    agreement_passed = bool(n >= min_items and observed >= min_agreement and p_value < 0.05)
+    why = []
+    if not agreement_passed:
+        why.append(f"一致性未達（n={n}、一致率 {observed:.4f}、機遇一致率 {chance:.4f}、單尾 p={p_value:.4f}）")
+    if not rejection["passed"]:
+        why.append(f"不採納安全性未達（{rejected} 筆無監督不採納經人工裁決，其中 {misses} 筆為真陽性；"
+                   f"漏放率 {confidence:.0%} 上界 {rejection['miss_rate_upper']} 須 ≤ {max_miss_rate}）")
+    return {**out, "n": n, "agreement": round(observed, 4), "chance_agreement": round(chance, 4), "kappa": round(kappa, 4),
+            "p_value": round(p_value, 4), "agreement_passed": agreement_passed,
+            "passed": bool(agreement_passed and rejection["passed"]), **({"why": "；".join(why)} if why else {})}
 
 
 def load_history(path: Path) -> list[dict]:
@@ -540,18 +607,30 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
     else:
         L.append("尚無 `calib/model-eval-<date>.json`：G-8 從未執行，權重未受評測結果調整。")
     L += ["", "## 7. Alternative Annotator Test（無監督「不採納」的驗收門檻，assessment #60）", "",
-          "報告第 15.3 節與 G-9 要求：在允許管線無監督地「不採納」之前，須以 `calib/decisions/` 的人工裁決為對照，",
-          "檢定管線的無監督標籤（Dawid-Skene 後驗 argmax）與人工裁決是否一致且顯著高於隨機：一致率 ≥ 0.8、n ≥ 10、",
-          "雙尾二項檢定 p < 0.05。通過的 live 校準會把結果寫入 `calib/latest.json`，政策 P8 據此才允許 "
-          "`gate.unsupervised_reject_allowed: true`；在此之前，非 D 級的「不採納」一律進人工佇列。", ""]
+          "報告第 15.3 節與 G-9 要求：在允許管線無監督地「不採納」之前，須以 `calib/decisions/` 的人工裁決為對照，兩項都要通過：",
+          "",
+          "1. **一致性**：管線的無監督標籤（Dawid-Skene 後驗 argmax）與人工裁決的一致率 ≥ 0.8、n ≥ 10，且以兩邊標籤分布算出的"
+          "機遇一致率（同 Cohen's kappa）為基準的單尾二項檢定 p < 0.05；永遠給同一個答案的標註者只會剛好等於機遇值，不會通過。",
+          "2. **不採納安全性**：在管線本身會無監督不採納的 finding（共識不採納、沒有其他送人工的理由、非 D 級，也就是 P8 實際放行的那批）中，"
+          "人工判為真陽性者即為漏放；漏放率的 Clopper-Pearson 單尾 95% 上界須 ≤ 0.05，零漏放也至少要 59 筆裁決。",
+          "",
+          "裁決以 v2 key 一對一綁定 finding（不以行號鄰近比對）。每個 finding 只有一位裁決者，因此這是單一裁決者版本，"
+          "不是需要多位標註者的 leave-one-annotator-out 原版。通過的 live 校準會把結果（含方法標記）寫入 `calib/latest.json`，"
+          "政策 P8 據此才允許 `gate.unsupervised_reject_allowed: true`；在此之前，非 D 級的「不採納」一律進人工佇列。", ""]
     if aat is None or not aat.get("n"):
         why = (aat or {}).get("why") or "本次沒有可對照的人工裁決。"
         L += [f"本次結果：**未通過**（{why}）管線的所有「不採納」繼續由人工抽查。", ""]
     else:
         verdict = "**通過**" if aat.get("passed") else "**未通過**"
-        L += [f"本次結果：{verdict} — n={aat['n']}、一致率 {aat['agreement']}、雙尾 p 值 {aat['p_value']}"
+        rej = aat.get("rejection") or {}
+        L += [f"本次結果：{verdict}。", "",
+              f"- 一致性{'通過' if aat.get('agreement_passed') else '未通過'}：n={aat['n']}、一致率 {aat['agreement']}、"
+              f"機遇一致率 {aat.get('chance_agreement')}、kappa {aat.get('kappa')}、單尾 p 值 {aat['p_value']}"
               f"（門檻：n ≥ {aat.get('min_items', 10)}、一致率 ≥ {aat.get('min_agreement', 0.8)}、p < 0.05；"
-              f"{aat.get('excluded', 0)} 個項目因無監督標籤為 needs_human 而未納入）。", ""]
+              f"{aat.get('excluded', 0)} 個項目因無監督標籤為 needs_human 或人工裁決互相矛盾而未納入）。",
+              f"- 不採納安全性{'通過' if rej.get('passed') else '未通過'}：{rej.get('n', 0)} 筆無監督不採納經人工裁決，"
+              f"其中 {rej.get('misses', 0)} 筆為真陽性；漏放率上界 {rej.get('miss_rate_upper')}"
+              f"（門檻 ≤ {rej.get('max_miss_rate', 0.05)}，信賴水準 {rej.get('confidence', 0.95)}）。", ""]
     L += ["## 8. α 跨期追蹤（assessment #49）", ""]
     if mode != "live":
         L += ["僅 live 校準寫入 `calib/history.json`；本次為 mock，數字只驗證方法，不追加、不比較。", ""]
@@ -603,6 +682,12 @@ def main() -> int:
             if (not manifest or any(p.get("type") not in {"anthropic", "openai_compatible"} for p in manifest)
                     or not rep.get("config_hash") or not rep.get("revision")):
                 raise SystemExit("--mode live refused: missing or non-live provider provenance")
+        leaked = sorted(s for s, rep, _ in runs if "labels.json" in (rep.get("coverage") or {}).get("included", []))
+        if leaked:
+            # defence in depth behind repo_map's calibration_answer_key exclusion: a run made before it
+            # (or by a build without it) showed the models the answer key, so its numbers are worthless
+            raise SystemExit(f"--mode live refused: the answer key labels.json was in the reviewed bundle of {leaked}; "
+                             "re-run the reviews with this version (scripts/calibration_run.py)")
     stats, families = family_metrics(runs)
     rates = audit_rates(runs, families)
     refuted = refutation_rates(runs, families)
@@ -629,7 +714,9 @@ def main() -> int:
             encoding="utf-8",
         )
     print(f"wrote {out}")
-    print(f"AAT: n={aat['n']} agreement={aat.get('agreement')} p={aat.get('p_value')} passed={aat['passed']}"
+    print(f"AAT: n={aat['n']} agreement={aat.get('agreement')} chance={aat.get('chance_agreement')} p={aat.get('p_value')} "
+          f"rejections={aat['rejection']['n']} misses={aat['rejection']['misses']} miss_upper={aat['rejection']['miss_rate_upper']} "
+          f"passed={aat['passed']}"
           + (f"（{aat['why']}）" if aat.get("why") else ""))
     print(f"tool reference labels: {n_tool_labels} finding(s) from {len(tool_labels)} sample(s)")
     for fam in families:

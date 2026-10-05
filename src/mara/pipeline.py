@@ -523,7 +523,9 @@ class Pipeline:
             self.audit[f"judge_agreement[{k}]"] = v
         self.audit["tool_results_ingested"] = len(tool_results)
         self.audit["tools_ran"] = ",".join(sorted(tools_ran)) or "none"
-        target_id = hashlib.sha256(str(target).encode()).hexdigest()
+        # repository + path below its top level for a committed git target (repo_map.target_identity),
+        # so CI, every clone and every calibration run name the same target the same way
+        target_id = hashlib.sha256(ctx.identity.encode()).hexdigest()
         report = ReviewReport(
             target=str(target),
             generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),

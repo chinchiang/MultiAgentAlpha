@@ -120,7 +120,13 @@ refusal, so a rate limit or an outage is never charged to the model in the bias 
 calibration refusal rate; like refusals and truncations it makes the review incomplete and the gate
 fails. The OpenAI-compatible provider retries timeouts, transport errors and 408/429/500/502/503/504/529
 up to three calls in total, with exponential backoff and jitter or the server's `Retry-After`
-(at most 30 s); other statuses fail at once. The Anthropic SDK retries on its own.
+(at most 30 s); other statuses fail at once. The Anthropic SDK retries on its own. A response that
+stops at the output limit (`finish_reason: length`) is a truncation even when its content is empty, as
+with a reasoning model that spent the whole budget thinking; only a content filter or an empty answer
+that did not hit the limit counts as a refusal. The OpenAI-compatible provider never uses the
+`HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` environment variables: its endpoints are on-prem, and a proxy
+would receive the source code (in cleartext for an `http://` loopback endpoint). `SSL_CERT_FILE` and
+`SSL_CERT_DIR` still apply, for an internal CA.
 
 ### Incremental review
 
@@ -163,7 +169,21 @@ python scripts/calibrate.py --mode mock
 
 For a live run point the same commands at `config/mara.yaml` (three reachable family endpoints,
 ZDR enabled) and pass `--mode live`. `scripts/fetch_calib_corpora.sh` fetches OWASP Juice Shop
-and WebGoat; they need human-authored `labels.json` files before they count.
+and WebGoat; they need human-authored `labels.json` files before they count. A sample's
+`labels.json` is its answer key and never reaches a model: the bundle excludes it (coverage reason
+`calibration_answer_key`; recognised by its content, so an unrelated `labels.json` is still reviewed),
+the label-driven mocks read it from disk, and `calibrate.py --mode live` refuses any run whose bundle
+included it. A `calib-out/<sample>` without its own `labels.json` is skipped with a message, never
+scored against other labels.
+
+The Alternative Annotator Test that policy P8 relies on has two parts, both required. Agreement: the
+unsupervised label against the human decisions, at least 0.8 on at least 10 items and better than the
+chance agreement of the two label distributions (one-sided exact binomial test, p < 0.05), so a
+pipeline that always gives one answer never passes. Rejection safety: among the findings the pipeline
+would itself reject unsupervised (the set P8 unlocks), the share humans confirmed as real must have a
+95% Clopper-Pearson upper bound of at most 5%, which takes at least 59 decided rejections without a
+miss. Decisions bind to findings one to one by their v2 key, and P8 only accepts results tagged with
+the current method.
 
 ## Policies enforced by the config
 
@@ -179,9 +199,12 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 | P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr` unless `allow_source_code_to_non_on_prem` is set |
 | P6 psirt-scope | when the PSIRT hand-off is enabled: HTTPS webhook, product set, token from the environment, trigger tiers within A/B and severities within Critical/High |
 | P7 ml-bom | when `ml_bom.required`: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature method), signed when `require_signature` |
-| P8 unsupervised-reject | `gate.unsupervised_reject_allowed` may be `true` only while `calib/latest.json` records a passing Alternative Annotator Test on a live calibration within 90 days; while `false` every rejected non-D finding goes to the human queue |
+| P8 unsupervised-reject | `gate.unsupervised_reject_allowed` may be `true` only while `calib/latest.json` records a passing Alternative Annotator Test (current method: chance-corrected agreement and a bounded miss rate on the rejections themselves, see Calibration) on a live calibration within 90 days; while `false` every rejected non-D finding goes to the human queue |
 
-`config/examples/violating.yaml` breaks the first five and is what the tests run against.
+`config/examples/violating.yaml` breaks the first five and is what the tests run against. Every
+section of the config refuses unknown keys, not only the top level and `gate`: a misspelt
+`psirt: {enable: true}`, `ml_bom: {requried: true}` or `rollout: {phse: blocking}` fails to load
+instead of falling back to the weaker default.
 
 ## Gap assessment (Appendix E, prompt 3)
 

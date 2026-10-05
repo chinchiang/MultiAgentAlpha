@@ -355,6 +355,52 @@ def test_queue_identity_separates_targets_and_revisions():
     assert len(keys) == 4
 
 
+def _repo_with_sample(root, remote):
+    (root / "sample").mkdir(parents=True)
+    (root / "sample" / "app.py").write_text("print('sample')\n", encoding="utf-8")
+    (root / "notes.txt").write_text("v1\n", encoding="utf-8")
+    git(root, "init", "-q", "-b", "main")
+    git(root, "remote", "add", "origin", remote)
+    git(root, "add", ".")
+    git(root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "init")
+
+
+def test_decision_identity_survives_unrelated_commits_and_other_checkouts(tmp_path):
+    """Decisions bind to (target_id, revision, context hash). The target id used to be the absolute
+    path and the revision the repository commit, so a decision taken on CI never matched a local
+    run, and committing the synced decisions (or touching any sibling) unbound all of them."""
+    a = tmp_path / "a"
+    _repo_with_sample(a, "https://github.com/example-org/product.git")
+    first = build_context(a / "sample")
+    assert json.loads(first.identity) == ["git", "github.com/example-org/product", "sample"]
+    # a commit outside the target directory changes the commit, not the binding
+    (a / "notes.txt").write_text("v2\n", encoding="utf-8")
+    git(a, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-am", "unrelated")
+    second = build_context(a / "sample")
+    assert second.commit != first.commit
+    assert (second.identity, second.revision, second.content_hash) == (first.identity, first.revision, first.content_hash)
+    # another clone of the same repository (ssh remote, other location) names the target the same way
+    b = tmp_path / "elsewhere" / "b"
+    _repo_with_sample(b, "git@github.com:example-org/product.git")
+    other = build_context(b / "sample")
+    assert other.identity == first.identity and other.revision == first.revision
+    # changing the reviewed code does unbind
+    (a / "sample" / "app.py").write_text("print('changed')\n", encoding="utf-8")
+    git(a, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-am", "change")
+    assert build_context(a / "sample").revision != first.revision
+    # another directory of the same repository is another target
+    assert build_context(a).identity != first.identity
+
+
+def test_untracked_directories_keep_a_path_identity(tmp_path):
+    # tmp_path may itself sit inside a parent repository (a home-directory dotfiles repo): a directory
+    # that is not part of a committed history is named by its path and has no git revision
+    (tmp_path / "app.py").write_text("print(1)\n", encoding="utf-8")
+    ctx = build_context(tmp_path)
+    assert json.loads(ctx.identity) == ["path", str(tmp_path.resolve())]
+    assert ctx.revision.startswith("non-git:") and ctx.commit == ""
+
+
 def test_calibration_counts_zero_finding_called_families():
     import calibrate
     rep = {"findings": [], "bias_audit": {"reviewer_calls[anthropic]": 11, "reviewer_refusals[anthropic]": 11}}
