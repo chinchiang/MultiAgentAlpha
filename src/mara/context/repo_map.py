@@ -13,6 +13,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from html import escape
 from pathlib import Path
+from urllib.parse import urlsplit
 
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build", "__pycache__", ".mypy_cache", ".ruff_cache"}
 TEXT_EXT = {
@@ -75,6 +76,8 @@ class RepoContext:
     content: dict[str, str] = field(default_factory=dict)
     content_hash: str = ""
     revision: str = ""
+    identity: str = ""
+    commit: str = ""
     omitted: dict[str, str] = field(default_factory=dict)
     excluded: dict[str, str] = field(default_factory=dict)
     redacted: list[str] = field(default_factory=list)
@@ -94,6 +97,7 @@ class RepoContext:
             "complete": self.complete,
             "content_hash": self.content_hash,
             "revision": self.revision,
+            "commit": self.commit,
             "changed": self.changed,
             "related": self.related,
         }
@@ -148,6 +152,25 @@ _SECRET_VALUE = re.compile(
     r"sk-(?:ant-)?[A-Za-z0-9_-]{16,}|(?:api[_-]?key|secret|password|token)\s*[:=]\s*['\"][^'\"\n]{6,}['\"]|"
     r"-----BEGIN [^\n]*PRIVATE KEY-----[\s\S]*?-----END [^\n]*PRIVATE KEY-----)"
 )
+
+
+def is_calibration_answer_key(rel: str, text: str) -> bool:
+    """A labelled calibration sample's answer key (scripts/gen_calib_samples.py writes it as the
+    sample's top-level labels.json: {"labels": [{"dimension", "cwe", "file", "line", ...}]}).
+
+    It must never reach a model: a live calibration that bundles it hands every reviewer and judge
+    the file, line and CWE of each seeded bug, and inflates precision, recall, the suggested weights
+    and the AAT. Recognised by content, not by name alone, so an unrelated labels.json is reviewed."""
+    if rel != "labels.json":
+        return False
+    try:
+        doc = json.loads(text)
+    except ValueError:
+        return False
+    labels = doc.get("labels") if isinstance(doc, dict) else None
+    return isinstance(labels, list) and bool(labels) and all(
+        isinstance(x, dict) and {"cwe", "file", "line"} <= x.keys() for x in labels
+    )
 
 
 def redact_secrets(text: str) -> str:
@@ -205,6 +228,49 @@ def _content_hash(content: dict[str, str]) -> str:
     for rel, sanitized in content.items():
         h.update(json.dumps([rel, sanitized], ensure_ascii=False).encode())
     return h.hexdigest()
+
+
+def _git(root: Path, *args: str) -> str | None:
+    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=False)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def normalise_remote(url: str) -> str:
+    """host/owner/repo for a git remote URL, so https, ssh and scp-style clones of one repository
+    agree: no scheme, credentials, port or .git suffix, lower-case host. Local paths stay as given."""
+    u = url.strip()
+    scp = re.match(r"^[\w.-]+@([^:/]+):(.+)$", u)
+    if scp:
+        host, path = scp.group(1), scp.group(2)
+    else:
+        s = urlsplit(u)
+        if not (s.scheme and s.hostname):
+            return u.rstrip("/")
+        host, path = s.hostname, s.path
+    path = path.strip("/")
+    path = path[:-4] if path.endswith(".git") else path
+    return f"{host.lower()}/{path}"
+
+
+def _git_tree(root: Path) -> str | None:
+    """Tree id of the target directory in HEAD, or None when the directory is not part of a
+    committed git history (no repository, an untracked directory, or a parent repository - such as
+    a home-directory dotfiles repo - that merely happens to contain the target)."""
+    return _git(root, "rev-parse", "--verify", "--quiet", "HEAD:./")
+
+
+def target_identity(root: Path) -> str:
+    """Stable identity of the review target for human-queue keys and decision binding.
+
+    A directory tracked in a git history is named by its repository (the normalised origin URL,
+    empty without one) and its path below the repository top level, so every clone, checkout
+    location and CI runner of the same repository agrees. Anything else is named by its absolute
+    path, as before: no stable name exists, and none is guessed."""
+    prefix = _git(root, "rev-parse", "--show-prefix")
+    if _git_tree(root) is None or prefix is None:
+        return json.dumps(["path", str(root)])
+    remote = _git(root, "remote", "get-url", "origin") or ""
+    return json.dumps(["git", normalise_remote(remote), prefix.replace("\\", "/").rstrip("/")])
 
 
 def git_changed_files(root: str | Path, base: str) -> list[str]:
@@ -399,6 +465,9 @@ def build_context(root: str | Path) -> RepoContext:
         except (OSError, ValueError, UnicodeError):
             ctx.omitted[rel] = "unreadable_unsafe_or_oversize"
             continue
+        if is_calibration_answer_key(rel, text):
+            ctx.excluded[rel] = "calibration_answer_key"
+            continue
         sanitized = redact_secrets(text)
         raw_hash.update(json.dumps([rel, text], ensure_ascii=False).encode())
         if sanitized != text:
@@ -415,8 +484,13 @@ def build_context(root: str | Path) -> RepoContext:
             for m in pat.finditer(sanitized):
                 ctx.entry_points.append(fmt.format(m.group(pat.groups)))  # the route is the last group
     ctx.content_hash = _content_hash(ctx.content)
-    head = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "HEAD"], capture_output=True, text=True, check=False)
-    commit = head.stdout.strip() if head.returncode == 0 else "non-git"
+    # The revision binds human decisions to what was reviewed: the target directory's own tree in
+    # HEAD plus the raw text snapshot. Not the repository commit: any commit outside the target (a
+    # sibling sample, the synced decisions themselves) would otherwise unbind every decision made on
+    # it. The commit is still recorded in the coverage for traceability.
+    tree = _git_tree(root)
+    ctx.commit = (_git(root, "rev-parse", "--verify", "HEAD") or "") if tree else ""
+    ctx.identity = target_identity(root)
     raw_hash.update(json.dumps(ctx.omitted, sort_keys=True).encode())
-    ctx.revision = f"{commit}:{raw_hash.hexdigest()}"
+    ctx.revision = f"{tree or 'non-git'}:{raw_hash.hexdigest()}"
     return ctx

@@ -114,6 +114,34 @@ def test_top_level_unknown_keys_are_refused():
     assert MaraConfig.model_validate(dict(_base(), standby_for="anthropic")).standby_for == "anthropic"
 
 
+@pytest.mark.parametrize("section,typo", [
+    ("rollout", {"phse": "blocking"}),         # would load as not_started: the gate never blocks
+    ("ml_bom", {"requried": True}),            # would load as required: false: P7 never enforces
+    ("psirt", {"enable": True}),               # would load as enabled: false: no PSIRT hand-off
+    ("human_queue", {"backlog_limt": 5}),
+    ("training", {"require_trained_adjudicater": False}),
+    ("model_eval", {"thresholds": {"garak_pass_rate": 0.9}}),
+    ("roles", {"skeptik": "n"}),
+])
+def test_unknown_keys_inside_sections_are_refused(section, typo):
+    """Every nested section refuses unknown keys like the top level and the gate: a misspelt key
+    would otherwise load silently as the default, which for rollout/ml_bom/psirt is the weaker one."""
+    raw = _base()
+    if section == "roles":
+        raw["roles"] = dict(raw["roles"], **typo)
+    else:
+        raw[section] = typo
+    with pytest.raises(ValueError, match=next(iter(typo if section != "model_eval" else typo["thresholds"]))):
+        MaraConfig.model_validate(raw, context={"skip_policies": True})
+
+
+def test_unknown_model_keys_are_refused():
+    raw = _base()
+    raw["models"][1]["baseurl"] = "https://vllm-deepseek.internal:8000/v1"
+    with pytest.raises(ValueError, match="baseurl"):
+        MaraConfig.model_validate(raw, context={"skip_policies": True})
+
+
 def test_check_config_refuses_structurally_invalid_configs(tmp_path):
     """check-config validates the whole structure first: it can never report "policies pass" for a
     file load_config would refuse (duplicate names, unknown keys, out-of-bounds gate values)."""
@@ -175,7 +203,11 @@ def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkey
     assert _p8(MaraConfig.model_validate(_base())).passed  # the default (false) is always allowed
     calib = tmp_path / "calib"
     calib.mkdir()
-    evidence = {"date": dt.date.today().isoformat(), "mode": "live", "aat": {"passed": True, "n": 12, "agreement": 1.0, "p_value": 0.002}}
+    from mara.policy import AAT_METHOD
+
+    evidence = {"date": dt.date.today().isoformat(), "mode": "live", "aat": {
+        "method": AAT_METHOD, "passed": True, "n": 12, "agreement": 1.0, "chance_agreement": 0.5, "p_value": 0.0002,
+        "rejection": {"n": 59, "misses": 0, "miss_rate_upper": 0.0495, "passed": True}}}
     (calib / "latest.json").write_text(json.dumps(evidence), encoding="utf-8")
     assert _p8(_allow()).passed and "Alternative Annotator Test passed" in _p8(_allow()).reason
 
@@ -191,6 +223,10 @@ def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkey
         _allow()  # no evidence at all
     (calib / "latest.json").write_text(json.dumps(evidence), encoding="utf-8")
     bad(lambda ev: ev["aat"].update(passed=False), "did not pass")
+    bad(lambda ev: ev["aat"]["rejection"].update(passed=False), "did not pass")
+    # a result from the first, untagged AAT (fixed 0.5 baseline, rejections never examined) is no evidence
+    bad(lambda ev: ev["aat"].pop("method"), "uses method None")
+    bad(lambda ev: ev["aat"].pop("rejection"), "did not pass")
     bad(lambda ev: ev.update(mode="mock"), "not live")
     bad(lambda ev: ev.update(date=(dt.date.today() - dt.timedelta(days=91)).isoformat()), "rerun the calibration")
     bad(lambda ev: ev.update(date=(dt.date.today() + dt.timedelta(days=1)).isoformat()), "in the future")

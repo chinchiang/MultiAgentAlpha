@@ -15,12 +15,12 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))  # governance_check: the G-9 rule that blocking reuses
 
 from mara import govdocs  # noqa: E402
 from mara.config import load_config  # noqa: E402
@@ -57,13 +57,15 @@ def cmd_baseline(a: argparse.Namespace) -> int:
     return 0
 
 
-def _calibration_is_live(root: Path) -> bool:
-    for p in (root / "docs").glob("calibration-*.md"):
-        head = p.read_text(encoding="utf-8")[:2000]
-        if re.search(r"執行模式[:：]\s*mock|mode[:：]\s*mock", head, re.I):
-            continue
-        return True
-    return False
+def _live_calibration(root: Path, today: dt.date, config: Path) -> tuple[bool, str]:
+    """Blocking needs what governance check G-9 accepts: a calibration report younger than 90 days,
+    front matter mode live, covering every production family of `config`. One decision rule for
+    both: the old filename scan here took any report it could not prove was mock (the 2026-09-11
+    report writes `執行模式：**mock**`) as live, and never checked age or families."""
+    from governance_check import PASS, check_g9
+
+    r = check_g9(root, today, config)
+    return r.status == PASS, r.evidence
 
 
 def cmd_advance(a: argparse.Namespace) -> int:
@@ -86,8 +88,10 @@ def cmd_advance(a: argparse.Namespace) -> int:
             problems.append("baseline report missing: run `rollout_phase.py baseline` and set rollout.baseline_report")
         elif "Mock mode reports are included" in baseline.read_text(encoding="utf-8"):
             problems.append(f"baseline report {r.baseline_report} is built from mock-mode reviews")
-        if a.to == "blocking" and not _calibration_is_live(ROOT):
-            problems.append("no non-mock calibration report in docs/ (G-9): blocking needs calibrated weights")
+        if a.to == "blocking":
+            live, evidence = _live_calibration(ROOT, a.today, a.config)
+            if not live:
+                problems.append(f"no live calibration that passes G-9 (blocking needs calibrated weights): {evidence}")
     for p in problems:
         print(f"blocked: {p}")
     if problems:

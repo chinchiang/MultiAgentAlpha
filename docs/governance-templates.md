@@ -61,7 +61,8 @@ not started, so all three fail today with precise reasons.
     mix, gate would-block rate, human-queue size, token cost, false-positive rate from decisions).
     A baseline that includes mock-mode reviews says so and cannot support advancing.
   - `advance --to advisory|blocking`: checks time in phase, the baseline report and (for blocking) a
-    non-mock calibration report, then prints the config change; it never edits the config.
+    live calibration that governance check G-9 accepts (front matter `mode: live`, younger than 90
+    days, covering every production family), then prints the config change; it never edits the config.
 - `check_g10` fails while `not_started`; in `shadow` it fails once the phase is a month past its
   planned end without advancing; in `advisory` and `blocking` it requires the baseline report.
 

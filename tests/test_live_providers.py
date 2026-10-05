@@ -70,6 +70,30 @@ def test_openai_compatible_length_finish_is_truncation_not_refusal():
     assert (c.input_tokens, c.output_tokens) == (11, 7), "token usage is kept so the cost of a truncated call is still accounted"
 
 
+def test_openai_compatible_empty_content_at_the_length_limit_is_truncation_not_refusal():
+    # a reasoning model (DeepSeek-R1 behind vLLM's reasoning parser) can spend max_tokens thinking and
+    # return no content at all: the budget ran out, the model did not decline
+    for content in ("", None):
+        c = _call(_oai(lambda req, content=content: _chat(content, finish_reason="length")))
+        assert c.truncated and not c.refused and c.data is None
+
+
+def test_openai_compatible_ignores_proxy_environment_variables(monkeypatch):
+    """The endpoints are on-prem: HTTP(S)_PROXY must never route the source code (and the bearer key)
+    through a proxy, least of all in cleartext for an approved http://127.0.0.1 endpoint."""
+    for var in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(var, "http://proxy.corp.example:3128")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    for url in ("http://127.0.0.1:8000/v1", "https://vllm.internal:8000/v1"):
+        p = OpenAICompatibleProvider(_spec(base_url=url))
+        transport = p.client._transport_for_url(httpx.URL(url + "/chat/completions"))
+        assert isinstance(transport, httpx.HTTPTransport) and transport._pool.__class__.__name__ == "ConnectionPool", url
+    # contrast: a default client on the same environment would have picked the proxy
+    default = httpx.Client()
+    assert default._transport_for_url(httpx.URL("http://127.0.0.1:8000/v1"))._pool.__class__.__name__ == "HTTPProxy"
+
+
 def test_openai_compatible_invalid_json_with_stop_finish_is_truncation():
     c = _call(_oai(lambda req: _chat("Sure! Here is the JSON: {\"findings\": [")))
     assert c.truncated and not c.refused and c.data is None

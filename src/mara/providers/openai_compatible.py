@@ -51,7 +51,11 @@ class OpenAICompatibleProvider(Provider):
         key = os.environ.get(spec.api_key_env, "") if spec.api_key_env else ""
         headers = {"Authorization": f"Bearer {key}"} if key else {}
         # `client` is for tests (httpx.MockTransport); production always builds its own from the spec.
-        self.client = client or httpx.Client(base_url=spec.base_url, headers=headers, timeout=timeout)
+        # An explicit transport switches off httpx's HTTP_PROXY/HTTPS_PROXY/ALL_PROXY handling (the
+        # transport still honours SSL_CERT_FILE / SSL_CERT_DIR for an internal CA): these endpoints are
+        # on-prem, and a proxy in between would receive the source code - in cleartext for the
+        # loopback-only http:// case that ModelSpec approved as never leaving the host.
+        self.client = client or httpx.Client(base_url=spec.base_url, headers=headers, timeout=timeout, transport=httpx.HTTPTransport())
 
     def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> Completion:
         body = {
@@ -87,12 +91,14 @@ class OpenAICompatibleProvider(Provider):
         finish = choice.get("finish_reason", "")
         usage = payload.get("usage", {}) or {}
         tokens = {"input_tokens": usage.get("prompt_tokens", 0), "output_tokens": usage.get("completion_tokens", 0)}
+        if finish == "length":
+            # The server stopped at max_tokens: the JSON is cut off, or never started when a reasoning
+            # model spent the whole budget thinking (vLLM's reasoning parser then returns empty content).
+            # Checked before the empty-text rule: never count this as a refusal (the bias audit would
+            # misread a too-small budget as model reluctance).
+            return Completion(data=None, raw_text=text, truncated=True, **tokens)
         if finish == "content_filter" or not text.strip():
             return Completion(data=None, raw_text=text, refused=True, **tokens)
-        if finish == "length":
-            # The server stopped at max_tokens: the JSON is cut off. Never count this as a refusal
-            # (the bias audit would misread a too-small budget as model reluctance).
-            return Completion(data=None, raw_text=text, truncated=True, **tokens)
         try:
             data = json.loads(text)
         except json.JSONDecodeError:

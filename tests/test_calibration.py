@@ -40,6 +40,46 @@ def test_label_driven_mock_and_calibrate(root, tmp_path):
     assert "weight=" in cp.stdout
 
 
+# ------------------------------------------------------------------ the answer key never reaches a model
+
+def test_calibration_answer_key_is_excluded_from_the_bundle(root, tmp_path):
+    from mara.context.repo_map import build_context
+
+    for sample in sorted((root / "calib" / "samples").iterdir()):
+        ctx = build_context(sample)
+        assert "labels.json" not in ctx.content, sample.name
+        assert ctx.excluded["labels.json"] == "calibration_answer_key" and ctx.complete, sample.name
+        assert "labels.json" not in ctx.bundle()
+    # recognised by content: an unrelated labels.json (e.g. a GitHub label set) is still reviewed
+    (tmp_path / "app.py").write_text("print('hi')\n", encoding="utf-8")
+    (tmp_path / "labels.json").write_text(json.dumps([{"name": "bug", "color": "d73a4a"}]), encoding="utf-8")
+    assert "labels.json" in build_context(tmp_path).content
+    (tmp_path / "labels.json").write_text(json.dumps({"labels": [{"name": "bug"}]}), encoding="utf-8")
+    assert "labels.json" in build_context(tmp_path).content
+
+
+def test_live_calibration_refuses_runs_that_bundled_the_answer_key(tmp_path, monkeypatch):
+    import calibrate
+
+    run = {"provider_mode": "live", "provider_manifest": [{"type": "anthropic", "family": "anthropic", "model": "claude-opus-5"}],
+           "config_hash": "hash", "revision": "rev", "coverage": {"included": ["main.py", "labels.json"]}}
+    monkeypatch.setattr(sys, "argv", ["calibrate", "--mode", "live", "--out-dir", str(tmp_path)])
+    monkeypatch.setattr(calibrate, "load_runs", lambda *_: [("s1", run, [])])
+    import pytest
+    with pytest.raises(SystemExit, match="answer key labels.json was in the reviewed bundle of \\['s1'\\]"):
+        calibrate.main()
+
+
+def test_runs_without_their_own_labels_are_skipped_not_scored_against_nothing(tmp_path, capsys):
+    import calibrate
+
+    (tmp_path / "out" / "unlabelled-corpus").mkdir(parents=True)
+    (tmp_path / "out" / "unlabelled-corpus" / "report.json").write_text(json.dumps({"findings": []}), encoding="utf-8")
+    (tmp_path / "samples").mkdir()
+    assert calibrate.load_runs(tmp_path / "out", tmp_path / "samples", decisions_dir=tmp_path / "none") == []
+    assert "unlabelled-corpus: SKIPPED" in capsys.readouterr().err
+
+
 # ------------------------------------------------------------------ per-role refusals, refutation and weight discounts (#30/#38)
 
 def test_audit_rates_reports_per_role_refusals_and_invalid_output():
@@ -88,8 +128,9 @@ def test_suggested_weights_discount_refutations_and_invalid_output():
 
 # ------------------------------------------------------------------ assessment #60: Alternative Annotator Test
 
-def _aat_run(sample, findings):
-    return (sample, {"target_id": "target-s9", "revision": "rev", "coverage": {"content_hash": "ctx"}, "findings": findings}, [])
+def _aat_run(sample, findings, consensus=()):
+    return (sample, {"target_id": "target-s9", "revision": "rev", "coverage": {"content_hash": "ctx"}, "findings": findings,
+                     "consensus": list(consensus)}, [])
 
 
 def _dec(file, line, cwe, decision, trained=True):
@@ -107,21 +148,88 @@ def _post(sample, fid, argmax):
     return (sample, fid), p
 
 
-def test_aat_agrees_with_human_decisions_and_needs_ten_items():
+def _finding(i, cwe="CWE-79"):
+    return {"id": f"F-{i}", "cwe": cwe, "provenance": [{"file": "app.py", "line": i * 10}]}
+
+
+def _rejected(i):
+    """The consensus row of a finding the pipeline would drop unsupervised (what P8 unlocks)."""
+    return {"finding_id": f"F-{i}", "accepted": False, "needs_human": False, "tier": "C"}
+
+
+def _accepted(i):
+    return {"finding_id": f"F-{i}", "accepted": True, "needs_human": False, "tier": "B"}
+
+
+def test_aat_agreement_is_tested_against_chance_and_needs_ten_items():
     import calibrate
 
-    findings = [{"id": f"F-{i}", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": i * 10}]} for i in range(1, 13)]
+    findings = [_finding(i) for i in range(1, 13)]
     decisions = [_dec("app.py", i * 10, "CWE-79", "true_positive" if i % 2 else "false_positive") for i in range(1, 12)]
     post = dict([_post("s9", f"F-{i}", 0 if i % 2 else 1) for i in range(1, 11)])
     post[_post("s9", "F-11", 2)[0]] = _post("s9", "F-11", 2)[1]   # pipeline abstains: excluded, not tested
     post[_post("s9", "F-12", 1)[0]] = _post("s9", "F-12", 1)[1]   # no human decision: not tested
     aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post)
-    assert aat["n"] == 10 and aat["agreement"] == 1.0 and aat["p_value"] == 0.002
-    assert aat["passed"] and aat["excluded"] == 1
+    assert aat["n"] == 10 and aat["agreement"] == 1.0 and aat["chance_agreement"] == 0.5 and aat["kappa"] == 1.0
+    assert aat["p_value"] == 0.001 and aat["agreement_passed"] and aat["excluded"] == 1  # one-sided: 0.5 ** 10
+    # agreement alone is not enough: none of these was a rejection the pipeline would make unsupervised
+    assert aat["rejection"]["n"] == 0 and not aat["passed"] and "不採納安全性未達" in aat["why"]
     weak = calibrate.alternative_annotator_test([_aat_run("s9", findings[:2])], decisions[:2],
                                                 {_post("s9", "F-1", 0)[0]: _post("s9", "F-1", 0)[1],
                                                  _post("s9", "F-2", 1)[0]: _post("s9", "F-2", 1)[1]})
-    assert weak["n"] == 2 and weak["agreement"] == 1.0 and not weak["passed"]  # significant needs n >= 10
+    assert weak["n"] == 2 and weak["agreement"] == 1.0 and not weak["agreement_passed"]  # significant needs n >= 10
+
+
+def test_aat_constant_labeller_agrees_only_at_chance_and_fails():
+    """Humans confirm 18 of 20 queued findings as false positives. A pipeline that calls everything a
+    false positive agrees 90% of the time, which the old fixed-0.5 baseline read as p = 0.0004."""
+    import calibrate
+
+    findings = [_finding(i) for i in range(1, 21)]
+    decisions = [_dec("app.py", i * 10, "CWE-79", "true_positive" if i <= 2 else "false_positive") for i in range(1, 21)]
+    post = dict(_post("s9", f"F-{i}", 1) for i in range(1, 21))
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post)
+    assert aat["n"] == 20 and aat["agreement"] == 0.9 and aat["chance_agreement"] == 0.9 and aat["kappa"] == 0.0
+    assert aat["p_value"] > 0.5 and not aat["agreement_passed"] and not aat["passed"]
+
+
+def test_aat_rejection_safety_bounds_the_miss_rate_of_unsupervised_rejections():
+    import calibrate
+
+    def run(n_rejected, misses=0):
+        rej = range(1, n_rejected + 1)
+        acc = range(100, 120)
+        findings = [_finding(i) for i in [*rej, *acc]]
+        decisions = ([_dec("app.py", i * 10, "CWE-79", "true_positive" if i <= misses else "false_positive") for i in rej]
+                     + [_dec("app.py", i * 10, "CWE-79", "true_positive") for i in acc])
+        post = dict([_post("s9", f"F-{i}", 1) for i in rej] + [_post("s9", f"F-{i}", 0) for i in acc])
+        consensus = [_rejected(i) for i in rej] + [_accepted(i) for i in acc]
+        return calibrate.alternative_annotator_test([_aat_run("s9", findings, consensus)], decisions, post)
+
+    ok = run(59)  # zero misses in 59: the 95% upper bound 1 - 0.05 ** (1/59) = 0.0495 <= 0.05
+    from mara.policy import AAT_METHOD
+    assert ok["passed"] and ok["method"] == AAT_METHOD and ok["agreement_passed"]
+    assert ok["rejection"] == {"n": 59, "misses": 0, "miss_rate_upper": 0.0495, "max_miss_rate": 0.05, "confidence": 0.95, "passed": True}
+    short = run(58)  # one decided rejection short: 0.0503 > 0.05
+    assert short["agreement_passed"] and not short["rejection"]["passed"] and not short["passed"]
+    missed = run(59, misses=1)  # one real vulnerability among the would-be rejections
+    assert missed["rejection"]["misses"] == 1 and missed["rejection"]["miss_rate_upper"] > 0.05 and not missed["passed"]
+    assert abs(calibrate.clopper_pearson_upper(0, 59) - (1 - 0.05 ** (1 / 59))) < 1e-9
+    assert abs(calibrate.clopper_pearson_upper(1, 59) - 0.07790) < 1e-4  # P(X <= 1 | 59, p) = 0.05 at p = 0.0779
+
+
+def test_aat_binds_one_decision_to_one_finding_by_key():
+    import calibrate
+
+    # the old +-3-line match let the line-10 decision count for the line-12 finding as well
+    findings = [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 10}]},
+                {"id": "F-2", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 12}]}]
+    post = dict([_post("s9", "F-1", 0), _post("s9", "F-2", 0)])
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [_dec("app.py", 10, "CWE-79", "true_positive")], post)
+    assert aat["n"] == 1
+    contradictory = [_dec("app.py", 10, "CWE-79", "true_positive"), _dec("app.py", 10, "CWE-79", "false_positive")]
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], contradictory, post)
+    assert aat["n"] == 0 and aat["excluded"] == 1
 
 
 def test_aat_ignores_untrained_adjudicators():
