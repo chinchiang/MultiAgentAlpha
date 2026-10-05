@@ -1,0 +1,78 @@
+"""The reviewed repository cannot switch its own L0 scans off. The target is untrusted: a pull
+request that adds `.semgrepignore`, `.trivyignore`, `trivy.yaml`, an `osv-scanner.toml` with
+`ignore = true` overrides, a `zizmor.yml` or inline `# zizmor: ignore[...]` comments would
+otherwise make the tool report "ran, nothing found", and model silence would clear the gate.
+(Verified against the pinned binaries: each of those suppresses results with the old arguments.)"""
+
+import json
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from mara.tools import runner
+
+ROOT = Path(__file__).resolve().parents[1]
+TOOLS = ROOT / ".mara-tools"
+EMPTY_SARIF = json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "x"}}, "results": []}]})
+
+
+def _argv_after(argv: list[str], flag: str) -> str:
+    return argv[argv.index(flag) + 1]
+
+
+def test_every_tool_is_handed_neutral_config_instead_of_the_targets(tmp_path, monkeypatch):
+    import mara.tools.trivy_db as trivy_db
+
+    seen: dict[str, list[str]] = {}
+
+    def fake_run(cmd, cwd, timeout=600, env=None):
+        exe = Path(cmd[0]).name
+        seen[exe] = cmd
+        for flag in ("--output", "--output-file"):
+            if flag in cmd:
+                Path(_argv_after(cmd, flag)).write_text(EMPTY_SARIF, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout=EMPTY_SARIF if exe == "zizmor" else "", stderr="")
+
+    monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
+    monkeypatch.setattr(runner, "installed_version", lambda tool: "pinned")
+    monkeypatch.setattr(runner, "_run", fake_run)
+    fake_db = tmp_path / "trivy.db"
+    fake_db.write_bytes(b"")
+    monkeypatch.setattr(trivy_db, "db_path", lambda cache: fake_db)  # "the offline database is there"
+    target = tmp_path / "target"
+    target.mkdir()
+    for name, text in {".semgrepignore": "*\n", ".trivyignore": "CVE-2018-18074\n", "trivy.yaml": "severity: [LOW]\n",
+                       "osv-scanner.toml": "[[PackageOverrides]]\nname = \"requests\"\nignore = true\n"}.items():
+        (target / name).write_text(text, encoding="utf-8")
+    out = tmp_path / "out"
+    runner.run_all(target, out, enabled=["semgrep", "osv-scanner", "zizmor", "trivy"])
+
+    assert "--x-ignore-semgrepignore-files" in seen["semgrep"]
+    osv_config = Path(_argv_after(seen["osv-scanner"], "--config"))
+    assert osv_config.read_text(encoding="utf-8") == "" and out.resolve() in osv_config.parents
+    assert {"--no-config", "--no-ignores", "--collect=all"} <= set(seen["zizmor"])
+    trivy_ignore, trivy_config = Path(_argv_after(seen["trivy"], "--ignorefile")), Path(_argv_after(seen["trivy"], "--config"))
+    assert trivy_ignore.read_text(encoding="utf-8") == "" and trivy_config.read_text(encoding="utf-8") == "{}\n"
+    for p in (osv_config, trivy_ignore, trivy_config):
+        assert target.resolve() not in p.parents, "the neutral files live in the output directory, never in the target"
+    # the target's own files are untouched
+    assert (target / ".semgrepignore").read_text(encoding="utf-8") == "*\n"
+
+
+@pytest.mark.skipif(not (TOOLS / "bin" / "semgrep").exists(), reason="locked semgrep not installed under .mara-tools (run scripts/install_tools.py)")
+def test_real_semgrep_scans_what_the_targets_semgrepignore_hides(tmp_path, monkeypatch):
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(TOOLS))
+    rule = tmp_path / "rule.yml"
+    rule.write_text("rules:\n  - id: probe-os-system\n    pattern: os.system(...)\n    message: os.system\n"
+                    "    languages: [python]\n    severity: ERROR\n", encoding="utf-8")
+    monkeypatch.setenv("MARA_SEMGREP_CONFIG", str(rule))
+    target = tmp_path / "target"
+    target.mkdir()
+    code = "import os\n\n\ndef run(cmd):\n    os.system(cmd)\n"
+    (target / "app.py").write_text(code, encoding="utf-8")
+    (target / "hidden.py").write_text(code, encoding="utf-8")
+    (target / ".semgrepignore").write_text("hidden.py\n", encoding="utf-8")
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["semgrep"])
+    assert run.ran, run.note
+    assert {r.file for r in run.results} == {"app.py", "hidden.py"}

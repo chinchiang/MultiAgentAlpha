@@ -165,6 +165,125 @@ def test_duplicate_judge_reply_is_not_counted(tmp_path):
     assert not votes and errors
 
 
+def _skeptic_errors(data, n=3, **completion):
+    from mara.agents import skeptic
+    from mara.pipeline import _count_invalid
+
+    class One(Provider):
+        def complete(self, **kwargs):
+            return Completion(data=data, raw_text=json.dumps(data), **completion)
+
+    ctx = RepoContext(root=Path("."), content={"app.py": "unsafe()\n"})
+    fs = [finding().model_copy(update={"id": f"F-{i}"}) for i in range(1, n + 1)]
+    verdicts, errors, _ = skeptic.run_skeptic(One(load_config(ROOT / "config/mara.mock.yaml").models[0]), ctx, fs)
+    assert verdicts == []
+    return errors, _count_invalid(errors)
+
+
+def _sk(fid, verdict="stands"):
+    return {"finding_id": fid, "verdict": verdict, "reason": "r", "sanitizer_or_control": ""}
+
+
+def test_incomplete_ballots_count_one_invalid_item_per_uncovered_finding():
+    """A well-formed reply that drops findings used to leave only the summary marker, which the
+    invalid-output audit does not count: nothing was counted and the run stayed complete."""
+    errors, invalid = _skeptic_errors({"items": []})
+    assert errors.count("missing_verdict") == 3 and invalid == 3
+    assert _skeptic_errors({"items": [_sk("F-1"), _sk("F-2")]})[1] == 1
+    errors, invalid = _skeptic_errors({"items": [_sk("F-1"), _sk("F-1"), _sk("F-2"), _sk("F-3"), _sk("F-9")]})
+    assert errors.count("duplicate_verdict") == 1 and errors.count("unexpected_verdict") == 1 and invalid == 2
+    # a schema-invalid item already counts once and is not counted again as missing
+    errors, invalid = _skeptic_errors({"items": [_sk("F-1"), {"finding_id": "F-2", "verdict": "maybe"}]})
+    assert invalid == 2 and errors.count("missing_verdict") == 1
+    # response-level outcomes are not multiplied by the batch size
+    assert _skeptic_errors(None, refused=True)[0] == ["refused"]
+    assert _skeptic_errors(None, error="provider_http_error:503")[1] == 1
+    assert _skeptic_errors(None)[1] == 1  # empty body
+
+
+class _OverrideRole(Provider):
+    """The wrapped mock provider, except that calls for `role` get `data` back."""
+
+    def __init__(self, inner, role, data):
+        super().__init__(inner.spec)
+        self.inner, self.role, self.data = inner, role, data
+
+    def bind_target(self, root):
+        self.inner.bind_target(root)
+
+    def complete(self, *, system, user, schema, role, max_tokens=16000):
+        if role == self.role:
+            return Completion(data=self.data, raw_text=json.dumps(self.data))
+        return self.inner.complete(system=system, user=user, schema=schema, role=role, max_tokens=max_tokens)
+
+
+@pytest.mark.parametrize("role,counter", [("skeptic", "skeptic_invalid_items"), ("redteam", "redteam_invalid_items")])
+def test_an_empty_ballot_never_passes_silently(tmp_path, role, counter):
+    cfg = load_config(ROOT / "config/mara.mock.yaml")
+    pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
+    pipe.providers = {n: _OverrideRole(p, role, {"items": []}) for n, p in pipe.providers.items()}
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    assert report.bias_audit[counter] > 0 and counter in report.incomplete_reasons and not report.gate_passed
+    if role == "skeptic":
+        assert report.bias_audit[counter] == len(report.findings), "one missing verdict per unchallenged finding"
+        assert all(c.skeptic_abstained for c in report.consensus)
+        assert not [c for c in report.consensus if c.tier == EvidenceTier.B], "no independent challenge, no tier B"
+
+
+def test_a_refutation_must_cite_a_non_blank_line_of_a_file_the_skeptic_was_shown():
+    from mara.agents.skeptic import _control_location_ok
+
+    ctx = RepoContext(root=Path("."), content={"app.py": "import db\n\nq = db.param(x)\n", "other.py": "safe()\n"})
+    assert _control_location_ok(ctx, "db.param at app.py:3", {"app.py"})
+    assert not _control_location_ok(ctx, "see other.py:1", {"app.py"}), "a file the skeptic never received"
+    assert not _control_location_ok(ctx, "app.py:2", {"app.py"}), "a blank line is no control"
+    assert not _control_location_ok(ctx, "app.py:99", {"app.py"}) and not _control_location_ok(ctx, "parameterised query", {"app.py"})
+
+
+class _EchoRole(_OverrideRole):
+    """Follows the planted canary instruction for `role`: echoes the prompt (token included)."""
+
+    def complete(self, *, system, user, schema, role, max_tokens=16000):
+        if role == self.role:
+            return Completion(data=self.data, raw_text=user)
+        return self.inner.complete(system=system, user=user, schema=schema, role=role, max_tokens=max_tokens)
+
+
+@pytest.mark.parametrize("role", ["skeptic", "redteam"])
+def test_l3_agents_carry_a_canary_and_an_echo_voids_their_verdicts(tmp_path, role):
+    """The skeptic and the red team read raw repository files and can clear or downgrade a finding, but
+    only reviewers and the context agent carried a canary: an injection steering refutations was invisible."""
+    cfg = load_config(ROOT / "config/mara.mock.yaml")
+    pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
+    pipe.providers = {n: _EchoRole(p, role, {"items": []}) for n, p in pipe.providers.items()}
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    key = f"{role}_canary_echoes"
+    assert report.bias_audit[key] > 0 and key in report.incomplete_reasons and not report.gate_passed
+    assert report.bias_audit[f"{role}_invalid_items"] == 0, "an echo is counted as an echo, not as invalid output"
+    if role == "skeptic":
+        assert not report.skeptic and all(c.skeptic_abstained for c in report.consensus)
+    else:
+        assert not report.redteam
+
+
+def test_tool_corroboration_needs_the_same_file_and_a_blocking_level():
+    """A bare suffix match let a tool hit in services/billing/main.py corroborate a finding in main.py
+    and promote it to tier A; a note-level result corroborated as strongly as an error."""
+    from mara.pipeline import _tool_corroborates
+
+    f = finding().model_copy(update={"provenance": [Provenance(file="main.py", line=10, quote="unsafe()", verified=True)]})
+
+    def hit(file, level="error"):
+        return [ToolResult("semgrep", "sql", level, "SQL injection", file, 11, "CWE-89")]
+
+    assert _tool_corroborates(f, hit("main.py")) and _tool_corroborates(f, hit("./main.py"))
+    assert not _tool_corroborates(f, hit("services/billing/main.py")), "another file with the same name"
+    assert not _tool_corroborates(f, hit("main.py", level="note")), "a note is information, not evidence"
+    # a tool that ran from the repository top level reports the target's own prefix (pre-recorded zizmor)
+    assert _tool_corroborates(f, hit("fixtures/vuln-sample/main.py"), "fixtures/vuln-sample")
+    assert not _tool_corroborates(f, hit("other/vuln-sample/main.py"), "fixtures/vuln-sample")
+
+
 def test_quorum_requires_two_independent_families_and_both_passes(tmp_path):
     pipe, f = pipeline(tmp_path), finding()
     finders = {f.id: {ModelFamily.ANTHROPIC}}
@@ -390,6 +509,37 @@ def test_decision_identity_survives_unrelated_commits_and_other_checkouts(tmp_pa
     assert build_context(a / "sample").revision != first.revision
     # another directory of the same repository is another target
     assert build_context(a).identity != first.identity
+
+
+def test_a_subdirectory_target_sends_tracked_files_only(tmp_path):
+    """`has_git` used to look for target/.git only: a subdirectory target (mara review fixtures/x) was
+    walked with rglob, so untracked and gitignored local files went to the providers."""
+    repo = tmp_path / "repo"
+    _repo_with_sample(repo, "https://github.com/example-org/product.git")
+    (repo / "sample" / "untracked_local.yaml").write_text("token: LOCAL_ONLY_MARKER\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("sample/ignored.txt\n", encoding="utf-8")
+    (repo / "sample" / "ignored.txt").write_text("IGNORED_MARKER\n", encoding="utf-8")
+    ctx = build_context(repo / "sample")
+    assert sorted(ctx.content) == ["app.py"] and ctx.complete
+    assert "LOCAL_ONLY_MARKER" not in ctx.bundle() and "IGNORED_MARKER" not in ctx.bundle()
+
+
+def test_a_failing_git_ls_files_fails_closed_instead_of_walking_the_tree(tmp_path, monkeypatch):
+    import mara.context.repo_map as mod
+
+    repo = tmp_path / "repo"
+    _repo_with_sample(repo, "https://github.com/example-org/product.git")
+    (repo / "sample" / "untracked_local.yaml").write_text("token: LOCAL_ONLY_MARKER\n", encoding="utf-8")
+    real = subprocess.run
+
+    def broken(cmd, *a, **kw):  # e.g. "detected dubious ownership" in a CI container
+        if "ls-files" in cmd:
+            return subprocess.CompletedProcess(cmd, 128, stdout=b"", stderr=b"fatal: detected dubious ownership")
+        return real(cmd, *a, **kw)
+
+    monkeypatch.setattr(mod.subprocess, "run", broken)
+    ctx = build_context(repo / "sample")
+    assert ctx.omitted == {".": "git_ls_files_failed"} and not ctx.complete and not ctx.content
 
 
 def test_untracked_directories_keep_a_path_identity(tmp_path):

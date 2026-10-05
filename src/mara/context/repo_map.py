@@ -78,6 +78,7 @@ class RepoContext:
     revision: str = ""
     identity: str = ""
     commit: str = ""
+    repo_prefix: str = ""  # target path below the repository top level; '' at the top or outside git
     omitted: dict[str, str] = field(default_factory=dict)
     excluded: dict[str, str] = field(default_factory=dict)
     redacted: list[str] = field(default_factory=list)
@@ -259,6 +260,15 @@ def _git_tree(root: Path) -> str | None:
     return _git(root, "rev-parse", "--verify", "--quiet", "HEAD:./")
 
 
+def repo_prefix(root: Path) -> str | None:
+    """Path of the target below its repository top level ('' at the top level), or None when the
+    target is not part of a committed git history (see _git_tree)."""
+    prefix = _git(root, "rev-parse", "--show-prefix")
+    if _git_tree(root) is None or prefix is None:
+        return None
+    return prefix.replace("\\", "/").rstrip("/")
+
+
 def target_identity(root: Path) -> str:
     """Stable identity of the review target for human-queue keys and decision binding.
 
@@ -266,11 +276,11 @@ def target_identity(root: Path) -> str:
     empty without one) and its path below the repository top level, so every clone, checkout
     location and CI runner of the same repository agrees. Anything else is named by its absolute
     path, as before: no stable name exists, and none is guessed."""
-    prefix = _git(root, "rev-parse", "--show-prefix")
-    if _git_tree(root) is None or prefix is None:
+    prefix = repo_prefix(root)
+    if prefix is None:
         return json.dumps(["path", str(root)])
     remote = _git(root, "remote", "get-url", "origin") or ""
-    return json.dumps(["git", normalise_remote(remote), prefix.replace("\\", "/").rstrip("/")])
+    return json.dumps(["git", normalise_remote(remote), prefix])
 
 
 def git_changed_files(root: str | Path, base: str) -> list[str]:
@@ -419,17 +429,24 @@ def restrict_to_increment(ctx: RepoContext, base: str) -> tuple[list[str], list[
 def build_context(root: str | Path) -> RepoContext:
     root = Path(root).resolve()
     ctx = RepoContext(root=root)
-    # git ls-files honors the target subdirectory and excludes untracked/ignored local files.
-    # Check if root is actually a git repository root rather than falling through to a parent user repo
-    has_git = (root / ".git").exists()
+    # A git target - a repository root, or a directory tracked in a repository's HEAD (a subdirectory
+    # such as fixtures/vuln-sample) - is read through `git ls-files`, which honours the subdirectory and
+    # leaves out untracked and ignored local files (an .env, an old out/ with un-blinded reports). A
+    # directory that merely sits inside some parent repository without being part of its history (a
+    # home-directory dotfiles repo) is not a git target and is walked. When git should answer but
+    # cannot (dubious ownership, a broken index), the review fails closed instead of silently walking
+    # the tree and sending what git would have excluded.
+    use_git = (root / ".git").exists() or _git_tree(root) is not None
     tracked = (
         subprocess.run(["git", "-C", str(root), "ls-files", "--cached", "-z", "--", "."], capture_output=True, check=False)
-        if has_git
+        if use_git
         else None
     )
+    if tracked is not None and tracked.returncode != 0:
+        ctx.omitted["."] = "git_ls_files_failed"
     paths = (
-        [Path(os.fsdecode(x)) for x in tracked.stdout.split(b"\0") if x]
-        if tracked is not None and tracked.returncode == 0
+        [Path(os.fsdecode(x)) for x in tracked.stdout.split(b"\0") if x] if tracked is not None and tracked.returncode == 0
+        else [] if tracked is not None
         else [p.relative_to(root) for p in root.rglob("*") if not p.is_dir()]
     )
 
@@ -491,6 +508,7 @@ def build_context(root: str | Path) -> RepoContext:
     tree = _git_tree(root)
     ctx.commit = (_git(root, "rev-parse", "--verify", "HEAD") or "") if tree else ""
     ctx.identity = target_identity(root)
+    ctx.repo_prefix = repo_prefix(root) or ""
     raw_hash.update(json.dumps(ctx.omitted, sort_keys=True).encode())
     ctx.revision = f"{tree or 'non-git'}:{raw_hash.hexdigest()}"
     return ctx

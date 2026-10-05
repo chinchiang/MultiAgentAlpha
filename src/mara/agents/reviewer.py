@@ -49,15 +49,16 @@ CONTEXT_DIMENSIONS = ("architecture", "authn_authz")
 def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canary: base.Canary,
                      context_view: ContextView | None = None) -> tuple[list[Finding], dict]:
     system_extra = base.load_prompt(f"reviewer_{dimension}")
-    trusted = ""
+    facts = ""
     if context_view is not None and dimension in CONTEXT_DIMENSIONS:
         # the C4-lite view (assessment #19): boundaries a reviewer must reason about, derived
-        # by a separate context agent and quote-verified; JSON keeps the block structure-pure
-        trusted = context_view.facts_block() + "\n\n"
+        # by a separate context agent and quote-verified; JSON keeps the block structure-pure.
+        # It is data derived from the untrusted bundle, and labelled so (facts_block)
+        facts = context_view.facts_block() + "\n\n"
     user = (
         f"Dimension under review: {DIMENSION_LABELS[dimension]}\n"
         f"Repository summary: {ctx.summary()}\n\n"
-        f"{trusted}"
+        f"{facts}"
         f"{base.untrusted_block(ctx, canary)}\n\n"
         "Return {\"findings\": [...]} following the schema."
     )

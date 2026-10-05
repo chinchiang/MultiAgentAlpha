@@ -98,11 +98,35 @@ def _offline_zizmor() -> bool:
     return not online
 
 
+def neutral_configs(out_dir: Path) -> dict[str, Path]:
+    """Empty configuration files handed to the tools explicitly, so none of them loads the reviewed
+    repository's own: the target is untrusted, and a pull request that adds `.trivyignore`, an
+    `osv-scanner.toml` with `ignore = true` overrides, a `zizmor.yml` or a `.semgrepignore` listing
+    `*` would otherwise make the tool report "ran, nothing found" and clear the gate. They live in
+    the run's output directory, never in the target."""
+    d = out_dir / "neutral-tool-config"
+    d.mkdir(parents=True, exist_ok=True)
+    files = {"osv-scanner": d / "osv-scanner.toml", "trivyignore": d / "trivyignore", "trivy": d / "trivy.yaml"}
+    files["osv-scanner"].write_text("", encoding="utf-8")
+    files["trivyignore"].write_text("", encoding="utf-8")
+    files["trivy"].write_text("{}\n", encoding="utf-8")
+    return files
+
+
+# Flags that stop each tool from honouring suppressions the reviewed repository controls (verified
+# against the pinned versions: semgrep 1.179.0, osv-scanner 2.5.1, zizmor 1.30.1, trivy 0.74.0).
+# semgrep's `# nosemgrep` needs nothing: its SARIF keeps those results, marked kind inSource, and
+# read_sarif only drops status "accepted". gitleaks gets an explicit config and no allowlist below.
+SEMGREP_TARGET_FLAGS = ["--x-ignore-semgrepignore-files"]
+ZIZMOR_TARGET_FLAGS = ["--no-config", "--no-ignores", "--collect=all"]  # all: also what .gitignore hides
+
+
 def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> list[ToolRun]:
     # tools run with cwd=target, so the report path must be absolute or it lands inside the target
     out_dir = out_dir.resolve()
     target = target.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    neutral = neutral_configs(out_dir)
     runs: list[ToolRun] = []
     wanted = enabled or list(TOOL_DIMENSIONS)
     for tool in wanted:
@@ -122,7 +146,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 from .semgrep_rules import default_configs, normalize_sarif, scan_env
                 from .semgrep_rules import scan_args as semgrep_args
 
-                cp = _run(semgrep_args(exe, default_configs(), sarif) + ["."], target, env=scan_env())
+                cp = _run(semgrep_args(exe, default_configs(), sarif) + SEMGREP_TARGET_FLAGS + ["."], target, env=scan_env())
                 if sarif.exists() and sarif.read_text(encoding="utf-8").strip():
                     normalize_sarif(sarif)
             elif tool == "gitleaks":
@@ -135,13 +159,15 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                     target,
                 )
             elif tool == "osv-scanner":
-                cp = _run([exe, "scan", "source", "--format", "sarif", "--output-file", str(sarif), "-r", "."], target)
+                cp = _run([exe, "scan", "source", "--config", str(neutral["osv-scanner"]), "--format", "sarif",
+                           "--output-file", str(sarif), "-r", "."], target)
                 if cp.returncode not in (0, 1):
                     # 127 no packages, 128 general error (e.g. api.osv.dev unreachable): osv-scanner may still write an
                     # empty SARIF, which must not be read as "ran, nothing found"
                     sarif.unlink(missing_ok=True)
             elif tool == "zizmor":
-                cp = _run([exe, "--no-progress", "--format", "sarif"] + (["--offline"] if _offline_zizmor() else []) + ["."], target)
+                cp = _run([exe, "--no-progress", "--format", "sarif", *ZIZMOR_TARGET_FLAGS] + (["--offline"] if _offline_zizmor() else []) + ["."],
+                          target)
                 if cp.stdout.strip():
                     sarif.write_text(cp.stdout, encoding="utf-8")
             elif tool == "trivy":
@@ -154,7 +180,8 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                     note = f"no offline database under {cache}; run scripts/trivy_db.py download (or import a bundle)"
                     runs.append(ToolRun(tool=tool, ran=False, note=note))
                     continue
-                cp = _run(trivy_args(exe, cache, sarif) + ["."], target)
+                cp = _run(trivy_args(exe, cache, sarif) + ["--ignorefile", str(neutral["trivyignore"]), "--config", str(neutral["trivy"]), "."],
+                          target)
                 updated = (read_metadata(cache) or {}).get("UpdatedAt", "?")
                 version = f"{version}, db {str(updated)[:10]}" if version else f"db {str(updated)[:10]}"
             elif tool == "csp-evaluator":
