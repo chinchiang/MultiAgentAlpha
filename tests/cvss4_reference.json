@@ -62,5 +62,53 @@
  "CVSS:4.0/AV:L/AC:H/AT:N/PR:N/UI:A/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N": {
   "macro": "111200",
   "score": 5.6
+ },
+ "CVSS:4.0/AV:A/AC:H/AT:N/PR:H/UI:A/VC:N/VI:H/VA:L/SC:N/SI:N/SA:L": {
+  "macro": "211200",
+  "score": 4.3
+ },
+ "CVSS:4.0/AV:A/AC:H/AT:P/PR:H/UI:A/VC:H/VI:N/VA:L/SC:L/SI:L/SA:N": {
+  "macro": "211200",
+  "score": 4.3
+ },
+ "CVSS:4.0/AV:L/AC:H/AT:N/PR:N/UI:A/VC:L/VI:N/VA:N/SC:H/SI:L/SA:N/E:A": {
+  "macro": "112101",
+  "score": 4.3
+ },
+ "CVSS:4.0/AV:L/AC:H/AT:P/PR:H/UI:P/VC:H/VI:L/VA:N/SC:L/SI:N/SA:L": {
+  "macro": "211200",
+  "score": 4.3
+ },
+ "CVSS:4.0/AV:N/AC:H/AT:N/PR:L/UI:P/VC:L/VI:L/VA:L/SC:H/SI:H/SA:N": {
+  "macro": "112101",
+  "score": 5.1
+ },
+ "CVSS:4.0/AV:N/AC:H/AT:P/PR:H/UI:N/VC:N/VI:L/VA:N/SC:L/SI:H/SA:L": {
+  "macro": "112101",
+  "score": 5.1
+ },
+ "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:A/VC:L/VI:N/VA:N/SC:H/SI:H/SA:N/E:A": {
+  "macro": "112101",
+  "score": 5.1
+ },
+ "CVSS:4.0/AV:N/AC:L/AT:P/PR:H/UI:P/VC:L/VI:H/VA:H/SC:N/SI:L/SA:N": {
+  "macro": "111200",
+  "score": 5.9
+ },
+ "CVSS:4.0/AV:P/AC:H/AT:N/PR:L/UI:N/VC:L/VI:N/VA:H/SC:L/SI:N/SA:N": {
+  "macro": "211200",
+  "score": 4.3
+ },
+ "CVSS:4.0/AV:P/AC:H/AT:N/PR:L/UI:P/VC:H/VI:L/VA:N/SC:N/SI:N/SA:L/E:U": {
+  "macro": "211220",
+  "score": 0.7
+ },
+ "CVSS:4.0/AV:P/AC:H/AT:P/PR:L/UI:A/VC:L/VI:H/VA:N/SC:L/SI:N/SA:L": {
+  "macro": "211200",
+  "score": 4.3
+ },
+ "CVSS:4.0/AV:P/AC:H/AT:P/PR:L/UI:N/VC:H/VI:L/VA:N/SC:N/SI:N/SA:N/E:A": {
+  "macro": "211200",
+  "score": 4.3
  }
 }

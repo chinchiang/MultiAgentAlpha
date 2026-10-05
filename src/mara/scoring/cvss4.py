@@ -264,7 +264,10 @@ def score(vector: str) -> float:
     mean = 0.0 if n_lower == 0 else normalized / n_lower
     value = value - mean
     value = max(0.0, min(10.0, value))
-    return round(value * 10) / 10
+    # FIRST: `Math.round(value * 10) / 10`, which rounds halves up. Python's round() rounds halves
+    # to even and scored 14,166 of the 419,904 base x E vectors 0.1 lower than the reference
+    # (AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:L/SC:H/SI:H/SA:L: 7.8 instead of 7.9).
+    return math.floor(value * 10 + 0.5) / 10
 
 
 def severity(numeric: float) -> str:

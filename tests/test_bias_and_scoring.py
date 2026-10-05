@@ -98,6 +98,33 @@ def test_krippendorff_alpha_known_values():
     assert krippendorff_alpha_nominal({"a": ["x", "x"], "b": ["y", "y"], "c": ["x", "x"]}) == 1.0
     assert krippendorff_alpha_nominal({"a": ["x", "y"], "b": ["y", "x"]}) < 0
     assert krippendorff_alpha_nominal({"a": ["x"]}) is None
+    assert krippendorff_alpha_nominal({"a": ["x", "y"], "b": ["y", "x"]}) == -0.5
+    # no variation at all: alpha is undefined (0/0), not perfect agreement
+    assert krippendorff_alpha_nominal({"a": ["x", "x"], "b": ["x", "x"]}) is None
+
+
+def test_corpus_alpha_counts_each_family_once_not_once_per_pass():
+    """Two self-consistent families that always disagree: alpha is -0.5. Fed both passes of each family
+    as separate raters it read -0.17, a family's agreement with itself counted as inter-family agreement."""
+    from mara.pipeline import _alpha_units
+    from mara.schemas import JudgeVote
+
+    def v(fid, fam, pass_id, verdict):
+        return JudgeVote(finding_id=fid, verdict=verdict, severity_band="High", reason="r", judge_family=fam,
+                         judge_model="m", presentation_order=0, pass_id=pass_id)
+
+    fs = [_finding(1), _finding(2)]
+    votes = [v(f.id, fam, p, verdict) for f in fs for fam, verdict in ((ModelFamily.DEEPSEEK, "true_positive"),
+                                                                         (ModelFamily.NEMOTRON, "false_positive"))
+             for p in ("forward", "reverse")]
+    units = _alpha_units(fs, votes)
+    assert units == {"F-0001": ["true_positive", "false_positive"], "F-0002": ["true_positive", "false_positive"]}
+    assert krippendorff_alpha_nominal(units) == -0.5
+    assert krippendorff_alpha_nominal({f.id: [x.verdict for x in votes if x.finding_id == f.id] for f in fs}) == -0.1667
+    # a family whose two passes disagree has no single label for that finding
+    flip = [x if not (x.judge_family == ModelFamily.NEMOTRON and x.pass_id == "reverse" and x.finding_id == "F-0001")
+            else x.model_copy(update={"verdict": "true_positive"}) for x in votes]
+    assert _alpha_units(fs, flip)["F-0001"] == ["true_positive"]
 
 
 def test_tier_rules():

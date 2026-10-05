@@ -59,7 +59,15 @@ Git targets include tracked source only: a repository root and any directory tra
 repository's HEAD (a subdirectory such as `fixtures/vuln-sample`) are read through `git ls-files`, and
 if git cannot answer (dubious ownership, a broken index) the review fails closed with
 `git_ls_files_failed` instead of walking the tree. Only a directory outside any committed history
-(including one that merely sits inside a home-directory dotfiles repo) is walked. Secret files, symlinks, unsafe paths and file/request-size
+(including one that merely sits inside a home-directory dotfiles repo) is walked.
+
+MARA's own trust anchors live in the MARA workspace, never in the code under review: the pinned
+tools (`.mara-tools`, or `MARA_TOOLS_DIR`), policy P8's evidence `calib/latest.json`, the human-queue
+backlog, the ML-BOM and the PSIRT ledger resolve against `MARA_HOME` when set, the working directory
+otherwise. `mara review` refuses a target that contains the workspace, the tool directory or the trivy
+database (`cd target && mara review .` would let the reviewed repository supply the binaries the runner
+executes and the evidence the policies trust); run it from the workspace (`mara review path/to/target`)
+or set `MARA_HOME` outside the target. Secret files, symlinks, unsafe paths and file/request-size
 limits are visible in the coverage manifest; omitted required text prevents a complete result. Live
 model calls require a current local secret preflight, even when other SARIF was pre-recorded. Use
 HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
@@ -75,7 +83,7 @@ operated families or complete human review instead of weakening the quorum.
 | L2 reviewers | 11 dimensions × ≥2 model families, independent, structured JSON only. | `mara/agents/reviewer.py`, `mara/prompts` |
 | L3 adversarial | Skeptic (must be a different family than the finder) tries to refute; red team states exploitability. Both read repository files and carry their own canary; a refutation must cite a non-blank line of a file the skeptic was shown; a reply that does not cover every finding exactly once counts one invalid item per gap, and its findings stay unchallenged (no tier B). | `mara/agents/skeptic.py`, `redteam.py` |
 | L4 jury | Blinded findings (no identity, no scores, fixed width), forward + reverse order, a family never judges its own finding when enough independent judges exist. | `mara/agents/judge.py`, `mara/bias` |
-| L5 scoring | CVSS 4.0 computed by code (FIRST-equivalent), SSVC decision, weighted consensus, Krippendorff's α, evidence tier A–D (tier A needs a tool result at level error or warning in the same file — the exact path, or the target's own path below the repository top level plus it — within ±3 lines), dimension scores, gate, SARIF 2.1 + Markdown. | `mara/scoring`, `mara/report` |
+| L5 scoring | CVSS 4.0 computed by code (identical to FIRST's `cvss_score.js` on all 419,904 base × E vectors, rounding halves up), SSVC decision, weighted consensus, Krippendorff's α (one label per judge family per finding), evidence tier A–D (tier A needs a tool result at level error or warning in the same file — the exact path, or the target's own path below the repository top level plus it — within ±3 lines), dimension scores, gate, SARIF 2.1 + Markdown. | `mara/scoring`, `mara/report` |
 
 Three rules are enforced by code, not by prompt:
 
@@ -135,10 +143,12 @@ would receive the source code (in cleartext for an `http://` loopback endpoint).
 ### Incremental review
 
 On a git repository, `--base <ref>` narrows the bundle to the files changed since that ref, the
-files they import or that import them (Python and relative JS/TS specifiers), plus the manifests and
-GitHub workflows. Everything else is excluded with the reason `out_of_increment` in the report's
-coverage section — never silently kept; a changed file the bundle cannot show fails the run, and an
-unresolvable ref is a usage error, not an empty "nothing changed":
+files they import or that import them (Python and relative JS/TS specifiers; `from app import models`
+and `from . import models` count as importing `app.models`), plus the manifests and GitHub workflows.
+Everything else is excluded with the reason `out_of_increment` in the report's coverage section —
+never silently kept; a changed file the bundle cannot show fails the run, files the increment deletes
+are listed under `deleted` (there is nothing left to show, so they do not make the run incomplete), and
+an unresolvable ref is a usage error, not an empty "nothing changed":
 
 ```bash
 mara review path/to/repo --config config/mara.yaml --base origin/main --out out
@@ -150,7 +160,9 @@ fixture a second time with `--base` set to the merge-base commit (the report lan
 skip that step).
 
 Before the reviewers run, a separate context agent builds a C4-lite view of the architecture
-(containers, external systems, trust boundaries, data stores) in one provider call. Every fact must
+(containers, external systems, trust boundaries, data stores), one provider call per bundle batch
+(the same request bound as the reviewers; facts are merged, de-duplicated and capped at 12 per kind,
+and any refused, echoed or unusable batch voids the view). Every fact must
 cite a bundle file:line with a verbatim quote and passes the same provenance check as findings;
 unverifiable items are dropped and counted, and a refusal, an echoed canary or a view with no
 verifiable fact leaves the reviewers without context facts and marks the run incomplete. The
@@ -200,10 +212,10 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 | Policy | Rule |
 |---|---|
 | P1 covered-models | Fable/Mythos-class Anthropic models (30-day retention, not ZDR-eligible) need `anthropic_covered_models_authorized: true` and an authorization reference |
-| P2 deepseek-on-prem | DeepSeek only through an OpenAI-compatible endpoint on an RFC 1918, loopback or `.internal` host; any `*.deepseek.com` URL is rejected |
+| P2 deepseek-on-prem | DeepSeek (and Qwen) only through an OpenAI-compatible endpoint on an RFC 1918, loopback, IPv6 unique-local or `.internal`/`.local`/`.lan` host; the DeepSeek and DashScope vendor APIs are rejected, and so are link-local and documentation addresses. A model is DeepSeek/Qwen by its family, its model id or its host, so a misdeclared `family: other` fails instead of switching P2 off |
 | P3 panel-size | reviewers and judges each span at least three model families; exactly two only with a stated `reduced_panel_reason` (see `config/examples/prc-site.yaml`) |
 | P4 gate-bounds | `gate.self_judge_discount` at most 0.5, `gate.human_threshold_alpha` at least 0.3 |
-| P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr` unless `allow_source_code_to_non_on_prem` is set |
+| P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr` unless `allow_source_code_to_non_on_prem` is set; `on_prem` must match the endpoint (an OpenAI-compatible server on a private host, not a vendor API or a public URL) |
 | P6 psirt-scope | when the PSIRT hand-off is enabled: HTTPS webhook, product set, token from the environment, trigger tiers within A/B and severities within Critical/High |
 | P7 ml-bom | when `ml_bom.required`: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature method), signed when `require_signature` |
 | P8 unsupervised-reject | `gate.unsupervised_reject_allowed` may be `true` only while `calib/latest.json` records a passing Alternative Annotator Test (current method: chance-corrected agreement and a bounded miss rate on the rejections themselves, see Calibration) on a live calibration within 90 days; while `false` every rejected non-D finding goes to the human queue |

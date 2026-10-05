@@ -17,7 +17,8 @@ def krippendorff_alpha_nominal(units: dict[str, list[str]]) -> float | None:
     """units: finding_id -> list of nominal labels from different raters (missing allowed).
 
     Standard nominal-metric alpha: 1 - Do/De over all pairable values.
-    Returns None when fewer than two units have >=2 labels.
+    Returns None when fewer than two units have >=2 labels, and when the expected disagreement is
+    zero (every label the same): alpha is undefined there (0/0), not perfect agreement.
     """
     pairable = {u: labels for u, labels in units.items() if len(labels) >= 2}
     if len(pairable) < 2:
@@ -37,7 +38,7 @@ def krippendorff_alpha_nominal(units: dict[str, list[str]]) -> float | None:
     # expected disagreement
     de = (n * (n - 1) - sum(k * (k - 1) for k in total.values())) / (n * (n - 1))
     if de == 0:
-        return 1.0
+        return None
     return round(1.0 - do / de, 4)
 
 

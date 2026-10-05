@@ -26,7 +26,7 @@ MAX_SELF_JUDGE_DISCOUNT = 0.5
 MIN_HUMAN_THRESHOLD_ALPHA = 0.3
 MIN_FAMILIES = 3
 AAT_MAX_AGE_DAYS = 90
-AAT_EVIDENCE = Path("calib/latest.json")
+AAT_EVIDENCE = Path("calib/latest.json")  # below the MARA workspace root (mara.workspace.resolve)
 # scripts/calibrate.py::alternative_annotator_test tags its result with this; P8 accepts no other.
 # The untagged first version tested agreement against a fixed 0.5 baseline (a constant labeller
 # could pass) and never looked at the rejections P8 unlocks, so its "passed" is not evidence.
@@ -41,24 +41,44 @@ class PolicyResult:
     reason: str
 
 
-def _host_is_private(url: str) -> tuple[bool, str]:
+# RFC 1918, loopback and IPv6 unique-local only. ipaddress' is_private also admits link-local
+# (169.254/16, fe80::/10), the documentation ranges and other special-purpose blocks, which are
+# no evidence of an on-prem inference host.
+PRIVATE_NETWORKS = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8",
+                                                         "::1/128", "fc00::/7"))
+# Vendor APIs of the PRC-affiliated families (policy P2): never a destination for source code.
+PRC_VENDOR_API_HOSTS = ("deepseek.com", "dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com")
+PRC_MODEL_MARKERS = ("deepseek", "qwen")
+
+
+def _host(url: str) -> str:
     try:
-        host = (urlparse(url).hostname or "").lower()
+        return (urlparse(url).hostname or "").lower().rstrip(".")
     except ValueError:
-        return False, "unparseable base_url"
+        return ""
+
+
+def _is_vendor_api(host: str) -> bool:
+    return any(host == h or host.endswith("." + h) for h in PRC_VENDOR_API_HOSTS)
+
+
+def _host_is_private(url: str) -> tuple[bool, str]:
+    host = _host(url)
     if not host:
-        return False, "base_url has no host"
-    if "deepseek.com" in host:
-        return False, f"host {host} is the DeepSeek vendor API"
+        return False, "base_url has no host (or cannot be parsed)"
+    if _is_vendor_api(host):
+        return False, f"host {host} is a DeepSeek/Qwen vendor API"
     if host == "localhost" or host.endswith(PRIVATE_SUFFIXES):
         return True, f"host {host} is a private name"
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
         return False, f"host {host} is neither RFC 1918, loopback nor a .internal/.local/.lan name"
-    if ip.is_private or ip.is_loopback:
-        return True, f"host {host} is RFC 1918 or loopback"
-    return False, f"host {host} is a public address"
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped  # ::ffff:10.0.0.1 is judged as 10.0.0.1
+    if any(ip in net for net in PRIVATE_NETWORKS if net.version == ip.version):
+        return True, f"host {host} is RFC 1918, loopback or IPv6 unique-local"
+    return False, f"host {host} is not RFC 1918, loopback or IPv6 unique-local (public, link-local and documentation addresses are refused)"
 
 
 def p1_covered_models(cfg: MaraConfig) -> PolicyResult:
@@ -78,12 +98,25 @@ def p1_covered_models(cfg: MaraConfig) -> PolicyResult:
 PRC_AFFILIATED = (ModelFamily.DEEPSEEK, ModelFamily.QWEN)
 
 
+def _prc_affiliated(m) -> bool:
+    """By what the model is, not only by what the config declares: the family, a DeepSeek/Qwen
+    model id, or a DeepSeek/Qwen vendor API host. `family: other` must not switch P2 off."""
+    return (m.family in PRC_AFFILIATED or any(k in m.model.lower() for k in PRC_MODEL_MARKERS)
+            or _is_vendor_api(_host(m.base_url or "")))
+
+
 def p2_deepseek_on_prem(cfg: MaraConfig) -> PolicyResult:
     """PRC-affiliated families (DeepSeek, and Qwen when used as a cold standby) run only as
-    self-hosted weights on private endpoints; never the vendor API."""
+    self-hosted weights on private endpoints; never the vendor API. A model that is one of them
+    by its id or host but declares another family fails: the family drives the panel-diversity
+    and judging rules, so a misdeclared family is itself a violation."""
     problems, notes = [], []
     for m in cfg.models:
-        if m.family not in PRC_AFFILIATED:
+        if not _prc_affiliated(m):
+            continue
+        if m.family not in PRC_AFFILIATED and m.provider != "mock":
+            problems.append(f"{m.name}: model {m.model!r} at {_host(m.base_url or '') or 'no host'} is DeepSeek/Qwen "
+                            f"but declares family {m.family.value!r}")
             continue
         if m.provider == "mock":
             notes.append(f"{m.name}: mock provider, exempt")
@@ -93,7 +126,7 @@ def p2_deepseek_on_prem(cfg: MaraConfig) -> PolicyResult:
             continue
         ok, why = _host_is_private(m.base_url or "")
         (notes if ok else problems).append(f"{m.name}: {why}")
-    if not any(m.family in PRC_AFFILIATED for m in cfg.models):
+    if not any(_prc_affiliated(m) for m in cfg.models):
         return PolicyResult("P2", "deepseek-on-prem", True, "no DeepSeek/Qwen model configured")
     if problems:
         return PolicyResult("P2", "deepseek-on-prem", False, "; ".join(problems))
@@ -135,6 +168,17 @@ def p5_data_residency(cfg: MaraConfig) -> PolicyResult:
         return PolicyResult("P5", "data-residency", True, "allow_source_code_to_non_on_prem is true (explicit override)")
     bad = [f"{m.name}: data_residency={m.data_residency}" for m in cfg.models
            if m.provider != "mock" and m.data_residency not in ("on_prem", "vendor_api_zdr")]
+    # on_prem is a claim about where the weights run; it must match the endpoint: a self-hosted
+    # OpenAI-compatible server on a private host. A public URL declared on_prem is not on-prem.
+    for m in cfg.models:
+        if m.provider == "mock" or m.data_residency != "on_prem":
+            continue
+        if m.provider != "openai_compatible":
+            bad.append(f"{m.name}: data_residency=on_prem but provider {m.provider} is a vendor API")
+            continue
+        ok, why = _host_is_private(m.base_url or "")
+        if not ok:
+            bad.append(f"{m.name}: data_residency=on_prem but {why}")
     if bad:
         return PolicyResult("P5", "data-residency", False,
                             "source code may only be sent to on_prem or vendor_api_zdr models: " + "; ".join(bad))
@@ -218,7 +262,9 @@ def p8_unsupervised_reject(cfg: MaraConfig) -> PolicyResult:
             "unsupervised_reject_allowed is false: every rejected non-D finding goes to the human queue",
         )
     try:
-        latest = json.loads(AAT_EVIDENCE.read_text(encoding="utf-8"))
+        from .workspace import resolve
+
+        latest = json.loads(resolve(AAT_EVIDENCE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return PolicyResult(
             "P8", "unsupervised-reject", False,

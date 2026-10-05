@@ -494,7 +494,9 @@ def self_hosted_models(cfg: MaraConfig) -> list:
 
 def status_for_config(cfg: MaraConfig, root: Path | str | None = None) -> dict[str, ModelStatus]:
     """One ModelStatus per self-hosted model in the config, read from cfg.ml_bom.path."""
-    base = Path(root) if root else Path.cwd()
+    from .workspace import root as workspace_root
+
+    base = Path(root) if root else workspace_root()
     bom_path = Path(cfg.ml_bom.path)
     if not bom_path.is_absolute():
         bom_path = base / bom_path

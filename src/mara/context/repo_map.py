@@ -84,6 +84,7 @@ class RepoContext:
     redacted: list[str] = field(default_factory=list)
     changed: list[str] = field(default_factory=list)
     related: list[str] = field(default_factory=list)
+    deleted: list[str] = field(default_factory=list)
 
     @property
     def complete(self) -> bool:
@@ -101,6 +102,7 @@ class RepoContext:
             "commit": self.commit,
             "changed": self.changed,
             "related": self.related,
+            "deleted": self.deleted,
         }
 
     def batches(self):
@@ -283,9 +285,10 @@ def target_identity(root: Path) -> str:
     return json.dumps(["git", normalise_remote(remote), prefix])
 
 
-def git_changed_files(root: str | Path, base: str) -> list[str]:
+def git_changed_files(root: str | Path, base: str, diff_filter: str = "d") -> list[str]:
     """Files changed between `base` and HEAD (three-dot: since the merge base), relative
-    to the review target directory (assessment #14).
+    to the review target directory (assessment #14). `diff_filter` is git's --diff-filter:
+    "d" (the default) leaves deletions out, "D" lists only them.
 
     `git diff` runs from the repository toplevel so its paths are unambiguously
     repo-root-relative; the review target's prefix is then stripped and paths outside the
@@ -295,7 +298,8 @@ def git_changed_files(root: str | Path, base: str) -> list[str]:
     root = Path(root).resolve()
     top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False)
     prefix = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-prefix"], capture_output=True, text=True, check=False)
-    diff = subprocess.run(["git", "-C", str(top.stdout.strip() if top.returncode == 0 else root), "diff", "--name-only", "-z", f"{base}...HEAD"],
+    diff = subprocess.run(["git", "-C", str(top.stdout.strip() if top.returncode == 0 else root), "diff", "--name-only", "-z",
+                           f"--diff-filter={diff_filter}", f"{base}...HEAD"],
                           capture_output=True, check=False)
     if top.returncode != 0 or prefix.returncode != 0 or diff.returncode != 0:
         raise ValueError(f"cannot resolve base ref {base!r} for incremental review")
@@ -314,7 +318,11 @@ def git_changed_files(root: str | Path, base: str) -> list[str]:
     return out
 
 
-_PY_IMPORT = re.compile(r"^[ \t]*(?:from[ \t]+([.\w]+)[ \t]+import\b|import[ \t]+([\w.]+(?:[ \t]*,[ \t]*[\w.]+)*))", re.M)
+# `from X import a, b` (also parenthesised over several lines) keeps the imported names: they may be
+# submodules (`from app import models`, `from . import models`), and the reverse direction - who
+# imports a changed module - only matches if `app.models` is recorded, not just `app`.
+_PY_IMPORT = re.compile(
+    r"^[ \t]*(?:from[ \t]+([.\w]+)[ \t]+import[ \t]*(\([^)]*\)|[^\n#;]*)|import[ \t]+([\w.]+(?:[ \t]*,[ \t]*[\w.]+)*))", re.M)
 # JS/TS: only relative specifiers are resolvable inside the bundle; bare specifiers are node_modules
 _JS_IMPORT = re.compile(r"""(?:require\(\s*|from\s+|import\s+)['"](\.{1,2}/[^'"]+)['"]""")
 _JS_SUFFIXES = ("", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js", "/index.jsx")
@@ -338,7 +346,13 @@ def _py_import_specs(rel: str, text: str) -> set[str]:
         pkg = pkg[:-1]
     out: set[str] = set()
     for m in _PY_IMPORT.finditer(text):
-        names = [m.group(1)] if m.group(1) else [s.strip().split(" as ")[0] for s in m.group(2).split(",")]
+        if m.group(1):
+            module = m.group(1)
+            imported = [n.strip().split(" as ")[0].strip() for n in m.group(2).strip().strip("()").replace("\n", ",").split(",")]
+            sep = "" if module.endswith(".") else "."
+            names = [module] + [f"{module}{sep}{n}" for n in imported if n.isidentifier()]
+        else:
+            names = [s.strip().split(" as ")[0] for s in m.group(3).split(",")]
         for spec in names:
             if not spec:
                 continue
@@ -405,12 +419,16 @@ def restrict_to_increment(ctx: RepoContext, base: str) -> tuple[list[str], list[
     """Narrow the bundle to the changed files, their import neighbours and the
     manifests/workflows (assessment #14). Everything else moves to ctx.excluded with the
     reason 'out_of_increment' — visible in coverage, never silently kept; a changed file the
-    bundle cannot show (deleted, unreadable) lands in ctx.omitted so the run fails closed.
+    bundle cannot show (unreadable, oversize) lands in ctx.omitted so the run fails closed. Files
+    the increment deletes are listed in ctx.deleted: there is nothing left to show, so they cannot
+    make every deleting pull request incomplete; their importers are still pulled in as neighbours
+    when they changed too.
 
     Returns (changed, related). The tree-level revision is unchanged; content_hash is
     recomputed for the narrowed bundle.
     """
     changed = git_changed_files(ctx.root, base)
+    ctx.deleted = git_changed_files(ctx.root, base, diff_filter="D")
     in_bundle = [rel for rel in changed if rel in ctx.content]
     for rel in changed:
         if rel not in ctx.content and rel not in ctx.excluded and rel not in ctx.omitted:

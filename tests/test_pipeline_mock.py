@@ -210,3 +210,57 @@ def test_incremental_review_limits_the_bundle_to_changed_files_and_import_neighb
     # an unresolvable base ref is a usage error, never an empty 'nothing changed'
     with pytest.raises(ValueError):
         restrict_to_increment(build_context(repo), "no-such-ref")
+
+
+def _git_repo(repo, files):
+    import subprocess
+
+    repo.mkdir()
+
+    def git(*args):
+        subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
+
+    for rel, text in files.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(text)
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-q", "-m", "init")
+    return git
+
+
+def test_incremental_review_finds_importers_of_a_changed_submodule(tmp_path):
+    """`from app import models` and `from . import models` import the module app.models, but only `app`
+    was recorded, so changing app/models.py left both callers out of the increment."""
+    from mara.context.repo_map import build_context, restrict_to_increment
+
+    repo = tmp_path / "repo"
+    git = _git_repo(repo, {
+        "app/__init__.py": "", "app/models.py": "class Order:\n    pass\n",
+        "app/views.py": "from app import models\n\nmodels.Order()\n",
+        "app/admin.py": "from . import models as m\n",
+        "app/api.py": "from app import (\n    helpers,\n    models,\n)\n",
+        "app/helpers.py": "def h():\n    return 1\n",
+        "app/unrelated.py": "from app import helpers\n",
+    })
+    (repo / "app" / "models.py").write_text("class Order:\n    owner = None\n")
+    git("commit", "-q", "-am", "change models")
+    ctx = build_context(repo)
+    changed, related = restrict_to_increment(ctx, "HEAD~1")
+    assert changed == ["app/models.py"]
+    assert {"app/views.py", "app/admin.py", "app/api.py"} <= set(related)
+    assert ctx.excluded.get("app/unrelated.py") == "out_of_increment"
+
+
+def test_a_deleted_file_does_not_make_every_incremental_review_incomplete(tmp_path):
+    from mara.context.repo_map import build_context, restrict_to_increment
+
+    repo = tmp_path / "repo"
+    git = _git_repo(repo, {"app.py": "import legacy\n", "legacy.py": "def old():\n    pass\n"})
+    (repo / "app.py").write_text("print('no legacy')\n")
+    git("rm", "-q", "legacy.py")
+    git("commit", "-q", "-am", "drop legacy")
+    ctx = build_context(repo)
+    changed, _ = restrict_to_increment(ctx, "HEAD~1")
+    assert changed == ["app.py"] and ctx.deleted == ["legacy.py"]
+    assert not ctx.omitted and ctx.complete and ctx.coverage()["deleted"] == ["legacy.py"]

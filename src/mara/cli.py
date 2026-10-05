@@ -42,8 +42,12 @@ def review(
     if provider == "mock" and any(m.provider != "mock" for m in cfg.models):
         raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock")
     pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out)
+    from .workspace import WorkspaceInsideTarget
+
     try:
         report = pipe.run(target, sarif_dir=sarif_dir, mode=provider, base_ref=base)
+    except WorkspaceInsideTarget as e:
+        raise typer.BadParameter(str(e), param_hint="TARGET") from e
     except ValueError as e:
         # a broken base ref is a usage error, not an empty 'nothing changed' review
         if base is not None:
@@ -66,7 +70,9 @@ def review(
 
         write_psirt(report.psirt, out / "psirt-notifications.json")
         if notify_psirt and report.psirt:
-            for s in send_psirt(report.psirt, cfg, ledger_path=Path(cfg.psirt.ledger_file), resend=psirt_resend):
+            from .workspace import resolve
+
+            for s in send_psirt(report.psirt, cfg, ledger_path=resolve(cfg.psirt.ledger_file), resend=psirt_resend):
                 if s.get("skipped"):
                     console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: skipped, {s['reason']} (ledger {cfg.psirt.ledger_file})")
                 else:

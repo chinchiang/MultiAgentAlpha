@@ -65,6 +65,32 @@ def test_g8_and_g9_freshness(tmp_path):
     assert check_g9(tmp_path, TODAY).status == PASS
 
 
+def test_g8_and_g9_refuse_reports_dated_in_the_future(tmp_path):
+    """A negative age used to pass the `age > 90` freshness test: a report dated 2027-01-01 kept G-8/G-9
+    green until April 2027."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    live = "---\nmode: live\nfamilies: []\nprovider_modes: [live]\nlabels: 3\n---\n# x\n"
+    for name in ("garak-2027-01-01.md", "cyberseceval-2027-01-01.md", "calibration-2027-01-01.md"):
+        (docs / name).write_text(live, encoding="utf-8")
+    g8, g9 = check_g8(tmp_path, TODAY), check_g9(tmp_path, TODAY)
+    assert g8.status == FAIL and "晚於今天" in g8.evidence
+    assert g9.status == FAIL and "晚於今天" in g9.evidence
+
+
+def test_calibrate_refuses_a_future_or_malformed_date(tmp_path, monkeypatch):
+    import calibrate
+
+    run = ("s1", {"provider_mode": "mock", "findings": [], "bias_audit": {}}, [])
+    monkeypatch.setattr(calibrate, "load_runs", lambda *_: [run])
+    tomorrow = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+    for bad, match in ((tomorrow, "in the future"), ("2026-13-01", "YYYY-MM-DD")):
+        monkeypatch.setattr(sys, "argv", ["calibrate", "--out-dir", str(tmp_path), "--date", bad, "--report", str(tmp_path / "r.md")])
+        with pytest.raises(SystemExit, match=match):
+            calibrate.main()
+    assert not (tmp_path / "r.md").exists()
+
+
 def test_g6_fails_on_the_seeded_fixture_workflow(tmp_path):
     src = ROOT / "fixtures" / "vuln-sample" / ".github" / "workflows"
     dst = tmp_path / ".github" / "workflows"
