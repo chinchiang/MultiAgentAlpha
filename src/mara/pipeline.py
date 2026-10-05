@@ -38,6 +38,7 @@ from .scoring.idcheck import check_finding_refs
 from .scoring.tiers import assign_tier, ssvc_decision
 from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
 from .tools.sarif import ToolResult
+from .workspace import check_outside
 
 # error vocabulary of the agent layer: "refused" marks an abstention (model said no), the
 # incomplete_or_duplicate_* entries are summary markers the agents append to signal that a
@@ -98,9 +99,9 @@ class Pipeline:
             return None
         prov = self._p(name)
         fam = prov.family.value
-        self.audit["context_calls"] += 1
-        self.audit[f"context_calls[{fam}]"] += 1
         view, audit = context_agent.run_context_agent(prov, ctx)
+        self.audit["context_calls"] += audit["calls"]
+        self.audit[f"context_calls[{fam}]"] += audit["calls"]
         for key, counter in (("refused", "context_refusals"), ("truncated", "context_truncations"),
                              ("errored", "context_errors"), ("canary_echoed", "canary_echoes"),
                              ("invalid", "context_invalid_items"), ("unverified", "context_unverified_items")):
@@ -450,6 +451,9 @@ class Pipeline:
         if mode not in {"mock", "live"} or actual_mode != mode or (mode == "live" and "mock" in actual_modes):
             raise ValueError("provider mode does not match the actual provider configuration")
         target = Path(target).resolve()
+        # before anything runs: the tools come from, and P8/the backlog were read from, the MARA
+        # workspace; none of it may be supplied by the repository under review
+        check_outside(target)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = build_context(target)
         if base_ref:
@@ -547,7 +551,7 @@ class Pipeline:
                     self.audit["tier_c_blocked_while_tightened"] += 1
         if any(x.score < self.cfg.gate.min_dimension_score for x in dims):
             gate = False
-        global_alpha = krippendorff_alpha_nominal({f.id: [v.verdict for v in votes if v.finding_id == f.id] for f in findings})
+        global_alpha = krippendorff_alpha_nominal(_alpha_units(findings, votes))
         self.audit["global_krippendorff_alpha"] = global_alpha if global_alpha is not None else "n/a"
         for k, v in pairwise_family_agreement(votes).items():
             self.audit[f"judge_agreement[{k}]"] = v
@@ -667,6 +671,27 @@ def _norm_path(path: str) -> str:
     while path.startswith("./"):
         path = path[2:]
     return path
+
+
+def _alpha_units(findings: list[Finding], votes: list[JudgeVote]) -> dict[str, list[str]]:
+    """Krippendorff units for the corpus alpha: one label per judge family per finding, the verdict
+    both of its passes gave. The forward and reverse passes are the same rater seen twice (they exist
+    to measure position bias, counted as position_flips); counted as two raters, a family's
+    agreement with itself passed for agreement between families (two self-consistent families that
+    always disagree scored -0.17 instead of -0.5). A family whose passes differ has no single label
+    for that finding and is missing there, which alpha allows."""
+    by_finding: dict[str, dict[ModelFamily, list[JudgeVote]]] = defaultdict(lambda: defaultdict(list))
+    for v in votes:
+        by_finding[v.finding_id][v.judge_family].append(v)
+    units: dict[str, list[str]] = {}
+    for f in findings:
+        labels: list[str] = []
+        for vs in by_finding[f.id].values():
+            passes = {v.pass_id: v.verdict for v in vs}
+            if len(vs) == 2 and set(passes) == {"forward", "reverse"} and passes["forward"] == passes["reverse"]:
+                labels.append(passes["forward"])
+        units[f.id] = labels
+    return units
 
 
 def _tool_corroborates(f: Finding, tool_results: list[ToolResult], prefix: str = "") -> bool:

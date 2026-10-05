@@ -60,6 +60,46 @@ def test_p2_accepts_private_hosts(url):
     assert MaraConfig.model_validate(ok)
 
 
+@pytest.mark.parametrize("url", ["https://169.254.10.1:8000/v1", "https://192.0.2.10/v1", "https://[fe80::1]:8000/v1",
+                                 "https://[2001:db8::1]/v1", "https://dashscope.aliyuncs.com/compatible-mode/v1"])
+def test_p2_refuses_link_local_documentation_and_vendor_hosts(url):
+    # ipaddress' is_private admits link-local and the documentation ranges; neither is an on-prem host
+    bad = _base()
+    bad["models"][1]["base_url"] = url
+    with pytest.raises(ValueError, match="P2 deepseek-on-prem"):
+        MaraConfig.model_validate(bad)
+
+
+@pytest.mark.parametrize("url", ["https://[::ffff:10.0.0.7]:8000/v1", "https://[fd12:3456::1]/v1"])
+def test_p2_accepts_mapped_rfc1918_and_unique_local(url):
+    ok = _base()
+    ok["models"][1]["base_url"] = url
+    assert MaraConfig.model_validate(ok)
+
+
+def test_p2_does_not_trust_the_declared_family():
+    """`family: other` used to switch P2 (and with a self-declared on_prem, P5) off entirely."""
+    vendor = _base()
+    vendor["models"][1].update(family="other", base_url="https://api.deepseek.com/v1")
+    with pytest.raises(ValueError, match="P2 deepseek-on-prem.*declares family 'other'"):
+        MaraConfig.model_validate(vendor)
+    misdeclared = _base()
+    misdeclared["models"][1].update(family="other")  # deepseek-v3.2 on a private host, but not called deepseek
+    with pytest.raises(ValueError, match="is DeepSeek/Qwen but declares family 'other'"):
+        MaraConfig.model_validate(misdeclared)
+
+
+def test_p5_on_prem_must_match_the_endpoint():
+    public = _base()
+    public["models"][2]["base_url"] = "https://models.example.com/v1"  # nemotron, declared on_prem
+    with pytest.raises(ValueError, match="P5 data-residency.*on_prem but host models.example.com"):
+        MaraConfig.model_validate(public)
+    vendor = _base()
+    vendor["models"][0]["data_residency"] = "on_prem"  # the Anthropic API is not on-prem
+    with pytest.raises(ValueError, match="on_prem but provider anthropic is a vendor API"):
+        MaraConfig.model_validate(vendor)
+
+
 def test_p2_rejects_non_openai_compatible_provider_for_deepseek():
     bad = _base()
     bad["models"][1]["provider"] = "anthropic"

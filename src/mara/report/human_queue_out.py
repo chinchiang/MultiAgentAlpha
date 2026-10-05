@@ -28,7 +28,9 @@ def queue_key(file: str, line: int, cwe: str, *, target_id: str = "", revision: 
 
 def read_backlog(cfg: MaraConfig, root: Path | None = None) -> int | None:
     """Open ticket count as last written by scripts/human_queue_issues.py, or None if unknown."""
-    path = (root or Path(".")) / cfg.human_queue.backlog_file
+    from ..workspace import root as workspace_root
+
+    path = (root or workspace_root()) / cfg.human_queue.backlog_file
     if not path.is_file():
         return None
     try:

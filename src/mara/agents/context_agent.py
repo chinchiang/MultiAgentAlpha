@@ -94,8 +94,43 @@ class ContextView(BaseModel):
         ])
 
 
+MAX_ITEMS_PER_KIND = 12  # the schema's per-call limit, kept for the merged view: the reviewer prompt stays bounded
+
+_AUDIT_KEYS = ("refused", "truncated", "errored", "canary_echoed", "input_tokens", "output_tokens", "invalid", "unverified")
+
+
 def run_context_agent(provider: Provider, ctx: RepoContext) -> tuple[ContextView | None, dict]:
-    """Returns (view, audit); view is None when no trustworthy view could be produced."""
+    """Returns (view, audit); view is None when no trustworthy view could be produced.
+
+    One call per bundle batch (RepoContext.batches, the bound every reviewer request has): the whole
+    bundle in one request - up to MAX_REPOSITORY_CHARS - failed as a provider error on any repository
+    larger than the context model's window and left every review incomplete. A batch that is refused,
+    echoes its canary or returns no usable object voids the whole view (fail closed); a batch with no
+    architecture facts in it just contributes none. Facts are de-duplicated and capped per kind.
+    Audit counters are summed over the calls; `calls` says how many were made."""
+    totals = dict.fromkeys(_AUDIT_KEYS, 0) | {"calls": 0}
+    merged: list[ContextItem] = []
+    seen: set[tuple[str, str, str, int]] = set()
+    for batch in ctx.batches():
+        items, audit = _context_call(provider, batch)
+        totals["calls"] += 1
+        for k in _AUDIT_KEYS:
+            totals[k] += int(audit[k])
+        if items is None:
+            return None, totals
+        for it in items:
+            key = (it.kind, it.name, it.file, it.line)
+            if key in seen or sum(m.kind == it.kind for m in merged) >= MAX_ITEMS_PER_KIND:
+                continue
+            seen.add(key)
+            merged.append(it)
+    if not merged:
+        return None, totals
+    return ContextView(source_family=provider.family.value, source_model=provider.model, items=merged), totals
+
+
+def _context_call(provider: Provider, ctx: RepoContext) -> tuple[list[ContextItem] | None, dict]:
+    """One context call over one batch: (verified items, audit); None when the call is unusable."""
     canary = base.Canary()
     user = (
         f"Repository summary: {ctx.summary()}\n\n{base.untrusted_block(ctx, canary)}\n\n"
@@ -130,6 +165,4 @@ def run_context_agent(provider: Provider, ctx: RepoContext) -> tuple[ContextView
             audit["unverified"] += 1
             continue
         items.append(ContextItem(**item.model_dump()))
-    if not items:
-        return None, audit
-    return ContextView(source_family=provider.family.value, source_model=provider.model, items=items), audit
+    return items, audit

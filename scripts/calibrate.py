@@ -668,6 +668,15 @@ def main() -> int:
     ap.add_argument("--report", default=None)
     ap.add_argument("--date", default=None, help="YYYY-MM-DD (default: today)")
     args = ap.parse_args()
+    try:
+        when = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
+    except ValueError:
+        raise SystemExit(f"--date must be YYYY-MM-DD, got {args.date!r}") from None
+    if when > dt.date.today():
+        # the date names the report, calib/latest.json and the history row; policy P8 and governance
+        # checks G-8/G-9 measure freshness from it, so a future date would keep stale evidence "fresh"
+        raise SystemExit(f"--date {when.isoformat()} is in the future; a calibration records a run that happened")
+    date = when.isoformat()
     out_dir = Path(args.out_dir) if Path(args.out_dir).is_absolute() else ROOT / args.out_dir
     samples_dir = Path(args.samples_dir) if Path(args.samples_dir).is_absolute() else ROOT / args.samples_dir
     runs = load_runs(out_dir, samples_dir)
@@ -701,7 +710,6 @@ def main() -> int:
     history_path = ROOT / "calib" / "history.json"
     history = load_history(history_path)
     n_tool_labels = sum(len(rs) for per in tool_labels.values() for rs in per.values())
-    date = args.date or dt.date.today().isoformat()
     text = render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, args.mode, date, model_eval,
                   aat=aat, history=history, tool_recall_rows=recall_rows, tool_labels=n_tool_labels)
     out = Path(args.report) if args.report else ROOT / "docs" / f"calibration-{date}.md"

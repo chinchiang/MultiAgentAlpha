@@ -46,6 +46,7 @@ def test_context_strips_nothing_but_records_entry_points(root):
 # ------------------------------------------------------------------ refusals vs invalid output (#29)
 
 import json  # noqa: E402
+import re  # noqa: E402
 
 from mara.agents import context_agent, skeptic  # noqa: E402
 from mara.config import load_config  # noqa: E402
@@ -125,6 +126,42 @@ def test_context_agent_keeps_only_quote_verified_facts(root):
         ("container", "dashboard"), ("external_system", "package registry"), ("data_store", "orders.db")]
     block = view.facts_block()
     assert "<context_facts>" in block and "orders.db" in block and "UNTRUSTED bundle" in block and "trusted context" not in block
+
+
+def test_context_agent_calls_once_per_batch_and_merges_the_facts(root, tmp_path, monkeypatch):
+    """The whole bundle (up to 16M characters) went to the context model in one request; any repository
+    larger than its window failed as a provider error and left every review incomplete."""
+    import mara.context.repo_map as repo_map
+
+    for i in range(4):
+        (tmp_path / f"svc{i}.py").write_text(f"DB_URL_{i} = 'postgres://db{i}.internal/app'\n" + "# padding\n" * 20, encoding="utf-8")
+    monkeypatch.setattr(repo_map, "MAX_TOTAL_CHARS", 500)
+    ctx = build_context(tmp_path)
+    batches = list(ctx.batches())
+    assert len(batches) > 1
+    prompts = []
+
+    class PerBatch(Provider):
+        def __init__(self, refuse_call=None):
+            super().__init__(load_config(root / "config" / "mara.mock.yaml").models[0])
+            self.refuse_call = refuse_call
+
+        def complete(self, *, user, **kwargs):
+            prompts.append(user)
+            if len(prompts) == self.refuse_call:
+                return Completion(data=None, raw_text="", refused=True)
+            files = sorted(set(re.findall(r'<file path="(svc\d\.py)">', user)))
+            stores = [{"name": f"db{f[3]}", "file": f, "line": 1, "quote": f"DB_URL_{f[3]} = 'postgres://db{f[3]}.internal/app'"}
+                      for f in files]
+            return Completion(data={"containers": [], "external_systems": [], "trust_boundaries": [], "data_stores": stores}, raw_text="{}")
+
+    view, audit = context_agent.run_context_agent(PerBatch(), ctx)
+    assert audit["calls"] == len(batches) == len(prompts) and audit["unverified"] == 0
+    assert all(sum(f"svc{i}.py" in p for i in range(4)) < 4 for p in prompts), "no request carries the whole bundle"
+    assert sorted(i.name for i in view.by_kind("data_store")) == ["db0", "db1", "db2", "db3"]
+    prompts.clear()
+    view, audit = context_agent.run_context_agent(PerBatch(refuse_call=2), ctx)
+    assert view is None and audit["refused"] == 1, "one refused batch voids the view (fail closed)"
 
 
 def test_context_facts_are_labelled_as_data_and_cannot_close_their_block():

@@ -5,7 +5,8 @@ model reproduced is still kept, attributed to the TOOL family.
 
 Tools are executed only from the directory populated by scripts/install_tools.py (version,
 SHA-256 and publisher signature checked against tools/versions.lock); whatever happens to be on
-PATH is ignored. Override the directory with MARA_TOOLS_DIR.
+PATH is ignored. Override the directory with MARA_TOOLS_DIR; a relative one, like the default
+.mara-tools, resolves against the MARA workspace (mara.workspace), never inside the review target.
 
 Tools are never executed against code they could run: they parse, they do not build.
 """
@@ -25,7 +26,9 @@ NOT_INSTALLED = "not installed under {bin_dir}; run `python scripts/install_tool
 
 
 def tools_dir() -> Path:
-    return Path(os.environ.get("MARA_TOOLS_DIR", ".mara-tools")).resolve()
+    from ..workspace import resolve
+
+    return resolve(os.environ.get("MARA_TOOLS_DIR") or ".mara-tools").resolve()
 
 
 def tool_path(tool: str) -> Path | None:

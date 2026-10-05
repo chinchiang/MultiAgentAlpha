@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from mara.agents import base, judge
@@ -385,14 +386,79 @@ def test_unresolvable_base_ref_is_a_usage_error(tmp_path, monkeypatch):
 
     from mara.cli import app
 
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "app.py").write_text("unsafe()")
+    monkeypatch.chdir(tmp_path)  # the workspace; the target is a directory below it, never the workspace itself
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "app.py").write_text("unsafe()")
     res = CliRunner().invoke(
-        app, ["review", str(tmp_path), "--provider", "mock", "--config", str(ROOT / "config" / "mara.mock.yaml"),
+        app, ["review", str(target), "--provider", "mock", "--config", str(ROOT / "config" / "mara.mock.yaml"),
               "--base", "no-such-ref"])
     # exit 2 (usage error) and no report: the message text goes through typer's rich error
     # panel, whose rendering varies with terminal width and encoding, so assert the outcome
     assert res.exit_code == 2 and not (tmp_path / "out" / "report.json").exists()
+    assert "WorkspaceInsideTarget" not in repr(res.exception)
+
+
+def test_trust_anchors_never_come_from_the_review_target(tmp_path, monkeypatch):
+    """`cd target && mara review .` used to execute target/.mara-tools/bin/* as the pinned tools and
+    let a planted target/calib/latest.json satisfy policy P8."""
+    from typer.testing import CliRunner
+
+    from mara import workspace
+    from mara.cli import app
+
+    target = tmp_path / "target"
+    (target / ".mara-tools" / "bin").mkdir(parents=True)
+    (target / "app.py").write_text("unsafe()")
+    monkeypatch.chdir(target)
+    monkeypatch.delenv("MARA_TOOLS_DIR", raising=False)
+    monkeypatch.delenv("MARA_HOME", raising=False)
+    with pytest.raises(workspace.WorkspaceInsideTarget, match="MARA workspace"):
+        workspace.check_outside(target)
+    res = CliRunner().invoke(app, ["review", ".", "--provider", "mock", "--config", str(ROOT / "config" / "mara.mock.yaml"),
+                                   "--out", str(tmp_path / "out")])
+    assert res.exit_code == 2 and isinstance(res.exception, SystemExit) and not (tmp_path / "out" / "report.json").exists()
+    # a workspace outside the target is fine, even when the working directory is the target
+    home = tmp_path / "mara-home"
+    home.mkdir()
+    monkeypatch.setenv("MARA_HOME", str(home))
+    workspace.check_outside(target)
+    assert workspace.resolve("calib/latest.json") == home / "calib" / "latest.json"
+    from mara.tools.runner import tools_dir
+    assert tools_dir() == (home / ".mara-tools").resolve()
+    # ...but not a tool directory or trivy database pointed into it
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(target / ".mara-tools"))
+    with pytest.raises(workspace.WorkspaceInsideTarget, match="tool directory"):
+        workspace.check_outside(target)
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(home / ".mara-tools"))
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(target / "cache"))
+    with pytest.raises(workspace.WorkspaceInsideTarget, match="trivy"):
+        workspace.check_outside(target)
+    # the ordinary layout: the workspace is a parent of the target (mara review fixtures/vuln-sample)
+    monkeypatch.delenv("MARA_TRIVY_CACHE_DIR")
+    monkeypatch.setenv("MARA_HOME", str(tmp_path))
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / ".mara-tools"))
+    workspace.check_outside(target)
+
+
+def test_p8_reads_its_evidence_from_the_workspace(tmp_path, monkeypatch):
+    import datetime as dt
+
+    from mara.config import MaraConfig
+    from mara.policy import AAT_METHOD, evaluate_policies
+
+    raw = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    raw["gate"] = dict(raw.get("gate") or {}, unsupervised_reject_allowed=True)
+    cfg = MaraConfig.model_validate(raw, context={"skip_policies": True})
+    home = tmp_path / "home"
+    (home / "calib").mkdir(parents=True)
+    (home / "calib" / "latest.json").write_text(json.dumps({"date": dt.date.today().isoformat(), "mode": "live", "aat": {
+        "method": AAT_METHOD, "passed": True, "n": 12, "rejection": {"n": 59, "passed": True, "miss_rate_upper": 0.0495}}}), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)  # no calib/ here
+    p8 = lambda: [r for r in evaluate_policies(cfg) if r.id == "P8"][0]  # noqa: E731
+    assert not p8().passed
+    monkeypatch.setenv("MARA_HOME", str(home))
+    assert p8().passed
 
 
 def test_one_verified_quote_cannot_launder_an_invalid_primary_location(tmp_path):

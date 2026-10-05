@@ -346,6 +346,10 @@ def _fresh_live_report(root: Path, pattern: str, today: dt.date, families: list[
     files = _dated_files(root / "docs", [pattern], today)
     problems, ev = [], []
     for p, d, age in files:
+        if age < 0:
+            # a report dated in the future would otherwise count as fresh until long after it expired
+            problems.append(f"`docs/{p.name}` 的日期 {d} 晚於今天，不是實際執行的紀錄")
+            continue
         if age > FRESH_DAYS:
             problems.append(f"`docs/{p.name}` 已 {age} 天（> {FRESH_DAYS}）")
             continue
@@ -392,6 +396,9 @@ def check_g9(root: Path, today: dt.date, config_path: Path | None = None) -> Che
     files = _dated_files(root / "docs", ["calibration-*.md"], today)
     fresh, rejected = [], []
     for p, d, age in files:
+        if age < 0:
+            rejected.append(f"`docs/{p.name}`（{d}，日期晚於今天）")
+            continue
         if age > FRESH_DAYS:
             continue
         meta, body = read_front_matter(p)
