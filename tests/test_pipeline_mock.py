@@ -95,7 +95,7 @@ def test_tool_corroboration_respects_tool_dimensions():
     from mara.pipeline import _tool_corroborates
     from mara.tools.sarif import ToolResult
 
-    result = ToolResult(tool="csp-evaluator", rule_id="csp.test", level="high", message="weak CSP",
+    result = ToolResult(tool="csp-evaluator", rule_id="csp.test", level="error", message="weak CSP",
                         file="static/index.html", line=5, cwe=None, cwes=[])
 
     def finding(dim, cwe):

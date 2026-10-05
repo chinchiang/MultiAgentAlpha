@@ -122,7 +122,8 @@ class HumanQueueConfig(BaseModel):
     backlog_limit: int = Field(default=20, ge=1, description="Open tickets above which the pipeline tightens")
     backlog_file: str = Field(default="calib/decisions/backlog.json", description="Written by scripts/human_queue_issues.py")
     tighten_alpha_step: float = Field(default=0.1, ge=0.0, le=0.5, description="Added to gate.human_threshold_alpha while over the limit")
-    tighten_exclude_tier_c: bool = Field(default=True, description="While over the limit, tier C High findings are not queued")
+    tighten_exclude_tier_c: bool = Field(default=True, description="While over the limit, tier C High findings are not queued; "
+                                        "an accepted one blocks the gate instead of passing unseen")
     queue_tier_c_min_severity: Literal["High", "Critical"] = Field(default="High", description="Tier C findings at or above this severity are queued")
 
 

@@ -29,6 +29,6 @@ python3 scripts/human_queue_issues.py --repo owner/repo --sync-decisions --dry-r
 
 ## Backlog 與 CI
 
-`human_queue.backlog_limit` 以上會提高 agreement proxy 的門檻。歷史設定名 `gate.human_threshold_alpha`／`tighten_alpha_step` 暫保留相容性；待判結果始終保留在佇列中。`human_queue.enabled: false` 只關閉佇列檔案，不能關閉阻擋判定。
+`human_queue.backlog_limit` 以上會提高 agreement proxy 的門檻；`tighten_exclude_tier_c: true`（預設）時，`queue_tier_c_min_severity` 以上的 C 級 finding 不再排入佇列，但既然沒有人會看，陪審團接受的這類 finding 會像 A／B 級一樣阻擋 gate（bias audit 記 `tier_c_blocked_while_tightened`），不會只憑單一家族加陪審共識就放行：收緊只減少人工負擔，從不放寬。歷史設定名 `gate.human_threshold_alpha`／`tighten_alpha_step` 暫保留相容性；待判結果始終保留在佇列中。`human_queue.enabled: false` 只關閉佇列檔案，不能關閉阻擋判定。
 
 CI 的 human-queue job 僅於 main push、測試通過後執行，具 `issues: write` 而無 `contents: write`。除非儲存庫變數 `MARA_HUMAN_QUEUE_ISSUES=true`，它維持 dry-run。裁決 artifact 必須由負責人核對後保存；本次修正未建立對外工單或填造訓練紀錄。

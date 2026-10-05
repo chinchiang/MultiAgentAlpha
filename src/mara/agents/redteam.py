@@ -107,17 +107,21 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         }
         for f in findings
     ]
+    canary = base.Canary()  # raw repository files again: an injection steering exploitability must show
     user = (
         f"Repository summary: {ctx.summary()}\n\n"
-        f"{base.untrusted_block(ctx, None, sorted({p.file for f in findings for p in f.provenance}))}\n\nFindings.\nBEGIN_JSON_ARRAY\n"
+        f"{base.untrusted_block(ctx, canary, sorted({p.file for f in findings for p in f.provenance}))}\n\nFindings.\nBEGIN_JSON_ARRAY\n"
         + json.dumps(view, ensure_ascii=False)
     )
     comp = base.call(provider, system_extra=base.load_prompt("redteam"), user=user, schema=REDTEAM_SCHEMA, role="redteam")
+    if comp.raw_text and canary.echoed(comp.raw_text):
+        return [], ["canary_echoed"], 0  # followed the planted instruction: none of its notes counts
     items, errors = base.parse_items(comp, _RedRaw)
     counts = Counter(i.finding_id for i in items)
     if set(counts) != {f.id for f in findings} or any(n != 1 for n in counts.values()) or errors:
         # a bare refusal is an abstention, not invalid output: keep its error list clean
-        errs = errors if errors == ["refused"] else errors + ["incomplete_or_duplicate_response"]
+        errs = errors if errors == ["refused"] else (
+            errors + base.coverage_errors({f.id for f in findings}, [i.finding_id for i in items], errors) + ["incomplete_or_duplicate_response"])
         return [], errs, 0
     stripped = 0
     out = []

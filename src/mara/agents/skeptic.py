@@ -32,16 +32,23 @@ def _norm_ref_path(path: str) -> str:
     return path
 
 
-def _control_location_ok(ctx: RepoContext, text: str) -> bool:
-    """A refutation's cited control must point at a real path:line inside the reviewed bundle.
+def _control_location_ok(ctx: RepoContext, text: str, shown: set[str] | None = None) -> bool:
+    """A refutation's cited control must point at a real, non-blank path:line the skeptic was shown.
 
     Without this check a model can refute a finding with a bare phrase such as
-    'parameterised query' — a control nobody can open and verify. The citation must name
-    an existing file (paths are bundle-relative) and a line inside it.
+    'parameterised query' - a control nobody can open and verify. The citation must name a file
+    the skeptic actually received in this call (`shown`: the batch's evidence files; any bundle
+    file when None) and a non-blank line inside it: citing a file it never saw, or an empty line,
+    cannot be a control it found. Whether the cited code really neutralises the finding is not
+    decidable by code; refuted findings the jury still accepts go to a human for that reason.
     """
     for m in _CONTROL_REF.finditer(text):
-        lines = ctx.content.get(_norm_ref_path(m.group("file")), "").splitlines()
-        if 1 <= int(m.group("line")) <= len(lines):
+        path = _norm_ref_path(m.group("file"))
+        if shown is not None and path not in shown:
+            continue
+        lines = ctx.content.get(path, "").splitlines()
+        n = int(m.group("line"))
+        if 1 <= n <= len(lines) and lines[n - 1].strip():
             return True
     return False
 
@@ -60,22 +67,29 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     """
     if not findings:
         return [], [], 0
+    shown = sorted({p.file for f in findings for p in f.provenance})
+    # the skeptic reads raw repository files like a reviewer, and its verdict can clear a finding: an
+    # injection that drives refutations must be as detectable as one that silences a reviewer
+    canary = base.Canary()
     user = (
-        f"Repository summary: {ctx.summary()}\n\n{base.untrusted_block(ctx, None, sorted({p.file for f in findings for p in f.provenance}))}\n\n"
+        f"Repository summary: {ctx.summary()}\n\n{base.untrusted_block(ctx, canary, shown)}\n\n"
         "Findings to refute.\nBEGIN_JSON_ARRAY\n" + json.dumps([_view(f) for f in findings], ensure_ascii=False)
     )
     comp = base.call(provider, system_extra=base.load_prompt("skeptic"), user=user, schema=SKEPTIC_SCHEMA, role="skeptic")
+    if comp.raw_text and canary.echoed(comp.raw_text):
+        return [], ["canary_echoed"], 0  # followed the planted instruction: none of its verdicts counts
     items, errors = base.parse_items(comp, _SkepticRaw)
     counts = Counter(i.finding_id for i in items)
     if set(counts) != {f.id for f in findings} or any(n != 1 for n in counts.values()) or errors:
         # a bare refusal is an abstention, not invalid output: keep its error list clean
-        errs = errors if errors == ["refused"] else errors + ["incomplete_or_duplicate_response"]
+        errs = errors if errors == ["refused"] else (
+            errors + base.coverage_errors({f.id for f in findings}, [i.finding_id for i in items], errors) + ["incomplete_or_duplicate_response"])
         return [], errs, 0
     unverified = 0
     out = []
     for i in items:
         data = i.model_dump()
-        if data["verdict"] == "refuted" and not _control_location_ok(ctx, data["sanitizer_or_control"]):
+        if data["verdict"] == "refuted" and not _control_location_ok(ctx, data["sanitizer_or_control"], {_norm_ref_path(p) for p in shown}):
             data["verdict"] = "weakened"
             data["reason"] = (data["reason"] + " [control citation not verifiable in bundle]")[:600]
             unverified += 1

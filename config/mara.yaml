@@ -82,7 +82,8 @@ psirt:
 # scripts/human_queue_issues.py turns them into GitHub issues (one per stable key, label below) and brings
 # the decisions on closed tickets back into calib/decisions/, which scripts/calibrate.py reads as labels.
 # When calib/decisions/backlog.json says more tickets are open than backlog_limit, the pipeline tightens:
-# the alpha threshold rises by tighten_alpha_step and tier C stops being queued. It never loosens.
+# the alpha threshold rises by tighten_alpha_step and tier C stops being queued; an accepted tier C finding
+# at queue_tier_c_min_severity then blocks the gate instead of passing unseen. It never loosens.
 # See docs/human-queue.md.
 human_queue:
   enabled: true

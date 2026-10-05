@@ -55,7 +55,11 @@ for incomplete reviews; scores on completed reviews are prioritization heuristic
 that the application is secure. Single-finding agreement is named `agreement_proxy`, distinct from
 corpus-level Krippendorff alpha. The older alpha-named configuration keys remain for compatibility.
 
-Git targets include tracked source only. Secret files, symlinks, unsafe paths and file/request-size
+Git targets include tracked source only: a repository root and any directory tracked in a
+repository's HEAD (a subdirectory such as `fixtures/vuln-sample`) are read through `git ls-files`, and
+if git cannot answer (dubious ownership, a broken index) the review fails closed with
+`git_ls_files_failed` instead of walking the tree. Only a directory outside any committed history
+(including one that merely sits inside a home-directory dotfiles repo) is walked. Secret files, symlinks, unsafe paths and file/request-size
 limits are visible in the coverage manifest; omitted required text prevents a complete result. Live
 model calls require a current local secret preflight, even when other SARIF was pre-recorded. Use
 HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
@@ -69,9 +73,9 @@ operated families or complete human review instead of weakening the quorum.
 | L0 deterministic anchors | semgrep, gitleaks, osv-scanner, zizmor, trivy, csp-evaluator → SARIF. Ground truth and calibration set. | `mara/tools` |
 | L1 context | Repo map, entry points, workflows, manifests; strips authorship signals. Facts, not judgements. | `mara/context` |
 | L2 reviewers | 11 dimensions × ≥2 model families, independent, structured JSON only. | `mara/agents/reviewer.py`, `mara/prompts` |
-| L3 adversarial | Skeptic (must be a different family than the finder) tries to refute; red team states exploitability. | `mara/agents/skeptic.py`, `redteam.py` |
+| L3 adversarial | Skeptic (must be a different family than the finder) tries to refute; red team states exploitability. Both read repository files and carry their own canary; a refutation must cite a non-blank line of a file the skeptic was shown; a reply that does not cover every finding exactly once counts one invalid item per gap, and its findings stay unchallenged (no tier B). | `mara/agents/skeptic.py`, `redteam.py` |
 | L4 jury | Blinded findings (no identity, no scores, fixed width), forward + reverse order, a family never judges its own finding when enough independent judges exist. | `mara/agents/judge.py`, `mara/bias` |
-| L5 scoring | CVSS 4.0 computed by code (FIRST-equivalent), SSVC decision, weighted consensus, Krippendorff's α, evidence tier A–D, dimension scores, gate, SARIF 2.1 + Markdown. | `mara/scoring`, `mara/report` |
+| L5 scoring | CVSS 4.0 computed by code (FIRST-equivalent), SSVC decision, weighted consensus, Krippendorff's α, evidence tier A–D (tier A needs a tool result at level error or warning in the same file — the exact path, or the target's own path below the repository top level plus it — within ±3 lines), dimension scores, gate, SARIF 2.1 + Markdown. | `mara/scoring`, `mara/report` |
 
 Three rules are enforced by code, not by prompt:
 
@@ -149,9 +153,12 @@ Before the reviewers run, a separate context agent builds a C4-lite view of the 
 (containers, external systems, trust boundaries, data stores) in one provider call. Every fact must
 cite a bundle file:line with a verbatim quote and passes the same provenance check as findings;
 unverifiable items are dropped and counted, and a refusal, an echoed canary or a view with no
-verifiable fact leaves the reviewers without trusted facts and marks the run incomplete. The
-architecture and authn_authz reviewers receive the verified facts as a `<trusted_context_facts>`
-block that is explicitly not part of the untrusted data.
+verifiable fact leaves the reviewers without context facts and marks the run incomplete. The
+architecture and authn_authz reviewers receive the verified facts as a `<context_facts>` block that
+is labelled, like the bundle, as untrusted data: the quote check proves only that the quoted text
+exists, and that text is repository content (the seeded README's "already passed security review"
+note would pass it), so the block is never presented as trusted context or as an instruction.
+`<`, `>` and `&` are escaped inside it, so a quote cannot close it early.
 
 ## Calibration (Appendix E, prompt 4)
 
@@ -259,6 +266,16 @@ file under the pinned security rulesets, and by the commit's GPG signature (GitH
 the rules are read from `.mara-tools/semgrep-rules` at scan time and never copied into this
 repository (Semgrep Rules License v1.0). `--digest-git semgrep-rules <checkout>` prints the two
 values to paste into the lock when bumping the commit.
+
+In a review the reviewed repository is untrusted, so `runner.py` never lets a tool load the target's
+own suppressions: semgrep runs with `--x-ignore-semgrepignore-files` (its `# nosemgrep` results stay in
+the SARIF, marked `inSource`, and are kept), osv-scanner with `--config` pointing at an empty file
+(no `osv-scanner.toml` overrides), zizmor with `--no-config --no-ignores --collect=all` (no
+`zizmor.yml`, no inline `# zizmor: ignore[...]`, no `.gitignore` hiding workflows), trivy with an empty
+`--ignorefile` and `--config` (no `.trivyignore`, no `trivy.yaml`), and gitleaks with an explicit
+config and no allowlist. The empty files live in the run's output directory. Each of those
+repository files suppresses results under the old arguments with the pinned versions (checked against
+the real binaries); this repository's own CI scans (`scripts/*_ci.py`) keep their reviewed triage files.
 
 The Python side is pinned the same way since 2026-09-17: `tools/dev-requirements.txt` is the
 complete closure of `pyproject.toml`'s dependencies plus the `dev` extra, every wheel with its
@@ -472,8 +489,9 @@ turns closed tickets labelled `decision:true-positive` / `decision:false-positiv
 `calib/decisions/<key>.json`, which `scripts/calibrate.py` uses as labels. When
 `calib/decisions/backlog.json` shows more open tickets than `human_queue.backlog_limit`, the pipeline
 raises the alpha threshold and — with `human_queue.tighten_exclude_tier_c`, the default — stops queuing
-tier C at `human_queue.queue_tier_c_min_severity` (the jury's consensus then decides those findings); it
-never loosens. The `human-queue` CI job runs
+tier C at `human_queue.queue_tier_c_min_severity`. Nobody then looks at those findings, so one the jury
+accepts blocks the gate like tier A/B (`tier_c_blocked_while_tightened` in the bias audit) instead of
+passing on a single family's word: tightening cuts human work, it never loosens. The `human-queue` CI job runs
 on push to `main` with `issues: write` only and stays in dry-run until the repository variable
 `MARA_HUMAN_QUEUE_ISSUES` is `true`. See `docs/human-queue.md`.
 

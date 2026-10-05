@@ -42,7 +42,7 @@ from .tools.sarif import ToolResult
 # error vocabulary of the agent layer: "refused" marks an abstention (model said no), the
 # incomplete_or_duplicate_* entries are summary markers the agents append to signal that a
 # partially-failed call returned no verdicts at all; neither is an unusable item itself
-_ERROR_MARKERS = frozenset({"refused", "incomplete_or_duplicate_response", "incomplete_or_duplicate_judge_response"})
+_ERROR_MARKERS = frozenset({"refused", "canary_echoed", "incomplete_or_duplicate_response", "incomplete_or_duplicate_judge_response"})
 
 
 def _count_invalid(errors: list[str]) -> int:
@@ -91,7 +91,7 @@ class Pipeline:
 
         Every fact must cite a verbatim file:line quote; unverified items are dropped and
         counted. A refused, empty or echoed call yields no view: reviewers then run without
-        trusted facts and the run is marked incomplete (fail-closed, never fabricated).
+        context facts and the run is marked incomplete (fail-closed, never fabricated).
         """
         name = self.cfg.roles.context
         if not name:
@@ -210,13 +210,17 @@ class Pipeline:
             self.audit[f"skeptic_refusals[{fam}]"] += refusals
             self.audit["skeptic_unverified_controls"] += unverified
             self.audit[f"skeptic_unverified_controls[{fam}]"] += unverified
+            self.audit["skeptic_canary_echoes"] += errors.count("canary_echoed")
+            self.audit[f"skeptic_canary_echoes[{fam}]"] += errors.count("canary_echoed")
             for x in v:
                 if x.verdict == "refuted":
                     self.audit["skeptic_refuted"] += 1
                     self.audit[f"skeptic_refuted[{fam}]"] += 1
-            if refusals:
-                # a refused call is an abstention: the finding gets no verdict, can no longer
-                # reach tier B on the skeptic's strength, and the run stays incomplete
+            if not v:
+                # no usable verdict for this group - a refusal, a provider failure, or a reply the
+                # agent rejected (unparseable, schema-invalid, or not covering every finding exactly
+                # once): the findings went unchallenged, so none of them may reach tier B on the
+                # skeptic's strength, and the counters above keep the run incomplete
                 abstained.update(f.id for f in fs)
             verdicts.extend(v)
             self._say(
@@ -249,6 +253,8 @@ class Pipeline:
             self.audit[f"redteam_refusals[{fam}]"] += refusals
             self.audit["redteam_exploit_code_stripped"] += stripped
             self.audit[f"redteam_exploit_code_stripped[{fam}]"] += stripped
+            self.audit["redteam_canary_echoes"] += errors.count("canary_echoed")
+            self.audit[f"redteam_canary_echoes[{fam}]"] += errors.count("canary_echoed")
             notes.extend(n)
             self._say(f"L3: red team {fam} probed {len(fs)} → {sum(x.exploitable == 'yes' for x in n)} exploitable"
                       + (f", {stripped} preconditions had exploit code removed" if stripped else "")
@@ -303,6 +309,23 @@ class Pipeline:
         return votes
 
     # ------------------------------------------------------------------ L5
+    def blocking_reason(self, c: ConsensusResult) -> str | None:
+        """Why an accepted finding blocks the gate, or None.
+
+        The configured conjunction (tier in block_on_tiers, severity in block_on_severity), plus one
+        rule of G-11's tightening: over the backlog limit tier C at or above
+        queue_tier_c_min_severity is no longer queued for a human (tighten_exclude_tier_c), so such
+        a finding blocks instead of passing on one family's word plus the jury. Tightening may cut
+        human work; it never lets more through. An unknown severity ranks above every band."""
+        if not c.accepted:
+            return None
+        if c.tier.value in self.cfg.gate.block_on_tiers and c.cvss4_severity in self.cfg.gate.block_on_severity:
+            return "blocking_tier_and_severity"
+        sev_rank = SEVERITY_ORDER.index(c.cvss4_severity) if c.cvss4_severity in SEVERITY_ORDER else len(SEVERITY_ORDER)
+        if self.exclude_tier_c and c.tier == EvidenceTier.C and sev_rank >= SEVERITY_ORDER.index(self.cfg.human_queue.queue_tier_c_min_severity):
+            return "tier_c_while_tightened"
+        return None
+
     def score(
         self,
         findings: list[Finding],
@@ -312,6 +335,7 @@ class Pipeline:
         votes: list[JudgeVote],
         tool_results: list[ToolResult],
         skeptic_abstained_ids: frozenset[str] = frozenset(),
+        tool_path_prefix: str = "",
     ) -> list[ConsensusResult]:
         weights = {m.family: m.weight for m in self.cfg.models}
         by_finding: dict[str, list[JudgeVote]] = defaultdict(list)
@@ -335,7 +359,7 @@ class Pipeline:
             refuted = bool(sk and sk.verdict == "refuted")
             abstained = f.id in skeptic_abstained_ids
             prov_ok = bool(f.provenance) and all(p.verified for p in f.provenance)
-            corroborated = _tool_corroborates(f, tool_results)
+            corroborated = _tool_corroborates(f, tool_results, tool_path_prefix)
             fams = set(agreeing) | (finders[f.id] if score >= self.cfg.gate.accept_threshold else set())
             if corroborated:
                 fams.add(ModelFamily.TOOL)
@@ -465,7 +489,8 @@ class Pipeline:
         rt = self.run_redteam(ctx, survivors, finders)
         rt_by_id = {n.finding_id: n for n in rt}
         votes = self.run_jury(ctx, findings, sk_by_id, finders)
-        consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=abstained_ids)
+        consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=abstained_ids,
+                               tool_path_prefix=ctx.repo_prefix)
         cons_by_id = {c.finding_id: c for c in consensus}
         dims = []
         for d in self.cfg.dimensions:
@@ -486,6 +511,8 @@ class Pipeline:
             "reviewer_errors",
             "invalid_findings_dropped",
             "canary_echoes",
+            "skeptic_canary_echoes",
+            "redteam_canary_echoes",
             "judge_invalid_items",
             "judge_refusals",
             "skeptic_invalid_items",
@@ -513,8 +540,11 @@ class Pipeline:
         if incomplete:
             overall = None
         for c in consensus:
-            if c.accepted and c.tier.value in self.cfg.gate.block_on_tiers and c.cvss4_severity in self.cfg.gate.block_on_severity:
+            reason = self.blocking_reason(c)
+            if reason:
                 gate = False
+                if reason == "tier_c_while_tightened":
+                    self.audit["tier_c_blocked_while_tightened"] += 1
         if any(x.score < self.cfg.gate.min_dimension_score for x in dims):
             gate = False
         global_alpha = krippendorff_alpha_nominal({f.id: [v.verdict for v in votes if v.finding_id == f.id] for f in findings})
@@ -639,18 +669,26 @@ def _norm_path(path: str) -> str:
     return path
 
 
-def _tool_corroborates(f: Finding, tool_results: list[ToolResult]) -> bool:
+def _tool_corroborates(f: Finding, tool_results: list[ToolResult], prefix: str = "") -> bool:
+    """A tool result corroborates a finding (tier A) only on the same file, within +-3 lines, with a
+    matching CWE (or none), from a tool that scans the finding's dimension, at level error or
+    warning - the levels that also block as unresolved tool findings; a note is information.
+
+    Same file means the exact path. Tools that ran from the repository top level report paths
+    below it (pre-recorded zizmor: fixtures/vuln-sample/.github/workflows/deploy.yml), so a path
+    that is exactly `prefix/<finding path>` also matches, prefix being the target's own path below
+    the top level. A bare suffix match did not: `main.py` matched `services/billing/main.py`, and a
+    tool hit in another file promoted a single-family finding to tier A."""
     for t in tool_results:
         # a tool only corroborates findings in the dimensions it scans for (TOOL_DIMENSIONS):
         # csp-evaluator emits results without CWEs, and without this guard any such result would
         # corroborate any finding that happens to sit within +-3 lines
-        if f.dimension not in TOOL_DIMENSIONS.get(t.tool, []):
+        if f.dimension not in TOOL_DIMENSIONS.get(t.tool, []) or t.level not in ("error", "warning"):
             continue
+        tf = _norm_path(t.file)
         for p in f.provenance:
-            # tools run from the git root report paths relative to it (e.g. zizmor emits
-            # fixtures/vuln-sample/.github/workflows/deploy.yml); the review target may be a subdirectory
-            tf, pf = _norm_path(t.file), _norm_path(p.file)
-            same_file = tf == pf or tf.endswith("/" + pf)
+            pf = _norm_path(p.file)
+            same_file = tf == pf or (bool(prefix) and tf == f"{prefix}/{pf}")
             if same_file and abs(t.line - p.line) <= 3:
                 cwes = {c.upper() for c in (t.cwes or ([t.cwe] if t.cwe else []))}
                 if not cwes or f.cwe.upper() in cwes:

@@ -142,6 +142,10 @@ def test_tier_c_high_needs_a_human_until_the_queue_tightens(tmp_path, monkeypatc
     (c2,) = tightened.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
     assert c2.tier == EvidenceTier.C and c2.accepted and c2.human_reasons == []
     assert build_queue([f], {"F-1": c2}, {}, {}, _votes("F-1"), cfg, exclude_tier_c=True) == []
+    # ...and since nobody will look at it, it blocks the gate instead of passing (tightening never loosens);
+    # tier C is not in block_on_tiers, so before this rule an over-limit backlog let a tier C Critical through
+    assert "C" not in cfg.gate.block_on_tiers and pipe.blocking_reason(c2) is None
+    assert tightened.blocking_reason(c2) == "tier_c_while_tightened"
     # tighten_exclude_tier_c: false keeps tier C in the queue even while tightened
     kept = build_queue([f], {"F-1": c2}, {}, {}, _votes("F-1"), cfg, exclude_tier_c=False)
     assert [i.reasons for i in kept] == [["tier_c_high"]]

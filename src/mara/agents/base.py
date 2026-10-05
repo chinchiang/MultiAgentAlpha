@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import secrets
+from collections import Counter
 from importlib import resources
 from pathlib import Path
 
@@ -116,3 +117,23 @@ def parse_items(comp: Completion, model_cls, key: str = "items") -> tuple[list, 
         except ValidationError as e:
             errors.append("invalid_item:" + e.errors()[0]["type"])
     return valid, errors
+
+
+def coverage_errors(expected: set[str], ids: list[str], errors: list[str]) -> list[str]:
+    """One error per finding a ballot-style reply (skeptic, red team, judge) failed to cover exactly
+    once: a missing, duplicated or unknown finding_id each count as an unusable item.
+
+    Without these a well-formed but incomplete reply - `{"items": []}`, one verdict dropped - left
+    the error list holding only the summary marker, which the invalid-output audit does not count:
+    nothing was counted, the run stayed complete and the unchallenged findings could still reach
+    tier B. Only for a reply the model actually gave as a list: a refusal, a provider failure or an
+    unparseable body is already one response-level error and is not multiplied by the batch size
+    (an outage is never charged to the model item by item). Schema-invalid items already count once
+    each and their ids are unknown, so they are subtracted from the missing ones."""
+    if any(not e.startswith("invalid_item:") for e in errors):
+        return []
+    seen = Counter(ids)
+    missing = max(0, len(expected - set(seen)) - len(errors))
+    duplicated = sum(n - 1 for i, n in seen.items() if i in expected)
+    unexpected = sum(n for i, n in seen.items() if i not in expected)
+    return ["missing_verdict"] * missing + ["duplicate_verdict"] * duplicated + ["unexpected_verdict"] * unexpected
