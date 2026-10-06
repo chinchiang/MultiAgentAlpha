@@ -5,9 +5,9 @@ title: 多模型多代理資安審查
 # 以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查
 
 **文件編號：GSMD-RPT-2026-0908-01**（登錄簿配號 2026-09-10）
-**版本：v0.1.0**　**日期：2026-09-08**　**類型：RPT 研究報告／專業教學手冊**
+**版本：v0.3.0**　**日期：2026-09-26**（正文最後一次實質修改；初版 v0.1.0，2026-09-08；之後各版見 `docs/CHANGELOG.md`）　**類型：RPT 研究報告／專業教學手冊**
 **讀者定位：治理決策與技術落地並重**
-**附屬雛型：** `chinchiang/MultiAgentAlpha`，branch `claude/multi-model-security-review-0ni3ll`，套件 `mara`
+**附屬雛型：** `chinchiang/MultiAgentAlpha`，branch `main`，套件 `mara`
 
 證據級別標記說明：正文每一項事實句以【級別｜來源編號】標示，級別為「已證實」「廠商主張」「第三方評論」「尚未證實」之一；來源編號對應附錄A。標記中另註「preprint」「摘要」「頁面被擋」者，其意義見附錄A 前言與第 12.6 節。
 

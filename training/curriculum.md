@@ -60,8 +60,10 @@ Records expire after `validity_days` (365) and are invalidated by a new curricul
 
 ## 4. Deciding human-queue tickets (adjudicators and security, 60 min)
 
-- What arrives: judge majority `needs_human`, Krippendorff's alpha below the threshold, or tier C at
-  High or above. The ticket carries everything the judges were not allowed to see: finder families,
+- What arrives: any L5 human reason — judge majority `needs_human`, the per-finding agreement proxy
+  (`agreement_proxy`) below the threshold, too few independent judges, position inconsistency, a
+  skeptic refutation the jury overrode, tier C at High or above — and, while policy P8 is locked,
+  every rejected non-D finding. The ticket carries everything the judges were not allowed to see: finder families,
   the skeptic's verdict and named control, the red team's preconditions, every judge vote in both
   passes. Report section 15.1; `docs/human-queue.md`.
 - How to decide: open the file at the quoted line; check whether the control the skeptic named

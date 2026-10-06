@@ -2,16 +2,16 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
-  "serialNumber": "urn:uuid:66667297-c670-4838-bc3a-1972556ba22b",
+  "serialNumber": "urn:uuid:056fcf5a-7816-41a8-8fff-a921108c6edf",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-09-12T07:57:48Z",
+    "timestamp": "2026-10-06T03:40:14Z",
     "tools": {
       "components": [
         {
           "type": "application",
           "name": "mara",
-          "version": "0.1.0",
+          "version": "0.3.22",
           "description": "scripts/ml_bom.py (governance item G-7)"
         }
       ]
@@ -20,7 +20,7 @@
       "type": "application",
       "bom-ref": "mara",
       "name": "mara",
-      "version": "0.1.0",
+      "version": "0.3.22",
       "description": "Multi-Agent Review Architecture; the self-hosted models below are its inference dependencies"
     },
     "properties": [
@@ -103,7 +103,7 @@
         },
         {
           "name": "mara:note",
-          "value": "PENDING. Weights must be downloaded from the official source only and loaded as safetensors; report Appendix B (A78): the formal source of the DeepSeek V4 weights could not be confirmed, so V3.2 is the only DeepSeek release with a verified source. Policy P2 keeps this model on-prem."
+          "value": "PENDING. Weights must be downloaded from the official source only and loaded as safetensors; report Appendix B item 20 (source A78): the formal source of the DeepSeek V4 weights could not be confirmed, so V3.2 is the only DeepSeek release with a verified source. Policy P2 keeps this model on-prem."
         }
       ]
     },
@@ -166,7 +166,7 @@
         },
         {
           "name": "mara:note",
-          "value": "PENDING. The licence text and the exact NGC/Hugging Face repository were not read during the research (report Appendix B, B-gap-9); record them here together with the hashes."
+          "value": "PENDING. The licence text and the exact NGC/Hugging Face repository were not read during the research (report Appendix B items 39 and 21); record them here together with the hashes."
         }
       ]
     }

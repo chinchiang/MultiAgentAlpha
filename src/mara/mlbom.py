@@ -337,7 +337,10 @@ def build_component(e: ModelEntry, *, allow_pending: bool) -> dict:
 
 
 def build_bom(entries: list[ModelEntry], *, allow_pending: bool = False, timestamp: str | None = None,
-              serial: str | None = None, tool_version: str = "0.1.0") -> dict:
+              serial: str | None = None, tool_version: str | None = None) -> dict:
+    from . import __version__
+
+    tool_version = tool_version or __version__
     comps = [build_component(e, allow_pending=allow_pending) for e in entries]
     return {
         "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
@@ -429,10 +432,18 @@ def verify_dir(bom: dict, model_id: str, directory: Path | str) -> list[str]:
 
 
 def bom_equal_ignoring_volatile(a: dict, b: dict) -> bool:
+    """Equal apart from what changes on every build: the serial number, the timestamp and MARA's own
+    version (metadata.tools and metadata.component). The version follows docs/CHANGELOG.md, so it
+    moves with every release; drift means the models in the manifest changed, not MARA."""
     def strip(d: dict) -> dict:
         d = json.loads(json.dumps(d))
         d.pop("serialNumber", None)
-        d.get("metadata", {}).pop("timestamp", None)
+        md = d.get("metadata", {})
+        md.pop("timestamp", None)
+        for tool in md.get("tools", {}).get("components", []):
+            tool.pop("version", None)
+        if isinstance(md.get("component"), dict):
+            md["component"].pop("version", None)
         return d
     return strip(a) == strip(b)
 

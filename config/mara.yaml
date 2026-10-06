@@ -76,8 +76,10 @@ psirt:
   handshake_file: ops/psirt/handshake.json # last endpoint handshake; G-12 needs a successful one younger than handshake_max_age_days
   handshake_max_age_days: 90
 
-# G-11: human queue. Findings the pipeline will not decide on its own (judge majority says needs_human,
-# Krippendorff alpha below gate.human_threshold_alpha, or tier C at High+ severity) become HumanQueueItems
+# G-11: human queue. Findings the pipeline will not decide on its own (any L5 human reason: judge majority says
+# needs_human, the per-finding agreement proxy below gate.human_threshold_alpha, too few independent judges,
+# position inconsistency, an overridden refutation, tier C at High+ severity, or - while P8 is locked - any
+# rejected non-D finding) become HumanQueueItems
 # with the full un-blinded context (finders, skeptic, red team, every judge vote) in out/human_queue.md/json.
 # scripts/human_queue_issues.py turns them into GitHub issues (one per stable key, label below) and brings
 # the decisions on closed tickets back into calib/decisions/, which scripts/calibrate.py reads as labels.

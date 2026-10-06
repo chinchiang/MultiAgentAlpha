@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mara"
-version = "0.1.0"
+dynamic = ["version"]  # from mara.__version__ (src/mara/__init__.py); tests/test_version.py ties it to docs/CHANGELOG.md
 description = "MARA - Multi-Agent Review Architecture: heterogeneous-model security and architecture review for vibe-coded software"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,6 +23,9 @@ dev = ["pytest>=8.0", "ruff>=0.5", "markdown>=3.6", "jsonschema>=4.18"]
 
 [project.scripts]
 mara = "mara.cli:app"
+
+[tool.setuptools.dynamic]
+version = { attr = "mara.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

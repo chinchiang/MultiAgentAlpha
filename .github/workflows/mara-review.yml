@@ -54,7 +54,8 @@ on:
 # One run per pull request: a newer push cancels the superseded run. Pushes to main do not cancel a running
 # run, but GitHub keeps only one pending run per group: when three merges land while one run is in progress,
 # the middle one's pending run is replaced and its human-queue job does not run (the next run queues the same
-# findings, keyed by file:line:cwe; its commits were scanned by the PR's own gitleaks run).
+# findings under the same v2 keys (target identity, reviewed-tree revision, context hash, file:line:cwe) while the
+# fixture is unchanged; its commits were scanned by the PR's own gitleaks run).
 concurrency:
   group: mara-review-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -91,7 +92,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip   # wheels are re-verified by --require-hashes on every install, so a shared cache cannot substitute a pinned package
-          cache-dependency-path: tools/*.txt   # tools/versions.lock pins semgrep's wheel hashes for CPython 3.11
+          cache-dependency-path: tools/*.txt   # tools/semgrep-requirements.txt pins semgrep's wheel hashes for CPython 3.11
       - name: Install pinned, verified L0 tools (tools/versions.lock)
         # SHA-256 for every asset, then the publisher's signature/provenance: cosign keyless (trivy, cosign),
         # SLSA provenance (osv-scanner, slsa-verifier, scorecard), GitHub attestation via gh (zizmor), publisher
@@ -141,7 +142,7 @@ jobs:
         run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/dev-requirements-py312.txt --lockfile tools/typecheck-requirements.txt --lockfile tools/build-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
       - name: osv-scanner on the isolated model-evaluation closure only
         run: python3 scripts/osv_ci.py --lockfile tools/model-eval-requirements.txt --config tools/osv-model-eval.toml --report osv-model-eval.sarif
-      - name: osv-scanner on the semgrep closure only (semgrep pins pyjwt[crypto]~=2.13.0 upstream; dated exceptions in tools/osv-semgrep.toml)
+      - name: osv-scanner on the semgrep closure only (tools/osv-semgrep.toml, exception-free since semgrep 1.179.0)
         run: python3 scripts/osv_ci.py --lockfile tools/semgrep-requirements.txt --config tools/osv-semgrep.toml --report osv-semgrep.sarif
       - name: trivy offline database — fetch once, record its digests, refuse a stale or tampered copy
         run: |
@@ -238,7 +239,7 @@ jobs:
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/build-requirements.txt
           python3 -m pip install --quiet --disable-pip-version-check --no-deps --no-build-isolation -e .
       - name: Install the locked gitleaks, semgrep and semgrep-rules so their tests run instead of skipping
-        # tests/test_gitleaks_ci.py and tests/test_semgrep_ci.py opt in to .mara-tools explicitly (conftest points
+        # tests/test_gitleaks_ci.py, tests/test_semgrep_ci.py and tests/test_tool_target_config.py opt in to .mara-tools explicitly (conftest points
         # MARA_TOOLS_DIR elsewhere for everything else). Same verified installer as the L0 job, limited to the
         # three tools those tests use: SHA-256 for every asset, gitleaks' publisher checksums, pip --require-hashes
         # for semgrep, pinned commit + content digest + GPG commit signature for semgrep-rules. No token needed.

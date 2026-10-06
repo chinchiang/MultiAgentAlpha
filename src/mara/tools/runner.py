@@ -96,7 +96,8 @@ def _run(cmd: list[str], cwd: Path, timeout: int = 600, env: dict | None = None)
 def _offline_zizmor() -> bool:
     """zizmor's online audits (impostor-commit, known-vulnerable-actions) call the GitHub API and abort the
     whole run when the token or the network is missing, so the pipeline runs zizmor offline unless
-    MARA_ZIZMOR_ONLINE=1 is set and a token is present. CI runs the online audits separately via zizmor-action."""
+    MARA_ZIZMOR_ONLINE=1 is set and a token is present. CI runs the online audits separately, through
+    scripts/zizmor_ci.py with GH_TOKEN."""
     online = os.environ.get("MARA_ZIZMOR_ONLINE") == "1" and bool(os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
     return not online
 

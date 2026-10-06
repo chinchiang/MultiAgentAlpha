@@ -424,7 +424,7 @@ def render(invs: list[WorkflowInventory], latest: dict[str, str | None], *, root
     invs = sorted(invs, key=lambda i: (SEVERITY_ORDER.index(i.severity), i.path))
     L: list[str] = []
     L += [f"# GitHub Actions 盤點（{date}）", "",
-          "依附錄 E 的 prompt 5，對本 repo 內所有 `.github/workflows/*.yml` 做 pwn request 與 SHA pinning 盤點。**只讀不改。** 本檔第 0 到 5 節由 `scripts/actions_inventory.py` 產生，第 6 節為人工補充。", "",
+          "依附錄 E 的 prompt 5，對本 repo 內所有 `.github/workflows/*.yml` 做 pwn request 與 SHA pinning 盤點。**只讀不改。** 本檔第 0 到 5 節由 `scripts/actions_inventory.py` 產生；人工補充（若有）列在其後的第 6 節。", "",
           "## 0. 範圍、方法與判定準則", "",
           f"- 掃描根目錄：`{root.name}/`，遞迴尋找所有 `.github/workflows/*.yml|yaml`（排除 `.git`、`node_modules`、`out/`、`calib-out/`）。共 {len(invs)} 個 workflow。",
           "- 每個檔案先以 `yaml.safe_load` 驗證；不合法 YAML 的檔案仍以逐行比對盤點並標記，因為 GitHub 會拒絕執行它、zizmor 與 actionlint 也解析不了，這本身就是要回報的事實。",

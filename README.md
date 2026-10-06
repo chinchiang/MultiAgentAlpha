@@ -41,7 +41,8 @@ back to the root by mistake: `index.html` is a self-contained redirect to `docs/
 tells Jekyll to exclude `fixtures/`, `calib/`, the source tree and the other non-documentation
 directories, so the seeded vulnerable material is never published either way.
 `tests/test_docs_site.py` checks that the redirect points at a file that exists and loads nothing off-site.
-`.github/workflows/docs-check.yml` (Appendix E prompt 1) runs on every pull request that touches `docs/`:
+`.github/workflows/docs-check.yml` (Appendix E prompt 1) runs on every pull request and every push to `main`
+that touches `docs/`, the three report scripts or the workflow itself:
 it rebuilds the report from `docs/parts/` and requires the result to be byte-identical to the committed
 file, fails when the body is under 20,000 characters, and fails when a citation marker has no row in
 Appendix A. `docs/CHANGELOG.md` records each version with its verification status.
@@ -155,7 +156,8 @@ mara review path/to/repo --config config/mara.yaml --base origin/main --out out
 ```
 
 CI exercises the mode on every pull request and push: the `tests + mock review` job runs the seeded
-fixture a second time with `--base` set to the merge-base commit (the report lands in the
+fixture a second time with `--base` set to the pull request's base commit (`pull_request.base.sha`) or, on
+a push, the previous head (`github.event.before`); MARA diffs `<base>...HEAD`, i.e. from their merge base (the report lands in the
 `mara-report` artifact next to the full review; schedule and dispatch runs have no base commit and
 skip that step).
 
@@ -249,29 +251,29 @@ interpolation of attacker-controlled contexts, cache keys built from untrusted r
 per report section 10.7 (Critical rows first), suggested full SHAs for every non-SHA reference
 (via `git ls-remote`; `--offline` to skip), a check that each SHA pin still matches its tag
 comment, and zizmor's SARIF when zizmor is on the PATH. Files that are not valid YAML are still
-inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run
-(`docs/actions-inventory-2026-10-03.md` is the current one: four real workflows, all rated None, with
-the new job-level `timeout-minutes` detection — the seeded fixtures keep their deliberate gaps and
-stay Critical); its section 6 adds what the CI logs showed that the static inventory cannot, and the fixes that
+inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run, and its
+section 6 adds what the CI logs showed that the static inventory cannot, and the fixes that
 followed: CI now runs zizmor strictly on the real workflows, checks that zizmor's findings on the
 seeded fixture match `fixtures/vuln-sample-sarif/zizmor.sarif` (now produced by zizmor itself), and
 no longer hides a crashed or leaking gitleaks run behind `continue-on-error` (`.gitleaks.toml`
 allowlists exact known synthetic values; all fixture paths remain scanned). Since 2026-09-13 the scan
 itself is `scripts/gitleaks_ci.py` with the gitleaks pinned in `tools/versions.lock` (PR: the PR's
 commits; push: every new commit), not gitleaks-action, so no action downloads its own tool and the
-L0 job needs no `pull-requests` permission.
+L0 job needs no `pull-requests` permission. `docs/actions-inventory-2026-10-03.md` is the current run: four real workflows, all rated None,
+with the job-level `timeout-minutes` detection; the seeded fixtures keep their deliberate gaps and stay Critical.
 
 ## Pinned, verified L0 tools (Appendix E, prompt 7)
 
-`tools/versions.lock` pins every deterministic tool (gitleaks, osv-scanner, zizmor, trivy, semgrep,
+`tools/versions.lock` pins every deterministic tool (gitleaks, osv-scanner, zizmor, trivy, scorecard, semgrep,
 csp-evaluator, plus the verifiers cosign and slsa-verifier) by exact version, download URL and SHA-256, and names
 the strongest verification the publisher offers. `python scripts/install_tools.py` downloads each
 asset, checks the SHA-256 (never skippable), runs the publisher-side check — cosign keyless bundle,
-SLSA provenance, GitHub attestation, publisher checksum file, or `pip --require-hashes` for semgrep —
+SLSA provenance, GitHub attestation, publisher checksum file, the npm registry's `dist.integrity` for
+csp-evaluator, or `pip --require-hashes` for semgrep —
 and installs into `.mara-tools/bin`, writing `.mara-tools/manifest.json`. Any mismatch aborts.
 `mara/tools/runner.py` executes tools only from that directory and reports "not installed" otherwise;
 PATH is never consulted. `docs/tools-provenance.md` records source, licence, what each verification
-proves and the remaining gaps (gitleaks and semgrep publish no signature). CI installs and verifies
+proves and the remaining gaps (gitleaks, semgrep and csp-evaluator publish no signature). CI installs and verifies
 the whole set on every run. The lock also has a `git` kind: `semgrep-rules` is a checkout of
 `semgrep/semgrep-rules` at a pinned commit, verified by commit id, by a SHA-256 digest over every
 file under the pinned security rulesets, and by the commit's GPG signature (GitHub's web-flow key);
@@ -324,7 +326,7 @@ differs from the lock:
   fixture's `requests==2.19.0` flagged, so a silent scanner or database regression is caught.
 - The bootstrap, dev, typecheck and build closures use `tools/osv-scanner.toml` with no advisory
   exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`
-  (its dated exceptions cover garak's nltk/datasets pins); the semgrep tool closure is scanned with
+  (its dated exceptions cover garak's nltk/datasets/fsspec pins); the semgrep tool closure is scanned with
   `tools/osv-semgrep.toml`, which has been exception-free since semgrep 1.179.0 relaxed the
   `pyjwt[crypto]~=2.13.0` pin and the closure relocked to pyjwt 2.15.1. These scans
   also run weekly and on manual workflow dispatch.
@@ -412,7 +414,7 @@ once the policy is approved, live swap drills are recorded and the rollout has s
 calibration have run on a host with the endpoints (`docs/model-eval-runbook.md`). Nothing is
 marked passed before the fact. `docs/governance-check-2026-09-12.md` was regenerated in place as those
 mechanisms landed (last on 2026-09-17), so it shows the later state rather than the first run;
-`docs/governance-check-2026-09-26.md` is the current record: G-2, G-3, G-5, G-6 and G-11 pass, the
+`docs/governance-check-2026-09-26.md` (regenerated in place on 2026-10-03, as its heading shows) is the current record: G-2, G-3, G-5, G-6 and G-11 pass, the
 other eight fail for the reasons above, none is MANUAL.
 
 ## PSIRT hand-off (governance item G-12)
@@ -422,7 +424,9 @@ configured tiers and severities (default: tier A, Critical) is written to
 `out/psirt-notifications.json` as a `mara-psirt/2` internal hand-off carrying the evidence chain.
 Review time anchors only internal service targets. Legal deadlines stay empty until PSIRT confirms
 an event type and awareness timestamp; the final-report anchor depends on that event type.
-`mara review --notify-psirt` POSTs the hand-off to the configured webhook with an environment token.
+`mara review --notify-psirt` POSTs the hand-off to the configured webhook with an environment token;
+`--psirt-resend` (with `--notify-psirt`) sends even findings the ledger records as delivered, and
+`--psirt-event event.json` attaches a PSIRT-confirmed event so the legal deadlines are computed.
 A hand-off that fails (an HTTP error or no response at all) is recorded in the ledger, does not stop the
 other payloads, and makes `mara review` exit 3 after the reports are written, whatever the gate says.
 The send ledger (`ops/psirt/ledger.json`) deduplicates internal hand-offs. After confirmation, use
@@ -496,11 +500,15 @@ governance check G-13 fails naming the three roles. See `docs/ai-literacy-traini
 
 ## Human queue (governance item G-11)
 
-Findings the pipeline will not decide on its own (judge majority says `needs_human`, Krippendorff's
-alpha below the threshold, or tier C at High or above) become `HumanQueueItem`s in
+Findings the pipeline will not decide on its own (any L5 `human_reasons`: a judge majority of
+`needs_human`, the per-finding `agreement_proxy` below `gate.human_threshold_alpha`, too few independent
+judges, invalid or incomplete judge passes or CVSS vector, position inconsistency, a skeptic refutation
+the jury overrode, tier C at High or above; and, while policy P8 is locked, every rejected non-D finding)
+become `HumanQueueItem`s in
 `out/human_queue.md/json` with the full un-blinded context: finder families, the skeptic's verdict,
 the red team's call and every judge vote from both passes. `scripts/human_queue_issues.py` opens one
-GitHub issue per item (deduplicated by a stable `file:line:cwe` key) and, with `--sync-decisions`,
+GitHub issue per item (deduplicated by its v2 key: a SHA-256 over the target identity, the reviewed tree's
+revision, the context hash, file, line and CWE; legacy 12-hex keys are never auto-synced) and, with `--sync-decisions`,
 turns closed tickets labelled `decision:true-positive` / `decision:false-positive` into
 `calib/decisions/<key>.json`, which `scripts/calibrate.py` uses as labels. When
 `calib/decisions/backlog.json` shows more open tickets than `human_queue.backlog_limit`, the pipeline
@@ -515,6 +523,7 @@ on push to `main` with `issues: write` only and stays in dry-run until the repos
 
 ```bash
 mara cvss "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
+mara review <target> --provider mock --mock-fixtures <dir>   # replay another set of mock responses
 python scripts/gen_mock_fixtures.py      # regenerate mock responses after editing the fixture app
 python scripts/build_html.py             # rebuild the online edition of the report
 python scripts/count_words.py            # 字數統計（正體中文計字，不含附錄A）
@@ -523,13 +532,18 @@ python scripts/count_words.py            # 字數統計（正體中文計字，�
 ## Layout
 
 ```
-config/            mara.yaml (live topology), mara.mock.yaml (offline)
+config/            mara.yaml (live topology), mara.mock.yaml (offline), examples/ (standby, PRC site, policy cases)
 src/mara/          the prototype (see table above)
-fixtures/          vuln-sample app, mock-responses, pre-recorded SARIF
+fixtures/          vuln-sample app, mock-responses, pre-recorded SARIF, synthetic model-eval outputs
+calib/             labelled calibration samples, human decisions (calib/decisions/)
 tests/             unit + end-to-end tests (no network)
-docs/              the report (Markdown + HTML), Appendix E prompt kit, Appendix D questionnaire
-scripts/           fixture generator, HTML builder, word counter
-.github/workflows  hardened self-review workflow (SHA-pinned, read-only, no pull_request_target)
+docs/              the report (Markdown + HTML), dated records, runbooks, Appendix E prompt kit, Appendix D questionnaire
+scripts/           CI wrappers (*_ci.py), tool installer, governance, calibration, rollout and report scripts
+tools/             versions.lock, hash-pinned Python closures, triage / ignore / policy files
+sbom/              ML-BOM manifest (models.yaml) and the CycloneDX BOM
+ops/               model-swap drill register, PSIRT records
+training/          AI-literacy curriculum, quiz and register (G-13)
+.github/workflows  four hardened workflows: mara-review, scorecard, governance, docs-check (SHA-pinned, least privilege)
 ```
 
 ## Status

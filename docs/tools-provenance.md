@@ -7,7 +7,7 @@
 | 工具 | 版本 | 來源 | 授權 | 我們驗證的內容 | 發布者提供的最強證據 | 缺口 |
 |---|---|---|---|---|---|---|
 | cosign（驗證器） | 3.1.3 | `sigstore/cosign` GitHub release，`cosign-linux-amd64` | Apache-2.0 | SHA-256（鎖定值與 `cosign_checksums.txt` 交叉核對）→ 安裝後以自身驗證 keyless bundle（`cosign-linux-amd64.sigstore.json`，身分 `keyless@projectsigstore.iam.gserviceaccount.com`，issuer `https://accounts.google.com`） | Sigstore keyless bundle；另有 GCP KMS 金鑰簽章（`*-kms.sigstore.json` 與 `release-cosign.pub`） | 自我驗證是「信任第一次固定」：第一次寫進 lock 的 SHA-256 是信任根，之後每次安裝都以它為準 |
-| slsa-verifier（驗證器） | 2.7.1 | `slsa-framework/slsa-verifier` GitHub release，`slsa-verifier-linux-amd64` | Apache-2.0 | SHA-256（與 repo 主分支 `SHA256SUM.md` 的 v2.7.1 區段交叉核對）→ 安裝後以自身驗證自己的 SLSA provenance | SLSA v1 provenance（`slsa-github-generator`） | 同上，信任第一次固定 |
+| slsa-verifier（驗證器） | 2.7.1 | `slsa-framework/slsa-verifier` GitHub release，`slsa-verifier-linux-amd64` | Apache-2.0 | SHA-256（與加入 v2.7.1 的 commit `748161aa`（#860）上 `SHA256SUM.md` 的 v2.7.1 區段交叉核對；URL 固定到該 commit，不跟 main 分支）→ 安裝後以自身驗證自己的 SLSA provenance | SLSA v1 provenance（`slsa-github-generator`） | 同上，信任第一次固定 |
 | gitleaks | 8.30.1 | `gitleaks/gitleaks` GitHub release，`gitleaks_8.30.1_linux_x64.tar.gz` | MIT | SHA-256，並與 `gitleaks_8.30.1_checksums.txt` 交叉核對 | 只有 checksum 檔（goreleaser 未設 signs、release workflow 無 attestation；2026-09-12 查證 `.goreleaser.yml`） | **無簽章、無 provenance**：checksum 檔與二進位同源同倉，攻擊者若能改 release 就能同時改兩者。只有我們鎖定的 SHA-256 提供跨時間的不變性 |
 | osv-scanner | 2.5.1 | `google/osv-scanner` GitHub release，`osv-scanner_linux_amd64` | Apache-2.0 | SHA-256（與 `osv-scanner_SHA256SUMS` 交叉核對）→ `slsa-verifier verify-artifact --source-uri github.com/google/osv-scanner --source-tag v2.5.1` 對 `multiple.intoto.jsonl` | SLSA Build L3 provenance（`slsa-github-generator` generic generator v2.1.0） | 無 |
 | zizmor | 1.30.1 | `zizmorcore/zizmor` GitHub release，`zizmor-x86_64-unknown-linux-gnu.tar.gz` | MIT | SHA-256（本次由下載計算並鎖定；release 未附 checksum 檔）→ `gh attestation verify --repo zizmorcore/zizmor` | GitHub artifact attestation（`release-binaries.yml` 使用 `actions/attest-build-provenance`） | 驗證需要 `gh` 與 GitHub token；PyPI 的 PEP 740 attestation 在其 release workflow 中仍是 TODO |
@@ -30,18 +30,18 @@
 ## 3. 信任根與已知缺口
 
 - **信任第一次固定。** 兩個驗證器（cosign、slsa-verifier）本身以 SHA-256 固定；第一次寫進 lock 時是人工從發布者 checksum 檔與獨立下載交叉核對的。之後 cosign 用自身驗證自己的 keyless bundle、slsa-verifier 驗證自己的 provenance，這是自證，只能證明「這個二進位與它宣稱的簽章一致」。
-- **gitleaks 與 semgrep 沒有簽章。** 這兩個工具目前只有第 1 層。gitleaks 的 checksum 檔與二進位同源；semgrep 在 PyPI 沒有 provenance。升版時仍只能靠獨立下載交叉核對。semgrep 的規則（`semgrep-rules`）則有第 2 層：commit 的 GitHub web-flow 簽章。
-- **CI 的 secret scanning 已改用 lock 內的 gitleaks（2026-09-13）。** 原本的 `gitleaks/gitleaks-action` 自行下載 gitleaks 8.24.3（未驗雜湊），與 lock 的 8.30.1 是兩份不同的 gitleaks，還需要 `pull-requests: read` 與 `GITHUB_TOKEN`。現在 `scripts/gitleaks_ci.py` 只從 `.mara-tools/bin` 取（版本必須等於 lock），PR 掃 `--no-merges --first-parent base..head`、push 掃 `base..head`、無可用 base 時退回單一 commit；SARIF 上傳為 artifact，洩漏或崩潰都讓 job 紅。L0 job 不再需要 `pull-requests: read`，也不再有任何 action 自行下載工具。
+- **gitleaks、semgrep 與 csp-evaluator 沒有簽章。** 這三個工具目前只有第 1 層。gitleaks 的 checksum 檔與二進位同源；semgrep 在 PyPI 沒有 provenance；csp-evaluator 只有 npm registry 的 `dist.integrity`（與 tarball 同源）。升版時仍只能靠獨立下載交叉核對。semgrep 的規則（`semgrep-rules`）則有第 2 層：commit 的 GitHub web-flow 簽章。
+- **CI 的 secret scanning 已改用 lock 內的 gitleaks（2026-09-13）。** 原本的 `gitleaks/gitleaks-action` 自行下載 gitleaks 8.24.3（未驗雜湊），與 lock 的 8.30.1 是兩份不同的 gitleaks，還需要 `pull-requests: read` 與 `GITHUB_TOKEN`。現在 `scripts/gitleaks_ci.py` 只從 `.mara-tools/bin` 取（版本必須等於 lock），PR 掃 `merge-base(base,head)..head`（含 merge 在內的全部引入 commit）、push 掃 `base..head`、沒有可信的範圍時掃 head 可及的全部歷史（不漏掉先加後刪或合併進來的祕密）；SARIF 上傳為 artifact，洩漏或崩潰都讓 job 紅。L0 job 不再需要 `pull-requests: read`，也不再有任何 action 自行下載工具。
 - **TruffleHog 未納入。** Shai-Hulud 蠕蟲曾用 TruffleHog 採集憑證（報告 C6.13）；若日後加入，只能在無出口網路的 job 中執行，且其輸出不得回寫任何憑證存放處。
-- **平台。** lock 只涵蓋 linux/x86_64 與 CPython 3.11。wheel 是 ABI 專用的：安裝器只會用 lock 指定的 `python3.11` 建 venv，找不到就中止（CI 的 `ubuntu-latest` 預設是 3.12，所以 L0 job 先以 `actions/setup-python` 裝 3.11）。其他平台或直譯器需另外鎖定。
+- **平台。** lock 只涵蓋 linux/x86_64 與 CPython 3.11。wheel 是 ABI 專用的：安裝器只會用 lock 指定的 `python3.11` 建 venv，找不到就中止（CI 的 runner 固定為 `ubuntu-24.04`，預設是 3.12，所以 L0 job 先以 `actions/setup-python` 裝 3.11）。其他平台或直譯器需另外鎖定。
 - **未做 actions/cache。** 工具每次 CI 都重新下載並驗證（約 300 MB）。cache 是信任邊界（Ultralytics 事件，報告 C7.17），若日後加入，key 必須含 lock 檔的雜湊且 restore-keys 留空。
 
 ## 3a. 執行期的網路需求（與驗證無關，但決定工具在隔離環境能否產出結果）
 
 | 工具 | 執行時需要的網路 | 隔離環境（無出口網路）的行為 |
 |---|---|---|
-| gitleaks | 無 | 正常（`detect --no-git`） |
-| zizmor | 線上稽核（impostor-commit、known-vulnerable-actions）需 GitHub API 與 token；runner 預設 `--offline`，設 `MARA_ZIZMOR_ONLINE=1` 且有 token 才開 | 正常，少兩個線上稽核；CI 的 zizmor-action 對真實 workflow 另外跑線上稽核 |
+| gitleaks | 無 | 正常（`gitleaks dir`，明確的 config、`--ignore-gitleaks-allow`、空的 ignore 路徑） |
+| zizmor | 線上稽核（impostor-commit、known-vulnerable-actions）需 GitHub API 與 token；runner 預設 `--offline`，設 `MARA_ZIZMOR_ONLINE=1` 且有 token 才開 | 正常，少兩個線上稽核；CI 的 `scripts/zizmor_ci.py` 帶 `GH_TOKEN` 對真實 workflow 另外跑線上稽核 |
 | osv-scanner | 查詢 `api.osv.dev`（只送套件名與版本，不送原始碼）；對 `requirements.txt` 之類的 manifest 預設還會向 `api.deps.dev` 做遞移解析，CI 的 `scripts/osv_ci.py` 以 `--no-resolve` 關掉 | 以 exit 127／128 結束、無 SARIF；`osv_ci.py` 視為崩潰（exit 1），runner 記錄為未執行。可改用離線資料庫（`--offline-vulnerabilities` 加預先下載的 DB）作為後續工作 |
 | trivy | **無**（2026-09-13 起）：runner 與 `scripts/trivy_ci.py` 只對 `MARA_TRIVY_CACHE_DIR`（預設 `.mara-tools/trivy-cache`）內由 `scripts/trivy_db.py` 記錄的資料庫掃描，一律 `--skip-db-update --skip-java-db-update --skip-check-update --offline-scan`（misconfig 用內嵌檢查）。資料庫本身由 `trivy_db.py download` 事先自 `mirror.gcr.io`／`ghcr.io` 取得（見 3c） | 正常；資料庫不存在時 runner 不執行並記錄「no offline database」，不會嘗試下載 |
 | semgrep | **無**（2026-09-13 起）：規則來自 lock 固定的 `.mara-tools/semgrep-rules` 本地目錄，runner 與 `scripts/semgrep_ci.py` 一律 `--metrics=off --disable-version-check`，環境變數 `SEMGREP_ENABLE_VERSION_CHECK=0`、`SEMGREP_SEND_METRICS=off`，且不用 `--config auto`（auto 強制開啟 metrics 並把專案識別送到 semgrep.dev，違反政策 P5）。`MARA_SEMGREP_CONFIG` 可覆寫（例如明確指定 `p/default` 才會使用需連 semgrep.dev 的登錄集） | 正常；規則未安裝時 runner 不再退回 `p/default`，直接記錄 semgrep 為未執行（審查維持未完成），不會在使用者不知情下連線 semgrep.dev |
@@ -51,7 +51,7 @@ runner 對每個工具記錄「pinned <版本>」或「exit <code>, no SARIF pro
 
 ## 3b. CI 中的 semgrep 與 osv-scanner（2026-09-13）
 
-`deterministic-tools` job 在安裝完 lock 內的工具後，依序執行四個步驟，任何一步非零即紅：
+`deterministic-tools` job 在安裝完 lock 內的工具後，依序執行下表的步驟，任何一步非零即紅：
 
 | 步驟 | 指令 | 判定 |
 |---|---|---|
@@ -75,7 +75,7 @@ trivy 原本在掃描時才下載漏洞資料庫（OCI artifact，約 110 MiB �
 | 取得 | `python3 scripts/trivy_db.py download` | 依 `tools/trivy-db.yaml` 的順序（`mirror.gcr.io/aquasec/trivy-db:2`，備援 `ghcr.io/aquasecurity/trivy-db:2`）先向 registry 匿名 HEAD manifest 取得 OCI manifest digest、layer digest 與 `org.opencontainers.image.created`，再 `trivy image --download-db-only`；寫 `<cache>/mara-trivy-db.json`：來源、兩個 digest、trivy 的 `metadata.json`（`Version`、`UpdatedAt`、`NextUpdate`）、`trivy.db` 的 SHA-256 與大小、trivy 版本、下載時間。`--pin-digest sha256:…` 以 manifest digest 取代 tag（已驗證 trivy 0.74.0 接受，且取得的 `trivy.db` 位元組相同） |
 | 把關 | `python3 scripts/trivy_db.py status` | 資料庫不存在、`trivy.db` 的 SHA-256 與紀錄不符（被換掉）、或 `UpdatedAt` 超過 `max_age_hours`（預設 48 小時：離線不等於過期）都 exit 1。CI 與 `trivy_ci.py` 掃描前都先跑它 |
 | 搬運 | `export --out trivy-db-<日期>.tar.gz` → `import --bundle … --bundle-sha256 …` | 給沒有出口網路的 runner（報告第八部的上海／重慶隔離管線）：bundle 只含 `db/trivy.db`、`db/metadata.json`、`mara-trivy-db.json`，另產 `.sha256` 旁檔；`import` 拒絕成員不對、路徑不安全、或 `trivy.db` 的 SHA-256 與同行紀錄不符的 bundle |
-| 掃描 | `scripts/trivy_ci.py --target fixtures/vuln-sample --expect-package requests`；`--target . --ignorefile tools/trivyignore.yaml --skip-dirs …` | 前者要求 `requests==2.19.0` 被標為有漏洞（2026-09-13 實測：5 個 CVE，另有 Dockerfile 的 DS-0001／DS-0002／DS-0026）；後者掃本 repo，以 `--file-patterns pip:.*-requirements\.txt` 讓 `tools/` 下三個 hash 鎖定的 requirements 檔被解析（68 個套件，實測無 finding），任何未被 `tools/trivyignore.yaml`（`statement`＋`expired_at`）忽略的 vuln／misconfig 都 exit 2 |
+| 掃描 | `scripts/trivy_ci.py --target fixtures/vuln-sample --expect-package requests`；`--target . --ignorefile tools/trivyignore.yaml --skip-dirs …` | 前者要求 `requests==2.19.0` 被標為有漏洞（2026-09-13 實測：5 個 CVE，另有 Dockerfile 的 DS-0001／DS-0002／DS-0026）；後者掃本 repo，以 `--file-patterns pip:.*-requirements\.txt` 讓 `tools/` 下的 hash 鎖定閉包被解析（bootstrap 1、build 3、dev 37、typecheck 11、model-eval 194、semgrep 66 個套件；`dev-requirements-py312.txt` 不符合這個 pattern，但它與 3.11 閉包版本完全相同（`tests/test_relock_requirements.py` 把關），漏洞依版本比對，osv-scanner 也另外掃它），任何未被 `tools/trivyignore.yaml`（`statement`＋`expired_at`）忽略的 vuln／misconfig 都 exit 2 |
 
 **來源與缺口。** 上游 `aquasecurity/trivy-db` 的 cron workflow 只用 `oras push` 把 artifact 推到 ghcr.io、public.ecr.aws 與 Docker Hub（mirror.gcr.io 是 Docker Hub 的 Google 鏡像），**沒有 cosign 簽章、沒有 attestation**（2026-09-13 查證 `.github/workflows/cron.yml`）。因此資料庫不在 `tools/versions.lock`（它每六小時更新，無法固定），我們能做的是：記錄 manifest／layer digest 與 `trivy.db` 的 SHA-256（跨時間可比對、bundle 可驗）、要求新鮮度上限、以及 `--pin-digest` 讓兩台主機取得同一份。「這份資料庫真的是 Aqua 產生的」只能靠 registry 的 TLS 與 GitHub 帳號安全，列為缺口。trivy 的 misconfig 檢查同樣是 OCI artifact（`mirror.gcr.io/aquasec/trivy-checks:2`）；我們以 `--skip-check-update` 用 trivy 內嵌的那一份，版本隨 trivy 固定。
 
@@ -85,9 +85,9 @@ repo 改成 public 之後 GitHub Code Scanning 免費，報告第三部 L5 設�
 
 | 項目 | 做法 | 為什麼 |
 |---|---|---|
-| 上傳哪些 | `mara-review.yml` 新 job `code-scanning`（`needs: deterministic-tools`）把 `l0-sarif` artifact 裡對本 repo 的八份掃描（semgrep、osv-scanner 對 runtime／build、model-eval 與 semgrep 三個閉包、trivy、gitleaks、zizmor、csp-evaluator）經 `scripts/code_scanning_prep.py` 整理後，以 `github/codeql-action/upload-sarif`（v4.38.0，SHA 固定）一次上傳目錄 | 只有描述本 repo 的結果才該變成 Security 分頁的警報 |
+| 上傳哪些 | `mara-review.yml` 新 job `code-scanning`（`needs: deterministic-tools`）把 `l0-sarif` artifact 裡對本 repo 的八份掃描（semgrep、osv-scanner 對 runtime／build、model-eval 與 semgrep 三個閉包、trivy、gitleaks、zizmor、csp-evaluator）經 `scripts/code_scanning_prep.py` 整理後，以 `github/codeql-action/upload-sarif`（v4.38.2，SHA 固定）一次上傳目錄 | 只有描述本 repo 的結果才該變成 Security 分頁的警報 |
 | 不上傳哪些 | 四份 `fixture-*.sarif`（對 `fixtures/vuln-sample` 的漂移檢查）與 `mara review` 的 mock 報告 `out/report.sarif` | 它們描述的是刻意種下的漏洞材料，上傳只會製造假警報 |
-| `code_scanning_prep.py` 做的事 | 丟掉帶 `suppressions` 的 result（triage 檔已接受的 finding，理由留在 repo 內，不依賴 GitHub 對該欄位的處理）、丟掉沒有檔案位置的 result、把 `uri` 正規化成 repo 相對路徑、每個 run 設 `automationDetails.id = mara-l0/<tool>/`、超過 GitHub 上限（25,000 個 result 或 10 MB）即拒絕 | `automationDetails.id` 就是 Code Scanning 的 category：五個工具各自一個分析，後一次上傳沒再回報的警報會被自動關閉；0 個結果的上傳也要送，這樣修掉的問題才會關 |
+| `code_scanning_prep.py` 做的事 | 丟掉帶 `suppressions` 的 result（triage 檔已接受的 finding，理由留在 repo 內，不依賴 GitHub 對該欄位的處理）、丟掉沒有檔案位置的 result、把 `uri` 正規化成 repo 相對路徑、每個 run 設 `automationDetails.id = mara-l0/<tool>/`、超過 GitHub 上限（25,000 個 result 或 10 MB）即拒絕 | `automationDetails.id` 就是 Code Scanning 的 category：八份上傳各自一個分析，後一次上傳沒再回報的警報會被自動關閉；0 個結果的上傳也要送，這樣修掉的問題才會關 |
 | 權限 | 只有 `code-scanning` job 有 `security-events: write`；它不執行任何 repo 內的掃描腳本，只讀 artifact。L0 job 維持 `contents: read` | 執行 PR 程式碼的 job 不該拿到能寫警報的 token |
 | 誰不會上傳 | fork 來的 PR 與 Dependabot 的 PR（`if:` 條件），因為它們的 `GITHUB_TOKEN` 是唯讀，上傳會 403 | 這些 PR 仍完整跑 L0，只是結果留在 artifact |
 | zizmor | `zizmorcore/zizmor-action` 已移除，改由 `scripts/zizmor_ci.py` 執行 lock 內驗過 attestation 的 zizmor 1.30.1（CI 帶 token 跑線上稽核：impostor commit、ref confusion、known-vulnerable actions），任何 finding 即紅；`--format sarif` 時 zizmor 有 finding 也 exit 0，所以判定讀 SARIF | 同 3b 對 gitleaks-action 的理由：不再有第二份未經驗證的工具副本 |
