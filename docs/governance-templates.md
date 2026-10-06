@@ -4,7 +4,7 @@ Three governance items were "needs a human" in the first governance check becaus
 is organisational: a policy document, a cold-standby arrangement with drills, and a rollout
 schedule. Each now has a template with machine-readable fields, so the weekly check decides PASS or
 FAIL from the repository and says exactly what is missing. None of the templates ships with
-evidence that does not exist: the policy is a draft, the drill register is empty, the rollout has
+evidence that does not exist: the policy is a draft, the drill register holds only mock rehearsals (no live drill), the rollout has
 not started, so all three fail today with precise reasons.
 
 ## G-1: the review policy (`docs/policy/mara-review-policy.md`)

@@ -17,6 +17,8 @@
 #   slsa-provenance   SLSA v1 provenance (slsa-github-generator) verified with slsa-verifier.
 #   github-attestation GitHub artifact attestation verified with `gh attestation verify`.
 #   pip-hashes        pip --require-hashes over a fully hash-pinned requirements file.
+#   npm-integrity     the npm registry's dist.integrity (SHA-512) recomputed over the downloaded tarball.
+#   git-commit-gpg    a pinned commit whose GPG signature verifies against the key named in the lock.
 schema: 1
 platform:
   os: linux

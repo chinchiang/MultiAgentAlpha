@@ -9,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
 
+from .. import __version__
 from ..schemas import ConsensusResult, EvidenceTier, Finding, ReviewReport
 
 LEVEL = {"Critical": "error", "High": "error", "Medium": "warning", "Low": "note", "None": "none"}
@@ -75,7 +76,7 @@ def to_sarif(report: ReviewReport) -> dict:
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
         "runs": [{
-            "tool": {"driver": {"name": "MARA", "version": "0.1.0", "informationUri": "https://github.com/chinchiang/MultiAgentAlpha",
+            "tool": {"driver": {"name": "MARA", "version": __version__, "informationUri": "https://github.com/chinchiang/MultiAgentAlpha",
                                 "rules": list(rules.values())}},
             "results": results,
             "invocations": [{"executionSuccessful": report.review_status == "complete"}],

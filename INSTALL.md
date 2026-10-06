@@ -49,11 +49,11 @@ Deliver the zip through an internal file server or an encrypted attachment. The 
 ### 1.3 私有化後的影響 / What changes while the repository is private
 
 - **GitHub Pages 的線上報告仍然公開**：repo 私有後 Pages 照常在每次 push 到 `main` 時重新發布，<https://chinchiang.github.io/MultiAgentAlpha/> 不需登入即可讀取（2026-09-24 確認，owner 決定維持公開）。私有只保護原始碼、fixtures 與歷史紀錄，`docs/` 底下的所有檔案都是公開的，只能放可公開的文件。
-- **Code Scanning 上傳會跳過**：免費的 Code Scanning 只涵蓋公開 repo，私有 repo 需要 GitHub Advanced Security。`mara-review.yml` 的 `code-scanning` job 在私有狀態下自動跳過，SARIF 仍以 `l0-sarif` artifact 保存；Scorecard 的唯讀 token 讀不到私有 repo 的 GraphQL，整個 Scorecard job 也一併跳過。
+- **Code Scanning 上傳會跳過**：免費的 Code Scanning 只涵蓋公開 repo，私有 repo 需要 GitHub Advanced Security。`mara-review.yml` 的 `code-scanning` job 在私有狀態下自動跳過，SARIF 仍以 `l0-sarif` artifact 保存；Scorecard 的唯讀 token 讀不到私有 repo 的 GraphQL，呼叫 API 的 Scorecard job 也一併跳過；改由 `scorecard-local` job 以同一個鎖定的 CLI 加 `--local` 掃描已提交的樹，六個以檔案判定的強制項照樣把關。
 - **Private vulnerability reporting 無法使用**：GitHub 只對公開 repo 提供，`SECURITY.md` 的回報表單連結會回應 404；私有期間請直接私訊維護者，見 `SECURITY.md`。
 
 - **The online report on GitHub Pages stays public**: Pages keeps republishing on every push to `main` after the repository became private, and <https://chinchiang.github.io/MultiAgentAlpha/> is readable without signing in (confirmed 2026-09-24; the owner decided to keep it public). Being private protects the source tree, the fixtures and the history; every file under `docs/` is public and must be fit for publication.
-- **The Code Scanning uploads are skipped**: free Code Scanning covers public repositories only; private ones need GitHub Advanced Security. The `code-scanning` job of `mara-review.yml` skips itself while the repository is private and the SARIF files remain in the `l0-sarif` artifact; the whole Scorecard job is skipped too, because its read-only token cannot run scorecard's GraphQL queries on a private repository.
+- **The Code Scanning uploads are skipped**: free Code Scanning covers public repositories only; private ones need GitHub Advanced Security. The `code-scanning` job of `mara-review.yml` skips itself while the repository is private and the SARIF files remain in the `l0-sarif` artifact; the API-based Scorecard job is skipped too, because its read-only token cannot run scorecard's GraphQL queries on a private repository; the `scorecard-local` job runs the same locked CLI with `--local` on the committed tree instead and still enforces the six file-based checks.
 - **Private vulnerability reporting is unavailable**: GitHub offers it for public repositories only, so the form link in `SECURITY.md` returns 404; while private, contact the maintainer directly as `SECURITY.md` describes.
 
 ## 2. Python 套件（必要）/ Python package (required)
@@ -118,9 +118,9 @@ python -m pip install --require-hashes --only-binary=:all: -r tools/bootstrap-re
 python scripts/install_tools.py
 ```
 
-外部需求：zizmor 的 GitHub attestation 驗證需要 `gh` CLI；semgrep-rules 的 commit 簽章驗證需要 `gpg` 並能連到 `https://github.com/web-flow.gpg`。沒有這些的機器可以只裝一部分：
+外部需求：zizmor 的 GitHub attestation 驗證需要 `gh` CLI；semgrep-rules 的 commit 簽章驗證需要 `gpg` 並能連到 `https://github.com/web-flow.gpg`。沒有 `gh` 的機器可以只裝一部分（semgrep-rules 仍需要 `gpg`）：
 
-External requirements: zizmor's GitHub attestation check needs the `gh` CLI; the semgrep-rules commit signature check needs `gpg` and access to `https://github.com/web-flow.gpg`. A machine without them can install a subset:
+External requirements: zizmor's GitHub attestation check needs the `gh` CLI; the semgrep-rules commit signature check needs `gpg` and access to `https://github.com/web-flow.gpg`. A machine without `gh` can install a subset (semgrep-rules still needs `gpg`):
 
 ```bash
 python scripts/install_tools.py --only gitleaks semgrep semgrep-rules
@@ -139,9 +139,9 @@ python scripts/trivy_db.py download
 python scripts/trivy_db.py status
 ```
 
-安裝完成後 `pytest -q` 會多執行 gitleaks 與 semgrep 的整合測試。
+安裝完成後 `pytest -q` 會多執行使用真實工具的測試：gitleaks（`test_gitleaks_ci.py`）、semgrep（`test_semgrep_ci.py`、`test_tool_target_config.py`），有 node 時另含 csp-evaluator（`test_tools_csp.py`）。
 
-After that, `pytest -q` also runs the gitleaks and semgrep integration tests.
+After that, `pytest -q` also runs the tests that use the real tools: gitleaks (`test_gitleaks_ci.py`), semgrep (`test_semgrep_ci.py`, `test_tool_target_config.py`) and, with node, csp-evaluator (`test_tools_csp.py`).
 
 ### 3.1 Windows
 
@@ -150,10 +150,10 @@ After that, `pytest -q` also runs the gitleaks and semgrep integration tests.
 The code itself runs on Windows: the 2026-09-18 remediation made the tool runner, the installer and the tests Windows-aware (`.exe`/`.cmd` resolution, directory reads without `O_DIRECTORY`), so the plain install of section 2.3 and the offline mock review of section 2.4 work there. Two limits remain:
 
 - **hash 鎖定安裝不適用**：`tools/dev-requirements.txt` 只含 Linux x86_64 的 wheel hash，Windows 上 `--require-hashes` 必定失敗，只能走 2.3 節。
-- **L0 工具的 Windows 資產不齊**：`tools/versions.lock` 的二進位工具（cosign、gitleaks、osv-scanner、zizmor、trivy、scorecard）都是 `linux-amd64` 資產，Windows 上裝不起來，所以真實掃描做不到、`mara review` 對這些工具都會回報 "not installed"、報告永遠是 incomplete。唯一的例外是 npm 類型的 csp-evaluator：安裝器會寫 `.cmd` shim，只要有 node ≥ 18 就能在 Windows 上安裝並執行，但單靠它不足以完成審查。
+- **L0 工具的 Windows 資產不齊**：`tools/versions.lock` 的二進位工具（cosign、slsa-verifier、gitleaks、osv-scanner、zizmor、trivy、scorecard）都是 `linux-amd64` 資產，Windows 上裝不起來，所以真實掃描做不到、`mara review` 對這些工具都會回報 "not installed"、報告永遠是 incomplete。唯一的例外是 npm 類型的 csp-evaluator：安裝器會寫 `.cmd` shim，只要有 node ≥ 18 就能在 Windows 上安裝並執行，但單靠它不足以完成審查。
 
 - **The hash-pinned install does not apply**: `tools/dev-requirements.txt` holds Linux x86_64 wheel hashes only, so `--require-hashes` always fails on Windows; use section 2.3.
-- **The L0 tool set has no Windows binaries**: the binary tools in `tools/versions.lock` (cosign, gitleaks, osv-scanner, zizmor, trivy and scorecard) are all `linux-amd64` assets and cannot be installed on Windows, so real scans are impossible, `mara review` reports every one of them as "not installed" and the review stays incomplete. The one exception is the npm-kind csp-evaluator: the installer writes a `.cmd` shim, so with node ≥ 18 it installs and runs on Windows — but on its own it is not enough for a complete review.
+- **The L0 tool set has no Windows binaries**: the binary tools in `tools/versions.lock` (cosign, slsa-verifier, gitleaks, osv-scanner, zizmor, trivy and scorecard) are all `linux-amd64` assets and cannot be installed on Windows, so real scans are impossible, `mara review` reports every one of them as "not installed" and the review stays incomplete. The one exception is the npm-kind csp-evaluator: the installer writes a `.cmd` shim, so with node ≥ 18 it installs and runs on Windows — but on its own it is not enough for a complete review.
 
 要在 Windows 機器上得到完整功能，用 **WSL 2**（Ubuntu）：在 WSL 裡照第 1 到 3 節做，就是 Linux x86_64 環境，hash 鎖定與工具安裝都能用。Docker Desktop 跑一個 `python:3.11` 容器也可以。
 
@@ -182,13 +182,13 @@ Non-loopback inference endpoints must be HTTPS with certificate validation; the 
 - **系統 Python 上出現 `Cannot uninstall PyYAML`**：沒有用 venv。建 venv 後重來。
 - **`mara review` 說某工具 "not installed"**：第 3 節沒做，或該工具不在 `.mara-tools/bin`。離線 mock 模式不需要。
 - **防毒或 secret scanner 對 `fixtures/` 與 `calib/samples/` 告警**：那些是刻意植入漏洞與假憑證的教材，屬預期；不要部署它們。
-- **`import mara` 讀到別的目錄**：`-e .` 是可編輯安裝，指向安裝時的 repo 路徑；搬移 repo 後重跑 `pip install --no-deps -e .`。
+- **`import mara` 讀到別的目錄**：`-e .` 是可編輯安裝，指向安裝時的 repo 路徑；搬移 repo 後重跑 `pip install --no-deps --no-build-isolation -e .`。
 
 - **`--require-hashes` fails with a hash mismatch or no matching wheel**: the platform or Python version differs from the closure; see section 2.3.
 - **`Cannot uninstall PyYAML` on the system Python**: no venv was used. Create one and start over.
 - **`mara review` reports a tool as "not installed"**: section 3 was skipped, or the tool is not under `.mara-tools/bin`. The offline mock mode does not need it.
 - **Antivirus or a secret scanner flags `fixtures/` and `calib/samples/`**: these are teaching materials with deliberately planted vulnerabilities and fake credentials; expected. Never deploy them.
-- **`import mara` resolves to another directory**: `-e .` is an editable install pointing at the repository path at install time; after moving the repository, rerun `pip install --no-deps -e .`.
+- **`import mara` resolves to another directory**: `-e .` is an editable install pointing at the repository path at install time; after moving the repository, rerun `pip install --no-deps --no-build-isolation -e .`.
 
 ## 6. 授權 / Licence
 

@@ -1,6 +1,6 @@
 # GitHub Actions 盤點（2026-10-03）
 
-依附錄 E 的 prompt 5，對本 repo 內所有 `.github/workflows/*.yml` 做 pwn request 與 SHA pinning 盤點。**只讀不改。** 本檔第 0 到 5 節由 `scripts/actions_inventory.py` 產生，第 6 節為人工補充。
+依附錄 E 的 prompt 5，對本 repo 內所有 `.github/workflows/*.yml` 做 pwn request 與 SHA pinning 盤點。**只讀不改。** 本檔第 0 到 5 節由 `scripts/actions_inventory.py` 產生；本次沒有人工補充，所以沒有第 6 節（前兩次的人工補充見 2026-09-12 與 2026-09-26 版的第 6 節）。
 
 ## 0. 範圍、方法與判定準則
 

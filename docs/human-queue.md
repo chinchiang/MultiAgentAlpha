@@ -4,7 +4,7 @@
 
 ## 輸出與識別
 
-`out/human_queue.json`、Markdown 與 SARIF 保留發現者、skeptic、red team、正反序評審及待判原因。單筆一致度使用 `agreement_proxy`；舊 `krippendorff_alpha` 欄位保留為 null。它不是統計上的 Krippendorff alpha；全語料的 alpha 在 bias audit 另行呈現。
+`out/human_queue.json`、Markdown 與 SARIF 保留發現者、skeptic、red team、正反序評審及待判原因。單筆一致度使用 `agreement_proxy`（v0.3.13 起已移除舊的 `krippendorff_alpha` 欄位）。它不是統計上的 Krippendorff alpha；全語料的 alpha 在 bias audit 另行呈現。
 
 每項使用 `v2-` 加 24 位 SHA-256 前綴，雜湊內容為 target ID、revision、context hash、檔案、行號與 CWE。target ID：已提交進 git 歷史的目錄，以正規化的 `origin` URL（https、ssh 與 scp 形式視為同一個）加上目標相對 repo 頂層的路徑命名，因此每個 clone、每台機器與 CI runner 對同一目標的命名都相同；其他目錄（沒有 git、尚未提交，或只是剛好位在家目錄 dotfiles repo 之類的上層 repo 裡）維持以絕對路徑命名。revision 結合目標目錄在 HEAD 的 tree id 與原始文字快照雜湊，不再綁整個 repo 的 commit：目標目錄以外的 commit（例如另一個樣本，或把裁決同步回 `calib/decisions/` 本身）不會讓既有裁決失效，改到被審查的程式碼才會；commit 本身仍記在報告 coverage 的 `commit` 欄供追溯。context hash 綁定實際遮罩後送入模型的內容。2026-10-05 之前的 key 以絕對路徑與 repo commit 計算，已不會再相符，需重跑審查與工單。不能用檔名或 basename 猜測關係。
 

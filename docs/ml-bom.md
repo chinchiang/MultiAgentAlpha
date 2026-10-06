@@ -110,8 +110,8 @@ not reach huggingface.co, hf-mirror or NGC to fetch registry hashes (`registry-h
 that reason and was tested against a simulated registry; its first real run has to happen on a host
 with access). The manifest therefore carries
 the source and licence for DeepSeek-V3.2 (GitHub repository, MIT; the formal source of the V4
-weights could not be confirmed, report Appendix B item A78) and Nemotron 3 Super (NVIDIA Open Model
-License; exact repository and licence text still to be confirmed, B-gap-9) with empty `files:`.
+weights could not be confirmed, report Appendix B item 20, source A78) and Nemotron 3 Super (NVIDIA Open Model
+License; exact repository and licence text still to be confirmed, Appendix B items 39 and 21) with empty `files:`.
 The BOM is built with `--allow-pending`, its components are marked `mara:status=pending`, policy P7
 reports them, and governance check G-7 fails naming both models and the procedure above. No
 placeholder hash was written anywhere; hashes appear only once someone has computed them.

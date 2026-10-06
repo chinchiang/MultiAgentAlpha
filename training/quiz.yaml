@@ -53,11 +53,11 @@ questions:
   - id: T6
     question: Which of these is NOT a reason a finding enters the human queue?
     options:
-      a: Krippendorff's alpha across judge votes is below the threshold
+      a: The per-finding agreement proxy across judge votes is below the threshold
       b: The finding is tier A Critical
       c: The finding is tier C at High severity or above
     answer: b
-    rationale: "Queue reasons are majority_needs_human, alpha_below_threshold and tier_c_high (src/mara/report/human_queue_out.py). Tier A Critical is accepted and, for shipped products, goes to the PSIRT."
+    rationale: "Queue reasons are the L5 human_reasons set in src/mara/pipeline.py, among them majority_needs_human, agreement_below_threshold and tier_c_high (src/mara/report/human_queue_out.py adds unsupervised_reject_unverified). Tier A Critical is not a reason by itself: an accepted one blocks the gate and, for shipped products, goes to the PSIRT."
 
   - id: T7
     roles: [adjudicator, security]

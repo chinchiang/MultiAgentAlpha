@@ -43,6 +43,17 @@ def _entry(files, **kw) -> mlbom.ModelEntry:
     return mlbom.ModelEntry(**base)
 
 
+def test_bom_drift_ignores_the_generators_version_but_not_the_models(tmp_path):
+    """MARA's version now follows docs/CHANGELOG.md and moves with every release; comparing it made the
+    committed BOM drift on every version bump although no model had changed."""
+    d = _weights(tmp_path)
+    entries = [_entry(mlbom.hash_dir(d))]
+    old, new = mlbom.build_bom(entries, tool_version="0.1.0"), mlbom.build_bom(entries, tool_version="0.3.22")
+    assert mlbom.bom_equal_ignoring_volatile(old, new)
+    other = mlbom.build_bom([_entry(mlbom.hash_dir(d), version="8b")], tool_version="0.1.0")
+    assert not mlbom.bom_equal_ignoring_volatile(old, other)
+
+
 def test_hash_dir_requires_safetensors_and_refuses_pickle(tmp_path):
     d = _weights(tmp_path)
     files = mlbom.hash_dir(d)
