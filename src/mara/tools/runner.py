@@ -149,7 +149,12 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 from .semgrep_rules import default_configs, normalize_sarif, scan_env
                 from .semgrep_rules import scan_args as semgrep_args
 
-                cp = _run(semgrep_args(exe, default_configs(), sarif) + SEMGREP_TARGET_FLAGS + ["."], target, env=scan_env())
+                configs = default_configs()
+                if not configs:
+                    runs.append(ToolRun(tool=tool, ran=False, note="pinned semgrep-rules not installed under "
+                                        f"{tools_dir() / 'semgrep-rules'} (scripts/install_tools.py); no registry fallback"))
+                    continue
+                cp = _run(semgrep_args(exe, configs, sarif) + SEMGREP_TARGET_FLAGS + ["."], target, env=scan_env())
                 if sarif.exists() and sarif.read_text(encoding="utf-8").strip():
                     normalize_sarif(sarif)
             elif tool == "gitleaks":

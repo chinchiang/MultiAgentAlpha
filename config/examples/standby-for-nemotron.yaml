@@ -12,4 +12,6 @@ roles:
   skeptic: mistral-reviewer
   redteam: deepseek-reviewer
   judges: [claude-reviewer, deepseek-reviewer, mistral-reviewer]
+  context: claude-reviewer
 gate: { block_on_tiers: [A, B], block_on_severity: [High, Critical], min_dimension_score: 60, accept_threshold: 0.6, human_threshold_alpha: 0.4 }
+ml_bom: { bundle: sbom/ml-bom.cdx.json.sigstore.json }

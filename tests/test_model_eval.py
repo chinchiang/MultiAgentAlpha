@@ -4,6 +4,7 @@ mock output as live, calibration's weight penalty and front matter, and governan
 
 import datetime as dt
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -48,6 +49,25 @@ def test_targets_and_commands_never_carry_keys(monkeypatch):
     assert me.cse_spec(an, "sk-real") == "ANTHROPIC::claude-opus-5::sk-real"
     with pytest.raises(RuntimeError):
         me.resolve_key("MARA_TEST_UNSET_KEY")
+
+
+def test_cyberseceval_keys_never_reach_the_process_command_line(tmp_path):
+    """CyberSecEval takes the keys only inside --llm-under-test / --judge-llm; passed as arguments they were
+    visible to every local user in `ps`. The shim keeps them in the child's environment and restores them
+    into sys.argv inside the child only."""
+    pkg = tmp_path / "fakebench"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "run.py").write_text("import json, sys\nprint(json.dumps(sys.argv))\n")
+    real = [sys.executable, "-m", "fakebench.run", "--llm-under-test=OPENAI::m::sk-SECRET-123::https://x/v1", "--judge-llm=OPENAI::j::JUDGE-456::u"]
+    argv, env = me.argv_without_secrets(real, {"MARA_CSE_KEY": "sk-SECRET-123", "MARA_CSE_JUDGE": "OPENAI::j::JUDGE-456::u"})
+    assert not any("sk-SECRET-123" in a or "JUDGE-456" in a for a in argv), argv
+    assert "--llm-under-test=OPENAI::m::{MARA_CSE_KEY}::https://x/v1" in argv and "--judge-llm={MARA_CSE_JUDGE}" in argv
+    out = subprocess.run(argv, env={**os.environ, **env, "PYTHONPATH": str(tmp_path)}, capture_output=True, text=True, check=True)
+    child = json.loads(out.stdout)
+    assert child[1:] == real[3:], "the child sees the real arguments"
+    direct = json.loads(subprocess.run(real, env={**os.environ, "PYTHONPATH": str(tmp_path)}, capture_output=True, text=True, check=True).stdout)
+    assert child == direct, "exactly what `python -m` would have given the module, argv[0] included"
 
 
 def test_parsers_on_the_synthetic_fixtures():

@@ -153,6 +153,45 @@ def test_reports_render(mock_report):
     assert "## Accepted findings" in md and "## Bias and integrity audit" in md
 
 
+def test_sarif_fingerprints_follow_the_content_not_the_finding_number(mock_report):
+    """partialFingerprints carried the F-0001-style id, which follows the sort order: one finding added in
+    front renumbered all the others, and code scanning moved alert state (dismissals) between findings."""
+    _, report = mock_report
+
+    def prints(r):
+        out = {}
+        for res in to_sarif(r)["runs"][0]["results"]:
+            loc = res["locations"][0]["physicalLocation"]
+            out[(res["ruleId"], loc["artifactLocation"]["uri"], loc["region"]["startLine"])] = res["partialFingerprints"]["maraContent/v1"]
+        return out
+
+    before = prints(report)
+    assert before and len(set(before.values())) == len(before), "distinct findings, distinct fingerprints"
+    # renumber every finding (as an extra finding sorted in front would) and shift every line by 3
+    shifted = report.model_copy(deep=True)
+    renumber = {f.id: f"F-{9000 + i}" for i, f in enumerate(shifted.findings)}
+    for f in shifted.findings:
+        f.id = renumber[f.id]
+        for p in f.provenance:
+            p.line += 3
+    for c in shifted.consensus:
+        c.finding_id = renumber[c.finding_id]
+    for q in shifted.human_queue:
+        q.finding_id = renumber[q.finding_id]
+    after = prints(shifted)
+    assert sorted(before.values()) == sorted(after.values())
+
+
+def test_sarif_uris_are_percent_encoded_references(mock_report):
+    _, report = mock_report
+    emitted = to_sarif(report)["runs"][0]["results"][0]["properties"]["findingId"]
+    odd = report.model_copy(deep=True)
+    next(f for f in odd.findings if f.id == emitted).provenance[0].file = "dir with space/a#b.py"
+    uris = {r["properties"]["findingId"]: r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+            for r in to_sarif(odd)["runs"][0]["results"]}
+    assert uris[emitted] == "dir%20with%20space/a%23b.py"
+
+
 def test_tool_corroboration_matches_git_root_relative_paths(mock_report):
     """zizmor run from the repo root reports fixtures/vuln-sample/.github/workflows/deploy.yml while the
     finding says .github/workflows/deploy.yml; both must corroborate, and a leading dot must survive."""

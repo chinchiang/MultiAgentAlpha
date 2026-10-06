@@ -287,8 +287,8 @@ class _Raises(OpenAICompatibleProvider):
 
 @pytest.mark.parametrize("exc,code", [(RuntimeError("provider_http_error:429"), "provider_http_error:429"),
                                       (RuntimeError("provider_connection_failed"), "provider_connection_failed"),
-                                      (RuntimeError("provider_http_error:429 body=secret-token"), "provider_call_failed"),
-                                      (ValueError("sk-live-123 leaked in a message"), "provider_call_failed")])
+                                      (RuntimeError("provider_http_error:429 body=secret-token"), "provider_call_failed:RuntimeError"),
+                                      (ValueError("sk-live-123 leaked in a message"), "provider_call_failed:ValueError")])
 def test_agent_layer_records_provider_failures_as_errors_not_refusals(exc, code):
     from mara.agents.reviewer import review_dimension
     from mara.context.repo_map import RepoContext
@@ -298,3 +298,20 @@ def test_agent_layer_records_provider_failures_as_errors_not_refusals(exc, code)
     assert agent_base.parse_items(comp, dict) == ([], [code])
     _, audit = review_dimension(_Raises(exc), RepoContext(root=Path(".")), "xss", agent_base.Canary())
     assert (audit["errored"], audit["refused"], audit["truncated"]) == (True, False, False)
+
+
+def test_an_unexpected_provider_exception_is_logged_without_its_message(caplog):
+    """`except Exception` turned programming errors inside a provider into an anonymous provider_call_failed
+    with no trace anywhere; the type and the raising frame are now logged, the message (possibly a key) never."""
+    class Buggy(_Raises):
+        def complete(self, **kwargs):
+            return {}["missing"]  # a bug, not a provider failure
+
+    with caplog.at_level("ERROR", logger="mara.providers"):
+        comp = agent_base.call(Buggy(ValueError("unused")), system_extra="", user="u", schema=SCHEMA, role="judge")
+    assert comp.error == "provider_call_failed:KeyError"
+    [rec] = caplog.records
+    assert "KeyError" in rec.getMessage() and "test_live_providers.py" in rec.getMessage() and "in complete" in rec.getMessage()
+    with caplog.at_level("ERROR", logger="mara.providers"):
+        agent_base.call(_Raises(ValueError("sk-live-123 leaked in a message")), system_extra="", user="u", schema=SCHEMA, role="judge")
+    assert all("sk-live-123" not in r.getMessage() for r in caplog.records)

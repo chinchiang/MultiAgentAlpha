@@ -40,6 +40,26 @@ def test_label_driven_mock_and_calibrate(root, tmp_path):
     assert "weight=" in cp.stdout
 
 
+def test_calibration_run_never_takes_an_exit_2_without_a_report_for_a_review(tmp_path):
+    """Exit 2 is a blocked gate (a completed review) but also any typer usage error; the loop took both as
+    success and calibrated on whatever report.json an earlier run had left in calib-out."""
+    import os
+    import shutil
+
+    sample = tmp_path / "samples" / "s1"
+    shutil.copytree(ROOT / "calib" / "samples" / "s1-fastapi-inventory", sample)
+    stale = tmp_path / "out" / "s1" / "report.json"
+    stale.parent.mkdir(parents=True)
+    stale.write_text('{"stale": true}', encoding="utf-8")
+    # MARA_HOME inside the sample: `mara review` refuses it with a usage error (exit 2) and writes no report
+    env = {**os.environ, "MARA_HOME": str(sample / "home"), "PYTHONIOENCODING": "utf-8"}
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "calibration_run.py"), "--mode", "mock", "--samples-dir", str(tmp_path / "samples"),
+                        "--out-dir", str(tmp_path / "out"), "--report", str(tmp_path / "r.md")],
+                       capture_output=True, text=True, encoding="utf-8", env=env, cwd=ROOT)
+    assert r.returncode == 1 and "review of s1 failed (exit 2, no report written)" in r.stderr, r.stdout + r.stderr
+    assert not stale.exists() and not (tmp_path / "r.md").exists()
+
+
 # ------------------------------------------------------------------ the answer key never reaches a model
 
 def test_calibration_answer_key_is_excluded_from_the_bundle(root, tmp_path):

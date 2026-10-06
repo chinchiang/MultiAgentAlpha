@@ -149,7 +149,27 @@ def test_ticket_body_treats_model_text_as_literal():
             "votes_tp": 0, "votes_fp": 0, "votes_human": 1, "finder_families": ["anthropic"], "reachability": "unknown",
             "reachability_argument": "ok", "exploit_sketch": "x", "quote": "`\n# forged\n<img src=x onerror=alert(1)>"}
     body = hq.ticket_body(item, "target")
-    assert "\n# forged" not in body and "<img" not in body and "&#96;" in body
+    assert "\n# forged" not in body
+    # the quote sits in a code span, verbatim and inert: rendered, it is text, not a heading or an element
+    import markdown
+    html_out = markdown.markdown(body)
+    assert "<img" not in html_out and "<h1>" not in html_out
+    assert "<code>` # forged &lt;img src=x onerror=alert(1)&gt;</code>" in html_out
+
+
+def test_code_spans_show_untrusted_text_verbatim():
+    """literal()'s character references are not decoded inside code spans, so evidence quotes rendered
+    as `cursor.execute&#40;&quot;SELECT &#42;...`; code() needs no escaping, only a fence the text
+    cannot contain, so the span shows the text as written and cannot be closed early."""
+    import html as html_mod
+
+    import markdown
+
+    from mara.report.escaping import code
+    for text in ['cursor.execute("SELECT * FROM t WHERE id=" + q)', "a ` b `` c", "`edge`", "x | y <b>z</b> [l](u)", ""]:
+        out = markdown.markdown(f"- Quote: {code(text)} tail")
+        inner = out.split("<code>", 1)[1].split("</code>", 1)[0]
+        assert html_mod.unescape(inner).strip() == text.strip() and "tail" in out.split("</code>", 1)[1], (text, out)
 
 
 @pytest.mark.parametrize("bad", ["CVSS:4.0/invalid", "CVSS:4.0/AV:Q", VECTOR + "/AV:N", "CVSS:4.0/AV:N"])

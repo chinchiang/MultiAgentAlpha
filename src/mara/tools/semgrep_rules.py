@@ -22,7 +22,6 @@ from pathlib import Path
 from .runner import installed_manifest_entry, tools_dir
 
 RULES_DIR_NAME = "semgrep-rules"
-REGISTRY_FALLBACK = "p/default"
 _PREFIX_RE = re.compile(r"^.*?\b" + re.escape(RULES_DIR_NAME) + r"\.")
 _TEXT_PREFIX_RE = re.compile(r"'[^'\s]*\b" + re.escape(RULES_DIR_NAME) + r"\.")
 
@@ -39,13 +38,16 @@ def installed_rule_paths() -> list[Path]:
 
 
 def default_configs() -> list[str]:
-    """MARA_SEMGREP_CONFIG (comma-separated) wins; otherwise the installed pinned rule directories; otherwise
-    the registry ruleset p/default (needs network to semgrep.dev, still with --metrics=off)."""
+    """MARA_SEMGREP_CONFIG (comma-separated) wins; otherwise the installed pinned rule directories;
+    otherwise none. There is no silent fallback to the registry ruleset p/default: it fetches rules
+    from semgrep.dev, which the pinned-rules setup exists to avoid (data-residency policy P5), and it
+    would label an unpinned rule set as the pinned run. Without rules the runner records semgrep as
+    not run, which keeps the review incomplete; p/default stays available explicitly, through
+    MARA_SEMGREP_CONFIG."""
     env = os.environ.get("MARA_SEMGREP_CONFIG", "")
     if env.strip():
         return [c.strip() for c in env.split(",") if c.strip()]
-    paths = installed_rule_paths()
-    return [str(p) for p in paths] if paths else [REGISTRY_FALLBACK]
+    return [str(p) for p in installed_rule_paths()]
 
 
 def scan_env() -> dict[str, str]:

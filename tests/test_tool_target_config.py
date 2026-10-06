@@ -34,6 +34,7 @@ def test_every_tool_is_handed_neutral_config_instead_of_the_targets(tmp_path, mo
                 Path(_argv_after(cmd, flag)).write_text(EMPTY_SARIF, encoding="utf-8")
         return subprocess.CompletedProcess(cmd, 0, stdout=EMPTY_SARIF if exe == "zizmor" else "", stderr="")
 
+    monkeypatch.setenv("MARA_SEMGREP_CONFIG", str(tmp_path / "rules.yml"))
     monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
     monkeypatch.setattr(runner, "installed_version", lambda tool: "pinned")
     monkeypatch.setattr(runner, "_run", fake_run)
@@ -58,6 +59,18 @@ def test_every_tool_is_handed_neutral_config_instead_of_the_targets(tmp_path, mo
         assert target.resolve() not in p.parents, "the neutral files live in the output directory, never in the target"
     # the target's own files are untouched
     assert (target / ".semgrepignore").read_text(encoding="utf-8") == "*\n"
+
+
+def test_semgrep_without_pinned_rules_does_not_fall_back_to_the_registry(tmp_path, monkeypatch):
+    """Without the pinned semgrep-rules the runner used to scan with p/default from semgrep.dev and label
+    the run as the pinned one; now semgrep is not run, which keeps the review incomplete."""
+    monkeypatch.delenv("MARA_SEMGREP_CONFIG", raising=False)
+    monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
+    monkeypatch.setattr(runner, "installed_version", lambda tool: "pinned")
+    monkeypatch.setattr(runner, "_run", lambda *a, **k: pytest.fail("semgrep must not be invoked without its pinned rules"))
+    (tmp_path / "target").mkdir()
+    [run] = runner.run_all(tmp_path / "target", tmp_path / "out", enabled=["semgrep"])
+    assert not run.ran and "no registry fallback" in run.note
 
 
 @pytest.mark.skipif(not (TOOLS / "bin" / "semgrep").exists(), reason="locked semgrep not installed under .mara-tools (run scripts/install_tools.py)")

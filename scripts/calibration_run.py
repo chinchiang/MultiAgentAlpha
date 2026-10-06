@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import shutil
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -47,9 +47,13 @@ def main() -> int:
     if a.mode == "mock" and len(mock_models) != len(cfg.models):
         print(f"ERROR: --mode mock needs a config whose models all use provider: mock ({config})", file=sys.stderr)
         return 2
-    mara = shutil.which("mara") or [sys.executable, "-m", "mara.cli"]
-    base = [mara] if isinstance(mara, str) else mara
-    r = subprocess.run([*base, "check-config", str(config)], capture_output=True, text=True)
+    # this interpreter and this checkout's code, never whatever `mara` an older install left on PATH
+    base = [sys.executable, "-m", "mara.cli"]
+    # the CLI prints Unicode (rich tables): make the child write UTF-8 and read it back as UTF-8, or a
+    # Windows console code page (cp950, cp1252) fails the decode and leaves stdout None
+    io = {"capture_output": True, "text": True, "encoding": "utf-8", "errors": "replace",
+          "env": {**os.environ, "PYTHONIOENCODING": "utf-8"}}
+    r = subprocess.run([*base, "check-config", str(config)], **io)
     print(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr.strip()[-200:])
     if r.returncode != 0:
         print("ERROR: check-config failed; fix the policies before calibrating", file=sys.stderr)
@@ -60,12 +64,17 @@ def main() -> int:
         return 2
     for s in samples:
         out = a.out_dir / s.name
+        # a previous run's report must never stand in for this one
+        (out / "report.json").unlink(missing_ok=True)
         cmd = [*base, "review", str(s), "--config", str(config), "--provider", a.mode, "--out", str(out)]
         print(f"+ {' '.join(cmd)}")
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode not in (0, 2):  # 2 = gate blocked in blocking phase, still a completed review
+        r = subprocess.run(cmd, **io)
+        # exit 2 is a blocked gate in the blocking phase, still a completed review - but a usage error
+        # (typer/click) is exit 2 too, and writes no report: only a fresh report.json makes it a review
+        if r.returncode not in (0, 2) or not (out / "report.json").is_file():
             print(r.stdout[-800:] + r.stderr[-800:], file=sys.stderr)
-            print(f"ERROR: review of {s.name} failed (exit {r.returncode})", file=sys.stderr)
+            print(f"ERROR: review of {s.name} failed (exit {r.returncode}{', no report written' if r.returncode in (0, 2) else ''})",
+                  file=sys.stderr)
             return 1
 
     # assessment #10: the calibration reference set must not rely on human labels alone. Run the
@@ -90,7 +99,7 @@ def main() -> int:
         evidence = [p for p in (ROOT / "calib" / "history.json", ROOT / "calib" / "latest.json", report) if p.is_file()]
         print("\nLIVE RUN COMMIT POLICY: commit together with the report:")
         for p in evidence:
-            print(f"  git add {p.relative_to(ROOT)}")
+            print(f"  git add {p.relative_to(ROOT) if p.resolve().is_relative_to(ROOT) else p}")
         if not (ROOT / "calib" / "latest.json").is_file():
             print("  WARNING: calib/latest.json was not written; policy P8 will refuse unsupervised_reject_allowed until a live run records it")
     return r.returncode
