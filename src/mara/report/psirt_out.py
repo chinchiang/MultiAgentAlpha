@@ -151,7 +151,16 @@ def send_psirt(payloads: list[dict], cfg: MaraConfig, *, client: httpx.Client | 
             headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
             if key:
                 headers["Idempotency-Key"] = key
-            r = client.post(ps.webhook_url, json=payload, headers=headers)
+            try:
+                r = client.post(ps.webhook_url, json=payload, headers=headers)
+            except httpx.HTTPError:
+                # one unreachable send must neither abort the payloads after it nor go unrecorded; the
+                # message is not kept (it may echo the URL), only a sanitised code
+                results.append({"finding_id": payload["finding_id"], "dedupe_key": key, "skipped": False, "status_code": None,
+                                "ok": False, "error": "connection_failed"})
+                if ledger is not None:
+                    record_attempt(ledger, payload, None, False, now or now_utc(), error="connection_failed")
+                continue
             results.append({"finding_id": payload["finding_id"], "dedupe_key": key, "skipped": False, "status_code": r.status_code,
                             "ok": r.is_success})
             if ledger is not None:

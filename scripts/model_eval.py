@@ -18,6 +18,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -92,11 +93,13 @@ def cmd_run(a: argparse.Namespace) -> int:
                 shown = [x.replace(key, me.MASK).replace(judge, "$" + cfg.model_eval.judge_llm_env) for x in argv]
                 print(f"+ [{t.family}] {bench}: {' '.join(shown)}")
                 (a.out / t.slug).mkdir(parents=True, exist_ok=True)
-                r = subprocess.run(argv)
+                # the keys travel in the child's environment, never in its (world-readable) command line
+                argv, secret_env = me.argv_without_secrets(argv, {"MARA_CSE_KEY": key, "MARA_CSE_JUDGE": judge})
+                r = subprocess.run(argv, env={**os.environ, **secret_env})
                 rc |= r.returncode
     (a.out / "run.json").write_text(json.dumps({"date": dt.date.today().isoformat(), "tool": a.tool, "garak_version": cfg.model_eval.garak_version,
                                                "cyberseceval_ref": cfg.model_eval.cyberseceval_ref, "families": [t.family for t in targets],
-                                               "python": sys.version.split()[0], "host": os.uname().nodename}, indent=2) + "\n", encoding="utf-8")
+                                               "python": sys.version.split()[0], "host": platform.node()}, indent=2) + "\n", encoding="utf-8")
     return 1 if rc else 0
 
 

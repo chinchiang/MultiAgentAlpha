@@ -65,6 +65,7 @@ def review(
         from .report.human_queue_out import write_human_queue
 
         write_human_queue(report, out)
+    psirt_failed = False
     if cfg.psirt.enabled:
         from .report.psirt_out import send_psirt, write_psirt
 
@@ -76,7 +77,9 @@ def review(
                 if s.get("skipped"):
                     console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: skipped, {s['reason']} (ledger {cfg.psirt.ledger_file})")
                 else:
-                    console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: HTTP {s['status_code']} {'ok' if s['ok'] else 'FAILED'}")
+                    psirt_failed |= not s["ok"]
+                    status = f"HTTP {s['status_code']}" if s["status_code"] is not None else s.get("error", "no response")
+                    console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: {status} {'ok' if s['ok'] else 'FAILED'}")
 
     overall = f"{report.overall_score}/100" if report.overall_score is not None else "unavailable (review incomplete)"
     t = Table(title=f"MARA · {target} · overall {overall} · gate {'PASSED' if report.gate_passed else 'BLOCKED'}")
@@ -92,6 +95,11 @@ def review(
     phase = cfg.rollout.phase
     if not report.gate_passed and phase != "blocking":
         console.print(f"rollout phase [bold]{phase}[/bold]: the gate would have blocked; result recorded, merge not enforced (G-10)")
+    if psirt_failed:
+        # an internal hand-off that did not arrive is an operational failure (EU CRA Article 14 clocks
+        # may depend on it): never a green run. It outranks the gate's 2; the reports are written.
+        console.print("[bold red]PSIRT hand-off failed for at least one finding; see the ledger and retry with --notify-psirt[/bold red]")
+        raise typer.Exit(code=3)
     if not report.gate_passed and (fail_on_gate or phase == "blocking"):
         raise typer.Exit(code=2)
 

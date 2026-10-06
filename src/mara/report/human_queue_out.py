@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..config import MaraConfig
 from ..schemas import SEVERITY_ORDER, ConsensusResult, EvidenceTier, Finding, HumanQueueItem, JudgeVote, RedTeamNote, ReviewReport, SkepticVerdict
-from .escaping import literal
+from .escaping import code, literal
 
 
 def queue_key(file: str, line: int, cwe: str, *, target_id: str = "", revision: str = "", context_hash: str = "") -> str:
@@ -147,7 +147,7 @@ def build_queue(
 
 def render_human_queue(report: ReviewReport) -> str:
     L = [
-        f"# Human queue: `{literal(report.target)}`",
+        f"# Human queue: {code(report.target)}",
         "",
         f"Generated {report.generated_at} · {len(report.human_queue)} item(s) need a human decision.",
         "",
@@ -163,12 +163,12 @@ def render_human_queue(report: ReviewReport) -> str:
             f"## {it.finding_id} · {literal(it.title)}",
             "",
             f"- Key `{it.key}` · reasons: {', '.join(it.reasons)}",
-            f"- {it.dimension} · {it.cwe} · `{literal(it.file)}:{it.line}` · tier {it.tier}"
+            f"- {it.dimension} · {it.cwe} · {code(f'{it.file}:{it.line}')} · tier {it.tier}"
             f" · CVSS {it.cvss4_score} {it.cvss4_severity} · SSVC {it.ssvc_decision}",
             f"- Consensus {it.weighted_score} (tp {it.votes_tp} / fp {it.votes_fp} / human {it.votes_human}) · agreement proxy {it.agreement_proxy}",
             f"- Found by: {', '.join(it.finder_families)} · reachability {it.reachability}: {literal(it.reachability_argument)}",
             f"- Attacker path: {literal(it.exploit_sketch)}",
-            f"- Quote: `{literal(it.quote)}`",
+            f"- Quote: {code(it.quote)}",
         ]
         if it.skeptic:
             L.append(

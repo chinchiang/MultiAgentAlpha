@@ -32,7 +32,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from mara.report.escaping import literal  # noqa: E402
+from mara.report.escaping import code, literal  # noqa: E402
 
 MARKER = "<!-- mara-hq:{key} -->"
 MARKER_RE = re.compile(r"<!-- mara-hq:(v2-[0-9a-f]{24}|[0-9a-f]{12}) -->")
@@ -99,13 +99,13 @@ def ticket_body(item: dict, target: str) -> str:
         if isinstance(value, dict):
             return {k: safe(v) for k, v in value.items()}
         return value
-    item = safe(item)
-    L = [marker, f"**MARA human queue** · target `{literal(target)}` · finding {item['finding_id']} · key `{item['key']}`", "",
+    raw, item = item, safe(item)  # running text goes through literal(); code spans take the raw text through code()
+    L = [marker, f"**MARA human queue** · target {code(target)} · finding {item['finding_id']} · key `{item['key']}`", "",
          f"- Why: {', '.join(item['reasons'])}",
-         f"- {item['dimension']} · {item['cwe']} · `{item['file']}:{item['line']}` · tier {item['tier']} · CVSS {item['cvss4_score']} {item['cvss4_severity']} · SSVC {item['ssvc_decision']}",
+         f"- {item['dimension']} · {item['cwe']} · {code(str(raw['file']) + ':' + str(raw['line']))} · tier {item['tier']} · CVSS {item['cvss4_score']} {item['cvss4_severity']} · SSVC {item['ssvc_decision']}",
          f"- Consensus {item['weighted_score']} (tp {item['votes_tp']} / fp {item['votes_fp']} / human {item['votes_human']}) · agreement proxy {item.get('agreement_proxy')}",
          f"- Found by {', '.join(item['finder_families'])} · reachability {item['reachability']}: {item['reachability_argument']}",
-         f"- Attacker path: {item['exploit_sketch']}", f"- Quote: `{item['quote']}`"]
+         f"- Attacker path: {item['exploit_sketch']}", f"- Quote: {code(raw['quote'])}"]
     if item.get("skeptic"):
         s = item["skeptic"]
         L.append(f"- Skeptic ({s['family']}): **{s['verdict']}** — {s['reason']}" + (f" · control: {s['sanitizer_or_control']}" if s.get("sanitizer_or_control") else ""))

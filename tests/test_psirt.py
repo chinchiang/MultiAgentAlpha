@@ -186,6 +186,53 @@ def test_ledger_skips_delivered_findings_records_attempts_and_sends_idempotency_
     assert len(led["items"][first[0]["dedupe_key"]]["attempts"]) == 2
 
 
+def test_an_unreachable_send_is_recorded_and_does_not_stop_the_others(shipped_report, monkeypatch, tmp_path):
+    """A connection error used to abort the loop: later payloads were never attempted and the failed one
+    never reached the ledger."""
+    import mara.psirt_ledger as pl
+
+    cfg, report = shipped_report
+    monkeypatch.setenv(cfg.psirt.token_env, "t0ken")
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) == 2:
+            raise httpx.ConnectError("connection refused by psirt.example.invalid")
+        return httpx.Response(202)
+
+    ledger = tmp_path / "ledger.json"
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        results = send_psirt(report.psirt, cfg, client=client, ledger_path=ledger)
+    assert len(calls) == 3 and [r["ok"] for r in results] == [True, False, True]
+    assert results[1]["status_code"] is None and results[1]["error"] == "connection_failed"
+    attempt = pl.load_ledger(ledger)["items"][results[1]["dedupe_key"]]["attempts"][0]
+    assert attempt == {"at": attempt["at"], "status_code": None, "ok": False, "error": "connection_failed"}
+
+
+def test_a_failed_psirt_hand_off_fails_the_cli_run(shipped_report, monkeypatch, tmp_path):
+    """The CLI printed FAILED but exited 0: CI showed green after a CRA hand-off that never arrived."""
+    import yaml
+
+    import mara.report.psirt_out as po
+    from mara.pipeline import Pipeline as P
+
+    _, report = shipped_report
+    raw = yaml.safe_load((ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8"))
+    raw["psirt"] = PSIRT
+    cfg_path = tmp_path / "mock-psirt.yaml"
+    cfg_path.write_text(yaml.safe_dump(raw))
+    monkeypatch.setattr(P, "run", lambda self, *a, **k: report)
+    monkeypatch.setattr(po, "send_psirt", lambda payloads, *a, **k: [
+        {"finding_id": p["finding_id"], "dedupe_key": p["dedupe_key"], "skipped": False, "status_code": None, "ok": False,
+         "error": "connection_failed"} for p in payloads])
+    out = tmp_path / "out"
+    res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(cfg_path),
+                                  "--out", str(out), "--notify-psirt"])
+    assert res.exit_code == 3, res.output
+    assert "connection_failed FAILED" in res.output and (out / "report.json").is_file(), "the reports are still written"
+
+
 def test_stage_clock_records_references_and_names_overdue_stages(shipped_report, tmp_path):
     cfg, report = shipped_report
     t0 = dt.datetime(2026, 9, 14, 0, 0, tzinfo=dt.UTC)

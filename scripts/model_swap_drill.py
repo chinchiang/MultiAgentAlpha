@@ -78,9 +78,11 @@ def cmd_rehearse(a: argparse.Namespace) -> int:
     pipe = Pipeline(mock_cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=Path(tempfile.mkdtemp(prefix="mara-rehearsal-out-")))
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
     same_dims = [d.dimension for d in report.dimensions] == list(prod.dimensions)
+    # a standby without the L1 context seat silently drops the C4-lite view the production panel has
+    same_context = bool(mock_cfg.roles.context) == bool(prod.roles.context)
     print(f"mock review on the standby panel: {len(report.findings)} findings, gate {'passed' if report.gate_passed else 'blocked'}, "
-          f"families {report.families_used}, dimensions unchanged: {same_dims}")
-    outcome = "pass" if same_dims and report.findings else "fail"
+          f"families {report.families_used}, dimensions unchanged: {same_dims}, context seat unchanged: {same_context}")
+    outcome = "pass" if same_dims and same_context and report.findings else "fail"
     hours = round((dt.datetime.now(dt.UTC) - started).total_seconds() / 3600, 3)
     drill = govdocs.Drill(a.today, "rehearsal", replaced, sb_fam, str(a.standby.relative_to(ROOT)) if a.standby.is_relative_to(ROOT) else str(a.standby),
                           max(hours, 0.001), outcome, a.performed_by or "rehearsal", "mock review of fixtures/vuln-sample")
@@ -90,7 +92,17 @@ def cmd_rehearse(a: argparse.Namespace) -> int:
 
 
 def cmd_record(a: argparse.Namespace) -> int:
-    started, completed = dt.datetime.fromisoformat(a.started), dt.datetime.fromisoformat(a.completed)
+    try:
+        started, completed = dt.datetime.fromisoformat(a.started), dt.datetime.fromisoformat(a.completed)
+    except ValueError as e:
+        print(f"ERROR: --started/--completed must be ISO 8601 date-times: {e}", file=sys.stderr)
+        return 2
+    if (started.tzinfo is None) != (completed.tzinfo is None):
+        # comparing an offset-aware with a naive time raises TypeError; and guessing the missing offset
+        # could shift a drill across the 168-hour limit
+        print("ERROR: give --started and --completed in the same form, both with a UTC offset (recommended) or both without",
+              file=sys.stderr)
+        return 2
     if completed <= started:
         print("ERROR: completed must be after started", file=sys.stderr)
         return 2

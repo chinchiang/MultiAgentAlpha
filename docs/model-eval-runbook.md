@@ -44,6 +44,8 @@ Run:
 
 ```
 python3 scripts/model_eval.py plan                                   # shows every command, keys masked
+# run: CyberSecEval takes the keys only inside its arguments, so they travel in the child's environment
+# and a one-line shim restores them inside the child; `ps` and /proc/<pid>/cmdline show placeholders only
 python3 scripts/model_eval.py run --out ops/model-eval/<date> --datasets "$DATASETS"
 python3 scripts/model_eval.py report --run-dir ops/model-eval/<date> --date <date> --mode live
 python3 scripts/model_eval.py check                                  # exit 1 if any family fails a threshold

@@ -120,6 +120,35 @@ def cyberseceval_commands(target: EvalTarget, datasets_dir: Path | str, out_dir:
     }
 
 
+def argv_without_secrets(argv: list[str], secrets: dict[str, str]) -> tuple[list[str], dict[str, str]]:
+    """Move secrets out of a `python3 -m <module> args...` command line into the child's environment.
+
+    A running process's command line is readable by every local user (`ps`, /proc/<pid>/cmdline);
+    its environment is not. CyberSecEval takes the API keys only inside --llm-under-test and
+    --judge-llm, so the command runs through a one-line shim that puts them back into sys.argv inside
+    the child: the OS-level argv carries `{NAME}` placeholders only. Returns (argv, env additions)."""
+    if len(argv) < 3 or argv[1] != "-m":
+        raise ValueError("expected a `python -m <module> ...` command")
+    module, env, args = argv[2], {}, []
+    for a in argv[3:]:
+        for name, value in secrets.items():
+            if value and value in a:
+                a = a.replace(value, "{" + name + "}")
+                env[name] = value
+        args.append(a)
+    shim = "\n".join([
+        "import os, runpy, sys",
+        f"names = {sorted(env)!r}",
+        "def put(a):",
+        "    for n in names:",
+        "        a = a.replace('{' + n + '}', os.environ[n])",
+        "    return a",
+        f"sys.argv = [{module!r}] + [put(a) for a in sys.argv[1:]]",
+        f"runpy.run_module({module!r}, run_name='__main__', alter_sys=True)",
+    ])
+    return [argv[0], "-c", shim, *args], env
+
+
 def resolve_key(env_name: str) -> str:
     v = os.environ.get(env_name, "") if env_name else ""
     if not v:

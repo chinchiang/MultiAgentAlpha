@@ -3,12 +3,29 @@ MARA-specific data (tier, consensus, families, CVSS vector) rides in `properties
 
 from __future__ import annotations
 
+import hashlib
 import json
+from collections import Counter
 from pathlib import Path
+from urllib.parse import quote
 
 from ..schemas import ConsensusResult, EvidenceTier, Finding, ReviewReport
 
 LEVEL = {"Critical": "error", "High": "error", "Medium": "warning", "Low": "note", "None": "none"}
+
+
+def content_fingerprint(f: Finding, occurrence: int = 0) -> str:
+    """Stable alert identity for code scanning: dimension, CWE, file and the whitespace-normalised
+    evidence quote, plus the occurrence index among findings sharing all four (ordered by line).
+
+    Not the finding id: F-0001-style ids follow the sort order of the findings, so adding or removing
+    an earlier finding renumbered the rest, and code scanning carried an alert's state (dismissals
+    included) over to a different finding of the same rule. Not the line either: code moving up or
+    down must not make a new alert."""
+    p = f.provenance[0]
+    norm = p.file.replace("\\", "/").removeprefix("./")
+    identity = json.dumps([f.dimension, f.cwe.upper(), norm, " ".join(p.quote.split()), occurrence], ensure_ascii=False)
+    return hashlib.sha256(identity.encode()).hexdigest()[:32]
 
 
 def to_sarif(report: ReviewReport) -> dict:
@@ -16,7 +33,8 @@ def to_sarif(report: ReviewReport) -> dict:
     queued = {i.finding_id: i for i in report.human_queue}
     rules: dict[str, dict] = {}
     results = []
-    for f in report.findings:
+    seen: Counter[tuple[str, str, str, str]] = Counter()
+    for f in sorted(report.findings, key=lambda x: (x.provenance[0].file, x.provenance[0].line, x.id)):
         c = cons.get(f.id)
         if c is None:
             continue
@@ -24,6 +42,9 @@ def to_sarif(report: ReviewReport) -> dict:
         if not c.accepted and q is None:
             continue
         rule_id = f"MARA/{f.dimension}/{f.cwe}"
+        same = (f.dimension, f.cwe.upper(), f.provenance[0].file, " ".join(f.provenance[0].quote.split()))
+        occurrence = seen[same]
+        seen[same] += 1
         rules.setdefault(rule_id, {
             "id": rule_id, "name": f.cwe, "shortDescription": {"text": f"{f.dimension}: {f.cwe}"},
             "properties": {"tags": ["security", f.cwe, f.dimension]},
@@ -36,11 +57,12 @@ def to_sarif(report: ReviewReport) -> dict:
             "level": "note" if q is not None else LEVEL[c.cvss4_severity],
             "rank": round(c.weighted_score * 100, 1),
             "message": {"text": f"[{c.tier.value}] {f.title} (CVSS 4.0 {c.cvss4_score} {c.cvss4_severity}; SSVC {c.ssvc_decision})"},
-            "locations": [{"physicalLocation": {"artifactLocation": {"uri": p.file, "uriBaseId": "%SRCROOT%"},
+            # a URI reference: a path with a space or '#' must be percent-encoded to stay one
+            "locations": [{"physicalLocation": {"artifactLocation": {"uri": quote(p.file.replace("\\", "/"), safe="/"), "uriBaseId": "%SRCROOT%"},
                                                 "region": {"startLine": p.line}}} for p in f.provenance[:1]],
-            "partialFingerprints": {"maraFindingId": f.id},
+            "partialFingerprints": {"maraContent/v1": content_fingerprint(f, occurrence)},
             "properties": {
-                "evidenceTier": c.tier.value, "cvss4Vector": f.cvss4_vector, "cvss4Score": c.cvss4_score,
+                "findingId": f.id, "evidenceTier": c.tier.value, "cvss4Vector": f.cvss4_vector, "cvss4Score": c.cvss4_score,
                 "ssvc": c.ssvc_decision, "consensus": c.weighted_score, "familiesAgreeing": [x.value for x in c.families_agreeing],
                 "toolCorroborated": c.tool_corroborated, "skepticRefuted": c.skeptic_refuted,
                 "agreementProxy": c.agreement_proxy,

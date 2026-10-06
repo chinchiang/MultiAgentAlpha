@@ -110,10 +110,13 @@ def already_sent(ledger: dict, key: str) -> str | None:
     return item["stages"].get("internal_handoff", {}).get("sent_at")
 
 
-def record_attempt(ledger: dict, payload: dict, status_code: int, ok: bool, now: dt.datetime | None = None) -> dict:
+def record_attempt(ledger: dict, payload: dict, status_code: int | None, ok: bool, now: dt.datetime | None = None,
+                   error: str = "") -> dict:
+    """status_code is None when no HTTP response came back (connection failure, timeout): the attempt
+    is recorded all the same, with the sanitised error code."""
     now = now or now_utc()
     item = item_for(ledger, payload, now)
-    item["attempts"].append({"at": iso(now), "status_code": status_code, "ok": ok})
+    item["attempts"].append({"at": iso(now), "status_code": status_code, "ok": ok, **({"error": error} if error else {})})
     if ok and not item["stages"].get("internal_handoff", {}).get("sent_at"):
         item["stages"]["internal_handoff"] = {"sent_at": iso(now), "status_code": status_code}
     return item

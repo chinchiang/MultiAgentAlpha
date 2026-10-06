@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import secrets
+import traceback
 from collections import Counter
 from importlib import resources
 from pathlib import Path
@@ -19,6 +21,7 @@ def load_prompt(name: str) -> str:
 
 
 COMMON_SYSTEM = load_prompt("_common_system")
+_log = logging.getLogger("mara.providers")
 PROVIDER_ERROR_RE = re.compile(r"provider_[a-z_]+(?::\d{3})?")  # the codes the providers raise, nothing else
 
 
@@ -88,8 +91,15 @@ def call(provider: Provider, *, system_extra: str, user: str, schema: dict, role
         # Neither exception messages nor remote response bodies belong in prompts/reports: only the
         # providers' own sanitised codes pass through. A failed call is an error, not a refusal, so the
         # bias audit does not charge a rate limit or an outage to the model.
-        code = str(e) if isinstance(e, RuntimeError) and PROVIDER_ERROR_RE.fullmatch(str(e)) else "provider_call_failed"
-        return Completion(data=None, raw_text="", error=code)
+        if isinstance(e, RuntimeError) and PROVIDER_ERROR_RE.fullmatch(str(e)):
+            return Completion(data=None, raw_text="", error=str(e))
+        # Anything else is a bug or an unexpected library exception: still a failed call (fail closed),
+        # but it must not vanish into an anonymous code. Its type, and where it was raised, go to the log
+        # and into the code; the message never does, it may carry a key or a response body.
+        frame = traceback.extract_tb(e.__traceback__)[-1] if e.__traceback__ else None
+        where = f" at {Path(frame.filename).name}:{frame.lineno} in {frame.name}" if frame else ""
+        _log.error("provider %s (%s) raised %s%s; recorded as a provider error", provider.spec.name, role, type(e).__name__, where)
+        return Completion(data=None, raw_text="", error=f"provider_call_failed:{type(e).__name__}")
 
 
 def parse_items(comp: Completion, model_cls, key: str = "items") -> tuple[list, list[str]]:

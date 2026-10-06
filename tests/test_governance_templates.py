@@ -68,6 +68,14 @@ def test_standby_configs_swap_exactly_one_family_and_pass_policies():
         cfg = load_config(path)
         assert all(r.passed for r in evaluate_policies(cfg))
         assert yaml.safe_load(path.read_text(encoding="utf-8"))["standby_for"] == fam
+        # "nothing else changes": every section equals production, and every seat either equals it or
+        # moved from the replaced family's model to the standby model (the L1 context seat included)
+        sb, pd = cfg.model_dump(), prod.model_dump()
+        assert {k for k in pd if pd[k] != sb[k]} <= {"models", "roles", "standby_for"}, fam
+        old = next(m.name for m in prod.models if m.family.value == fam)
+        new = next(m.name for m in cfg.models if m.family.value == sb_fam)
+        swap = lambda v, old=old, new=new: [new if x == old else x for x in v] if isinstance(v, list) else (new if v == old else v)  # noqa: E731
+        assert {k: swap(v) for k, v in pd["roles"].items()} == sb["roles"], fam
     assert {"llama", "mistral", "qwen"} <= {f.value for f in ModelFamily}
 
 
@@ -112,6 +120,7 @@ def test_drill_cli_rehearse_record_check(tmp_path):
     assert run("check").returncode == 1
     r = run("rehearse", "--standby", str(ROOT / "config" / "examples" / "standby-for-nemotron.yaml"))
     assert r.returncode == 0 and "replaces nemotron with mistral" in r.stdout and "dimensions unchanged: True" in r.stdout
+    assert "context seat unchanged: True" in r.stdout
     r = run("record", "--replaced", "nemotron", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-nemotron.yaml"),
             "--started", "2026-09-01T09:00", "--completed", "2026-09-02T09:00", "--outcome", "pass", "--performed-by", "ops", "--evidence", "CHG-9")
     assert r.returncode == 0 and "24.0 h pass; counts for G-4" in r.stdout
@@ -120,6 +129,10 @@ def test_drill_cli_rehearse_record_check(tmp_path):
     r = run("record", "--replaced", "anthropic", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-nemotron.yaml"),
             "--started", "2026-09-01T09:00", "--completed", "2026-09-02T09:00", "--outcome", "pass", "--performed-by", "ops", "--evidence", "x")
     assert r.returncode == 2 and "still contains the anthropic family" in r.stderr
+    # an offset on one end only used to crash with TypeError (aware vs naive comparison)
+    r = run("record", "--replaced", "nemotron", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-nemotron.yaml"),
+            "--started", "2026-09-01T09:00+08:00", "--completed", "2026-09-02T09:00", "--outcome", "pass", "--performed-by", "ops", "--evidence", "x")
+    assert r.returncode == 2 and "same form" in r.stderr and "Traceback" not in r.stderr
 
 
 # ---------------------------------------------------------------- G-10

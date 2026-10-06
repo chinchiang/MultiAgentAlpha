@@ -275,7 +275,8 @@ proves and the remaining gaps (gitleaks and semgrep publish no signature). CI in
 the whole set on every run. The lock also has a `git` kind: `semgrep-rules` is a checkout of
 `semgrep/semgrep-rules` at a pinned commit, verified by commit id, by a SHA-256 digest over every
 file under the pinned security rulesets, and by the commit's GPG signature (GitHub's web-flow key);
-the rules are read from `.mara-tools/semgrep-rules` at scan time and never copied into this
+the rules are read from `.mara-tools/semgrep-rules` at scan time (without them semgrep is recorded as
+not run, which keeps the review incomplete; there is no fallback to the semgrep.dev registry) and never copied into this
 repository (Semgrep Rules License v1.0). `--digest-git semgrep-rules <checkout>` prints the two
 values to paste into the lock when bumping the commit.
 
@@ -422,6 +423,8 @@ configured tiers and severities (default: tier A, Critical) is written to
 Review time anchors only internal service targets. Legal deadlines stay empty until PSIRT confirms
 an event type and awareness timestamp; the final-report anchor depends on that event type.
 `mara review --notify-psirt` POSTs the hand-off to the configured webhook with an environment token.
+A hand-off that fails (an HTTP error or no response at all) is recorded in the ledger, does not stop the
+other payloads, and makes `mara review` exit 3 after the reports are written, whatever the gate says.
 The send ledger (`ops/psirt/ledger.json`) deduplicates internal hand-offs. After confirmation, use
 `scripts/psirt_ops.py confirm-event --key … --event event.json --reference …` to update the event
 and deadlines without resetting delivery history; `record` records the PSIRT's legal-stage references.
@@ -473,7 +476,8 @@ draft), `config/examples/standby-for-<family>.yaml` plus `ops/model-swap-drills.
 `scripts/model_swap_drill.py` (`rehearse` proves the process is unchanged on a mock panel, `record`
 logs a live swap timed from decision to first real PR; mock rehearsals for all three families are recorded, live drills are still missing), and `rollout:` in
 `config/mara.yaml` with `scripts/rollout_phase.py` (`status`, `baseline`, `advance`). The rollout
-phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking`. All three fail
+phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking` (or with
+`--fail-on-gate`); exit 3 is reserved for a failed PSIRT hand-off. All three fail
 today for the stated reasons: the policy awaits PSO approval, no live drill has run, the rollout
 has not started. See `docs/governance-templates.md`.
 

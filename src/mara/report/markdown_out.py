@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..schemas import DIMENSION_LABELS, ReviewReport
-from .escaping import literal
+from .escaping import code, literal
 from .sarif_out import tier_counts
 
 
@@ -11,7 +11,7 @@ def render_markdown(r: ReviewReport) -> str:
     cons = {c.finding_id: c for c in r.consensus}
     overall = f"{r.overall_score}/100" if r.overall_score is not None else "unavailable (review incomplete)"
     lines = [
-        f"# MARA review: `{literal(r.target)}`",
+        f"# MARA review: {code(r.target)}",
         "",
         f"Generated {r.generated_at} · mode `{r.provider_mode}` · families {', '.join(r.families_used)}",
         "",
@@ -47,7 +47,7 @@ def render_markdown(r: ReviewReport) -> str:
             f" · tier **{c.tier.value}** · consensus {c.weighted_score}",
             f"- Families agreeing: {', '.join(x.value for x in c.families_agreeing) or '-'} · tool corroborated: {c.tool_corroborated}"
             f" · skeptic refuted: {c.skeptic_refuted} · position-consistent: {c.position_consistent}",
-            f"- Evidence: `{literal(p.file)}:{p.line}` — `{literal(p.quote[:160])}`",
+            f"- Evidence: {code(f'{p.file}:{p.line}')} — {code(p.quote[:160])}",
             f"- Reachability ({f.reachability}): {literal(f.reachability_argument)}",
             f"- Attacker path: {literal(f.exploit_sketch)}",
             "",
@@ -88,7 +88,7 @@ def render_markdown(r: ReviewReport) -> str:
             "",
             "## PSIRT hand-off (EU CRA Article 14)",
             "",
-            f"{len(r.psirt)} finding(s) meet the PSIRT trigger for product `{literal(first['product'])}`; "
+            f"{len(r.psirt)} finding(s) meet the PSIRT trigger for product {code(first['product'])}; "
             f"internal hand-off due {first['internal_sla']['early_warning_by']}.",
             "",
         ]
@@ -96,14 +96,14 @@ def render_markdown(r: ReviewReport) -> str:
             cv, loc = n["cvss4"], n["location"]
             lines.append(
                 f"- {n['finding_id']} · {literal(n['title'])} · {n['cwe']} · CVSS {cv['score']} {cv['severity']} · tier {n['evidence_tier']}"
-                f" · exploitable: {n['exploitable']} · `{literal(loc['file'])}:{loc['line']}`"
+                f" · exploitable: {n['exploitable']} · {code(str(loc['file']) + ':' + str(loc['line']))}"
             )
     ml_bom = r.bias_audit.get("ml_bom")
     lines += ["", "## Model provenance (ML-BOM, G-7)", ""]
     if isinstance(ml_bom, dict) and ml_bom:
         for name, v in ml_bom.items():
             detail = f" {v['component']}@{v['version']} sha256 {v['sha256'][:12]}" if v.get("status") == "complete" else ""
-            lines.append(f"- {name} (`{literal(v['model_id'])}`): {v['status']}{detail}")
+            lines.append(f"- {name} ({code(v['model_id'])}): {v['status']}{detail}")
     else:
         lines.append("_No self-hosted model in this configuration._")
     me = r.bias_audit.get("model_eval")
