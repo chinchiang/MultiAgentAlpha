@@ -4,6 +4,10 @@
 # Install: python3 -m pip install --require-hashes --no-build-isolation -r <this file>
 # Preinstall the hash-pinned tools/build-requirements.txt closure before resolving or installing sdists.
 # Source distributions (no wheel published; built at install time, see scripts/relock_requirements.py): ecoji==0.1.1, langdetect==1.0.9
+# Hand-applied 2026-10-06, the one exception to the rule above: multidict 6.8.0 -> 6.9.1 (GHSA-54p9-h82j-f925), with the
+# index's SHA-256 of multidict-6.9.1-cp311-cp311-manylinux2014_x86_64...whl, verified by pip --require-hashes for CPython 3.11 /
+# manylinux x86_64; aiohttp 3.14.3 (multidict>=4.5,<7.0) and yarl 1.25.1 (>=4.0) accept it. A full relock could not run (the
+# CUDA wheels download at ~50 KB/s from the authoring host); the .in file's floor keeps it, and the next relock drops this note.
 accelerate==1.15.0 \
     --hash=sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec
 aiohappyeyeballs==2.7.1 \
@@ -190,8 +194,8 @@ mistralai==1.5.2 \
     --hash=sha256:5b1112acebbcad1afd7732ce0bd60614975b64999801c555c54768ac41f506ae
 mpmath==1.3.0 \
     --hash=sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c
-multidict==6.8.0 \
-    --hash=sha256:ab83fdd8cf307353edba9c427c17a3a021c2522d690f5633dd9f72d28b48ccca
+multidict==6.9.1 \
+    --hash=sha256:e8f1e362c9352b50ed120f001046fdbb80810c9d56580f4c3fc13bbe30823387
 multiprocess==0.70.16 \
     --hash=sha256:af4cabb0dac72abfb1e794fa7855c325fd2b55a10a44628a3c1ad3311c04127a
 mypy_extensions==1.1.0 \
