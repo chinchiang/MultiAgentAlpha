@@ -6,7 +6,7 @@
 
 ### 16.1 原始碼外洩
 
-這是最直接的風險。原始碼會經過三條路徑：送往 Anthropic API、送往組織內的 vLLM 或 NIM、存放在 Actions 的 artifact 與日誌中。第一條路徑的控制是 ZDR 協議與模型選擇（第 7.1 節）；Anthropic 的文件明載 Fable 系列不在 ZDR 範圍內【已證實｜B81】，而且 code execution 工具與 programmatic tool calling 不符合 ZDR【已證實｜B81】，本架構不使用這兩者。第二條路徑的控制是網路隔離：vLLM 與 NIM 的端點只能從 runner 的網段存取，且 DeepSeek 權重的部署主機不得有出口網路。第三條路徑最常被忽略：GitHub Actions 的日誌是公開倉庫的公開內容，私有倉庫的 artifact 也有保留期；tj-actions 事件的 payload 正是從記憶體掃出 secret、以 base64 編碼後寫進公開的 workflow 日誌【已證實｜C7.14】。雛型在送出前就以程式遮蔽機密值、排除機密檔，live 模式另以 gitleaks 預檢、發現機密即阻擋外送；Markdown 報告只輸出被採納 finding 引用的前 160 字元（人工佇列為 200 字元），但 JSON 與 SARIF 報告保留完整引用。這些都不能取代 artifact 的存取控制。
+這是最直接的風險。原始碼會經過三條路徑：送往雲端家族（正式面板為 Amazon Bedrock 上的 Claude 與 Gemini API）、送往組織內的自架端點（正式面板為 IEC 網路內的 GLM，冷備援為 DeepSeek）、存放在 Actions 的 artifact 與日誌中。第一條路徑的控制是資料保留條件與模型選擇（第 7.1 節）：Anthropic 的文件明載 Fable 系列不在 ZDR 範圍內【已證實｜B81】，而且 code execution 工具與 programmatic tool calling 不符合 ZDR【已證實｜B81】，本架構不使用這兩者；Bedrock 預設不儲存輸入與輸出，但帳戶若開啟 model invocation logging，原始碼就會留在紀錄裡【已證實｜B137】；Gemini API 付費層會在有限期間內記錄提示與回應【已證實｜B139】，所以這條路徑的殘餘風險是被接受的而非被消除的，只以核准單號記錄。第二條路徑的控制是網路隔離：自架端點只能從 runner 的網段存取（雛型只接受私有網段或宣告的私有 DNS 區上的 https 端點，內部 CA 以 `ca_bundle` 加入信任而不關閉驗證），且中國關聯模型權重的部署主機不得有出口網路。第三條路徑最常被忽略：GitHub Actions 的日誌是公開倉庫的公開內容，私有倉庫的 artifact 也有保留期；tj-actions 事件的 payload 正是從記憶體掃出 secret、以 base64 編碼後寫進公開的 workflow 日誌【已證實｜C7.14】。雛型在送出前就以程式遮蔽機密值、排除機密檔，live 模式另以 gitleaks 預檢、發現機密即阻擋外送；Markdown 報告只輸出被採納 finding 引用的前 160 字元（人工佇列為 200 字元），但 JSON 與 SARIF 報告保留完整引用。這些都不能取代 artifact 的存取控制。
 
 ### 16.2 Prompt Injection 操縱審查結果
 
@@ -14,7 +14,7 @@
 
 ### 16.3 模型供應鏈
 
-自架權重本身是供應鏈風險。Hugging Face 上的模型檔可能含惡意的 pickle；權重的來源必須可驗證（NVIDIA NGC 據報自 2025 年 7 月起對模型簽章【尚未證實（原引的 Sigstore 文章沒有提到 NGC）】）；DeepSeek V4 權重的官方來源是 Hugging Face 的 `deepseek-ai` 組織（官方 news 頁有連結，GitHub 組織沒有 V4 倉庫），格式為 safetensors【已證實｜A78】。治理建議要求：只從官方來源下載權重、以 cosign 或 NGC 簽章驗證、以 safetensors 而非 pickle 格式載入、記錄權重的雜湊值進入 SBOM（CycloneDX 自 1.5 起支援 ML-BOM，1.6 與 1.7 已成為 ECMA-424【已證實｜C11.2】）。
+自架權重本身是供應鏈風險。Hugging Face 上的模型檔可能含惡意的 pickle；權重的來源必須可驗證（NVIDIA NGC 據報自 2025 年 7 月起對模型簽章【尚未證實（原引的 Sigstore 文章沒有提到 NGC）】）；DeepSeek V4 權重的官方來源是 Hugging Face 的 `deepseek-ai` 組織（官方 news 頁有連結，GitHub 組織沒有 V4 倉庫），格式為 safetensors【已證實｜A78】；GLM 的官方來源是 Hugging Face 的 `zai-org` 組織【已證實｜B143】，但 IEC 端點實際載入的是哪個倉庫與版本，ML-BOM 中還沒有紀錄。治理建議要求：只從官方來源下載權重、以 cosign 或 NGC 簽章驗證、以 safetensors 而非 pickle 格式載入、記錄權重的雜湊值進入 SBOM（CycloneDX 自 1.5 起支援 ML-BOM，1.6 與 1.7 已成為 ECMA-424【已證實｜C11.2】）。
 
 ### 16.4 審查系統自己的 GitHub Actions
 
@@ -33,7 +33,7 @@
 | LLM Top 10 2025 | 對本架構的適用性 | 控制 |
 |---|---|---|
 | LLM01 Prompt Injection | 高。被審查內容全是攻擊者可控 | 第 9 章五道防線；canary 指標 |
-| LLM02 Sensitive Information Disclosure | 高。原始碼與 secret 經過模型 | ZDR、地端部署、secret 遮蔽、artifact 存取控制 |
+| LLM02 Sensitive Information Disclosure | 高。原始碼與 secret 經過模型 | ZDR 或雲端平台的不保留承諾、核准的有限期保留、地端部署、secret 遮蔽、artifact 存取控制 |
 | LLM03 Supply Chain | 中。自架權重的來源 | 第 16.3 節 |
 | LLM04 Data and Model Poisoning | 低。本架構不微調 | 校準資料的人工裁決來源需有存取控制 |
 | LLM05 Improper Output Handling | 中。模型輸出進入 SARIF、Markdown 與（未來的）PR 評論 | schema 驗證；Markdown 輸出經跳脫；SARIF 除單行、限長的標題外只放結構化欄位，路徑經 URI 編碼 |

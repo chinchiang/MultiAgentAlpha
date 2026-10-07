@@ -10,9 +10,9 @@
 
 **G-2 家族數不低於三、反序 pass 不關閉、judge 不見分數，列為政策。** 對應 NIST AI 600-1 的「Harmful Bias and Homogenization」風險類別【已證實｜B118】與 ISO/IEC 42001:2023 的 AI 管理系統要求【尚未證實｜B121】。負責：PSO 與 AI 治理委員會。時程：第 1 個月。代價：成本下限被鎖定，第 22 章的裁減空間縮小約三分之一。
 
-**G-3 資料主權規則寫進設定檔的驗證邏輯。** 原始碼只送往 on-prem 或 ZDR 的模型；Fable 系列不用於審查；DeepSeek 只自架；送往 Claude 的呼叫不走 Batch API 與 code execution 等不在 ZDR 範圍內的功能，因為 API 本身不會擋下它們【已證實｜B81】；每次回應實際使用的模型要記錄下來，因為 Opus 5.5 會把部分資安請求轉給另一個模型【廠商主張｜B125】（雛型自 v0.4.1 起記錄回應自報的模型 ID；轉送是否反映在這個欄位，官方沒有說明）。v0.4.2 新增 `vendor_api_retained` 一類，指廠商會保留資料一段期間、但不用於訓練的 API，只在該模型自己附有核准單號時放行，正式設定的 Gemini 即屬此類；經 Bedrock 的 Claude 仍標為 `vendor_api_zdr`，依據的是 AWS 的承諾而非 Anthropic 的 ZDR 協議，須由法務確認。對應 A.5.19 到 A.5.21（供應商關係與 ICT 供應鏈，標題待對照）、A.8.10（資訊刪除）；Anthropic 的資料保留條款【B81】。負責：CISO 與法務。時程：第 1 個月。代價：放棄 Anthropic 最強的 Fable 模型；DeepSeek 需自備 GPU。
+**G-3 資料主權規則寫進設定檔的驗證邏輯。** 原始碼只送往 on-prem 或 ZDR 的模型，或附核准單號的有限期保留模型；Fable 系列不用於審查；DeepSeek 與 GLM 只自架、不經其廠商 API；送往 Claude 的呼叫不走 Batch API 與 code execution 等不在 ZDR 範圍內的功能，因為 API 本身不會擋下它們【已證實｜B81】；每次回應實際使用的模型要記錄下來，因為 Opus 5.5 會把部分資安請求轉給另一個模型【廠商主張｜B125】（雛型自 v0.4.1 起記錄回應自報的模型 ID；轉送是否反映在這個欄位，官方沒有說明）。v0.4.2 新增 `vendor_api_retained` 一類，指廠商會保留資料一段期間、但不用於訓練的 API，只在該模型自己附有核准單號時放行，正式設定的 Gemini 即屬此類；經 Bedrock 的 Claude 仍標為 `vendor_api_zdr`，依據的是 AWS 的承諾而非 Anthropic 的 ZDR 協議，須由法務確認。對應 A.5.19 到 A.5.21（供應商關係與 ICT 供應鏈，標題待對照）、A.8.10（資訊刪除）；Anthropic 的資料保留條款【B81】。負責：CISO 與法務。時程：第 1 個月。代價：放棄 Anthropic 最強的 Fable 模型；GLM（以及冷備援的 DeepSeek）需自備 GPU；Gemini 的有限期保留要逐模型核准，換模型或換方案時重新核准。
 
-**G-4 模型可抽換性作為採購條件。** 任何家族必須能在一週內被替換而不改變流程；替代家族（Llama 4、Mistral、Qwen 的自架版本）預先部署為冷備。對應 A.5.20（供應商協議）、NIST CSF 2.0 GV.SC【已證實｜C13.4】。負責：採購與平台團隊。時程：第 3 個月前完成冷備。代價：額外的 GPU 與維運成本；Qwen 同屬中國關聯來源，替代 DeepSeek 時不解決稽核問題。
+**G-4 模型可抽換性作為採購條件。** 任何家族必須能在一週內被替換而不改變流程；替代家族（Llama 4、Mistral、Qwen 的自架版本）預先部署為冷備。雛型自 v0.4.2 起的三份冷備設定（`standby-for-{anthropic,gemini,glm}.yaml`）各以地端 DeepSeek 取代正式面板的一個家族，mock 排練已記錄，實地演練尚未進行。對應 A.5.20（供應商協議）、NIST CSF 2.0 GV.SC【已證實｜C13.4】。負責：採購與平台團隊。時程：第 3 個月前完成冷備。代價：額外的 GPU 與維運成本；Qwen 同屬中國關聯來源，替代 DeepSeek 時不解決稽核問題；同理，以 DeepSeek 替代 GLM 也不解決「排除中國關聯模型」的客戶要求，這種要求需要另備一個非中國關聯的自架家族。
 
 ### 25.2 技術層
 
@@ -20,9 +20,9 @@
 
 **G-6 審查 workflow 本身套用組織層級的 SHA pinning 政策與 `pull_request` 限制。** 對應 GitHub 2025 年 8 月的政策功能【C7.8】、OpenSSF Scorecard Dangerous-Workflow 與 Pinned-Dependencies【C7.13】、A.8.32（變更管理，標題待對照）。負責：平台團隊。時程：第 1 個月。代價：所有既有 workflow 都要重新固定 SHA。
 
-**G-7 模型權重納入 SBOM 並簽章。** 自架權重的來源、雜湊與授權寫進 CycloneDX 1.6 以上的 ML-BOM【C11.2】；以 cosign 或 NGC 簽章驗證；只載入 safetensors。對應 EU CRA Annex I Part II (1)【C11.9】、A.5.21。負責：平台團隊與 PSIRT。時程：第 2 個月。代價：自架權重的雜湊與簽章需要平台團隊逐版補齊；DeepSeek V4 的權重已確認發布於 Hugging Face 的官方組織【A78】，但 NGC 之外的來源沒有發行者簽章，只能靠第一次固定的雜湊。
+**G-7 模型權重納入 SBOM 並簽章。** 自架權重的來源、雜湊與授權寫進 CycloneDX 1.6 以上的 ML-BOM【C11.2】；以 cosign 或 NGC 簽章驗證；只載入 safetensors。對應 EU CRA Annex I Part II (1)【C11.9】、A.5.21。負責：平台團隊與 PSIRT。時程：第 2 個月。代價：自架權重的雜湊與簽章需要平台團隊逐版補齊；正式面板的 GLM 在 ML-BOM 中仍是 PENDING（來源、版本、授權與雜湊都待 IEC 平台團隊填入）；DeepSeek V4 的權重已確認發布於 Hugging Face 的官方組織【A78】，但 NGC 之外的來源沒有發行者簽章，只能靠第一次固定的雜湊，而冷備援實際使用的 V4-Flash 權重尚無 ML-BOM 項目。
 
-**G-8 每季對三個家族執行 garak 與 CyberSecEval 4 的 Prompt Injection 與 False Refusal Rate 測試。** 結果寫進校準權重與偏誤稽核。garak 應使用 0.17.0 以上的版本（含 EU AI Act 對照標籤）【B104】；CyberSecEval 自 2025 年 6 月起處於低維護狀態，沒有新的基準版本【B113】。對應 NIST AI 600-1 的 Information Security 類別【B118】、OWASP Agentic Top 10 ASI01【B45】。負責：安全團隊。時程：第 3 個月起每季。代價：每季約一人週。
+**G-8 每季對三個家族執行 garak 與 CyberSecEval 4 的 Prompt Injection 與 False Refusal Rate 測試。** 結果寫進校準權重與偏誤稽核。garak 應使用 0.17.0 以上的版本（含 EU AI Act 對照標籤）【B104】；CyberSecEval 自 2025 年 6 月起處於低維護狀態，沒有新的基準版本【B113】。雛型的 `scripts/model_eval.py` 目前只能對直連的 Anthropic API 與 OpenAI 相容端點產生命令；Bedrock 上的 Claude 與 Gemini API 尚無包裝，正式面板中只有自架的 GLM 能跑，G-8 對另外兩個家族維持紅燈。對應 NIST AI 600-1 的 Information Security 類別【B118】、OWASP Agentic Top 10 ASI01【B45】。負責：安全團隊。時程：第 3 個月起每季。代價：每季約一人週。
 
 **G-9 校準迴圈每季重跑，並以 Alternative Annotator Test 作為無監督「不採納」的驗收門檻。** 對應 A.8.29、ISO/IEC 23894 的 AI 風險管理流程【B122】。負責：安全團隊與資料科學。時程：第 3 個月第一次，之後每季。代價：每季約兩人週，且需維護輪替的校準集。
 
@@ -62,7 +62,7 @@
 
 **CN-1 境內管線完全獨立。** repo、runner、L0 工具、三個家族的部署與報告全部在境內；原始碼、SARIF、校準資料與人工裁決結果不出境。對應 DSL 的資料分類分級與出境安全評估、PIPL 的個人資訊出境規定。負責：中國區 IT 與法務。時程：與全球管線同步規劃，但獨立驗收。代價：境內管線的家族數可能只有兩個、無 Claude、校準資料不與全球共用，能力低於全球管線。
 
-**CN-2 境內自架的 DeepSeek 仍適用敏感詞校準。** 第 13 章第 14 項的配對樣本測試在境內管線同樣執行，結果留在境內。負責：中國區安全團隊。代價：校準集需在境內獨立維護。
+**CN-2 境內自架的中國關聯模型仍適用敏感詞校準。** 第 13 章第 14 項的配對樣本測試在境內管線同樣執行（DeepSeek 之外，GLM 若進入境內管線也一樣），結果留在境內。負責：中國區安全團隊。代價：校準集需在境內獨立維護。
 
 **CN-3 全球安全團隊只接收面向分數的彙總，不接收 finding 明細。** 明細若需跨境，走 DSL 與 PIPL 的出境評估程序。負責：中國區法務。代價：全球團隊對境內程式碼的可見度降低，需以境內團隊的裁決為準。
 

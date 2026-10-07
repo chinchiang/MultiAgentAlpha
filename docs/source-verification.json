@@ -2330,6 +2330,146 @@
       "checked_at": "2026-10-06",
       "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
       "claim_excerpt": "\"When it creates a fix, it stores the fix pattern as a memory for future use.\" / \"Both agentic autofix and Copilot Memory are available in public preview.\""
+    },
+    {
+      "id": "B137",
+      "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "\"Amazon Bedrock uses a zero data retention (ZDR) data security model. This means that by default, Amazon Bedrock does not store model inputs or outputs.\" / \"Retained inputs and outputs are stored and processed by AWS and are not shared with third-party model providers.\"；例外最多保留 30 天，Claude Fable 5／5.1 全部流量保留；data-protection 頁：\"the model providers don't have access to … customer prompts and completions\"；model-invocation-logging 頁：\"Model invocation logging is disabled by default.\""
+    },
+    {
+      "id": "B138",
+      "url": "https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "Global 設定檔的資料駐留：\"Any supported AWS commercial Region worldwide\"；\"remains on the AWS network and does not traverse the public internet\"；inference-profiles-support 頁：\"retained inputs and outputs are stored in destination regions\"；global 頁：可用 SCP 拒絕 global.* 設定檔；Opus 5.5 model card：Global ID global.anthropic.claude-opus-5-5，Geo 設定檔為 US、EU、AU、JP"
+    },
+    {
+      "id": "B139",
+      "url": "https://ai.google.dev/gemini-api/terms",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "Paid Services：\"Google doesn't use your prompts (including associated system instructions, cached content, and files…) or responses to improve our products\" / \"Google logs prompts and responses for a limited period of time, solely for detecting and preventing violations of the Prohibited Use Policy\"；Unpaid Services：\"human reviewers may read, annotate, and process your API input and output\""
+    },
+    {
+      "id": "B140",
+      "url": "https://ai.google.dev/gemini-api/docs/zdr",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "Search 與 Maps grounding 儲存 30 天：\"There is no way to disable the storage of this information\" / \"If your workload requires guaranteed zero data retention or enterprise data processing agreements, use Vertex AI.\""
+    },
+    {
+      "id": "B141",
+      "url": "https://ai.google.dev/gemini-api/docs/models",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "Preview：gemini-3.1-pro-preview、gemini-3-flash-preview；changelog：gemini-3-pro-preview 2025-11-18 推出，3.1 Pro Preview 2026-02-19 發布，2026-03-09 \"The Gemini 3 Pro Preview model has been shut down. The gemini-3-pro-preview now points to gemini-3.1-pro-preview\" / 2026-09-02 \"Gemini 3.8 Flash generally available (GA) : Released gemini-3.8-flash\"；穩定版清單含 gemini-3.8-flash、3.7、3.6、3.5 Flash；2026-10-07 以正式金鑰呼叫 models 端點：gemini-3.8-flash 在清單上（inputTokenLimit 1048576），gemini-3-pro 不在"
+    },
+    {
+      "id": "B142",
+      "url": "https://storage.googleapis.com/deepmind-media/gemini/gemini_3_pro_fsf_report.pdf",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "Cyber Uplift Level 1：\"CCL reached? No: Gemini 3 Pro reaches the alert threshold for this CCL, but not the CCL itself.\"；3.1 Pro model card：\"has reached the alert threshold, but still does not reach the levels of uplift required\"；FSF 報告未含 prompt injection 結果"
+    },
+    {
+      "id": "B143",
+      "url": "https://huggingface.co/zai-org/GLM-5.3-Flash",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "GLM-5.3-Flash：license:mit，safetensors 321,323,031,390 參數（卡片：320B total／18B active），fp8；GLM-5.3：license other（license_name glm-5.3），753.3B；zai-org 清單：GLM-4.5 2025-07-20、4.6 2025-09-29、4.7 2025-12-22、GLM-5 2026-02-11、5.1 2026-04-03、5.2 2026-06-16、5.3／5.3-Flash 2026-08-25"
+    },
+    {
+      "id": "B144",
+      "url": "https://www.federalregister.gov/documents/full_text/text/2025/01/16/2025-00704.txt",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "\"These entities advance the People's Republic of China's military modernization through the development and integration of advanced artificial intelligence research.\"；列入 Beijing Zhipu Huazhang Technology Co., Ltd.（別名 Zhipu AI）與其北京、杭州、上海、深圳的關係企業"
+    },
+    {
+      "id": "B145",
+      "url": "https://docs.z.ai/legal-agreement/privacy-policy",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "\"your personal data is generally processed in Singapore.\" / API 內容：\"do not store any of the content the Customer or its End Users provide or generate… not saved on our servers.\""
+    },
+    {
+      "id": "B146",
+      "url": "https://www.nist.gov/news-events/news/2026/09/caisis-assessment-zais-glm-53-cyber-capabilities",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "\"GLM-5.3 is the most cyber-capable open-weight model released to date\"；落後美國前沿約 4 個月；SEC-Bench Pro 40.4% 對 90.2%、ExploitBench 61.1% 對 100%；未含 jailbreak 或 hijacking，未提 Flash 版本"
+    },
+    {
+      "id": "B147",
+      "url": "https://www.nist.gov/news-events/news/2026/07/caisi-assessment-zais-glm-52",
+      "source_type": "原登錄來源（權威性不等於內容已核對）",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "\"safeguards allow assistance with agentic cyber exploit development\" / \"potentially more robust against agent hijacking and jailbreaking attacks than other evaluated PRC open-weight models\" / \"safeguards for open-weight models can be circumvented when self-hosted\""
+    },
+    {
+      "id": "B148",
+      "url": "https://ai.google.dev/gemini-api/docs/pricing",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "gemini-3.1-pro-preview Standard：input \"$2.00, prompts <= 200k tokens\"（> 200k 為 $4.00），output $12.00（> 200k 為 $18.00）；Batch 與 Flex 半價；\"Used to improve our products\"：Free Yes、Paid No / gemini-3.8-flash Paid：input \"$0.75 through December 31, 2026. $1.50 starting January 1, 2027.\"，output（含 thinking）\"$3.75 through December 31, 2026. $7.50 starting January 1, 2027.\""
+    },
+    {
+      "id": "B149",
+      "url": "https://aws.amazon.com/bedrock/security-compliance/",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "\"Your data is not shared with model providers, and is not used to improve the base models.\""
+    },
+    {
+      "id": "B150",
+      "url": "https://storage.googleapis.com/deepmind-media/Model-Cards/Gemini-3-8-Flash-Model-Card.pdf",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "\"Published: September, 2026\" / \"Gemini 3.8 Flash does not have meaningful new capabilities or material increases in performance with respect to the domains outlined in our Frontier Safety Framework compared to Gemini 3.7 Flash; therefore, based on Gemini 3.7 Flash results, we are confident that Gemini 3.8 Flash is also unlikely to reach any T/CCLs.\""
     }
   ]
 }

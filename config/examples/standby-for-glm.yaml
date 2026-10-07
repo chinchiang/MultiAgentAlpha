@@ -14,7 +14,7 @@ models:
 - name: gemini-reviewer
   family: gemini
   provider: gemini
-  model: gemini-3-pro
+  model: gemini-3.8-flash
   api_key_env: GEMINI_API_KEY
   data_residency: vendor_api_retained
   retention_approval_ref: 20261006-GISMD-Approve-01
