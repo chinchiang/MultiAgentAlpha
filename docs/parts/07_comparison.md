@@ -9,7 +9,7 @@
 | 準則 | 純確定性工具（SAST + SCA + secret scanner） | 單一 LLM 審查（如 `/security-review`） | 同質多 agent（同一家族的多個角色） | 異質多 agent 錨定確定性工具（本報告） |
 |---|---|---|---|---|
 | 召回率證據 | 高於 LLM 於已知 pattern；對架構與授權缺陷幾乎為零（RealVuln 中 Semgrep F3 17.7【A128】） | 對語意缺陷有召回，但不可重現（SecLLMHolmes【A116】） | 無獨立證據高於單一 LLM | 工具召回 + 模型語意召回；IRIS 顯示 27→55【A85】 |
-| 精確率證據 | 高誤報（OWASP Benchmark 初始 FP 92%【B37】） | 依模型而異；curl 事件顯示規模化後崩潰【B42】 | 多角色共識提升 P 13.48%【A89】 | 工具佐證 + 否證 + 盲審；VulAgent FP −36%【A87】 |
+| 精確率證據 | 高誤報（OWASP Benchmark 初始 FP 92%【B37】） | 依模型而異；curl 事件顯示規模化後崩潰【B42】 | 多角色共識提升 P 13.48%（兩頁短文的初步結果）【A89】 | 工具佐證 + 否證 + 盲審；VulAgent FP −36%【A87】 |
 | 偏誤抗性 | 無偏誤（無模型） | 無抗性 | 低：同家族錯誤高度相關【B17、B18】 | 中到高：家族互斥、盲審、正反序、持續量測 |
 | Injection 抗性 | 免疫 | 低 | 低 | 中：五道防線 + canary 量測 |
 | 可稽核性 | 完全 | 低（自由文字） | 中 | 高：每層結構化、分數可重算 |
@@ -25,31 +25,33 @@
 
 | 方案 | 核心方法 | 公開的效能數據 | 多模型／多代理 | 資料主權 | 工具整合 | 證據級別 |
 |---|---|---|---|---|---|---|
-| Anthropic claude-code-security-review Action（2025-08-06） | 單一 Claude 呼叫 + 可讀可改的 prompt + 誤報排除清單 | 無精確率數據；2026 年宣稱 Opus 4.6 找到 500+ 漏洞 | 單模型 | Anthropic API；Enterprise 可 ZDR | 無內建 | 原始碼已證實【B84】；效能廠商主張【A6、A7】 |
-| OpenAI Aardvark → Codex Security（2025-10-30 / 2026-03-06） | GPT-5 代理式推理，沙箱驗證每筆 finding | 宣稱 golden repo 92% 召回、10 個 CVE；30 天掃 120 萬 commit、792 critical | 單模型多代理 | OpenAI 雲端 | 明言不用 fuzzing 或 SCA | 廠商主張【A12、A15、A17】 |
-| Google CodeMender / Big Sleep | Gemini Deep Think 代理，修補前人工複審 | 72 個上游修補；Big Sleep 攔截 CVE-2025-6965 | 單模型多代理 | Google 雲端 | 使用 debugger、fuzzer | 廠商主張【A18】；CVE 已證實【A22】 |
-| GitHub Copilot Autofix / code review / `/security-review`（2026-07-14） | CodeQL 結果 + LLM 修補；Copilot app 內建安全審查 | 修復快 3×、XSS 7×、SQLi 12×；逾三分之二建議可直接套用 | 單模型 | GitHub 雲端 | 深度整合 CodeQL | 廠商主張【A26】；Responsible-use 文件已證實【A25】 |
-| Semgrep Assistant + MCP（GA 2024-03-20） | LLM + RAG 對每筆 finding 判 TP/FP | 與研究員一致 96%；承接 60% 分流 | 文件曾混用 OpenAI 與 Claude on Bedrock | Semgrep 雲端；可自帶 key | 原生（它就是 SAST） | 廠商主張【A37、A38】；文件已證實【A40】 |
-| Snyk DeepCode AI | 符號式 + 生成式混合，修補後以符號規則複驗 | autofix 準確率 85% | 多模型（廠商自述） | Snyk 雲端 | 原生 | 廠商主張【A43、A44】 |
-| Endor Labs AI Code Security Review（2025-11-19） | Developer / Architect / AppSec 三專家代理審 PR | 宣稱 FP −95% | 多代理（同家族） | Endor 雲端 | 原生 SCA | 廠商主張【A56、A57】 |
-| DryRun / Corgea / ZeroPath / Amplify | AI-native SAST，以推理模型為主偵測引擎 | 自家基準 88%、FP −75% 等 | 依廠商 | 雲端為主 | 部分 | 廠商主張；Joshua Rogers 2025-09 獨立橫評為第三方評論【A54】 |
-| Datadog AI-Enhanced SAST（2025-10-28） | LLM 過濾 SAST 誤報 | 未公開數字，坦承過濾過度會漏真問題 | 單模型 | Datadog 雲端 | 原生 | 廠商主張【A62】；文件已證實【A63】 |
-| NVIDIA Vulnerability Analysis Blueprint | RAG + 代理判斷 CVE 可利用性，輸出 VEX | 宣稱 9.3× 加速 | 多代理；據稱以 Nemotron 3 Ultra 驅動 | 完全地端（NIM） | 掃描器輸出為輸入 | 廠商主張【A70】；Nemotron 驅動一事尚未證實【A72】 |
-| 學術：IRIS（ICLR 2025）、RepoAudit、VulAgent、GPTScan（ICSE 2024） | LLM + CodeQL／靜態確認／假設驗證 | 同儕審查或預印本的量化結果 | 單模型多代理 | 依部署 | 深度整合 | 已證實或第三方評論【A85、A86、A87、A93】 |
-| 本報告 MARA 雛型 | 六層：工具錨定、異質家族、否證、盲審、程式評分 | 僅 fixture 上的行為驗證，無真實模型的效能數據 | 三家族多代理 | 可設計為兩家族地端 | 原生（SARIF 匯入） | 雛型；效能尚未證實 |
+| Anthropic claude-code-security-review Action（2025-08-06） | Claude Code 分析 + 另一次 LLM 誤報過濾呼叫 + 可讀可改的 prompt 與誤報排除清單 | 無精確率數據；README 自承未防 prompt injection、只應審查可信任的 PR【A1】；預設模型 Opus 4.1 已於 2026-08-05 退役，須自行指定【已證實｜B126】 | 單模型 | Anthropic API；Enterprise 可 ZDR | 無內建 | 原始碼已證實【B84】 |
+| Anthropic Claude Security（原 Claude Code Security；2026-02-20 研究預覽，2026-04-30 public beta） | 代理式掃描，每筆 finding 再經一次對抗式驗證 | 宣稱以 Opus 4.6 在開源專案中找到 500+ 個高嚴重度漏洞；Enterprise 掃描現在跑在 Mythos 5.1 上 | 單模型多代理 | Anthropic 雲端 | 無內建 | 廠商主張【A6、A7、B134】 |
+| OpenAI Aardvark → Codex Security（2025-10-30 / 2026-03-06） | GPT-5 代理式推理，沙箱驗證每筆 finding | 宣稱 golden repo 92% 召回（OpenAI 原頁未讀到）、10 個 CVE；30 天掃 120 萬 commit、792 critical、10,561 high | 單模型多代理 | OpenAI 雲端（研究預覽），另有 CLI、SDK 與桌面 plugin | 據報不用 fuzzing 或 SCA（未讀到原文） | 廠商主張【A12、A15、A17】 |
+| Google CodeMender（2025-10-06）/ Big Sleep | Gemini Deep Think 代理，修補前人工複審 | 72 個上游修補；Big Sleep 攔截 CVE-2025-6965 | 單模型多代理 | Google 雲端 | 使用 debugger、fuzzer、靜態與動態分析、SMT solver | 廠商主張【A18】；CVE 的轉述來源品質偏弱【A22】 |
+| GitHub Copilot Autofix / code review / `/security-review`（2026-07-14，public preview） | CodeQL 結果 + LLM 修補；Copilot app 內建安全審查；PR 內另有 CodeQL 之外的 AI 偵測（2026-07-10，public preview，不阻擋合併）；agentic autofix 會把修補模式存進 Copilot Memory 跨次沿用（2026-09-25，public preview） | 修復快 3×、XSS 7×、SQLi 12×（beta 資料） | 單模型 | GitHub 雲端 | Autofix 整合 CodeQL；`/security-review` 只是與 code scanning 互補 | 廠商主張【A26、A31、B135、B136】；Responsible-use 文件已證實【A25】 |
+| Semgrep Assistant + MCP（GA 2024-03-20） | LLM + RAG 對每筆 finding 判 TP/FP | TP 與研究員一致 96%、FP 僅 41%；承接約 60% 分流 | 現行文件寫 OpenAI 為主、Amazon Bedrock 備援 | Semgrep 雲端 | 原生（它就是 SAST） | 廠商主張【A37、A38】；文件已證實【A40】 |
+| Snyk DeepCode AI / Agent Fix | 符號式 + 生成式混合；2026 年起改以 Anthropic 前沿模型加 Snyk 情資產生修補 | autofix 準確率 85%（約 150 個測試的 85.4%） | Anthropic 模型為主，宣稱不綁模型 | Snyk 雲端 | 原生 | 廠商主張【A43、A44】 |
+| Endor Labs AI Security Code Review（2025-04-23） | Developer / Architect / Security 三代理審 PR，標出需要人深入審查的安全變更 | 未公開數字 | 多代理（同家族） | Endor 雲端 | 原生 SCA | 廠商主張【A57】 |
+| Endor Labs AI SAST（2025-11-19） | Detection / Triage / Remediation 代理 + 程式分析 | 宣稱 FP −95% | 多代理 | Endor 雲端 | 原生 | 廠商主張【A56】 |
+| DryRun / Corgea / ZeroPath / Amplify | AI-native SAST，以推理模型為主偵測引擎 | 自家基準 88%、FP −75% 等 | 依廠商 | 雲端為主 | 部分 | 廠商主張；Joshua Rogers 2025-09 的獨立橫評實測 ZeroPath、Corgea、Amplify 等，未測 DryRun，為第三方評論【A54】 |
+| Datadog AI-Enhanced SAST（2025-10-28） | LLM 過濾 SAST 誤報；現行文件另有 AI-native SAST（LLM 偵測 + 第二個 LLM 以 taint 分析獨立複驗） | 未公開數字，blog 坦承過濾過度會漏真問題 | 兩階段 LLM | 只限 Datadog 託管的掃描 | 原生 | 廠商主張【A62】；文件已證實【A63】 |
+| NVIDIA Vulnerability Analysis Blueprint | RAG + 代理判斷 CVE 可利用性，輸出 VEX | 2024 年的 Llama3 版本宣稱平行處理比序列快 9.3× | 多代理；3.0 版（2026-08-19）以 Nemotron 3 Ultra 為主代理 | 模型推論可地端（NIM），CVE 研究階段會對外查詢 | 掃描器輸出為輸入 | 廠商主張【A70】；Nemotron 驅動已證實【B132】 |
+| 學術：IRIS（ICLR 2025）、RepoAudit（ICML 2025）、VulAgent、GPTScan（ICSE 2024） | LLM + CodeQL／靜態確認／假設驗證 | 同儕審查或預印本的量化結果 | 單模型多代理 | 依部署 | 深度整合 | 已證實或第三方評論【A85、A86、A87、A93】 |
+| 本報告 MARA 雛型 | 六層：工具錨定、異質家族、否證、盲審、程式評分 | 僅 fixture 與五個植入漏洞樣本上的 mock 行為驗證，無真實模型的效能數據 | 三家族多代理 | 可設計為兩家族地端 | 原生（以固定版本執行六個掃描工具，產出 SARIF） | 雛型；效能尚未證實 |
 
-三個觀察。第一，沒有任何商用方案公開可獨立驗證的精確率與召回率；「96% 一致」「FP −95%」全是廠商自述，且各自的基準不同。第二，多模型混編在商用產品中已有先例（Semgrep 的文件曾同時列出 OpenAI 與 Claude on Bedrock【A40】），但沒有任何產品公開說明它如何處理家族間的偏誤與相關錯誤。第三，最接近本報告架構的商用先例是 Endor Labs 的三專家代理【A57】，最接近的學術先例是 MARS 的無通訊三審查者【B30】與 Refute-or-Promote 的對抗式階段閘門【B31】；本報告的差異在於把「異質家族」與「盲審」做成硬約束，並把分數計算完全移出模型。
+三個觀察。第一，沒有任何商用方案公開可獨立驗證的精確率與召回率；「96% 一致」「FP −95%」全是廠商自述，且各自的基準不同。第二，多模型混編在商用產品中已有先例（Semgrep 的現行文件寫明以 OpenAI 為主、Amazon Bedrock 備援【A40】），但沒有任何產品公開說明它如何處理家族間的偏誤與相關錯誤。第三，最接近本報告架構的商用先例是 Endor Labs 的三代理審查【A57】，最接近的學術先例是 MARS 的獨立審查者【B30】與 Refute-or-Promote 的對抗式階段閘門【B31】（後者也記錄了十個審查者一致背書一個不存在的漏洞，正是相關錯誤的實例）；本報告的差異在於把「異質家族」與「盲審」做成硬約束，並把分數計算完全移出模型。
 
 ## 第 20 章　三個模型家族在此用途上的適配性
 
 準則：（1）部署方式與資料主權；（2）授權條款；（3）公開的資安相關評估；（4）採購與稽核風險；（5）在本架構中的建議角色。
 
-| 準則 | Anthropic Claude（Opus 5） | DeepSeek（V3.2 / V4） | NVIDIA Nemotron 3 |
+| 準則 | Anthropic Claude（Opus 5.5；雛型仍為 Opus 5） | DeepSeek（V3.2 / V4） | NVIDIA Nemotron 3 |
 |---|---|---|---|
-| 部署與資料主權 | API 或 Bedrock / Vertex / Foundry；ZDR 需申請；Fable 系列不可 ZDR【尚未證實｜B79–B82】 | 只能自架權重；隱私政策載明資料存於中國【廠商主張｜B88】；API 不得用於原始碼 | NIM 地端，無資料離境【廠商主張｜B102】 |
-| 授權 | 商業 API 條款 | V3.2 為 MIT【已證實｜A75】；V4 授權尚未證實 | NVIDIA Open Model License 或 OpenMDW【尚未證實｜B100】 |
-| 公開資安評估 | 2026 年宣稱 Opus 4.6 找到 500+ 漏洞【第三方評論｜A7】；RealVuln 中 Sonnet 4.6 為最佳通用模型 51.7【第三方評論｜A128】 | NIST CAISI 2025-09：遵從惡意指令 12 倍、jailbreak 95–100%、cyber 任務完成率較低【尚未證實（摘要）｜B95】；CrowdStrike：敏感詞使弱點率最多 +50%【第三方評論｜B97】；Cisco：HarmBench 攻擊成功率 100%【第三方評論｜B98】 | 本次未找到針對 Nemotron 3 的獨立資安評估【尚未證實】 |
+| 部署與資料主權 | API 或 Bedrock / Vertex / Foundry；ZDR 需申請，經 Bedrock 或 Google Cloud 時由雲端供應商處理資料；Fable 系列不可 ZDR【已證實｜B81、B82】 | 只能自架權重；隱私政策載明資料存於中國【廠商主張｜B88】；API 不得用於原始碼 | NIM 地端，無資料離境【廠商主張｜B102】 |
+| 授權 | 商業 API 條款 | V3.2 與 V4 皆為 MIT【已證實｜A75、A78】 | Nano 與 Super 為 NVIDIA Nemotron Open Model License，Ultra 為 OpenMDW-1.1【已證實｜B131】 |
+| 公開資安評估 | 2026 年宣稱 Opus 4.6 找到 500+ 漏洞【廠商主張｜A7】；RealVuln 中 Sonnet 4.6 為最佳通用模型 51.7（26 個 Python repo；榜首是作者自家產品）【第三方評論｜A128】 | NIST CAISI 2025-09：被誘導偏離任務（agent hijacking）的機率 12 倍、常見 jailbreak 下回應 94% 的明顯惡意請求、軟體工程與 cyber 任務上最佳美國模型多解 20% 以上【已證實｜B95】；CAISI 2026-05 對 V4 Pro：能力落後前沿約 8 個月、cyber CTF 基準 32%，未含安全面測試【已證實｜B96】；CrowdStrike：敏感詞使弱點率最多 +50%【第三方評論｜B97】；Cisco：HarmBench 50 個隨機提示的攻擊成功率 100%【第三方評論｜B98】 | 本次未找到針對 Nemotron 3 的獨立資安評估【尚未證實】 |
 | 採購與稽核風險 | 低；需確認 ZDR 涵蓋範圍 | 高；多國政府禁令與立法提案【尚未證實｜B89、B93、A82、A83】，客戶稽核可能拒絕 | 低；NVIDIA 為美系供應商 |
-| 建議角色 | 三個家族中唯一跨境者；作為 reviewer 與 judge，不作為唯一的 skeptic | reviewer 與 judge 之一；必須是可抽換的家族；校準集納入敏感詞配對 | reviewer、skeptic 與 judge；地端部署使它適合處理最敏感的 repo |
+| 建議角色 | 三個家族中唯一跨境者；作為 reviewer 與 judge，不作為唯一的 skeptic（雛型另由它擔任 L1 情境建構） | reviewer、judge 與紅隊之一；必須是可抽換的家族；校準集應納入敏感詞配對（雛型尚未實作） | reviewer、skeptic 與 judge；地端部署使它適合處理最敏感的 repo |
 
 這張表的結論是：三個家族沒有一個可以單獨承擔審查，也沒有一個應該被排除。Claude 有最強的公開能力證據但是唯一的跨境者；DeepSeek 有最強的自架彈性但有最多的採購與行為風險；Nemotron 有最強的資料主權保證但最少的獨立評估。這正是異質面板的論證：每個家族的弱點都由另一個家族的強項覆蓋，而每個家族的偏誤都被另一個家族的裁決制衡。
