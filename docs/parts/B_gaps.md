@@ -63,7 +63,7 @@
 
 49. **CWE 與 CAPEC 目錄的當前版本號與日期**未驗。暫採：未引用版本。
 50. **SARIF 2.1.0 的 OASIS 批准日**（2020-03-27）與 2.2 時程：A 組來源給出批准與公告日，C 組未能驗，兩組不矛盾。暫採：已證實（A142）。
-51. **GitHub code scanning 的 SARIF 上傳數值上限**未驗。暫採：正文只寫「子集」。附記：雛型的 `scripts/code_scanning_prep.py` 採用每次 25,000 筆、10 MB 的上限並拒絕超量上傳，但數值來源未記錄，不能據此關閉。已於 2026-10-06 關閉：GitHub 的 SARIF support 文件（A144）已直接讀取，載明上傳的上限；雛型採用的 25,000 筆與 10 MB 與文件一致，程式內仍應補上出處註記。
+51. **GitHub code scanning 的 SARIF 上傳數值上限**未驗。暫採：正文只寫「子集」。附記：雛型的 `scripts/code_scanning_prep.py` 採用每次 25,000 筆、10 MB 的上限並拒絕超量上傳，但數值來源未記錄，不能據此關閉。已於 2026-10-06 關閉：GitHub 的 SARIF support 文件（A144）已直接讀取，載明每個 run 最多 25,000 筆結果（超過只保留依嚴重度排序的前 5,000 筆）、每個 gzip 壓縮後的 SARIF 檔最大 10 MB。雛型以「每個檔案」計筆數、以未壓縮大小計位元組，兩項檢查都比文件嚴；2026-10-07 已在程式內補上出處註記（v0.4.1）。
 52. **ASVS 5.0 是否有 V17 WebRTC**：官方 CSV 渲染止於 V16。暫採：V1 到 V16 已證實，V17 尚未證實；雛型 ground truth 只收錄 V1 到 V16。已於 2026-09-21 關閉：`OWASP/ASVS` tag v5.0.0_release（5cf9b03，2025-05-30）的官方 CSV 有 17 章，V17 WebRTC 含 V17.1 TURN Server、V17.2 Media、V17.3 Signaling；雛型 ground truth 已於同日核准後收錄 V17，見 `docs/groundtruth-diff-2026-09-21.md`。
 53. **OWASP Top 10:2025 的定稿日期**：官方 Introduction 無日期。暫採：第三方（2025-11 公布、2026-01 定稿）。已於 2026-09-21 關閉：`OWASP/Top10` git 歷史顯示 2025 版骨架建於 2025-10-28，「Removed RC」與「Remove RC notice」於 2025-12-24，其後只有錯字修正；定稿日為 2025-12-24，第三方所稱 2026-01 不確。
 54. **OWASP SAMM 是否有 2.1**：未找到。暫採：引 2.0。

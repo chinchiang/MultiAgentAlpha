@@ -86,7 +86,7 @@ def verify_quote(ctx: RepoContext, file: str, line: int, quote: str) -> bool:
 def call(provider: Provider, *, system_extra: str, user: str, schema: dict, role: str) -> Completion:
     system = COMMON_SYSTEM + "\n\n" + system_extra
     try:
-        return provider.complete(system=system, user=user, schema=schema, role=role)
+        comp = provider.complete(system=system, user=user, schema=schema, role=role)
     except Exception as e:
         # Neither exception messages nor remote response bodies belong in prompts/reports: only the
         # providers' own sanitised codes pass through. A failed call is an error, not a refusal, so the
@@ -100,6 +100,12 @@ def call(provider: Provider, *, system_extra: str, user: str, schema: dict, role
         where = f" at {Path(frame.filename).name}:{frame.lineno} in {frame.name}" if frame else ""
         _log.error("provider %s (%s) raised %s%s; recorded as a provider error", provider.spec.name, role, type(e).__name__, where)
         return Completion(data=None, raw_text="", error=f"provider_call_failed:{type(e).__name__}")
+    # The response's own model id, not the configured one, is what an audit needs: a vendor-side
+    # fallback can serve a request with a different model.
+    served = getattr(comp, "served_model", "")
+    if served and isinstance(getattr(provider, "served_models", None), set):
+        provider.served_models.add(served)
+    return comp
 
 
 def parse_items(comp: Completion, model_cls, key: str = "items") -> tuple[list, list[str]]:

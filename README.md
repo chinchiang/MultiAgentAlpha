@@ -123,7 +123,7 @@ mara check-config config/mara.yaml
 mara review path/to/repo --config config/mara.yaml --out out
 ```
 
-`config/mara.yaml` documents the intended topology: Claude Opus 5 through the Anthropic API under a
+`config/mara.yaml` documents the intended topology: Claude Opus 5.5 through the Anthropic API under a
 zero-data-retention agreement, DeepSeek weights self-hosted on vLLM, Nemotron on NVIDIA NIM. The
 DeepSeek vendor API is never used for source code. See the report, Part VIII, for the site-by-site
 deployment pattern and the separate handling of 上海／重慶.

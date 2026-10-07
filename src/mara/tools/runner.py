@@ -1,5 +1,7 @@
-"""L0 deterministic tools. Each wrapper runs the pinned binary from .mara-tools/bin, emits SARIF,
-and returns [] with a recorded 'not run' otherwise. Tool output is ground truth: a model
+"""L0 deterministic tools. Each wrapper runs the pinned binary from .mara-tools/bin and emits SARIF.
+A tool that is not installed, writes no SARIF, exits with an unexpected code or reports an incomplete
+scan is recorded as ran=False; the pipeline then marks the review incomplete
+(required_tool_incomplete) and the gate fails closed. Tool output is ground truth: a model
 finding that coincides with a tool result is corroborated (tier A); a tool result no
 model reproduced is still kept, attributed to the TOOL family.
 

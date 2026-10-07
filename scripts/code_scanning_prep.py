@@ -24,6 +24,10 @@ import json
 import sys
 from pathlib import Path
 
+# GitHub "SARIF support for code scanning" (docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/
+# sarif-support-for-code-scanning, read 2026-10-07): at most 25,000 results per run (beyond that only the top 5,000 are
+# kept) and 10 MB per gzip-compressed SARIF file. Both checks here are stricter: results are counted per file, not per
+# run, and bytes are counted uncompressed.
 MAX_RESULTS = 25_000
 MAX_BYTES = 10 * 1024 * 1024
 
