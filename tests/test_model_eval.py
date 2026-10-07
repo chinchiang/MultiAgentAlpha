@@ -46,7 +46,7 @@ def test_targets_and_commands_never_carry_keys(monkeypatch):
     assert set(cmds) == {"prompt-injection", "mitre-frr"}
     assert f"--llm-under-test=OPENAI::deepseek-v3.2::{me.MASK}::https://vllm-deepseek.internal:8000/v1" in cmds["prompt-injection"]
     assert "--judge-llm=$CSE_JUDGE_LLM" in cmds["prompt-injection"] and "--benchmark=mitre-frr" in cmds["mitre-frr"]
-    assert me.cse_spec(an, "sk-real") == "ANTHROPIC::claude-opus-5::sk-real"
+    assert me.cse_spec(an, "sk-real") == "ANTHROPIC::claude-opus-5-5::sk-real"
     with pytest.raises(RuntimeError):
         me.resolve_key("MARA_TEST_UNSET_KEY")
 

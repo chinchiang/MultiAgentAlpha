@@ -46,7 +46,7 @@
 
 準則：（1）部署方式與資料主權；（2）授權條款；（3）公開的資安相關評估；（4）採購與稽核風險；（5）在本架構中的建議角色。
 
-| 準則 | Anthropic Claude（Opus 5.5；雛型仍為 Opus 5） | DeepSeek（V3.2 / V4） | NVIDIA Nemotron 3 |
+| 準則 | Anthropic Claude（Opus 5.5） | DeepSeek（V3.2 / V4） | NVIDIA Nemotron 3 |
 |---|---|---|---|
 | 部署與資料主權 | API 或 Bedrock / Vertex / Foundry；ZDR 需申請，經 Bedrock 或 Google Cloud 時由雲端供應商處理資料；Fable 系列不可 ZDR【已證實｜B81、B82】 | 只能自架權重；隱私政策載明資料存於中國【廠商主張｜B88】；API 不得用於原始碼 | NIM 地端，無資料離境【廠商主張｜B102】 |
 | 授權 | 商業 API 條款 | V3.2 與 V4 皆為 MIT【已證實｜A75、A78】 | Nano 與 Super 為 NVIDIA Nemotron Open Model License，Ultra 為 OpenMDW-1.1【已證實｜B131】 |

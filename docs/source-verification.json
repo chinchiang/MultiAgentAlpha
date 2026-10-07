@@ -597,9 +597,9 @@
       "source_type": "原登錄來源（權威性不等於內容已核對）",
       "verification_status": "原文核對",
       "access_record": "是",
-      "checked_at": "2026-10-06",
+      "checked_at": "2026-10-07",
       "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
-      "claim_excerpt": "\"Code scanning only supports SARIF version `2.1.0`.\"；\"code scanning will only use the following supported properties.\""
+      "claim_excerpt": "\"Code scanning only supports SARIF version `2.1.0`.\"；\"For each gzip-compressed SARIF file, SARIF upload supports a maximum size of 10 MB.\"；限制表：Results per run 25,000（\"Only the top 5,000 results will be included, prioritized by severity.\"）"
     },
     {
       "id": "A145",

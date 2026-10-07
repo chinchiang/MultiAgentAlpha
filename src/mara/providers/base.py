@@ -18,11 +18,13 @@ class Completion:
     refused: bool = False
     truncated: bool = False  # output hit max_tokens (or was not valid JSON): not a refusal, data is None
     error: str = ""  # sanitised provider failure code (provider_http_error:429, ...): no model answer, not a refusal
+    served_model: str = ""  # model the response names as its producer; can differ from the configured id
 
 
 class Provider(abc.ABC):
     def __init__(self, spec: ModelSpec):
         self.spec = spec
+        self.served_models: set[str] = set()  # every served_model seen this run, for the provider manifest
 
     @property
     def family(self):

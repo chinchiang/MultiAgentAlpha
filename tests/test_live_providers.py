@@ -191,13 +191,14 @@ def test_openai_compatible_requires_base_url_and_reads_key_from_env(monkeypatch)
 
 # ------------------------------------------------------------------ Anthropic SDK
 
-def _anthropic(stop_reason, text, usage=(11, 7)):
-    spec = _spec(name="claude-reviewer", family="anthropic", provider="anthropic", model="claude-opus-5", base_url=None,
+def _anthropic(stop_reason, text, usage=(11, 7), served="claude-opus-5-5"):
+    spec = _spec(name="claude-reviewer", family="anthropic", provider="anthropic", model="claude-opus-5-5", base_url=None,
                  data_residency="vendor_api_zdr")
     p = AnthropicProvider.__new__(AnthropicProvider)
     p.spec = spec
     content = [SimpleNamespace(type="thinking", thinking="…")] + ([SimpleNamespace(type="text", text=text)] if text is not None else [])
-    msg = SimpleNamespace(stop_reason=stop_reason, content=content, usage=SimpleNamespace(input_tokens=usage[0], output_tokens=usage[1]))
+    msg = SimpleNamespace(stop_reason=stop_reason, content=content, model=served,
+                          usage=SimpleNamespace(input_tokens=usage[0], output_tokens=usage[1]))
 
     @contextmanager
     def fake_stream(**kwargs):
@@ -213,7 +214,8 @@ def test_anthropic_happy_path_uses_structured_output_and_first_text_block():
     c = _call(p)
     assert c.data == GOOD and not c.refused and not c.truncated and (c.input_tokens, c.output_tokens) == (11, 7)
     assert stream.kwargs["output_config"]["format"] == {"type": "json_schema", "schema": SCHEMA}
-    assert stream.kwargs["thinking"] == {"type": "adaptive"} and stream.kwargs["model"] == "claude-opus-5"
+    assert stream.kwargs["thinking"] == {"type": "adaptive"} and stream.kwargs["model"] == "claude-opus-5-5"
+    assert stream.kwargs["output_config"]["effort"] == "high", "Opus 5.5 defaults to medium: effort must stay explicit"
 
 
 def test_anthropic_max_tokens_is_truncation_not_refusal_and_does_not_raise():
@@ -315,3 +317,27 @@ def test_an_unexpected_provider_exception_is_logged_without_its_message(caplog):
     with caplog.at_level("ERROR", logger="mara.providers"):
         agent_base.call(_Raises(ValueError("sk-live-123 leaked in a message")), system_extra="", user="u", schema=SCHEMA, role="judge")
     assert all("sk-live-123" not in r.getMessage() for r in caplog.records)
+
+
+# ------------------------------------------------------------------ served model
+
+def test_anthropic_records_the_model_the_response_names_even_on_refusal():
+    assert _call(_anthropic("end_turn", json.dumps(GOOD))[0]).served_model == "claude-opus-5-5"
+    # a vendor-side fallback answers under another id: the completion carries that id, not the configured one
+    assert _call(_anthropic("refusal", None, served="claude-opus-4-8")[0]).served_model == "claude-opus-4-8"
+
+
+def test_openai_compatible_records_the_served_model_from_the_payload():
+    def handler(request):
+        r = _chat(json.dumps(GOOD))
+        body = r.json() | {"model": "deepseek-ai/DeepSeek-V4-Pro"}
+        return httpx.Response(200, json=body)
+    assert _call(_oai(handler)).served_model == "deepseek-ai/DeepSeek-V4-Pro"
+    assert _call(_oai(lambda request: _chat(json.dumps(GOOD)))).served_model == "", "absent model field stays empty"
+
+
+def test_agent_call_collects_served_models_on_the_provider():
+    p, _ = _anthropic("end_turn", json.dumps(GOOD), served="claude-opus-4-8")
+    p.served_models = set()
+    agent_base.call(p, system_extra="", user="u", schema=SCHEMA, role="reviewer:xss")
+    assert p.served_models == {"claude-opus-4-8"}
