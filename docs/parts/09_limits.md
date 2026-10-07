@@ -22,11 +22,11 @@
 
 ### 24.3 查證上的限制
 
-初版研究環境的出口代理伺服器封鎖了大量一手網域（第 12.6 節列出），附錄A 中約半數的引用只能「依搜尋摘要」，所有 arXiv 條目都只能標為第三方評論。2026 年 10 月 6 日在不受封鎖的環境做了一次全面複核：附錄A 的 233 條中有 218 條重新讀取並逐條記下摘錄（狀態欄標「原文核對」或「交叉核對」），arXiv 條目改以 arXiv API 讀取並另查發表場次，NIST CAISI 對 DeepSeek V4 Pro 的評估也已讀到【B96】。這次複核修正了二十多處與原文不符的敘述（例如 EPSS 已是 v5、CRA 的通報義務已生效、Shai-Hulud 的 CISA alert 並未提到 TruffleHog），但它由 Claude Code 代理執行，未經人工複核。仍未讀到的重要來源包括 Anthropic 的 Opus 5 系統卡【B85】、EUR-Lex 上的 CRA 原文，以及 ISO/IEC 27001 與 IEC 62443-4-1 的正本。附錄B 列出全部 75 項查證缺口，其中 19 項已關閉。這些缺口不改變架構的設計，因為設計依據的是可直接讀取的來源（ASVS 5.0 CSV、OWASP Top 10 repo、GitHub Advisory、Anthropic 資料保留文件、FIRST 的計算器原始碼）；但它們影響第七部比較表中的效能數字與第 20 章的模型評估，讀者引用那些數字前應先讀附錄B。
+初版研究環境的出口代理伺服器封鎖了大量一手網域（第 12.6 節列出），附錄A 中約半數的引用只能「依搜尋摘要」，所有 arXiv 條目都只能標為第三方評論。2026 年 10 月 6 日在不受封鎖的環境做了一次全面複核：附錄A 的 233 條中有 218 條重新讀取並逐條記下摘錄（狀態欄標「原文核對」或「交叉核對」），arXiv 條目改以 arXiv API 讀取並另查發表場次，NIST CAISI 對 DeepSeek V4 Pro 的評估也已讀到【B96】。這次複核修正了二十多處與原文不符的敘述（例如 EPSS 已是 v5、CRA 的通報義務已生效、Shai-Hulud 的 CISA alert 並未提到 TruffleHog），但它由 Claude Code 代理執行，未經人工複核。仍未讀到的重要來源包括 Anthropic 的 Opus 5 系統卡【B85】、EUR-Lex 上的 CRA 原文，以及 ISO/IEC 27001 與 IEC 62443-4-1 的正本。2026 年 10 月 7 日為正式面板的改變另讀了 13 條一手來源（B137–B149，同樣由代理執行、未經人工複核），並新增四項缺口。附錄B 列出全部 79 項查證缺口，其中 19 項已關閉。這些缺口不改變架構的設計，因為設計依據的是可直接讀取的來源（ASVS 5.0 CSV、OWASP Top 10 repo、GitHub Advisory、Anthropic 資料保留文件、FIRST 的計算器原始碼）；但它們影響第七部比較表中的效能數字與第 20 章的模型評估，讀者引用那些數字前應先讀附錄B。
 
 ### 24.4 模型版本漂移
 
-本報告初版引用的模型版本（Claude Opus 5 於 2026 年 7 月 24 日發布、DeepSeek V3.2、Nemotron 3）在發布後一個月內就變了。Anthropic 於 9 月 22 日與 28 日發布 Opus 5.5 與 Sonnet 5.5，Opus 5 與 Sonnet 5 改列舊版，仍可使用但不再更新【已證實｜B124、B126、B129】；DeepSeek 先後發布 V4-Pro 正式版與 V4.1-Flash，並淘汰 V4-Flash【廠商主張｜B130】；NVIDIA 自己的漏洞分析 Blueprint 已改用 Nemotron 3.5 Lightning 擔任子代理【已證實｜B132】。任何一次升版都可能改變家族的行為，包括拒答率、canary 回應率與在特定 CWE 上的召回率。校準迴圈的季度重跑是唯一的對策，而它的成本是真實的。
+本報告初版引用的模型版本（Claude Opus 5 於 2026 年 7 月 24 日發布、DeepSeek V3.2、Nemotron 3）在發布後一個月內就變了。Anthropic 於 9 月 22 日與 28 日發布 Opus 5.5 與 Sonnet 5.5，Opus 5 與 Sonnet 5 改列舊版，仍可使用但不再更新【已證實｜B124、B126、B129】；DeepSeek 先後發布 V4-Pro 正式版與 V4.1-Flash，並淘汰 V4-Flash【廠商主張｜B130】；NVIDIA 自己的漏洞分析 Blueprint 已改用 Nemotron 3.5 Lightning 擔任子代理【已證實｜B132】。換面板本身也是漂移：v0.4.2 起的正式面板改為 Claude、Gemini 與 GLM，初版的校準設計與 mock 行為都以 Claude、DeepSeek、Nemotron 為對象。新家族的漂移更快：Gemini API 的 Pro 級模型仍是 preview，`gemini-3-pro-preview` 推出不到四個月就被關閉並改指向 3.1 Pro【已證實｜B141】，設定檔的暫定 ID 因此已不存在；GLM 自 2025 年 7 月起約每兩到三個月發布一版【已證實｜B143】。任何一次升版都可能改變家族的行為，包括拒答率、canary 回應率與在特定 CWE 上的召回率。校準迴圈的季度重跑是唯一的對策，而它的成本是真實的。
 
 Opus 5.5 另帶來一種新的漂移：Anthropic 公告寫明多數資安任務會被透明地轉給另一個模型處理【廠商主張｜B125】。同一個模型 ID 背後實際回答的模型因此不固定，而校準量測的是「家族的行為」，前提是模型固定。雛型自 v0.4.1 起把 Claude 預設改為 Opus 5.5，並把每次回應自報的模型 ID 記進報告的 provider manifest（`served_models`）。但公告沒有說明轉送後 API 回應裡的模型欄位會不會跟著改變；如果不會，這項紀錄就看不出轉送。改版時也還沒有以 Opus 5.5 做 live 校準，在那之前，Claude 家族的權重與門檻都不是針對 Opus 5.5 量出來的。
 

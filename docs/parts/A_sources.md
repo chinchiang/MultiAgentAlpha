@@ -151,6 +151,19 @@
 | B134 | Anthropic | Claude Security is now in public beta（含產品頁） | https://claude.com/blog/claude-security-public-beta | 2026-04-30 | 廠商主張 | 是 | 原文核對（2026-10-06） |
 | B135 | GitHub | AI-powered security detections in pull requests（public preview） | https://github.com/orgs/community/discussions/201543 | 2026-07-10 | 廠商主張 | 是 | 原文核對（2026-10-06） |
 | B136 | GitHub | Agentic autofix now uses Copilot Memory | https://github.blog/changelog/2026-09-25-agentic-autofix-now-uses-copilot-memory | 2026-09-25 | 廠商主張 | 是 | 原文核對（2026-10-06） |
+| B137 | AWS | Amazon Bedrock：Abuse detection（另見 Data protection、Model invocation logging） | https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html | 活文件（2026-10-07 讀取） | 已證實（雲端供應商文件） | 是 | 原文核對（2026-10-07） |
+| B138 | AWS | Amazon Bedrock：Cross-Region inference 與 Global cross-Region inference（另見 Claude Opus 5.5 model card） | https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html | 活文件（2026-10-07 讀取） | 已證實（雲端供應商文件） | 是 | 原文核對（2026-10-07） |
+| B139 | Google | Gemini API Additional Terms of Service | https://ai.google.dev/gemini-api/terms | 最後修改 2026-04-28 | 已證實（服務條款） | 是 | 原文核對（2026-10-07） |
+| B140 | Google | Gemini API：Zero data retention | https://ai.google.dev/gemini-api/docs/zdr | 活文件（2026-10-07 讀取） | 已證實 | 是 | 原文核對（2026-10-07） |
+| B141 | Google | Gemini API：Models 與 Release notes（changelog） | https://ai.google.dev/gemini-api/docs/models | 活文件（2026-10-07 讀取） | 已證實 | 是 | 原文核對（2026-10-07） |
+| B142 | Google DeepMind | Gemini 3 Pro Frontier Safety Framework Report（另見 Gemini 3.1 Pro model card） | https://storage.googleapis.com/deepmind-media/gemini/gemini_3_pro_fsf_report.pdf | 2025-11／2026-02-19 | 廠商主張 | 是 | 原文核對（2026-10-07） |
+| B143 | Z.ai（智譜） | zai-org/GLM-5.3-Flash 模型卡（另見 Hugging Face API 的 zai-org 模型清單） | https://huggingface.co/zai-org/GLM-5.3-Flash | 2026-08-25 | 已證實（授權與日期）；China-affiliated | 是 | 原文核對（2026-10-07） |
+| B144 | U.S. Department of Commerce, BIS | Additions to the Entity List（Federal Register 2025-00704） | https://www.federalregister.gov/documents/full_text/text/2025/01/16/2025-00704.txt | 2025-01-16 | 已證實（政府出版物） | 是 | 原文核對（2026-10-07） |
+| B145 | Z.ai（智譜） | Privacy Policy | https://docs.z.ai/legal-agreement/privacy-policy | 2025-09-29 | 廠商主張；China-affiliated | 是 | 原文核對（2026-10-07） |
+| B146 | NIST CAISI | CAISI's Assessment of Z.ai's GLM-5.3 Cyber Capabilities | https://www.nist.gov/news-events/news/2026/09/caisis-assessment-zais-glm-53-cyber-capabilities | 2026-09-17 | 已證實（只含能力評估） | 是 | 原文核對（2026-10-07） |
+| B147 | NIST CAISI | CAISI Assessment of Z.ai's GLM-5.2 | https://www.nist.gov/news-events/news/2026/07/caisi-assessment-zais-glm-52 | 2026-07-17 | 已證實 | 是 | 原文核對（2026-10-07） |
+| B148 | Google | Gemini API：Pricing | https://ai.google.dev/gemini-api/docs/pricing | 活文件（2026-10-07 讀取） | 已證實 | 是 | 原文核對（2026-10-07） |
+| B149 | AWS | Amazon Bedrock Security and Privacy（產品頁） | https://aws.amazon.com/bedrock/security-compliance/ | 活頁面（2026-10-07 讀取） | 廠商主張 | 是 | 原文核對（2026-10-07） |
 
 ## C 組：十一面向的標準、工具與事件
 

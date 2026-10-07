@@ -56,10 +56,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,.tablewrap:focus-visibl
 <a class="skip" href="#content">跳至內文</a>
 <header class="topbar"><button id="menu" aria-label="開啟目次" aria-expanded="false" aria-controls="navigation">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-01</span></header>
 <div class="layout">
-<nav id="navigation" aria-label="目次"><p class="brand">GSMD-RPT-2026-0908-01 · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits" aria-live="polite"></div><ol id="toc"><li class="h1"><a href="#s0">以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查</a></li><li class="h2"><a href="#s1">目次</a></li><li class="h1"><a href="#s2">第一部　管理階層摘要</a></li><li class="h2"><a href="#s3">第 1 章　決策者需要知道的事</a></li><li class="h3"><a href="#s4">1.1 問題</a></li><li class="h3"><a href="#s5">1.2 建議的架構，一句話</a></li><li class="h3"><a href="#s6">1.3 這個架構解決了什麼</a></li><li class="h3"><a href="#s7">1.4 三個需要決策的事項</a></li><li class="h3"><a href="#s8">1.5 成本與代價</a></li><li class="h3"><a href="#s9">1.6 這份報告不能告訴你的事</a></li><li class="h3"><a href="#s10">1.7 建議的批准事項</a></li><li class="h1"><a href="#s11">第二部　背景與問題定義</a></li><li class="h2"><a href="#s12">第 2 章　Vibe Coding 帶來的安全債：實證現況</a></li><li class="h3"><a href="#s13">2.1 什麼是 Vibe Coding，以及它為什麼改變了審查的前提</a></li><li class="h3"><a href="#s14">2.2 AI 生成程式碼的安全性：可查證的量化證據</a></li><li class="h3"><a href="#s15">2.3 供應鏈面的新型風險：套件幻覺</a></li><li class="h3"><a href="#s16">2.4 對跨國 ODM/EMS 的意義</a></li><li class="h2"><a href="#s17">第 3 章　單一 LLM 審查的四類失效</a></li><li class="h3"><a href="#s18">3.1 失效一：幻覺與不可重現</a></li><li class="h3"><a href="#s19">3.2 失效二：偏誤</a></li><li class="h3"><a href="#s20">3.3 失效三：Prompt Injection</a></li><li class="h3"><a href="#s21">3.4 失效四：覆蓋盲區與拒答</a></li><li class="h2"><a href="#s22">第 4 章　為什麼是 Multi-Agent，而不是「一個更強的模型」</a></li><li class="h3"><a href="#s23">4.1 反方證據先講</a></li><li class="h3"><a href="#s24">4.2 增益在哪裡：壓誤報與壓評論量，不是提召回</a></li><li class="h3"><a href="#s25">4.3 「LLM + 確定性工具」的證據為什麼一致偏正</a></li><li class="h3"><a href="#s26">4.4 異質性作為設計原則</a></li><li class="h3"><a href="#s27">4.5 本報告的定位</a></li><li class="h1"><a href="#s28">第三部　技術架構</a></li><li class="h2"><a href="#s29">第 5 章　六層架構總覽</a></li><li class="h3"><a href="#s30">5.1 為什麼是六層而不是一個 agentic loop</a></li><li class="h3"><a href="#s31">5.2 對抗的是誰</a></li><li class="h2"><a href="#s32">第 6 章　各層設計</a></li><li class="h3"><a href="#s33">6.1 L0：確定性錨定層</a></li><li class="h3"><a href="#s34">6.2 L1：情境建構層</a></li><li class="h3"><a href="#s35">6.3 L2：專家審查層</a></li><li class="h3"><a href="#s36">6.4 L3：對抗驗證層</a></li><li class="h3"><a href="#s37">6.5 L4：陪審裁決層</a></li><li class="h3"><a href="#s38">6.6 L5：評分與輸出層</a></li><li class="h2"><a href="#s39">第 7 章　模型家族與部署拓樸</a></li><li class="h3"><a href="#s40">7.1 三個家族的角色與部署方式</a></li><li class="h3"><a href="#s41">7.2 OpenAI 相容端點作為自架模型的共通介面</a></li><li class="h3"><a href="#s42">7.3 可抽換性是採購需求，不是工程偏好</a></li><li class="h2"><a href="#s43">第 8 章　資料流與信任邊界</a></li><li class="h2"><a href="#s44">第 9 章　Prompt Injection 防線</a></li><li class="h1"><a href="#s45">第四部　核心功能與能力</a></li><li class="h2"><a href="#s46">第 10 章　十一個審查面向</a></li><li class="h3"><a href="#s47">10.1 Application architecture</a></li><li class="h3"><a href="#s48">10.2 Security vulnerabilities（一般弱點）</a></li><li class="h3"><a href="#s49">10.3 XSS</a></li><li class="h3"><a href="#s50">10.4 CSP</a></li><li class="h3"><a href="#s51">10.5 Authentication and authorization</a></li><li class="h3"><a href="#s52">10.6 Dependency and supply-chain security（依賴）</a></li><li class="h3"><a href="#s53">10.7 GitHub Actions security</a></li><li class="h3"><a href="#s54">10.8 Secret exposure</a></li><li class="h3"><a href="#s55">10.9 Input validation</a></li><li class="h3"><a href="#s56">10.10 Insecure error handling</a></li><li class="h3"><a href="#s57">10.11 Supply-chain security（廣義）</a></li><li class="h3"><a href="#s58">10.12 十一個面向的交叉關係</a></li><li class="h2"><a href="#s59">第 11 章　評分方法</a></li><li class="h3"><a href="#s60">11.1 設計原則：分數由程式算，模型只提供判斷的輸入</a></li><li class="h3"><a href="#s61">11.2 單一 finding 的四個維度</a></li><li class="h3"><a href="#s62">11.3 為什麼不用 DREAD，也不只用 OWASP Risk Rating</a></li><li class="h3"><a href="#s63">11.4 面向分數與閘門</a></li><li class="h3"><a href="#s64">11.5 校準：從 seeded benchmark 到家族權重</a></li><li class="h2"><a href="#s65">第 12 章　資料可信度模型</a></li><li class="h3"><a href="#s66">12.1 問題的兩個層次</a></li><li class="h3"><a href="#s67">12.2 輸入資料的三種來源與各自的信任規則</a></li><li class="h3"><a href="#s68">12.3 來源證據的三要件</a></li><li class="h3"><a href="#s69">12.4 模型輸出的三重驗證</a></li><li class="h3"><a href="#s70">12.5 拒答與棄權的處理</a></li><li class="h3"><a href="#s71">12.6 本報告自身的證據分級</a></li><li class="h2"><a href="#s72">第 13 章　去偏誤機制目錄</a></li><li class="h1"><a href="#s73">第五部　使用流程</a></li><li class="h2"><a href="#s74">第 14 章　三種觸發模式</a></li><li class="h3"><a href="#s75">14.1 PR 觸發：增量審查</a></li><li class="h3"><a href="#s76">14.2 夜間全庫審查</a></li><li class="h3"><a href="#s77">14.3 手動深度審查</a></li><li class="h2"><a href="#s78">第 15 章　人工裁決佇列與校準迴圈</a></li><li class="h3"><a href="#s79">15.1 什麼會進人工佇列</a></li><li class="h3"><a href="#s80">15.2 審查疲勞與自動核准的陷阱</a></li><li class="h3"><a href="#s81">15.3 校準迴圈</a></li><li class="h3"><a href="#s82">15.4 導入的三個階段</a></li><li class="h1"><a href="#s83">第六部　資安風險</a></li><li class="h2"><a href="#s84">第 16 章　審查系統的六類風險</a></li><li class="h3"><a href="#s85">16.1 原始碼外洩</a></li><li class="h3"><a href="#s86">16.2 Prompt Injection 操縱審查結果</a></li><li class="h3"><a href="#s87">16.3 模型供應鏈</a></li><li class="h3"><a href="#s88">16.4 審查系統自己的 GitHub Actions</a></li><li class="h3"><a href="#s89">16.5 過度信任與責任稀釋</a></li><li class="h3"><a href="#s90">16.6 成本失控與可用性</a></li><li class="h2"><a href="#s91">第 17 章　與 OWASP LLM Top 10 2025 的對應</a></li><li class="h1"><a href="#s92">第七部　方案比較</a></li><li class="h2"><a href="#s93">第 18 章　架構層級的比較</a></li><li class="h2"><a href="#s94">第 19 章　商用與開源方案的比較</a></li><li class="h2"><a href="#s95">第 20 章　三個模型家族在此用途上的適配性</a></li><li class="h1"><a href="#s96">第八部　實務應用</a></li><li class="h2"><a href="#s97">第 21 章　跨國 ODM/EMS 的部署拓樸</a></li><li class="h3"><a href="#s98">21.1 共用管線：台北、桃園、休士頓、Brno/Blučina</a></li><li class="h3"><a href="#s99">21.2 隔離管線：上海浦東與重慶</a></li><li class="h3"><a href="#s100">21.3 客戶稽核時的說明</a></li><li class="h2"><a href="#s101">第 22 章　成本模型</a></li><li class="h3"><a href="#s102">22.1 變數</a></li><li class="h3"><a href="#s103">22.2 估算（以區間呈現）</a></li><li class="h3"><a href="#s104">22.3 成本與去偏誤的取捨</a></li><li class="h2"><a href="#s105">第 23 章　從雛型到生產的差距</a></li><li class="h1"><a href="#s106">第九部　限制</a></li><li class="h2"><a href="#s107">第 24 章　本報告不涵蓋什麼，以及結論的邊界條件</a></li><li class="h3"><a href="#s108">24.1 範圍限制</a></li><li class="h3"><a href="#s109">24.2 方法上的弱點</a></li><li class="h3"><a href="#s110">24.3 查證上的限制</a></li><li class="h3"><a href="#s111">24.4 模型版本漂移</a></li><li class="h3"><a href="#s112">24.5 兩套「證據級別」的混淆風險</a></li><li class="h1"><a href="#s113">第十部　治理建議</a></li><li class="h2"><a href="#s114">第 25 章　全球管線的治理建議</a></li><li class="h3"><a href="#s115">25.1 政策層</a></li><li class="h3"><a href="#s116">25.2 技術層</a></li><li class="h3"><a href="#s117">25.3 流程層</a></li><li class="h3"><a href="#s118">25.4 對應總表</a></li><li class="h2"><a href="#s119">第 26 章　上海浦東與重慶廠區的單獨建議</a></li><li class="h1"><a href="#s120">附錄A　引用來源清單</a></li><li class="h2"><a href="#s121">A 組：工具、產品與文獻</a></li><li class="h2"><a href="#s122">B 組：LLM 評審偏誤、共識方法、模型現況、治理框架</a></li><li class="h2"><a href="#s123">C 組：十一面向的標準、工具與事件</a></li><li class="h1"><a href="#s124">附錄B　查證缺口清單</a></li><li class="h2"><a href="#s125">B-1 方法與環境層缺口</a></li><li class="h2"><a href="#s126">B-2 工具與產品（A 組）</a></li><li class="h2"><a href="#s127">B-3 偏誤與模型（B 組）</a></li><li class="h2"><a href="#s128">B-4 標準與事件（C 組）</a></li><li class="h2"><a href="#s129">B-5 雛型自身的缺口</a></li><li class="h1"><a href="#s130">附錄C　術語對照表</a></li><li class="h1"><a href="#s131">附錄D　成熟度自評問卷（60 題）</a></li><li class="h2"><a href="#s132">L0 確定性錨定層</a></li><li class="h2"><a href="#s133">L1 情境建構層</a></li><li class="h2"><a href="#s134">L2 專家審查層</a></li><li class="h2"><a href="#s135">L3 對抗驗證層</a></li><li class="h2"><a href="#s136">L4 陪審裁決層</a></li><li class="h2"><a href="#s137">L5 評分與輸出層</a></li><li class="h2"><a href="#s138">計分</a></li><li class="h1"><a href="#s139">附錄E　落地 Prompt 套件（Claude Code + GitHub）</a></li></ol></nav>
+<nav id="navigation" aria-label="目次"><p class="brand">GSMD-RPT-2026-0908-01 · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits" aria-live="polite"></div><ol id="toc"><li class="h1"><a href="#s0">以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查</a></li><li class="h2"><a href="#s1">目次</a></li><li class="h1"><a href="#s2">第一部　管理階層摘要</a></li><li class="h2"><a href="#s3">第 1 章　決策者需要知道的事</a></li><li class="h3"><a href="#s4">1.1 問題</a></li><li class="h3"><a href="#s5">1.2 建議的架構，一句話</a></li><li class="h3"><a href="#s6">1.3 這個架構解決了什麼</a></li><li class="h3"><a href="#s7">1.4 三個需要決策的事項</a></li><li class="h3"><a href="#s8">1.5 成本與代價</a></li><li class="h3"><a href="#s9">1.6 這份報告不能告訴你的事</a></li><li class="h3"><a href="#s10">1.7 建議的批准事項</a></li><li class="h1"><a href="#s11">第二部　背景與問題定義</a></li><li class="h2"><a href="#s12">第 2 章　Vibe Coding 帶來的安全債：實證現況</a></li><li class="h3"><a href="#s13">2.1 什麼是 Vibe Coding，以及它為什麼改變了審查的前提</a></li><li class="h3"><a href="#s14">2.2 AI 生成程式碼的安全性：可查證的量化證據</a></li><li class="h3"><a href="#s15">2.3 供應鏈面的新型風險：套件幻覺</a></li><li class="h3"><a href="#s16">2.4 對跨國 ODM/EMS 的意義</a></li><li class="h2"><a href="#s17">第 3 章　單一 LLM 審查的四類失效</a></li><li class="h3"><a href="#s18">3.1 失效一：幻覺與不可重現</a></li><li class="h3"><a href="#s19">3.2 失效二：偏誤</a></li><li class="h3"><a href="#s20">3.3 失效三：Prompt Injection</a></li><li class="h3"><a href="#s21">3.4 失效四：覆蓋盲區與拒答</a></li><li class="h2"><a href="#s22">第 4 章　為什麼是 Multi-Agent，而不是「一個更強的模型」</a></li><li class="h3"><a href="#s23">4.1 反方證據先講</a></li><li class="h3"><a href="#s24">4.2 增益在哪裡：壓誤報與壓評論量，不是提召回</a></li><li class="h3"><a href="#s25">4.3 「LLM + 確定性工具」的證據為什麼一致偏正</a></li><li class="h3"><a href="#s26">4.4 異質性作為設計原則</a></li><li class="h3"><a href="#s27">4.5 本報告的定位</a></li><li class="h1"><a href="#s28">第三部　技術架構</a></li><li class="h2"><a href="#s29">第 5 章　六層架構總覽</a></li><li class="h3"><a href="#s30">5.1 為什麼是六層而不是一個 agentic loop</a></li><li class="h3"><a href="#s31">5.2 對抗的是誰</a></li><li class="h2"><a href="#s32">第 6 章　各層設計</a></li><li class="h3"><a href="#s33">6.1 L0：確定性錨定層</a></li><li class="h3"><a href="#s34">6.2 L1：情境建構層</a></li><li class="h3"><a href="#s35">6.3 L2：專家審查層</a></li><li class="h3"><a href="#s36">6.4 L3：對抗驗證層</a></li><li class="h3"><a href="#s37">6.5 L4：陪審裁決層</a></li><li class="h3"><a href="#s38">6.6 L5：評分與輸出層</a></li><li class="h2"><a href="#s39">第 7 章　模型家族與部署拓樸</a></li><li class="h3"><a href="#s40">7.1 正式面板的三個家族與冷備援</a></li><li class="h3"><a href="#s41">7.2 OpenAI 相容端點作為自架模型的共通介面</a></li><li class="h3"><a href="#s42">7.3 可抽換性是採購需求，不是工程偏好</a></li><li class="h2"><a href="#s43">第 8 章　資料流與信任邊界</a></li><li class="h2"><a href="#s44">第 9 章　Prompt Injection 防線</a></li><li class="h1"><a href="#s45">第四部　核心功能與能力</a></li><li class="h2"><a href="#s46">第 10 章　十一個審查面向</a></li><li class="h3"><a href="#s47">10.1 Application architecture</a></li><li class="h3"><a href="#s48">10.2 Security vulnerabilities（一般弱點）</a></li><li class="h3"><a href="#s49">10.3 XSS</a></li><li class="h3"><a href="#s50">10.4 CSP</a></li><li class="h3"><a href="#s51">10.5 Authentication and authorization</a></li><li class="h3"><a href="#s52">10.6 Dependency and supply-chain security（依賴）</a></li><li class="h3"><a href="#s53">10.7 GitHub Actions security</a></li><li class="h3"><a href="#s54">10.8 Secret exposure</a></li><li class="h3"><a href="#s55">10.9 Input validation</a></li><li class="h3"><a href="#s56">10.10 Insecure error handling</a></li><li class="h3"><a href="#s57">10.11 Supply-chain security（廣義）</a></li><li class="h3"><a href="#s58">10.12 十一個面向的交叉關係</a></li><li class="h2"><a href="#s59">第 11 章　評分方法</a></li><li class="h3"><a href="#s60">11.1 設計原則：分數由程式算，模型只提供判斷的輸入</a></li><li class="h3"><a href="#s61">11.2 單一 finding 的四個維度</a></li><li class="h3"><a href="#s62">11.3 為什麼不用 DREAD，也不只用 OWASP Risk Rating</a></li><li class="h3"><a href="#s63">11.4 面向分數與閘門</a></li><li class="h3"><a href="#s64">11.5 校準：從 seeded benchmark 到家族權重</a></li><li class="h2"><a href="#s65">第 12 章　資料可信度模型</a></li><li class="h3"><a href="#s66">12.1 問題的兩個層次</a></li><li class="h3"><a href="#s67">12.2 輸入資料的三種來源與各自的信任規則</a></li><li class="h3"><a href="#s68">12.3 來源證據的三要件</a></li><li class="h3"><a href="#s69">12.4 模型輸出的三重驗證</a></li><li class="h3"><a href="#s70">12.5 拒答與棄權的處理</a></li><li class="h3"><a href="#s71">12.6 本報告自身的證據分級</a></li><li class="h2"><a href="#s72">第 13 章　去偏誤機制目錄</a></li><li class="h1"><a href="#s73">第五部　使用流程</a></li><li class="h2"><a href="#s74">第 14 章　三種觸發模式</a></li><li class="h3"><a href="#s75">14.1 PR 觸發：增量審查</a></li><li class="h3"><a href="#s76">14.2 夜間全庫審查</a></li><li class="h3"><a href="#s77">14.3 手動深度審查</a></li><li class="h2"><a href="#s78">第 15 章　人工裁決佇列與校準迴圈</a></li><li class="h3"><a href="#s79">15.1 什麼會進人工佇列</a></li><li class="h3"><a href="#s80">15.2 審查疲勞與自動核准的陷阱</a></li><li class="h3"><a href="#s81">15.3 校準迴圈</a></li><li class="h3"><a href="#s82">15.4 導入的三個階段</a></li><li class="h1"><a href="#s83">第六部　資安風險</a></li><li class="h2"><a href="#s84">第 16 章　審查系統的六類風險</a></li><li class="h3"><a href="#s85">16.1 原始碼外洩</a></li><li class="h3"><a href="#s86">16.2 Prompt Injection 操縱審查結果</a></li><li class="h3"><a href="#s87">16.3 模型供應鏈</a></li><li class="h3"><a href="#s88">16.4 審查系統自己的 GitHub Actions</a></li><li class="h3"><a href="#s89">16.5 過度信任與責任稀釋</a></li><li class="h3"><a href="#s90">16.6 成本失控與可用性</a></li><li class="h2"><a href="#s91">第 17 章　與 OWASP LLM Top 10 2025 的對應</a></li><li class="h1"><a href="#s92">第七部　方案比較</a></li><li class="h2"><a href="#s93">第 18 章　架構層級的比較</a></li><li class="h2"><a href="#s94">第 19 章　商用與開源方案的比較</a></li><li class="h2"><a href="#s95">第 20 章　正式面板的三個家族與冷備援在此用途上的適配性</a></li><li class="h1"><a href="#s96">第八部　實務應用</a></li><li class="h2"><a href="#s97">第 21 章　跨國 ODM/EMS 的部署拓樸</a></li><li class="h3"><a href="#s98">21.1 共用管線：台北、桃園、休士頓、Brno/Blučina</a></li><li class="h3"><a href="#s99">21.2 隔離管線：上海浦東與重慶</a></li><li class="h3"><a href="#s100">21.3 客戶稽核時的說明</a></li><li class="h2"><a href="#s101">第 22 章　成本模型</a></li><li class="h3"><a href="#s102">22.1 變數</a></li><li class="h3"><a href="#s103">22.2 估算（以區間呈現）</a></li><li class="h3"><a href="#s104">22.3 成本與去偏誤的取捨</a></li><li class="h2"><a href="#s105">第 23 章　從雛型到生產的差距</a></li><li class="h1"><a href="#s106">第九部　限制</a></li><li class="h2"><a href="#s107">第 24 章　本報告不涵蓋什麼，以及結論的邊界條件</a></li><li class="h3"><a href="#s108">24.1 範圍限制</a></li><li class="h3"><a href="#s109">24.2 方法上的弱點</a></li><li class="h3"><a href="#s110">24.3 查證上的限制</a></li><li class="h3"><a href="#s111">24.4 模型版本漂移</a></li><li class="h3"><a href="#s112">24.5 兩套「證據級別」的混淆風險</a></li><li class="h1"><a href="#s113">第十部　治理建議</a></li><li class="h2"><a href="#s114">第 25 章　全球管線的治理建議</a></li><li class="h3"><a href="#s115">25.1 政策層</a></li><li class="h3"><a href="#s116">25.2 技術層</a></li><li class="h3"><a href="#s117">25.3 流程層</a></li><li class="h3"><a href="#s118">25.4 對應總表</a></li><li class="h2"><a href="#s119">第 26 章　上海浦東與重慶廠區的單獨建議</a></li><li class="h1"><a href="#s120">附錄A　引用來源清單</a></li><li class="h2"><a href="#s121">A 組：工具、產品與文獻</a></li><li class="h2"><a href="#s122">B 組：LLM 評審偏誤、共識方法、模型現況、治理框架</a></li><li class="h2"><a href="#s123">C 組：十一面向的標準、工具與事件</a></li><li class="h1"><a href="#s124">附錄B　查證缺口清單</a></li><li class="h2"><a href="#s125">B-1 方法與環境層缺口</a></li><li class="h2"><a href="#s126">B-2 工具與產品（A 組）</a></li><li class="h2"><a href="#s127">B-3 偏誤與模型（B 組）</a></li><li class="h2"><a href="#s128">B-4 標準與事件（C 組）</a></li><li class="h2"><a href="#s129">B-5 雛型自身的缺口</a></li><li class="h1"><a href="#s130">附錄C　術語對照表</a></li><li class="h1"><a href="#s131">附錄D　成熟度自評問卷（60 題）</a></li><li class="h2"><a href="#s132">L0 確定性錨定層</a></li><li class="h2"><a href="#s133">L1 情境建構層</a></li><li class="h2"><a href="#s134">L2 專家審查層</a></li><li class="h2"><a href="#s135">L3 對抗驗證層</a></li><li class="h2"><a href="#s136">L4 陪審裁決層</a></li><li class="h2"><a href="#s137">L5 評分與輸出層</a></li><li class="h2"><a href="#s138">計分</a></li><li class="h1"><a href="#s139">附錄E　落地 Prompt 套件（Claude Code + GitHub）</a></li></ol></nav>
 <main id="content" tabindex="-1"><h1 id="s0">以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查</h1>
 <p><strong>文件編號：GSMD-RPT-2026-0908-01</strong>（登錄簿配號 2026-09-10）
-<strong>版本：v0.4.2</strong>　<strong>日期：2026-10-07</strong>（正文最後一次實質修改；初版 v0.1.0，2026-09-08；之後各版見 <code>docs/CHANGELOG.md</code>）　<strong>類型：RPT 研究報告／專業教學手冊</strong>
+<strong>版本：v0.4.3</strong>　<strong>日期：2026-10-07</strong>（正文最後一次實質修改；初版 v0.1.0，2026-09-08；之後各版見 <code>docs/CHANGELOG.md</code>）　<strong>類型：RPT 研究報告／專業教學手冊</strong>
 <strong>讀者定位：治理決策與技術落地並重</strong>
 <strong>附屬雛型：</strong> <code>chinchiang/MultiAgentAlpha</code>，branch <code>main</code>，套件 <code>mara</code></p>
 <p>證據級別標記說明：正文每一項事實句以【級別｜來源編號】標示，級別為「已證實」「廠商主張」「第三方評論」「尚未證實」之一；來源編號對應附錄A。標記中另註「preprint」「摘要」「頁面被擋」者，其意義見附錄A 前言與第 12.6 節。</p>
@@ -84,21 +84,21 @@ a:focus-visible,button:focus-visible,input:focus-visible,.tablewrap:focus-visibl
 <h1 id="s2">第一部　管理階層摘要</h1>
 <h2 id="s3">第 1 章　決策者需要知道的事</h2>
 <h3 id="s4">1.1 問題</h3>
-<p>同仁正在用 AI 助理產生大量程式碼，這種工作方式的特徵是：程式碼跑得起來，但沒有人真正讀過它。獨立的學術研究一致顯示，這類程式碼的缺陷集中在架構與授權層，正是傳統掃描工具最弱的地方；同時也一致顯示，把一個大模型當作審查者，其判斷在沒有外部錨定時接近隨機，而且會被程式碼中的文字操縱。我們手上有三個模型家族，問題不是「用哪一個」，而是「怎麼把它們組織起來，讓沒有任何一個模型的錯誤能單獨決定結果」。</p>
+<p>同仁正在用 AI 助理產生大量程式碼，這種工作方式的特徵是：程式碼跑得起來，但沒有人真正讀過它。獨立的學術研究一致顯示，這類程式碼的缺陷集中在架構與授權層，正是傳統掃描工具最弱的地方；同時也一致顯示，把一個大模型當作審查者，其判斷在沒有外部錨定時接近隨機，而且會被程式碼中的文字操縱。我們的正式面板有三個模型家族（另有一個冷備援家族），問題不是「用哪一個」，而是「怎麼把它們組織起來，讓沒有任何一個模型的錯誤能單獨決定結果」。</p>
 <h3 id="s5">1.2 建議的架構，一句話</h3>
 <p>讓確定性工具當地基、三個不同家族的模型分工找問題、否證問題與裁決問題、彼此看不到對方的身分與分數、最後由程式而非模型算出分數。</p>
 <h3 id="s6">1.3 這個架構解決了什麼</h3>
 <p>它把三個問題變成可量測的指標。<strong>評分</strong>：每個發現的嚴重度由業界標準的計算器算出，行動建議由公開的決策樹產生，兩者都可以重算。<strong>資料可信度</strong>：每個發現都必須引用程式碼中真實存在的片段，引用不存在的發現自動作廢；每個發現都有 A 到 D 的證據層級，A 級代表工具與模型指向同一處，D 級代表未經驗證。<strong>偏誤</strong>：找問題、否證與裁決由不同家族執行；裁決者看不到誰找到的、找到的人有多有信心；同一批問題以正序與倒序各裁決一次；報告附上本次審查有幾次拒答、幾次被操縱、幾張折半的票。</p>
 <h3 id="s7">1.4 三個需要決策的事項</h3>
-<p><strong>第一，模型的部署方式。</strong> 只有一個家族的資料會離開組織的網路，而且只能在零資料保留協議下；另外兩個家族全部自架在組織內部。這代表要為自架模型準備 GPU，也代表放棄該供應商最強但不符合零保留條件的旗艦模型。其中一個家族的供應商已被多國政府限制、有立法提案針對它，且獨立研究顯示它的輸出品質會被程式碼中與安全無關的敏感字詞影響。本報告不建議排除它，但要求它必須可在一週內被替換，而且替代方案要事先部署好；雛型已為三個家族各備妥一份替代設定並完成模擬排練，但尚未做過實地換模演練。</p>
+<p><strong>第一，模型的部署方式。</strong> 正式面板有兩個家族的資料會離開組織的網路：一個經雲端平台、在預設不儲存的承諾下，這個承諾是否等同原廠的零資料保留協議仍待法務確認；另一個的供應商會在有限期間內保留資料以偵測濫用，因此只在正式核准並記錄單號後才放行。第三個家族自架在組織內部，需要為它準備 GPU；我們也放棄了第一個供應商最強但不符合零保留條件的旗艦模型。自架家族與冷備援家族的供應商都是中國關聯來源：前者的開發商在美國的出口管制實體清單上，後者已被多國政府限制、有立法提案針對它，且獨立研究顯示它的輸出品質會被程式碼中與安全無關的敏感字詞影響。本報告不建議排除它們，但要求每個家族都能在一週內被替換，而且替代方案要事先部署好；雛型已為三個正式家族各備妥一份替代設定並完成模擬排練，但尚未做過實地換模演練，而且三份替代設定都指向同一個中國關聯家族，客戶若要求排除中國關聯模型，還需要另備一個家族。</p>
 <p><strong>第二，人力。</strong> 這個架構不減少安全團隊的工作，它改變工作的性質：從逐行看程式碼變成裁決模型之間的分歧、維護校準資料集、每季重跑校準。需要安全團隊每週保留固定時段處理人工佇列，每季約兩人週做校準，每季約一人週對三個家族做對抗性測試。</p>
 <p><strong>第三，導入時程。</strong> 六個月分三個階段：前兩個月只觀察不評論，建立基線；第三到五個月在合併請求上留建議但不阻擋；第六個月起只對最高兩級證據的高嚴重度發現阻擋合併；人工佇列積壓超過上限時，次一級證據的高嚴重度發現也改為阻擋，而不是在無人複核下放行。前五個月沒有阻擋效果，這是刻意的，因為在校準之前阻擋只會製造噪音與不信任。</p>
 <h3 id="s8">1.5 成本與代價</h3>
 <p>雲端家族的月成本在中型組織的量級下是數百到低數千美元，自架家族的成本取決於既有的 GPU 資產。真正的代價不在錢：是放棄旗艦模型、是安全團隊的工作型態改變、是前五個月的等待、是在客戶稽核時必須能說明用了哪些模型與資料流向。上海與重慶廠區必須有完全獨立的境內管線，其能力會低於全球管線，這是法律隔離的代價。</p>
 <h3 id="s9">1.6 這份報告不能告訴你的事</h3>
-<p>附帶的雛型在模擬的模型上展示了架構的主要機制（模擬審查，以及在五個植入漏洞的樣本上跑完的模擬校準迴圈），其後的程式審查仍陸續找出並修正了數個會使防線靜默失效的缺陷；它沒有真實模型的精確率或召回率數字，語意擾動的偏誤敏感度測試也尚未實作。在模擬審查中，三家族設定下 30 個發現有 22 個因獨立裁決者不足而轉人工複核。三個家族在數學上是不夠的，四個以上才能讓每個發現都有足夠的獨立裁決者。本次研究的環境封鎖了大量一手資料來源，附錄B 列出七十餘項查證缺口，其中對部署決策最重要的一項是美國標準機構對該中國模型最新版本的評估報告，本次只取得了標題。</p>
+<p>附帶的雛型在模擬的模型上展示了架構的主要機制（模擬審查，以及在五個植入漏洞的樣本上跑完的模擬校準迴圈），其後的程式審查仍陸續找出並修正了數個會使防線靜默失效的缺陷；它沒有真實模型的精確率或召回率數字，語意擾動的偏誤敏感度測試也尚未實作。在模擬審查中，三家族設定下 30 個發現有 22 個因獨立裁決者不足而轉人工複核。三個家族在數學上是不夠的，四個以上才能讓每個發現都有足夠的獨立裁決者。初版研究的環境封鎖了大量一手資料來源，其後的複核已補讀多數；附錄B 列出七十餘項查證缺口，對部署決策最重要的幾項都與正式面板有關：兩個新家族尚未以真實模型校準、設定檔中的模型名稱與廠商現行清單不符、雲端平台的不保留承諾是否等同零資料保留仍待法務確認。</p>
 <h3 id="s10">1.7 建議的批准事項</h3>
-<p>批准以下四件事，即可啟動第一階段：（1）以三個家族、兩個自架的拓樸建立影子模式管線；（2）與雲端供應商簽訂零資料保留協議並確認涵蓋範圍；（3）指派產品安全長為負責人，安全團隊每週保留人工佇列時段；（4）上海與重慶的境內管線由中國區 IT 與法務另案規劃，不併入全球時程。</p>
+<p>批准以下四件事，即可啟動第一階段：（1）以正式面板的三個家族（兩個雲端、一個自架）建立影子模式管線；（2）由法務確認雲端平台的不保留承諾涵蓋原始碼，並確認另一個雲端家族的有限期保留已正式核准（正式設定已附核准單號）；（3）指派產品安全長為負責人，安全團隊每週保留人工佇列時段；（4）上海與重慶的境內管線由中國區 IT 與法務另案規劃，不併入全球時程。</p>
 <h1 id="s11">第二部　背景與問題定義</h1>
 <h2 id="s12">第 2 章　Vibe Coding 帶來的安全債：實證現況</h2>
 <h3 id="s13">2.1 什麼是 Vibe Coding，以及它為什麼改變了審查的前提</h3>
@@ -151,7 +151,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,.tablewrap:focus-visibl
 <li>找問題、否證問題、裁決問題的 agent 必須來自不同模型家族，且家族多樣性要被量測（第三部、第 13 章）。</li>
 <li>每個 finding 都要有可機器驗證的來源證據，引用不存在的 finding 直接作廢（第 12 章）。</li>
 <li>分數由程式計算，不由模型宣告（第 11 章）。</li>
-<li>資料主權是架構約束：原始碼不得送往境外的模型 API，DeepSeek 只能以自架權重使用，上海與重慶廠區單獨處理（第八部、第十部）。</li>
+<li>資料主權是架構約束：原始碼只送往自架、零資料保留或經核准有限期保留的模型（第 7.1 節），DeepSeek、GLM 這類中國關聯來源只能以自架權重使用，上海與重慶廠區單獨處理（第八部、第十部）。</li>
 </ol>
 <h1 id="s28">第三部　技術架構</h1>
 <h2 id="s29">第 5 章　六層架構總覽</h2>
@@ -191,15 +191,18 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <h3 id="s38">6.6 L5：評分與輸出層</h3>
 <p>L5 不呼叫任何模型。它做四件事：（1）用移植自 FIRST 參考實作的計算器把 L2 的 CVSS 4.0 向量算成分數（捨入方式與參考實作的 <code>Math.round</code> 一致，並以全部 419,904 個 base×E 向量逐一比對），另把 judge 的嚴重度中位數列為「營運嚴重度」並列呈現，不修改 CVSS；向量無效的 finding 送人工佇列；（2）以家族權重計算加權共識分數與每個 finding 的家族一致度（agreement proxy），並計算整批的 Krippendorff&#x27;s α 寫入偏誤稽核；（3）依來源證據是否驗證、工具是否佐證、幾個家族同意、Skeptic 是否否證、可達性如何，指定證據層級 A 到 D；（4）用簡化的 SSVC 決策樹給出 Track、Track*、Attend 或 Act。最後產出 SARIF 2.1（含 <code>level</code>、<code>rank</code>、內容雜湊指紋 <code>partialFingerprints.maraContent/v1</code> 與 MARA 特有的 <code>properties</code>；指紋不含行號與排序編號，新增或刪除其他 finding 不會把 code scanning 的告警狀態搬到別的 finding 上）、Markdown 報告、JSON 報告與人工佇列。第四部第 11 章與第 12 章詳述。</p>
 <h2 id="s39">第 7 章　模型家族與部署拓樸</h2>
-<h3 id="s40">7.1 三個家族的角色與部署方式</h3>
-<p>本報告以使用者手邊的三個家族為基準：Anthropic Claude、DeepSeek、NVIDIA Nemotron。三者的部署方式不同，而部署方式決定了它們能碰什麼資料。</p>
-<p><strong>Anthropic Claude</strong> 透過 Anthropic API 或 Amazon Bedrock、Google Vertex AI、Microsoft Foundry 使用。Anthropic 的官方文件明載：保留的資料在未經明確許可下絕不用於訓練，且在零資料保留（ZDR）協議下對話內容預設不保留；但 Claude Fable 5.1、Mythos 5.1、Fable 5 與 Mythos 5 是「Covered Models」，需要 30 天資料保留、未經 Anthropic 明確授權不得在 ZDR 下使用，不符合的請求會回傳 400 錯誤<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（直接讀取官方文件）｜B81</span></span>。因此本架構在治理上的建議是：審查用 Opus 系列而非 Fable 系列，除非組織已取得授權且接受 30 天保留。報告初版建議的 Claude Opus 5（2026 年 7 月 24 日發布）在 2026 年 9 月 22 日 Opus 5.5 發布後列為舊版，仍可使用，退役不早於 2027 年 7 月 24 日<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B80、B124</span></span>；Opus 5.5 同樣可在 ZDR 下使用<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span>。雛型自 v0.4.1 起改指向 <code>claude-opus-5-5</code>，但尚未做換模演練，也還沒有以 Opus 5.5 做 live 校準；正式使用前這兩件事仍要補上，因為兩代模型處理資安請求的方式不同：Anthropic 的 Opus 5.5 公告寫明多數資安任務會被透明地轉給另一個模型（Opus 4.8）處理，日常開發流程中的找錯與修錯不在此限，但公告沒有界定安全審查落在哪一邊<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span>；Opus 5 與 Sonnet 5 則有即時的資安用途阻擋，而零資料保留的組織目前不能申請放寬<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B127</span></span>。ZDR 不是自動的，企業必須向 Anthropic 業務申請；它只適用於 Anthropic 自己擔任資料處理者的管道，經 Amazon Bedrock 或 Google Cloud 時由雲端供應商擔任資料處理者；Batch API 也不在 ZDR 範圍內<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>。雛型自 v0.4.2 起的正式設定改經 Bedrock 呼叫 Claude，設定檔仍把它標為 <code>vendor_api_zdr</code>；這依據的是 AWS 對 Bedrock 不儲存提示、不用於訓練的承諾，不是 Anthropic 的 ZDR 協議，兩者是否等同要由法務確認<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span>。ZDR 下 Anthropic 仍保留安全分類器的結果<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B82</span></span>。</p>
-<p><strong>DeepSeek</strong> 只能以自架權重使用。DeepSeek-V3.2 以 MIT 授權釋出並引入 DeepSeek Sparse Attention（實驗版 V3.2-Exp 於 2025 年 9 月 29 日、正式版於 2025 年 12 月 1 日發布，設定檔名標示 671B）<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜A75</span></span>。V4 系列的規格（V4-Pro 1.6T 總參數／49B 啟動、V4-Flash 284B／13B、1M 上下文）見官方 news 頁<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜A77</span></span>；權重以 MIT 授權、safetensors 格式發布於 Hugging Face 的 <code>deepseek-ai</code> 組織，官方 news 頁直接連到該處，GitHub 組織則沒有 V4 倉庫<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜A78</span></span>。版本更迭很快：V4-Pro 於 2026 年 8 月 13 日正式發布，9 月 10 日發布的 V4.1-Flash（552B MoE，MIT）則宣布淘汰 V4-Flash、逐步淘汰 V4-Pro<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B130</span></span>。雛型設定使用的仍是 V3.2。無論版本，本架構的規則是一致的：DeepSeek 的隱私政策載明資料儲存於中華人民共和國境內的伺服器<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">（原文未直接讀取）｜B88</span></span>，原始碼不得經由 DeepSeek 的 API 送出；只能把權重下載到組織內的 vLLM 或 NVIDIA NIM 上執行，而且設定檔必須明示 <code>data_residency: on_prem</code> 才允許把原始碼送給它。</p>
-<p><strong>NVIDIA Nemotron</strong> 透過 NVIDIA NIM 微服務部署。NIM 把權重與推論後端（支援 TensorRT-LLM、vLLM 或 SGLang）打包成容器，提供業界標準的 API（官方範例使用 OpenAI 用戶端），支援完全由客戶管理的地端部署<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B102</span></span>。Nemotron 3 家族於 2025 年 12 月 15 日預告<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B100</span></span>；實際發布的規格與授權以 Hugging Face 上的官方模型卡為準：Nano 30B（約 3.5B 啟動，2025-12-15）與 Super 120B（12B 啟動，2026-03-11）採 NVIDIA Nemotron Open Model License，Ultra 550B（55B 啟動，2026-06-04）採 OpenMDW-1.1<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B131</span></span>。地端部署的性質使它成為三個家族中資料主權保證最強的一個：沒有任何資料離開組織的網路，這比任何契約性的 ZDR 都強。</p>
+<h3 id="s40">7.1 正式面板的三個家族與冷備援</h3>
+<p>本報告初版以使用者當時手邊的三個家族為基準：Anthropic Claude、DeepSeek、NVIDIA Nemotron。雛型自 v0.4.2（2026 年 10 月 6 日）起改用新的正式面板：Amazon Bedrock 上的 Anthropic Claude、經 Gemini API 付費層呼叫的 Google Gemini，以及在 IEC 網路內自架的智譜（Z.ai）GLM；DeepSeek 退為三份冷備設定共用的替代家族，Nemotron 只留在境內範例設定與 mock 測試中。各家族的部署方式不同，而部署方式決定了它們能碰什麼資料：Claude 與 Gemini 跨越組織邊界，前者依雲端平台的不保留承諾，後者依逐模型核准的有限期保留；GLM 與冷備援的 DeepSeek 不離開組織網路。</p>
+<p><strong>Anthropic Claude（正式面板經 Amazon Bedrock）</strong> 可透過 Anthropic API 或 Amazon Bedrock、Google Vertex AI、Microsoft Foundry 使用。Anthropic 的官方文件明載：保留的資料在未經明確許可下絕不用於訓練，且在零資料保留（ZDR）協議下對話內容預設不保留；但 Claude Fable 5.1、Mythos 5.1、Fable 5 與 Mythos 5 是「Covered Models」，需要 30 天資料保留、未經 Anthropic 明確授權不得在 ZDR 下使用，不符合的請求會回傳 400 錯誤<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（直接讀取官方文件）｜B81</span></span>。因此本架構在治理上的建議是：審查用 Opus 系列而非 Fable 系列，除非組織已取得授權且接受 30 天保留。報告初版建議的 Claude Opus 5（2026 年 7 月 24 日發布）在 2026 年 9 月 22 日 Opus 5.5 發布後列為舊版，仍可使用，退役不早於 2027 年 7 月 24 日<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B80、B124</span></span>；Opus 5.5 同樣可在 ZDR 下使用<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span>。雛型自 v0.4.1 起改指向 <code>claude-opus-5-5</code>，但尚未做換模演練，也還沒有以 Opus 5.5 做 live 校準；正式使用前這兩件事仍要補上，因為兩代模型處理資安請求的方式不同：Anthropic 的 Opus 5.5 公告寫明多數資安任務會被透明地轉給另一個模型（Opus 4.8）處理，日常開發流程中的找錯與修錯不在此限，但公告沒有界定安全審查落在哪一邊<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span>；Opus 5 與 Sonnet 5 則有即時的資安用途阻擋，而零資料保留的組織目前不能申請放寬<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B127</span></span>。ZDR 不是自動的，企業必須向 Anthropic 業務申請；它只適用於 Anthropic 自己擔任資料處理者的管道，經 Amazon Bedrock 或 Google Cloud 時由雲端供應商擔任資料處理者；Batch API 也不在 ZDR 範圍內<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>。ZDR 下 Anthropic 仍保留安全分類器的結果<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B82</span></span>。</p>
+<p>雛型自 v0.4.2 起的正式設定改經 Bedrock 呼叫 Claude（<code>global.anthropic.claude-opus-5-5</code>，SigV4 與 AWS 預設憑證鏈）。Bedrock 的文件寫明它採零資料保留的資料安全模型，預設不儲存模型的輸入與輸出；例外是被濫用偵測標記的流量與少數指定模型，最多保留 30 天，其中 Claude Fable 5 與 5.1 的全部流量都會保留；被保留的資料由 AWS 儲存與處理，不分享給模型供應商，模型供應商也接觸不到客戶的提示與回應<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B137</span></span>；AWS 另稱資料不用於改進基礎模型<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B149</span></span>。模型呼叫紀錄（model invocation logging）預設關閉<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B137</span></span>，帳戶若開啟它，紀錄裡就是原始碼。正式設定使用 <code>global.</code> 跨區推論設定檔，它的資料駐留範圍是「全球任一支援的 AWS 商用區域」，流量留在 AWS 網路內、不經公共網際網路，被保留的輸入與輸出存放在實際處理的目的區域；需要固定區域的廠區應改用地理範圍的設定檔（Opus 5.5 只有美國、歐盟、澳洲與日本），或以 SCP 擋下 <code>global.</code> 設定檔<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B138</span></span>。設定檔把這條路徑標為 <code>vendor_api_zdr</code>，依據是 AWS 的承諾而不是 Anthropic 的 ZDR 協議；Bedrock 新增的資料保留模式設定對 Opus 5.5 是否提供「不保留」，文件沒有載明，兩者是否等同要由法務確認<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span>。</p>
+<p><strong>Google Gemini（正式面板經 Gemini API 付費層）</strong> 以 REST 呼叫 Gemini API，金鑰放在標頭而不進 URL。Gemini API 的附加服務條款寫明：付費服務的提示（含 system instruction、快取內容與檔案）與回應不用於改進 Google 的產品，但 Google 會「在有限期間內」記錄提示與回應，只用於偵測與防止違反禁止使用政策，條款沒有寫天數；免費服務則相反，資料會用於改進產品，且可能由人工審閱者閱讀<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B139</span></span>。所以付費層也不是零資料保留：Google 自己的 ZDR 文件指出 Search 與 Maps grounding 會把資料存 30 天、無法關閉，並建議需要保證零資料保留或企業資料處理協議的工作負載改用 Vertex AI<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B140</span></span>。雛型因此把它標為 <code>vendor_api_retained</code>（廠商保留一段期間、不用於訓練），policy P5 只在該模型自帶核准單號（<code>retention_approval_ref</code>，正式設定為 20261006-GISMD-Approve-01）時放行，任何沒有單號的保留型模型照樣拒載；本架構不使用 grounding。模型版本的漂移比其他家族快：設定檔的 <code>gemini-3-pro</code> 是暫定值，而 Gemini API 現行的 Pro 級模型是仍屬 preview 的 <code>gemini-3.1-pro-preview</code>（2026 年 2 月 19 日發布），舊的 <code>gemini-3-pro-preview</code> 已於 2026 年 3 月 9 日關閉、改指向 3.1 Pro<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B141</span></span>；第一次 live 執行前必須對照金鑰的模型清單改成實際的 ID。公開的資安評估只有廠商自評：Google DeepMind 的 Frontier Safety Framework 報告稱 Gemini 3 Pro 在 Cyber Uplift Level 1 達到警示門檻、未達關鍵能力水準，3.1 Pro 的 model card 結論相同<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B142</span></span>；本次沒有找到 CAISI 或英國 AISI 對 Gemini 3 系列的獨立評估<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span>。</p>
+<p><strong>智譜 GLM（正式面板在 IEC 網路內自架）</strong> 透過組織內的 OpenAI 相容端點使用（第 7.2 節）。Z.ai 在 Hugging Face 的 <code>zai-org</code> 組織以開放權重發布 GLM 系列，自 2025 年 7 月的 GLM-4.5 起約每兩到三個月一版，最新是 2026 年 8 月 25 日的 GLM-5.3 與 GLM-5.3-Flash；GLM-5.3-Flash 的模型卡標示 MIT 授權、約 320B 總參數與 18B 啟動參數、FP8 權重，同時發布的 GLM-5.3（約 753B）則改用自訂的「glm-5.3」授權，不是 MIT<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B143</span></span>。設定檔的 <code>GLM-5.3-Flash-FP8</code> 是部署端的模型名稱，Hugging Face 上沒有同名倉庫；實際下載的倉庫、版本與雜湊要由 IEC 平台團隊填進 ML-BOM，目前仍是 PENDING。智譜是中國關聯來源：美國商務部 BIS 於 2025 年 1 月 16 日把北京智譜華章（Zhipu AI）與其北京、杭州、上海、深圳的關係企業列入實體清單，理由是以先進 AI 研究協助中國的軍事現代化<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B144</span></span>。實體清單管制的是對這些企業的出口與移轉，自架其公開權重是否衍生任何義務，本報告未查證<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span>。Z.ai 的隱私政策稱個人資料一般在新加坡處理、API 內容不儲存<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B145</span></span>，中國境內 bigmodel.cn 的條款本次未讀<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span>；無論條款怎麼寫，本架構對 GLM 的規則與 DeepSeek 相同：policy P2 只准它經 OpenAI 相容端點連到私有網段或宣告的私有 DNS 區（正式設定為 <code>.iec.inventec</code>），並拒絕 bigmodel.cn 與 z.ai 的廠商 API。</p>
+<p><strong>DeepSeek（冷備援）</strong> 只能以自架權重使用。DeepSeek-V3.2 以 MIT 授權釋出並引入 DeepSeek Sparse Attention（實驗版 V3.2-Exp 於 2025 年 9 月 29 日、正式版於 2025 年 12 月 1 日發布，設定檔名標示 671B）<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜A75</span></span>。V4 系列的規格（V4-Pro 1.6T 總參數／49B 啟動、V4-Flash 284B／13B、1M 上下文）見官方 news 頁<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜A77</span></span>；權重以 MIT 授權、safetensors 格式發布於 Hugging Face 的 <code>deepseek-ai</code> 組織，官方 news 頁直接連到該處，GitHub 組織則沒有 V4 倉庫<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜A78</span></span>。版本更迭很快：V4-Pro 於 2026 年 8 月 13 日正式發布，9 月 10 日發布的 V4.1-Flash（552B MoE，MIT）則宣布淘汰 V4-Flash、逐步淘汰 V4-Pro<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B130</span></span>。雛型的三份冷備設定使用自架的 V4-Flash（<code>deepseek-v4-flash-fp8</code>），境內範例設定仍用 V3.2；V4-Flash 已被廠商宣布淘汰，而這份權重正是附錄B 第 20 項無法確認正式來源者，還沒有 ML-BOM 項目。無論版本，本架構的規則是一致的：DeepSeek 的隱私政策載明資料儲存於中華人民共和國境內的伺服器<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">（原文未直接讀取）｜B88</span></span>，原始碼不得經由 DeepSeek 的 API 送出；只能把權重下載到組織內的 vLLM 或 NVIDIA NIM 上執行，而且設定檔必須明示 <code>data_residency: on_prem</code> 才允許把原始碼送給它。</p>
+<p><strong>NVIDIA Nemotron（初版面板）</strong> 透過 NVIDIA NIM 微服務部署。NIM 把權重與推論後端（支援 TensorRT-LLM、vLLM 或 SGLang）打包成容器，提供業界標準的 API（官方範例使用 OpenAI 用戶端），支援完全由客戶管理的地端部署<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B102</span></span>。Nemotron 3 家族於 2025 年 12 月 15 日預告<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B100</span></span>；實際發布的規格與授權以 Hugging Face 上的官方模型卡為準：Nano 30B（約 3.5B 啟動，2025-12-15）與 Super 120B（12B 啟動，2026-03-11）採 NVIDIA Nemotron Open Model License，Ultra 550B（55B 啟動，2026-06-04）採 OpenMDW-1.1<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B131</span></span>。地端部署的性質使它成為初版三個家族中資料主權保證最強的一個：沒有任何資料離開組織的網路，這比任何契約性的 ZDR 都強。它目前只出現在境內範例設定（<code>config/examples/prc-site.yaml</code>）與 mock 測試中；正式面板的地端角色由 GLM 承擔。</p>
 <h3 id="s41">7.2 OpenAI 相容端點作為自架模型的共通介面</h3>
-<p>雛型對自架的家族使用同一個 provider（初版是 DeepSeek 與 Nemotron；v0.4.2 起的正式面板是 IEC 內網自架的 GLM，DeepSeek 改當冷備援）：以 httpx 呼叫 <code>/v1/chat/completions</code>，以 <code>response_format: json_schema</code> 要求結構化輸出，回傳的文字再由呼叫端以 pydantic 重新驗證。這個選擇有三個理由：vLLM、NIM 與 SGLang 都提供這個介面；不引入任何廠商 SDK 讓「換掉一個家族」只需改設定檔；同一個介面讓校準迴圈可以公平地比較家族。Claude 則使用官方 anthropic SDK（直接連 Anthropic API，或經 Amazon Bedrock），以 <code>output_config.format</code> 取得保證合法的 JSON，並在 <code>stop_reason</code> 為 refusal 時把該次呼叫記為棄權而非空結果。兩個 provider 都把拒答、截斷（輸出達上限或 JSON 無效）與連線錯誤分開記錄，任何一種都會讓該次審查標記為不完整；OpenAI 相容 provider 另以 temperature 0 呼叫、忽略代理伺服器環境變數，對暫時性錯誤（408、429、5xx）最多重試三次（指數退避或依 <code>Retry-After</code>，上限 30 秒），設定檔也只接受 https 或僅限 loopback 的 http 端點。v0.4.2 另新增 Gemini API 的 provider（REST 呼叫、以 <code>responseJsonSchema</code> 要求結構化輸出），正式面板因此是 Bedrock 上的 Claude、付費層的 Gemini 與自架的 GLM；但本報告的模型比較只涵蓋 Claude、DeepSeek 與 Nemotron，Gemini 與 GLM 尚未評估（附錄B 第 75 項）。</p>
+<p>雛型對自架的家族使用同一個 provider（初版是 DeepSeek 與 Nemotron；v0.4.2 起的正式面板是 IEC 內網自架的 GLM，DeepSeek 改當冷備援）：以 httpx 呼叫 <code>/v1/chat/completions</code>，以 <code>response_format: json_schema</code> 要求結構化輸出，回傳的文字再由呼叫端以 pydantic 重新驗證。這個選擇有三個理由：vLLM、NIM 與 SGLang 都提供這個介面；不引入任何廠商 SDK 讓「換掉一個家族」只需改設定檔；同一個介面讓校準迴圈可以公平地比較家族。Claude 則使用官方 anthropic SDK（直接連 Anthropic API，或經 Amazon Bedrock），以 <code>output_config.format</code> 取得保證合法的 JSON，並在 <code>stop_reason</code> 為 refusal 時把該次呼叫記為棄權而非空結果。兩個 provider 都把拒答、截斷（輸出達上限或 JSON 無效）與連線錯誤分開記錄，任何一種都會讓該次審查標記為不完整；OpenAI 相容 provider 另以 temperature 0 呼叫、忽略代理伺服器環境變數，對暫時性錯誤（408、429、5xx）最多重試三次（指數退避或依 <code>Retry-After</code>，上限 30 秒），設定檔也只接受 https 或僅限 loopback 的 http 端點。v0.4.2 另新增 Gemini API 的 provider（REST 呼叫 <code>generateContent</code>、以 <code>responseJsonSchema</code> 要求結構化輸出、思考段落不解析；<code>MAX_TOKENS</code> 記為截斷，<code>blockReason</code>、安全類停止與空回覆記為拒答，重試規則與 OpenAI 相容 provider 相同）；OpenAI 相容 provider 同時新增 <code>ca_bundle</code>，讓 IEC 內部 CA 簽發的端點憑證只被加入預設信任清單，不取代也不關閉驗證。第 20 章依這個正式面板比較家族；Gemini 與 GLM 都還沒有以真實模型做過校準（附錄B 第 75 項）。</p>
 <h3 id="s42">7.3 可抽換性是採購需求，不是工程偏好</h3>
-<p>第 2.4 節提到台灣行政院的公務機關禁令<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B91</span></span>；第 7.1 節提到 DeepSeek 的資料儲存地。此外，義大利 Garante 於 2025 年 1 月 30 日對 DeepSeek 下達即時的資料處理限制令<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B89</span></span>，澳洲內政部於 2025 年 2 月 4 日發布 PSPF Direction 要求聯邦機關移除 DeepSeek<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜B93、A80</span></span>，美國國會有四項已提出但未通過的法案（S.765、H.R.1121、S.2177、H.R.4142），至 2026 年 10 月 6 日都還停在交付委員會的階段<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（Congress.gov 官方 API）｜A82、A83</span></span>。這些都不直接禁止民間企業自架 DeepSeek 權重，但一家跨國 ODM 的客戶（尤其是政府或受管制產業的客戶）在稽核時可能因「模型出處」而拒絕接受以 DeepSeek 參與審查的交付物。因此架構必須從第一天就提供降級路徑：設定檔以「家族」抽象模型，DeepSeek 可換成 Qwen、Llama 4 或 Mistral 的自架模型而不改變任何流程。Meta 的 Llama 4 模型卡明載其授權為自訂的 Community License，含 7 億月活躍使用者的門檻<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（直接讀取 GitHub）｜B106</span></span>；Qwen3 以 Apache 2.0 釋出但同屬中國關聯來源<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B107</span></span>。「可抽換」在這裡不是為了工程整潔，而是為了在客戶提出要求時能在一週內換掉一個家族。</p>
+<p>第 2.4 節提到台灣行政院的公務機關禁令<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B91</span></span>；第 7.1 節提到 DeepSeek 的資料儲存地。此外，義大利 Garante 於 2025 年 1 月 30 日對 DeepSeek 下達即時的資料處理限制令<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B89</span></span>，澳洲內政部於 2025 年 2 月 4 日發布 PSPF Direction 要求聯邦機關移除 DeepSeek<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜B93、A80</span></span>，美國國會有四項已提出但未通過的法案（S.765、H.R.1121、S.2177、H.R.4142），至 2026 年 10 月 6 日都還停在交付委員會的階段<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（Congress.gov 官方 API）｜A82、A83</span></span>。正式面板的 GLM 有同樣的問題，而且更直接：它的開發商在美國實體清單上<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B144</span></span>；台灣對智譜或 GLM 是否有類似 DeepSeek 的公務機關禁令，本次未找到<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span>。這些都不直接禁止民間企業自架 DeepSeek 或 GLM 的權重，但一家跨國 ODM 的客戶（尤其是政府或受管制產業的客戶）在稽核時可能因「模型出處」而拒絕接受以中國關聯模型參與審查的交付物。因此架構必須從第一天就提供降級路徑：設定檔以「家族」抽象模型，任何一個家族都可換成 Qwen、Llama 4 或 Mistral 的自架模型而不改變任何流程。雛型現有的三份冷備設定都以地端 DeepSeek 替代一個家族；用它替代 GLM 只換掉一個中國關聯來源、換上另一個，不能回應「排除中國關聯模型」的要求，這種要求需要另備一個非中國關聯的自架家族。Meta 的 Llama 4 模型卡明載其授權為自訂的 Community License，含 7 億月活躍使用者的門檻<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（直接讀取 GitHub）｜B106</span></span>；Qwen3 以 Apache 2.0 釋出但同屬中國關聯來源<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B107</span></span>。「可抽換」在這裡不是為了工程整潔，而是為了在客戶提出要求時能在一週內換掉一個家族。</p>
 <h2 id="s43">第 8 章　資料流與信任邊界</h2>
 <pre tabindex="0"><code>[開發者 PR] ──► [GitHub] ──► job A: L0 工具（隔離 runner，只讀 checkout，SHA-pinned actions，permissions: contents: read）
                               │  SARIF
@@ -208,16 +211,17 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
                               │
               ┌───────────────┼──────────────────┐
               ▼               ▼                  ▼
-        Claude Opus 5.5   DeepSeek (vLLM)    Nemotron (NIM)
-        Anthropic API     組織內網            組織內網
-        ZDR 協議          無資料離境          無資料離境
+        Claude Opus 5.5   Gemini             GLM（自架）
+        Amazon Bedrock    Gemini API 付費層   IEC 網路內
+        預設不儲存        有限期保留＋核准    無資料離境
+                                              （冷備援：自架 DeepSeek）
               └───────────────┴──────────────────┘
                               │ 結構化 JSON（schema 驗證）
                               ▼
                        L5 評分 → SARIF → code scanning / 人工佇列
 </code></pre>
 <p>上圖是目標部署。雛型 CI 只實作 job A，以及以 mock 家族驗證 pipeline 的測試 job；後者會 checkout 並執行本 repo 自己的測試，但沒有 secret、不呼叫任何模型。CI 另有只具 <code>security-events: write</code> 的 code scanning 上傳 job，以及推上 main 後才執行、只具 <code>issues: write</code> 的人工佇列 job（預設 dry-run）。真實模型的審查在能連到端點的主機上執行（第 14.1 節）。</p>
-<p>信任邊界有四條。第一條在 PR 與 L0 之間：workflow 只能以 <code>pull_request</code> 觸發，禁止 <code>pull_request_target</code> 加 checkout PR head 的組合，這是 GitHub Security Lab 定義的 pwn request<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C7.4</span></span>；2025 年 3 月的 tj-actions/changed-files 事件（CVE-2025-30066）中，攻擊者把多個版本標籤回溯重指向惡意 commit，影響逾 23,000 個倉庫，是 SHA pinning 最強的理由<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（GitHub Advisory 直接讀取）｜C7.14</span></span>。第二條在 L0 與模型之間：模型只讀原始碼文字（已遮蔽機密值、排除機密檔），不讀工具結果，不執行任何東西；live 模式在送出原始碼前另以 gitleaks 預檢，發現機密即阻擋外送並標記審查不完整。第三條在組織與模型供應商之間：只有 Claude 跨越這條邊界，而且只在 ZDR 下；DeepSeek 與 Nemotron 不跨越。第四條在模型輸出與評分之間：所有輸出都是不可信的，經 schema、來源證據與標準 ID 三重驗證後才進入 L5。</p>
+<p>信任邊界有四條。第一條在 PR 與 L0 之間：workflow 只能以 <code>pull_request</code> 觸發，禁止 <code>pull_request_target</code> 加 checkout PR head 的組合，這是 GitHub Security Lab 定義的 pwn request<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C7.4</span></span>；2025 年 3 月的 tj-actions/changed-files 事件（CVE-2025-30066）中，攻擊者把多個版本標籤回溯重指向惡意 commit，影響逾 23,000 個倉庫，是 SHA pinning 最強的理由<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（GitHub Advisory 直接讀取）｜C7.14</span></span>。第二條在 L0 與模型之間：模型只讀原始碼文字（已遮蔽機密值、排除機密檔），不讀工具結果，不執行任何東西；live 模式在送出原始碼前另以 gitleaks 預檢，發現機密即阻擋外送並標記審查不完整。第三條在組織與模型供應商之間：正式面板中 Claude 與 Gemini 跨越這條邊界，Claude 經 Bedrock、在預設不儲存的條件下，Gemini 在廠商有限期保留、逐模型核准的條件下；GLM 與冷備援的 DeepSeek 不跨越。初版面板只有 Claude 跨越這條邊界，新面板把跨界的家族增為兩個，而 Gemini 的跨界不是零保留，這是換面板時刻意接受、以核准單號記錄的代價。第四條在模型輸出與評分之間：所有輸出都是不可信的，經 schema、來源證據與標準 ID 三重驗證後才進入 L5。</p>
 <h2 id="s44">第 9 章　Prompt Injection 防線</h2>
 <p>本架構對 prompt injection 的防線有五道，全部在雛型中實作。</p>
 <p>第一道是資料與指令的分離。被審查的內容以 <code>&lt;untrusted_repository_data&gt;</code> 包裹並逐行編號，system prompt 明示其中一切都是資料。OWASP 指出這無法完全緩解 LLM01<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B43</span></span>，所以它只是第一道。</p>
@@ -330,7 +334,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <p>DREAD（Damage、Reproducibility、Exploitability、Affected users、Discoverability）常被引用為 Microsoft 在 2008 年前後因評分主觀且不一致而棄用；但本次研究找不到 Microsoft 的一手棄用聲明，這個說法只能以實務共識的層級陳述<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜C12.6</span></span>。無論出處，DREAD 的問題在本架構中會被放大：五個主觀維度交給 LLM 打分，正是第 11.1 節要避免的事。OWASP Risk Rating Methodology 的 16 個子因子（威脅代理四項、弱點四項、技術影響四項、業務影響四項，各 0 到 9）<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C12.2</span></span>比 DREAD 結構化得多，是強迫 LLM 輸出固定 schema 的理想格式；但它的業務影響四項（財務、聲譽、合規、隱私）需要組織脈絡，不適合由審查 agent 判斷。本架構的取捨是：技術面用 CVSS 4.0（可重算、業界可比），行動面用 SSVC（決策導向），業務影響留給人工佇列。</p>
 <h3 id="s63">11.4 面向分數與閘門</h3>
 <p>每個面向從 100 分起算，每個被採納的 finding 依嚴重度扣分（Critical 40、High 25、Medium 10、Low 3），再乘以證據層級係數（A 1.0、B 0.8、C 0.4、D 0），最低 0 分。整體分數是十一個面向的平均。閘門在下列情況不通過：任何被採納的 A 級或 B 級 finding 嚴重度為 High 或 Critical；任何面向分數低於 60；或審查不完整（必要工具未執行、任何拒答、截斷或 canary 回應、仍有待人工裁決的 finding、有未處理的工具 error／warning 結果），此時整體分數為 null，不給出一個看似可信的平均。C 級 High 以上的 finding 平時進入人工佇列；佇列積壓超過上限時改為直接阻擋，並把一致度門檻提高 0.1。這些數字都在設定檔中，是起始值而非定論；第五部的校準迴圈會修正它們。</p>
-<p>雛型 v0.3.22 在 fixture 上的實際輸出如下（三個 mock 家族、預錄的 semgrep、gitleaks、zizmor 與 csp-evaluator SARIF；與 CI 相同的指令，2026 年 10 月 6 日重跑）：審查狀態為 incomplete，整體分數為 null，閘門阻擋。不完整的原因有四：osv-scanner 與 trivy 沒有預錄結果、Nemotron 刻意拒答一次、人工佇列未清空、工具結果未處理。61 個原始 finding 去重為 30 個，其中 6 個被採納（2 個 A 級、4 個 B 級，2 個為 High），其餘 24 個全部進入人工佇列，沒有任何 finding 被靜默拒絕；24 個中有 22 個的原因是獨立 judge 不足（第 13 章第 7 項）。面向分數最低的是 GitHub Actions 75 分、認證授權與 XSS 各 80 分。機密外洩面向得 100 分，原因不是沒有缺陷：fixture 的預錄回覆引用了原始的機密值，而 bundle 在送出前已把機密值遮蔽為 <code>[REDACTED]</code>，兩個機密 finding 因此無法通過引用驗證而落為 D 級。真實模型只會看到遮蔽後的文字，不會遇到這個落差；它是 fixture 需要隨遮蔽功能更新的地方，而不是真實審查的盲點。這個結果與初版報告（2026 年 9 月）記載的「67.0 分、27 個採納」相去甚遠，差異來自之後補上的 fail-closed 規則：管線寧可把 finding 交給人，也不在證據不足時自動採納。</p>
+<p>雛型 v0.3.22 在 fixture 上的實際輸出如下（三個 mock 家族、預錄的 semgrep、gitleaks、zizmor 與 csp-evaluator SARIF；與 CI 相同的指令，2026 年 10 月 6 日重跑；<code>--provider mock</code> 的 mock 面板沿用初版的 Anthropic、DeepSeek、Nemotron 三個家族標籤，不隨正式面板改變，2026 年 10 月 7 日以 v0.4.2 重跑，下列計數與面向分數相同）：審查狀態為 incomplete，整體分數為 null，閘門阻擋。不完整的原因有四：osv-scanner 與 trivy 沒有預錄結果、Nemotron 刻意拒答一次、人工佇列未清空、工具結果未處理。61 個原始 finding 去重為 30 個，其中 6 個被採納（2 個 A 級、4 個 B 級；營運嚴重度為 High 的 2 個，CVSS 4.0 嚴重度為 High 的 3 個），其餘 24 個全部進入人工佇列，沒有任何 finding 被靜默拒絕；24 個中有 22 個的原因是獨立 judge 不足（第 13 章第 7 項）。面向分數最低的是 GitHub Actions 75 分、認證授權與 XSS 各 80 分。機密外洩面向得 100 分，原因不是沒有缺陷：fixture 的預錄回覆引用了原始的機密值，而 bundle 在送出前已把機密值遮蔽為 <code>[REDACTED]</code>，兩個機密 finding 因此無法通過引用驗證而落為 D 級。真實模型只會看到遮蔽後的文字，不會遇到這個落差；它是 fixture 需要隨遮蔽功能更新的地方，而不是真實審查的盲點。這個結果與初版報告（2026 年 9 月）記載的「67.0 分、27 個採納」相去甚遠，差異來自之後補上的 fail-closed 規則：管線寧可把 finding 交給人，也不在證據不足時自動採納。</p>
 <h3 id="s64">11.5 校準：從 seeded benchmark 到家族權重</h3>
 <p>家族權重的初始值都是 1.0，這是無知的表現而不是判斷。校準迴圈的做法是：以帶標籤的漏洞語料跑完整管線，計算每個家族在每個 CWE 類別上的精確度與召回率，再以 Dawid-Skene 型的 EM 估計家族可靠度，產出建議權重。雛型目前只有 5 個依第 2.2 節研究特徵自製的 vibe-coded 樣本（51 個標籤）；OWASP Juice Shop 與 WebGoat 只提供下載腳本，尚未標註。建議權重的公式是 0.6 ×（0.5 + F1）+ 0.4 ×（2 × DS 可靠度），夾在 0.2 到 2.0 之間，再依被 Skeptic 否證的比率、無效輸出率（超過 10% 時乘 0.8）與紅隊測試結果折抵；它只是建議值，須經人工核定才寫入設定檔。截至 2026 年 10 月 6 日，校準只以 mock 家族執行過。Dawid 與 Skene 於 1979 年提出的演算法能在沒有金標準的情況下同時估計每個項目的真實標籤與每個標註者的混淆矩陣<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B62</span></span>；近期研究已建議在 LLM 標註者一致度低時改用 Dawid-Skene<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">（preprint）｜B63</span></span>，也有研究實際以它彙整多個 LLM 的預測<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">（preprint）｜B64</span></span>。惡意軟體分類的實證則顯示，平權多數決已勝過最強的單一模型，不分層的加權投票反而略遜於平權投票；階層加權的最終版本只多約 1 個百分點的 accuracy、Macro-F1 相同，也沒有做顯著性檢定<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">（preprint）｜B68</span></span>。所以增益主要來自集成本身，本架構「先分層再加權」的順序是設計選擇，目前沒有實證支持它比平權投票更好。</p>
 <p>校準必須每季重跑。模型會被供應商更新，自架權重會升版，任何一次升版都會讓舊權重失效。這不是假設：本報告初版（2026 年 9 月）建議的 Claude Opus 5，在 9 月 22 日 Opus 5.5 發布後列為舊版模型<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B79、B124</span></span>（Opus 5 系統卡的內容至今未讀取<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜B85</span></span>）。這是第九部列出的限制之一。</p>
@@ -493,7 +497,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<p>第 14 項需要說明。CrowdStrike 於 2025 年 11 月報告，DeepSeek-R1 在中性提示下產出弱點程式碼的比率約 19%，與同儕相當；但當提示中含有與程式任務無關的政治敏感詞（西藏、法輪功、維吾爾）時，嚴重弱點的機率最多上升 50%，例如為「一家設在西藏的金融機構」寫支付處理程式時出現硬編碼 secret 與較不安全的資料抽取方式；報告並記錄了模型規劃完完整技術回應後拒絕輸出程式碼的「內建開關」（intrinsic kill switch）<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">（廠商研究）｜B97</span></span>。這項發現若成立，意味著 DeepSeek 作為審查者的輸出品質取決於被審查程式碼中是否恰好出現某些與安全無關的字串，而這在真實程式庫中是不可控的變數。本報告不因此排除 DeepSeek，但要求：它只能是三個家族之一而非唯一；校準集必須包含含敏感詞與不含敏感詞的配對樣本，量測其輸出差異；差異顯著時降低其權重。NIST CAISI 於 2025 年 9 月 30 日的評估（對象為 R1、R1-0528 與 V3.1）另指出 DeepSeek 模型被誘導偏離使用者任務的機率是美國前沿模型的約 12 倍、在常見 jailbreak 手法下回應 94% 的明顯惡意請求（美國參考模型為 8%）<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B95</span></span>；2026 年 5 月 1 日對 V4 Pro 的評估只量測能力，結論是落後前沿約 8 個月、cyber CTF 基準 32%，沒有 jailbreak 或 agent hijacking 等安全面的結果，所以上述安全結論還沒有 V4 的版本<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B96</span></span>。</p>
+<p>第 14 項需要說明。CrowdStrike 於 2025 年 11 月報告，DeepSeek-R1 在中性提示下產出弱點程式碼的比率約 19%，與同儕相當；但當提示中含有與程式任務無關的政治敏感詞（西藏、法輪功、維吾爾）時，嚴重弱點的機率最多上升 50%，例如為「一家設在西藏的金融機構」寫支付處理程式時出現硬編碼 secret 與較不安全的資料抽取方式；報告並記錄了模型規劃完完整技術回應後拒絕輸出程式碼的「內建開關」（intrinsic kill switch）<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">（廠商研究）｜B97</span></span>。這項發現若成立，意味著 DeepSeek 作為審查者的輸出品質取決於被審查程式碼中是否恰好出現某些與安全無關的字串，而這在真實程式庫中是不可控的變數。本報告不因此排除 DeepSeek，但要求：它只能是三個家族之一而非唯一；校準集必須包含含敏感詞與不含敏感詞的配對樣本，量測其輸出差異；差異顯著時降低其權重。正式面板的 GLM 同為中國開發的模型，本次沒有找到針對它的同類研究<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span>，但同一套配對樣本應同樣適用於它。NIST CAISI 於 2025 年 9 月 30 日的評估（對象為 R1、R1-0528 與 V3.1）另指出 DeepSeek 模型被誘導偏離使用者任務的機率是美國前沿模型的約 12 倍、在常見 jailbreak 手法下回應 94% 的明顯惡意請求（美國參考模型為 8%）<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B95</span></span>；2026 年 5 月 1 日對 V4 Pro 的評估只量測能力，結論是落後前沿約 8 個月、cyber CTF 基準 32%，沒有 jailbreak 或 agent hijacking 等安全面的結果，所以上述安全結論還沒有 V4 的版本<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B96</span></span>。</p>
 <p>第 7 項是整個目錄中最不能省略的一項。三個家族的設定在數學上很脆弱：一個 finding 若被兩個家族同時發現，只剩一個獨立的 judge；fixture 的稽核顯示有 53 個「judge 家族 × finding」組合只能由發現者的同家族審理（正反序共 106 張折半票），這些票不補足獨立家族數，使 30 個 finding 中有 22 個因獨立 judge 不足而轉人工佇列。ICML 2025 的證據說明即使真正獨立的家族，其錯誤仍高度相關【B17、B18】。因此第十部的建議之一是把家族數擴到四個以上（例如加入自架的 Llama 4 或 Mistral），而不是把三家族視為足夠。</p>
 <h1 id="s73">第五部　使用流程</h1>
 <h2 id="s74">第 14 章　三種觸發模式</h2>
@@ -521,11 +525,11 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <p>審查系統本身是一個處理組織最敏感資產（原始碼、憑證、架構）的系統。本部依 OWASP 的 Agentic AI 威脅分類與 LLM Top 10 檢視它自己的風險。</p>
 <h2 id="s84">第 16 章　審查系統的六類風險</h2>
 <h3 id="s85">16.1 原始碼外洩</h3>
-<p>這是最直接的風險。原始碼會經過三條路徑：送往 Anthropic API、送往組織內的 vLLM 或 NIM、存放在 Actions 的 artifact 與日誌中。第一條路徑的控制是 ZDR 協議與模型選擇（第 7.1 節）；Anthropic 的文件明載 Fable 系列不在 ZDR 範圍內<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>，而且 code execution 工具與 programmatic tool calling 不符合 ZDR<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>，本架構不使用這兩者。第二條路徑的控制是網路隔離：vLLM 與 NIM 的端點只能從 runner 的網段存取，且 DeepSeek 權重的部署主機不得有出口網路。第三條路徑最常被忽略：GitHub Actions 的日誌是公開倉庫的公開內容，私有倉庫的 artifact 也有保留期；tj-actions 事件的 payload 正是從記憶體掃出 secret、以 base64 編碼後寫進公開的 workflow 日誌<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C7.14</span></span>。雛型在送出前就以程式遮蔽機密值、排除機密檔，live 模式另以 gitleaks 預檢、發現機密即阻擋外送；Markdown 報告只輸出被採納 finding 引用的前 160 字元（人工佇列為 200 字元），但 JSON 與 SARIF 報告保留完整引用。這些都不能取代 artifact 的存取控制。</p>
+<p>這是最直接的風險。原始碼會經過三條路徑：送往雲端家族（正式面板為 Amazon Bedrock 上的 Claude 與 Gemini API）、送往組織內的自架端點（正式面板為 IEC 網路內的 GLM，冷備援為 DeepSeek）、存放在 Actions 的 artifact 與日誌中。第一條路徑的控制是資料保留條件與模型選擇（第 7.1 節）：Anthropic 的文件明載 Fable 系列不在 ZDR 範圍內<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>，而且 code execution 工具與 programmatic tool calling 不符合 ZDR<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>，本架構不使用這兩者；Bedrock 預設不儲存輸入與輸出，但帳戶若開啟 model invocation logging，原始碼就會留在紀錄裡<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B137</span></span>；Gemini API 付費層會在有限期間內記錄提示與回應<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B139</span></span>，所以這條路徑的殘餘風險是被接受的而非被消除的，只以核准單號記錄。第二條路徑的控制是網路隔離：自架端點只能從 runner 的網段存取（雛型只接受私有網段或宣告的私有 DNS 區上的 https 端點，內部 CA 以 <code>ca_bundle</code> 加入信任而不關閉驗證），且中國關聯模型權重的部署主機不得有出口網路。第三條路徑最常被忽略：GitHub Actions 的日誌是公開倉庫的公開內容，私有倉庫的 artifact 也有保留期；tj-actions 事件的 payload 正是從記憶體掃出 secret、以 base64 編碼後寫進公開的 workflow 日誌<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C7.14</span></span>。雛型在送出前就以程式遮蔽機密值、排除機密檔，live 模式另以 gitleaks 預檢、發現機密即阻擋外送；Markdown 報告只輸出被採納 finding 引用的前 160 字元（人工佇列為 200 字元），但 JSON 與 SARIF 報告保留完整引用。這些都不能取代 artifact 的存取控制。</p>
 <h3 id="s86">16.2 Prompt Injection 操縱審查結果</h3>
 <p>第 9 章的五道防線對應這個風險。這裡補充一個治理面的觀察：OWASP 2026 年 Agentic Applications Top 10 的第一項是 Agent Goal Hijack，第二項是 Tool Misuse，第三項是 Identity and Privilege Abuse<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">（僅前三項確認）｜B45</span></span>。本架構的 agent 沒有工具、沒有身分、沒有權限，所以第二與第三項在設計上不存在；第一項則靠 canary 量測而非靠 prompt 祈禱。MITRE ATLAS 的官方 changelog 顯示，v5.0.0（2025 年 9 月 30 日）一次新增 15 項以 AI agent 與 AI 服務為主的技術，v5.1.0（2025 年 11 月）再加 10 項；2026 年 5 月起版本號改為年月制，8 月與 9 月的版本又各新增 18 項與 11 項，多與 agent 有關<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B46</span></span>。更新速度比本報告初版預期的快，治理建議要求至少每半年對照一次。</p>
 <h3 id="s87">16.3 模型供應鏈</h3>
-<p>自架權重本身是供應鏈風險。Hugging Face 上的模型檔可能含惡意的 pickle；權重的來源必須可驗證（NVIDIA NGC 據報自 2025 年 7 月起對模型簽章<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">（原引的 Sigstore 文章沒有提到 NGC）</span></span>）；DeepSeek V4 權重的官方來源是 Hugging Face 的 <code>deepseek-ai</code> 組織（官方 news 頁有連結，GitHub 組織沒有 V4 倉庫），格式為 safetensors<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜A78</span></span>。治理建議要求：只從官方來源下載權重、以 cosign 或 NGC 簽章驗證、以 safetensors 而非 pickle 格式載入、記錄權重的雜湊值進入 SBOM（CycloneDX 自 1.5 起支援 ML-BOM，1.6 與 1.7 已成為 ECMA-424<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C11.2</span></span>）。</p>
+<p>自架權重本身是供應鏈風險。Hugging Face 上的模型檔可能含惡意的 pickle；權重的來源必須可驗證（NVIDIA NGC 據報自 2025 年 7 月起對模型簽章<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">（原引的 Sigstore 文章沒有提到 NGC）</span></span>）；DeepSeek V4 權重的官方來源是 Hugging Face 的 <code>deepseek-ai</code> 組織（官方 news 頁有連結，GitHub 組織沒有 V4 倉庫），格式為 safetensors<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜A78</span></span>；GLM 的官方來源是 Hugging Face 的 <code>zai-org</code> 組織<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B143</span></span>，但 IEC 端點實際載入的是哪個倉庫與版本，ML-BOM 中還沒有紀錄。治理建議要求：只從官方來源下載權重、以 cosign 或 NGC 簽章驗證、以 safetensors 而非 pickle 格式載入、記錄權重的雜湊值進入 SBOM（CycloneDX 自 1.5 起支援 ML-BOM，1.6 與 1.7 已成為 ECMA-424<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C11.2</span></span>）。</p>
 <h3 id="s88">16.4 審查系統自己的 GitHub Actions</h3>
 <p>一個審查 workflow 安全性的 workflow，若自己不安全，會是諷刺也會是災難。雛型的 workflow 做到：<code>pull_request</code> 而非 <code>pull_request_target</code>、頂層 <code>permissions: {}</code> 且每個 job 只明示必要的最小權限（只有上傳 code scanning 的 job 有 <code>security-events: write</code>、只有人工佇列 job 有 <code>issues: write</code>，沒有任何 job 有 <code>contents: write</code>）、所有 action 固定到 40 字元 SHA 並附版本註解、<code>persist-credentials: false</code>、L0 工具只用鎖定並驗證過的二進位且不允許失敗後繼續、工具 job 與測試 job 分離，CI 中不呼叫任何真實模型。GitHub 於 2025 年 8 月提供的組織層級 SHA pinning 政策<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C7.8</span></span>應在組織層級開啟，讓這些選擇成為強制而非慣例。</p>
 <h3 id="s89">16.5 過度信任與責任稀釋</h3>
@@ -550,7 +554,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <tr>
 <td>LLM02 Sensitive Information Disclosure</td>
 <td>高。原始碼與 secret 經過模型</td>
-<td>ZDR、地端部署、secret 遮蔽、artifact 存取控制</td>
+<td>ZDR 或雲端平台的不保留承諾、核准的有限期保留、地端部署、secret 遮蔽、artifact 存取控制</td>
 </tr>
 <tr>
 <td>LLM03 Supply Chain</td>
@@ -650,7 +654,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <td>完全（本地）</td>
 <td>依供應商；Fable 不可 ZDR【B81】</td>
 <td>依供應商</td>
-<td>可設計：兩家族地端、一家族 ZDR</td>
+<td>可設計：正式面板為一家族地端、一家族經雲端平台預設不儲存、一家族經核准的有限期保留【B137、B139】；初版設計為兩家族地端</td>
 </tr>
 <tr>
 <td>成本量級</td>
@@ -805,82 +809,88 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <td>本報告 MARA 雛型</td>
 <td>六層：工具錨定、異質家族、否證、盲審、程式評分</td>
 <td>僅 fixture 與五個植入漏洞樣本上的 mock 行為驗證，無真實模型的效能數據</td>
-<td>三家族多代理</td>
-<td>可設計為兩家族地端</td>
+<td>三家族多代理（正式面板：Claude、Gemini、GLM；冷備援 DeepSeek）</td>
+<td>一家族地端；其餘兩家族經 Bedrock 或附核准單號的 Gemini API；境內可全地端</td>
 <td>原生（以固定版本執行六個掃描工具，產出 SARIF）</td>
 <td>雛型；效能尚未證實</td>
 </tr>
 </tbody>
 </table></div>
 <p>三個觀察。第一，沒有任何商用方案公開可獨立驗證的精確率與召回率；「96% 一致」「FP −95%」全是廠商自述，且各自的基準不同。第二，多模型混編在商用產品中已有先例（Semgrep 的現行文件寫明以 OpenAI 為主、Amazon Bedrock 備援【A40】），但沒有任何產品公開說明它如何處理家族間的偏誤與相關錯誤。第三，最接近本報告架構的商用先例是 Endor Labs 的三代理審查【A57】，最接近的學術先例是 MARS 的獨立審查者【B30】與 Refute-or-Promote 的對抗式階段閘門【B31】（後者也記錄了十個審查者一致背書一個不存在的漏洞，正是相關錯誤的實例）；本報告的差異在於把「異質家族」與「盲審」做成硬約束，並把分數計算完全移出模型。</p>
-<h2 id="s95">第 20 章　三個模型家族在此用途上的適配性</h2>
-<p>準則：（1）部署方式與資料主權；（2）授權條款；（3）公開的資安相關評估；（4）採購與稽核風險；（5）在本架構中的建議角色。</p>
+<h2 id="s95">第 20 章　正式面板的三個家族與冷備援在此用途上的適配性</h2>
+<p>準則：（1）部署方式與資料主權；（2）授權條款；（3）公開的資安相關評估；（4）採購與稽核風險；（5）在本架構中的建議角色。比較對象是雛型自 v0.4.2 起的正式面板（Claude、Gemini、GLM）與冷備援 DeepSeek；初版面板的 Nemotron 不再列入，它的事實見第 7.1 節。</p>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 6"><table>
 <thead>
 <tr>
 <th>準則</th>
-<th>Anthropic Claude（Opus 5.5）</th>
-<th>DeepSeek（V3.2 / V4）</th>
-<th>NVIDIA Nemotron 3</th>
+<th>Anthropic Claude（Opus 5.5，經 Amazon Bedrock）</th>
+<th>Google Gemini（Gemini API 付費層）</th>
+<th>智譜 GLM（GLM-5.3-Flash，IEC 網路內自架）</th>
+<th>DeepSeek（V4，冷備援，自架）</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>部署與資料主權</td>
-<td>API 或 Bedrock / Vertex / Foundry；ZDR 需申請，經 Bedrock 或 Google Cloud 時由雲端供應商處理資料；Fable 系列不可 ZDR<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81、B82</span></span></td>
+<td>跨境；Bedrock 預設不儲存輸入與輸出，濫用標記的流量最多保留 30 天、不分享給 Anthropic<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B137</span></span>；<code>global.</code> 設定檔可在任一 AWS 商用區域處理<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B138</span></span>；與 Anthropic ZDR 是否等同待法務確認<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span>；Fable 系列不可 ZDR<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span></td>
+<td>跨境；付費層不用於改進產品，但有限期間記錄提示與回應以偵測濫用，天數未載明<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B139</span></span>；不是 ZDR，保證零保留須改用 Vertex AI<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B140</span></span>；雛型以 <code>vendor_api_retained</code> 加核准單號放行</td>
+<td>自架，無資料離境；廠商 API 一律拒絕（P2）；Z.ai 稱 API 內容不儲存、個資在新加坡處理，與本架構無關<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B145</span></span></td>
 <td>只能自架權重；隱私政策載明資料存於中國<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B88</span></span>；API 不得用於原始碼</td>
-<td>NIM 地端，無資料離境<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B102</span></span></td>
 </tr>
 <tr>
 <td>授權</td>
-<td>商業 API 條款</td>
+<td>商業 API 條款（經 AWS）</td>
+<td>商業 API 條款（Gemini API 附加條款）【B139】</td>
+<td>GLM-5.3-Flash 為 MIT；同代的 GLM-5.3 為自訂授權<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B143</span></span>；IEC 實際部署的權重來源與版本未記錄</td>
 <td>V3.2 與 V4 皆為 MIT<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜A75、A78</span></span></td>
-<td>Nano 與 Super 為 NVIDIA Nemotron Open Model License，Ultra 為 OpenMDW-1.1<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B131</span></span></td>
 </tr>
 <tr>
 <td>公開資安評估</td>
-<td>2026 年宣稱 Opus 4.6 找到 500+ 漏洞<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜A7</span></span>；RealVuln 中 Sonnet 4.6 為最佳通用模型 51.7（26 個 Python repo；榜首是作者自家產品）<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">｜A128</span></span></td>
+<td>2026 年宣稱 Opus 4.6 找到 500+ 漏洞<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜A7</span></span>；RealVuln 中 Sonnet 4.6 為最佳通用模型 51.7（26 個 Python repo；榜首是作者自家產品）<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">｜A128</span></span>；Opus 5.5 會把多數資安任務轉給 Opus 4.8<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span></td>
+<td>Gemini 3 Pro 與 3.1 Pro 在 Cyber Uplift Level 1 達警示門檻、未達關鍵能力水準<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B142</span></span>；未找到獨立評估<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span></td>
+<td>NIST CAISI 2026-07 對 GLM-5.2：防護允許協助代理式漏洞利用開發，對 agent hijacking 與 jailbreak 可能比其他受評中國開放權重模型穩健，自架時防護可被繞過<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B147</span></span>；CAISI 2026-09 對 GLM-5.3：最具 cyber 能力的開放權重模型、落後前沿約 4 個月，只含能力評估、未涵蓋 Flash<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B146</span></span></td>
 <td>NIST CAISI 2025-09：被誘導偏離任務（agent hijacking）的機率 12 倍、常見 jailbreak 下回應 94% 的明顯惡意請求、軟體工程與 cyber 任務上最佳美國模型多解 20% 以上<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B95</span></span>；CAISI 2026-05 對 V4 Pro：能力落後前沿約 8 個月、cyber CTF 基準 32%，未含安全面測試<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B96</span></span>；CrowdStrike：敏感詞使弱點率最多 +50%<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">｜B97</span></span>；Cisco：HarmBench 50 個隨機提示的攻擊成功率 100%<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">｜B98</span></span></td>
-<td>本次未找到針對 Nemotron 3 的獨立資安評估<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src"></span></span></td>
 </tr>
 <tr>
 <td>採購與稽核風險</td>
-<td>低；需確認 ZDR 涵蓋範圍</td>
-<td>高；多國政府禁令與立法提案<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜B89、B93、A82、A83</span></span>，客戶稽核可能拒絕</td>
-<td>低；NVIDIA 為美系供應商</td>
+<td>低；需確認 Bedrock 的不保留承諾與 ZDR 等同、invocation logging 保持關閉、<code>global.</code> 跨區路由是否符合各廠區要求</td>
+<td>中；資料保留須逐模型核准並記錄單號；Pro 級模型仍為 preview，設定檔的暫定 ID 已不存在<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B141</span></span></td>
+<td>高；開發商在美國實體清單上<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B144</span></span>，客戶稽核可能拒絕；ML-BOM 仍為 PENDING</td>
+<td>高；多國政府禁令與立法提案<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜B89、B93、A82、A83</span></span>，客戶稽核可能拒絕；冷備援所用的 V4-Flash 已被淘汰且無 ML-BOM 項目</td>
 </tr>
 <tr>
 <td>建議角色</td>
-<td>三個家族中唯一跨境者；作為 reviewer 與 judge，不作為唯一的 skeptic（雛型另由它擔任 L1 情境建構）</td>
-<td>reviewer、judge 與紅隊之一；必須是可抽換的家族；校準集應納入敏感詞配對（雛型尚未實作）</td>
-<td>reviewer、skeptic 與 judge；地端部署使它適合處理最敏感的 repo</td>
+<td>reviewer、judge 與 L1 情境建構；不作為唯一的 skeptic</td>
+<td>reviewer、judge 與紅隊（正式設定的 red team）</td>
+<td>reviewer、skeptic 與 judge；地端部署使它適合處理最敏感的 repo；校準集應納入敏感詞配對（雛型尚未實作）</td>
+<td>冷備援：任一家族退出時接手；用它替代 GLM 不解決中國關聯的稽核問題</td>
 </tr>
 </tbody>
 </table></div>
-<p>這張表的結論是：三個家族沒有一個可以單獨承擔審查，也沒有一個應該被排除。Claude 有最強的公開能力證據但是唯一的跨境者；DeepSeek 有最強的自架彈性但有最多的採購與行為風險；Nemotron 有最強的資料主權保證但最少的獨立評估。這正是異質面板的論證：每個家族的弱點都由另一個家族的強項覆蓋，而每個家族的偏誤都被另一個家族的裁決制衡。</p>
+<p>這張表的結論是：三個正式家族沒有一個可以單獨承擔審查，也沒有一個應該被排除。Claude 有最強的公開能力證據，但它與 Gemini 都是跨境者；Gemini 是唯一不在零保留條件下接觸原始碼的家族，也是版本漂移最快的一個；GLM 有最強的資料主權保證（自架），卻有最高的採購風險，而且它的安全面只有一份定性評估。與初版面板相比，新面板用 GLM 換掉了 DeepSeek 與 Nemotron 兩個自架家族，跨境家族由一個變成兩個：資料主權的保證變弱，換來的是兩個前沿供應商的雲端模型與較少的自架 GPU 需求。冷備援全部指向 DeepSeek，意味著一旦客戶要求排除中國關聯模型，GLM 被替換後面板仍含中國關聯家族，治理建議 G-4 因此指出這種要求需要另備一個非中國關聯的自架家族。這仍是異質面板的論證：每個家族的弱點都由另一個家族的強項覆蓋，而每個家族的偏誤都被另一個家族的裁決制衡。</p>
 <h1 id="s96">第八部　實務應用</h1>
 <h2 id="s97">第 21 章　跨國 ODM/EMS 的部署拓樸</h2>
 <h3 id="s98">21.1 共用管線：台北、桃園、休士頓、Brno/Blučina</h3>
-<p>這四個廠區可以共用同一條管線，拓樸如第 8 章的圖。Claude（Opus 5.5，即雛型的預設）經 Anthropic API 或 AWS Bedrock（依各廠區的雲端合約；ZDR 只涵蓋 Anthropic 自己擔任資料處理者的管道，經 Bedrock 時由 AWS 處理資料<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>；雛型自 v0.4.2 起的正式設定即經 Bedrock 呼叫 Claude（<code>global.</code> 跨區推論設定檔）），DeepSeek 與 Nemotron 自架於區域資料中心；GitHub Enterprise 的 runner 部署於各廠區網段，L0 工具在本地跑，SARIF 上傳到中央的 code scanning。Brno 廠區另需注意 EU CRA 的時程：第 14 條的 24 小時預警義務已於 2026 年 9 月 11 日生效，通報須經 ENISA 的 Single Reporting Platform 提交<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（生效日期與 SRP）｜C11.9、C11.15</span></span>，審查管線產出的 A 級 Critical finding 若涉及已出貨產品，應自動交給 PSIRT 作為內部交接；是否構成須通報的事件、法定期限從何時起算，由 PSIRT 確認後決定，審查完成時間不等於知悉時間（雛型已實作此交接，預設關閉）。</p>
+<p>這四個廠區可以共用同一條管線，拓樸如第 8 章的圖。雛型自 v0.4.2 起的正式面板是：Claude（Opus 5.5）經 AWS Bedrock 的 <code>global.</code> 跨區推論設定檔呼叫（ZDR 只涵蓋 Anthropic 自己擔任資料處理者的管道，經 Bedrock 時由 AWS 處理資料<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>；<code>global.</code> 設定檔可能在任一 AWS 商用區域處理，合約要求固定區域的廠區應改用地理範圍的設定檔<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B138</span></span>），Gemini 經 Gemini API 付費層呼叫（廠商有限期保留、附核准單號），GLM 自架於 IEC 網路內並以私有 DNS 區 <code>.iec.inventec</code> 提供端點，冷備援的 DeepSeek 同樣自架；GitHub Enterprise 的 runner 部署於各廠區網段，L0 工具在本地跑，SARIF 上傳到中央的 code scanning。Brno 廠區另需注意 EU CRA 的時程：第 14 條的 24 小時預警義務已於 2026 年 9 月 11 日生效，通報須經 ENISA 的 Single Reporting Platform 提交<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（生效日期與 SRP）｜C11.9、C11.15</span></span>，審查管線產出的 A 級 Critical finding 若涉及已出貨產品，應自動交給 PSIRT 作為內部交接；是否構成須通報的事件、法定期限從何時起算，由 PSIRT 確認後決定，審查完成時間不等於知悉時間（雛型已實作此交接，預設關閉）。</p>
 <h3 id="s99">21.2 隔離管線：上海浦東與重慶</h3>
 <p>中國廠區依 CSL、DSL 與 PIPL 的資料出境規則單獨處理，不得併入全球的 action item。具體的設計是：</p>
 <ul>
 <li>原始碼不出境。上海與重慶的 repo 在境內的 GitHub Enterprise Server 或 GitLab 實例，runner 在境內，L0 工具在境內跑。</li>
-<li>三個家族全部地端。Claude 不可用（API 在境外），改以境內自架的開源模型替代；DeepSeek 在境內自架反而沒有出境問題，但仍適用第 13 章第 14 項的校準要求；Nemotron 以 NIM 在境內部署。家族數因此可能只剩兩個，第 13 章第 7 項的脆弱性在此更嚴重，人工佇列的門檻應收緊（雛型的境內範例設定即為兩家族，須寫明縮編理由才能通過設定檢查，人工佇列門檻由 0.4 提高為 0.5）。</li>
+<li>三個家族全部地端。正式面板的 Claude 與 Gemini 都不可用（兩者的 API 都在境外），改以境內自架的開源模型替代；DeepSeek 與 GLM 在境內自架反而沒有出境問題，但仍適用第 13 章第 14 項的校準要求；Nemotron 以 NIM 在境內部署（雛型的境內範例設定即為 DeepSeek 與 Nemotron）。家族數因此可能只剩兩個，第 13 章第 7 項的脆弱性在此更嚴重，人工佇列的門檻應收緊（雛型的境內範例設定即為兩家族，須寫明縮編理由才能通過設定檢查，人工佇列門檻由 0.4 提高為 0.5）。</li>
 <li>校準集分開。境內管線的校準資料不與全球管線合併，除非經過資料出境的合規評估。</li>
 <li>報告分開。SARIF 與 Markdown 報告留在境內；全球安全團隊看到的是彙總的面向分數，不是 finding 明細。</li>
 </ul>
 <p>這些規則使境內管線的能力低於全球管線（家族少、模型弱、無跨境的校準資料）。這是法律隔離的代價，報告不假裝它不存在。</p>
 <h3 id="s100">21.3 客戶稽核時的說明</h3>
-<p>客戶問「你們用哪個模型審查交付給我們的程式碼」時，答案應該是可查的：設定檔中的家族清單、每個家族的部署方式與資料流向、SBOM 中的模型權重雜湊、每份報告的偏誤稽核區塊（雛型已有 ML-BOM 的格式與產生腳本，但自架模型的權重雜湊與簽章仍待平台團隊補齊）。若客戶要求排除某個家族（最可能是 DeepSeek），第 7.3 節的可抽換性讓這在一週內可行；治理建議要求事先備妥替代家族的部署，並以實地換模演練證明（雛型已備妥三個冷備設定並完成 mock 排練，實地演練尚未進行）。</p>
+<p>客戶問「你們用哪個模型審查交付給我們的程式碼」時，答案應該是可查的：設定檔中的家族清單、每個家族的部署方式與資料流向、SBOM 中的模型權重雜湊、每份報告的偏誤稽核區塊（雛型已有 ML-BOM 的格式與產生腳本，但自架模型的權重雜湊與簽章仍待平台團隊補齊）。若客戶要求排除某個家族（最可能是 GLM 這類中國關聯來源），第 7.3 節的可抽換性讓這在一週內可行；治理建議要求事先備妥替代家族的部署，並以實地換模演練證明（雛型已備妥三個冷備設定並完成 mock 排練，實地演練尚未進行）。但三個冷備設定的替代家族都是 DeepSeek，以它換掉 GLM 仍不能滿足「排除中國關聯模型」的要求；面對這類客戶，需要事先部署一個非中國關聯的自架家族。</p>
 <h2 id="s101">第 22 章　成本模型</h2>
 <h3 id="s102">22.1 變數</h3>
-<p>成本由三個變數決定：bundle 的 token 數（雛型每次請求最多送約 40 萬字元，約 10 到 13 萬 token，視語言與 tokenizer 而定；更大的 repo 會切成多批，呼叫數隨批數倍增）、每次審查的呼叫數（單批的全庫審查約 45 次：情境建構 1 次、11 個面向 × 3 個 reviewer、否證與紅隊各數次、3 個 judge 各正反序 2 次；PR 審查若再只跑與變更相關的面向、裁減家族，可降到約 15 到 25 次，但雛型的增量審查目前只縮小 bundle、不裁減面向）、以及各家族的單價。Claude Opus 5.5 的 API 價格為每百萬輸入 token 4 美元、輸出 20 美元（舊版 Opus 5 為 5 與 25 美元）；Sonnet 5.5 為 2 與 10 美元；Fable 5.1 為 10 與 50 美元；改用區域或多區域端點另加 10%<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（直接讀取官方文件）｜B79、B128</span></span>。自架家族的成本是 GPU 時數，與呼叫數的關係是階梯式的。</p>
+<p>成本由三個變數決定：bundle 的 token 數（雛型每次請求最多送約 40 萬字元，約 10 到 13 萬 token，視語言與 tokenizer 而定；更大的 repo 會切成多批，呼叫數隨批數倍增）、每次審查的呼叫數（單批的全庫審查約 45 次：情境建構 1 次、11 個面向 × 3 個 reviewer、否證與紅隊各數次、3 個 judge 各正反序 2 次；PR 審查若再只跑與變更相關的面向、裁減家族，可降到約 15 到 25 次，但雛型的增量審查目前只縮小 bundle、不裁減面向）、以及各家族的單價。Claude Opus 5.5 的 API 價格為每百萬輸入 token 4 美元、輸出 20 美元（舊版 Opus 5 為 5 與 25 美元）；Sonnet 5.5 為 2 與 10 美元；Fable 5.1 為 10 與 50 美元；改用區域或多區域端點另加 10%<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（直接讀取官方文件）｜B79、B128</span></span>；正式面板經 Bedrock 呼叫，實際單價以 AWS 帳單為準，本報告未查證。Gemini API 付費層的 <code>gemini-3.1-pro-preview</code> 為每百萬輸入 token 2 美元、輸出 12 美元（提示超過 20 萬 token 時為 4 與 18 美元），Batch 與 Flex 半價<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B148</span></span>；Batch 是否改變資料保留條件本報告未查證，正式設定不使用。自架家族的成本是 GPU 時數，與呼叫數的關係是階梯式的。</p>
 <h3 id="s103">22.2 估算（以區間呈現）</h3>
-<p>以一次全庫審查、bundle 12 萬 token、Claude 承擔三分之一的呼叫（約 15 次，其中約 12 次帶整份 bundle，judge 只看盲化後的 finding）估算：Claude 的輸入約 150 萬到 180 萬 token、輸出約 15 萬 token，以 Opus 5.5 計約 9 到 10 美元（舊版 Opus 5 約 11 到 13 美元），以 Sonnet 5.5 計約 5 美元；prompt caching 對重複的 bundle 前綴可大幅降低輸入成本，快取讀取的價格一般是基礎輸入價的 10%，Opus 5.5 為 5%<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B79</span></span>。Batch API 雖然打五折，但不在 ZDR 範圍內，不能用於送往 Claude 的原始碼<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>。自架的兩個家族在 30 次呼叫、每次約 12 萬 token 輸入下，於單張 H100 或 H200 節點上約需數十分鐘的 GPU 時間。RepoAudit 的學術數據提供一個量級參考：每專案 0.44 小時、2.54 美元<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（ICML 2025）｜A86</span></span>，但它是單模型。</p>
+<p>以一次全庫審查、bundle 12 萬 token、Claude 承擔三分之一的呼叫（約 15 次，其中約 12 次帶整份 bundle，judge 只看盲化後的 finding）估算：Claude 的輸入約 150 萬到 180 萬 token、輸出約 15 萬 token，以 Opus 5.5 計約 9 到 10 美元（舊版 Opus 5 約 11 到 13 美元），以 Sonnet 5.5 計約 5 美元；prompt caching 對重複的 bundle 前綴可大幅降低輸入成本，快取讀取的價格一般是基礎輸入價的 10%，Opus 5.5 為 5%<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B79</span></span>。Batch API 雖然打五折，但不在 ZDR 範圍內，不能用於送往 Claude 的原始碼<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>。Gemini 承擔另外三分之一，以 3.1 Pro 的單價計約 5 美元。自架的 GLM 在約 15 次呼叫、每次約 12 萬 token 輸入下，GPU 時間取決於 IEC 端點的硬體與並行度，本報告沒有實測數字；初版估算自架兩個家族 30 次呼叫在單張 H100 或 H200 節點上約需數十分鐘。RepoAudit 的學術數據提供一個量級參考：每專案 0.44 小時、2.54 美元<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（ICML 2025）｜A86</span></span>，但它是單模型。</p>
 <p>一個中型組織每日 50 個 PR、每晚 20 個全庫審查的量級下，雲端家族的月成本在數百到低數千美元之間，自架家族的成本取決於既有的 GPU 資產。這些數字的目的是量級而非預算：第五部的影子模式階段會產生真實的數字。</p>
 <h3 id="s104">22.3 成本與去偏誤的取捨</h3>
-<p>第 16.6 節已指出成本壓力的方向。可接受的裁減是：PR 審查只跑與變更相關的面向、對 Low 嚴重度的面向用較小的模型（Sonnet 5.5 或 Nemotron Nano）、對 bundle 做前綴快取。不可接受的裁減是：減到兩個家族以下、關掉反序 pass、讓 judge 看到分數以「節省」一次呼叫。治理建議把後三者列為政策。</p>
+<p>第 16.6 節已指出成本壓力的方向。可接受的裁減是：PR 審查只跑與變更相關的面向、對 Low 嚴重度的面向用較小的模型（Sonnet 5.5、Gemini 的 Flash 級模型或 GLM 的較小型號）、對 bundle 做前綴快取。不可接受的裁減是：減到兩個家族以下、關掉反序 pass、讓 judge 看到分數以「節省」一次呼叫。治理建議把後三者列為政策。</p>
 <h2 id="s105">第 23 章　從雛型到生產的差距</h2>
 <p>雛型證明的是行為：來源驗證會拒絕捏造、家族約束會被強制、盲審會抓到位置翻轉、分數可以重算（CVSS 4.0 計算器已對 FIRST 參考實作窮舉比對全部 base×E 向量）。它沒有證明的是效能：沒有任何真實模型的精確率或召回率數據。從雛型到生產需要：（1）以真實的三個家族在 seeded benchmark 上跑第一次校準；（2）實作第 13 章第 16 項的 bias sensitivity 測試；（3）把 L0 的工具從「有就跑」變成受控的版本；（4）把人工佇列接到組織的工單系統；（5）在影子模式下跑至少兩個月。截至 2026 年 10 月 6 日（v0.3.22），（3）已完成，工具以固定版本與雜湊安裝並驗證；（4）已在雛型中接上 GitHub issue 並把裁決寫回校準集，但尚無任何真實裁決；（1）的腳本與統計驗收（Alternative Annotator Test）已備妥，只以模擬家族跑過；（2）與（5）尚未開始。附錄E 的 prompt 套件涵蓋其中的（1）與（3），並以治理檢查追蹤（5）的導入階段。</p>
 <h1 id="s106">第九部　限制</h1>
@@ -895,9 +905,9 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <p><strong>數項去偏誤機制未實作。</strong> 第 13 章第 16 項的語意保持擾動測試、第 14 項的敏感詞配對樣本、第 15 項的雙語提示、第 7 項依一致率折減權重、第 8 項比對自報信心與精確度，在雛型中都未實作，只有量測或完全沒有；前三項需要對每個 finding 做多次額外的模型呼叫。</p>
 <p><strong>雛型本身也被審查出缺陷。</strong> 初版報告發布後的一個月內，雛型經過數輪程式審查，修正了多個會讓審查「看起來完整、其實沒跑完」的 fail-open 缺陷：被審 repo 自帶的工具設定可以關掉掃描、Skeptic 或 judge 漏回某些 finding 時照樣算完整、工具佐證以路徑後綴比對而誤升 A 級、CVSS 捨入在 14,166 個向量上少 0.1、整批 α 把正反序當成兩個評分者、校準答案檔被送進模型的 bundle。這些缺陷都已修正並有迴歸測試，但它們說明「機制存在」與「機制正確」是兩回事，第 1.6 節的結論應以此理解。</p>
 <h3 id="s110">24.3 查證上的限制</h3>
-<p>初版研究環境的出口代理伺服器封鎖了大量一手網域（第 12.6 節列出），附錄A 中約半數的引用只能「依搜尋摘要」，所有 arXiv 條目都只能標為第三方評論。2026 年 10 月 6 日在不受封鎖的環境做了一次全面複核：附錄A 的 233 條中有 218 條重新讀取並逐條記下摘錄（狀態欄標「原文核對」或「交叉核對」），arXiv 條目改以 arXiv API 讀取並另查發表場次，NIST CAISI 對 DeepSeek V4 Pro 的評估也已讀到【B96】。這次複核修正了二十多處與原文不符的敘述（例如 EPSS 已是 v5、CRA 的通報義務已生效、Shai-Hulud 的 CISA alert 並未提到 TruffleHog），但它由 Claude Code 代理執行，未經人工複核。仍未讀到的重要來源包括 Anthropic 的 Opus 5 系統卡【B85】、EUR-Lex 上的 CRA 原文，以及 ISO/IEC 27001 與 IEC 62443-4-1 的正本。附錄B 列出全部 75 項查證缺口，其中 19 項已關閉。這些缺口不改變架構的設計，因為設計依據的是可直接讀取的來源（ASVS 5.0 CSV、OWASP Top 10 repo、GitHub Advisory、Anthropic 資料保留文件、FIRST 的計算器原始碼）；但它們影響第七部比較表中的效能數字與第 20 章的模型評估，讀者引用那些數字前應先讀附錄B。</p>
+<p>初版研究環境的出口代理伺服器封鎖了大量一手網域（第 12.6 節列出），附錄A 中約半數的引用只能「依搜尋摘要」，所有 arXiv 條目都只能標為第三方評論。2026 年 10 月 6 日在不受封鎖的環境做了一次全面複核：附錄A 的 233 條中有 218 條重新讀取並逐條記下摘錄（狀態欄標「原文核對」或「交叉核對」），arXiv 條目改以 arXiv API 讀取並另查發表場次，NIST CAISI 對 DeepSeek V4 Pro 的評估也已讀到【B96】。這次複核修正了二十多處與原文不符的敘述（例如 EPSS 已是 v5、CRA 的通報義務已生效、Shai-Hulud 的 CISA alert 並未提到 TruffleHog），但它由 Claude Code 代理執行，未經人工複核。仍未讀到的重要來源包括 Anthropic 的 Opus 5 系統卡【B85】、EUR-Lex 上的 CRA 原文，以及 ISO/IEC 27001 與 IEC 62443-4-1 的正本。2026 年 10 月 7 日為正式面板的改變另讀了 13 條一手來源（B137–B149，同樣由代理執行、未經人工複核），並新增四項缺口。附錄B 列出全部 79 項查證缺口，其中 19 項已關閉。這些缺口不改變架構的設計，因為設計依據的是可直接讀取的來源（ASVS 5.0 CSV、OWASP Top 10 repo、GitHub Advisory、Anthropic 資料保留文件、FIRST 的計算器原始碼）；但它們影響第七部比較表中的效能數字與第 20 章的模型評估，讀者引用那些數字前應先讀附錄B。</p>
 <h3 id="s111">24.4 模型版本漂移</h3>
-<p>本報告初版引用的模型版本（Claude Opus 5 於 2026 年 7 月 24 日發布、DeepSeek V3.2、Nemotron 3）在發布後一個月內就變了。Anthropic 於 9 月 22 日與 28 日發布 Opus 5.5 與 Sonnet 5.5，Opus 5 與 Sonnet 5 改列舊版，仍可使用但不再更新<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B124、B126、B129</span></span>；DeepSeek 先後發布 V4-Pro 正式版與 V4.1-Flash，並淘汰 V4-Flash<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B130</span></span>；NVIDIA 自己的漏洞分析 Blueprint 已改用 Nemotron 3.5 Lightning 擔任子代理<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B132</span></span>。任何一次升版都可能改變家族的行為，包括拒答率、canary 回應率與在特定 CWE 上的召回率。校準迴圈的季度重跑是唯一的對策，而它的成本是真實的。</p>
+<p>本報告初版引用的模型版本（Claude Opus 5 於 2026 年 7 月 24 日發布、DeepSeek V3.2、Nemotron 3）在發布後一個月內就變了。Anthropic 於 9 月 22 日與 28 日發布 Opus 5.5 與 Sonnet 5.5，Opus 5 與 Sonnet 5 改列舊版，仍可使用但不再更新<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B124、B126、B129</span></span>；DeepSeek 先後發布 V4-Pro 正式版與 V4.1-Flash，並淘汰 V4-Flash<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B130</span></span>；NVIDIA 自己的漏洞分析 Blueprint 已改用 Nemotron 3.5 Lightning 擔任子代理<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B132</span></span>。換面板本身也是漂移：v0.4.2 起的正式面板改為 Claude、Gemini 與 GLM，初版的校準設計與 mock 行為都以 Claude、DeepSeek、Nemotron 為對象。新家族的漂移更快：Gemini API 的 Pro 級模型仍是 preview，<code>gemini-3-pro-preview</code> 推出不到四個月就被關閉並改指向 3.1 Pro<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B141</span></span>，設定檔的暫定 ID 因此已不存在；GLM 自 2025 年 7 月起約每兩到三個月發布一版<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B143</span></span>。任何一次升版都可能改變家族的行為，包括拒答率、canary 回應率與在特定 CWE 上的召回率。校準迴圈的季度重跑是唯一的對策，而它的成本是真實的。</p>
 <p>Opus 5.5 另帶來一種新的漂移：Anthropic 公告寫明多數資安任務會被透明地轉給另一個模型處理<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span>。同一個模型 ID 背後實際回答的模型因此不固定，而校準量測的是「家族的行為」，前提是模型固定。雛型自 v0.4.1 起把 Claude 預設改為 Opus 5.5，並把每次回應自報的模型 ID 記進報告的 provider manifest（<code>served_models</code>）。但公告沒有說明轉送後 API 回應裡的模型欄位會不會跟著改變；如果不會，這項紀錄就看不出轉送。改版時也還沒有以 Opus 5.5 做 live 校準，在那之前，Claude 家族的權重與門檻都不是針對 Opus 5.5 量出來的。</p>
 <h3 id="s112">24.5 兩套「證據級別」的混淆風險</h3>
 <p>本報告同時使用「finding 的證據層級 A 到 D」與「引用來源的證據四級」。兩者的名稱相似但意義不同：前者是審查輸出的可信度，後者是本文引用的可信度。讀者、稽核者與工具整合者都可能混淆；治理建議要求在任何對外文件中把前者稱為「evidence tier」、後者稱為「source grade」。</p>
@@ -907,13 +917,13 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <h3 id="s115">25.1 政策層</h3>
 <p><strong>G-1 把自動審查定義為安全測試的一部分，而非取代。</strong> 對應 ISO/IEC 27001:2022 A.8.29（開發與驗收中的安全測試）、A.8.25（安全開發生命週期）；IEC 62443-4-1 SVV 實務；NIST SSDF PW.7、PW.8。負責：產品安全長（PSO）。時程：導入第 1 個月內以政策文件確立。代價：無法以「AI 審查通過」取代人工安全測試，人力節省的預期需下修。</p>
 <p><strong>G-2 家族數不低於三、反序 pass 不關閉、judge 不見分數，列為政策。</strong> 對應 NIST AI 600-1 的「Harmful Bias and Homogenization」風險類別<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B118</span></span>與 ISO/IEC 42001:2023 的 AI 管理系統要求<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜B121</span></span>。負責：PSO 與 AI 治理委員會。時程：第 1 個月。代價：成本下限被鎖定，第 22 章的裁減空間縮小約三分之一。</p>
-<p><strong>G-3 資料主權規則寫進設定檔的驗證邏輯。</strong> 原始碼只送往 on-prem 或 ZDR 的模型；Fable 系列不用於審查；DeepSeek 只自架；送往 Claude 的呼叫不走 Batch API 與 code execution 等不在 ZDR 範圍內的功能，因為 API 本身不會擋下它們<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>；每次回應實際使用的模型要記錄下來，因為 Opus 5.5 會把部分資安請求轉給另一個模型<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span>（雛型自 v0.4.1 起記錄回應自報的模型 ID；轉送是否反映在這個欄位，官方沒有說明）。v0.4.2 新增 <code>vendor_api_retained</code> 一類，指廠商會保留資料一段期間、但不用於訓練的 API，只在該模型自己附有核准單號時放行，正式設定的 Gemini 即屬此類；經 Bedrock 的 Claude 仍標為 <code>vendor_api_zdr</code>，依據的是 AWS 的承諾而非 Anthropic 的 ZDR 協議，須由法務確認。對應 A.5.19 到 A.5.21（供應商關係與 ICT 供應鏈，標題待對照）、A.8.10（資訊刪除）；Anthropic 的資料保留條款【B81】。負責：CISO 與法務。時程：第 1 個月。代價：放棄 Anthropic 最強的 Fable 模型；DeepSeek 需自備 GPU。</p>
-<p><strong>G-4 模型可抽換性作為採購條件。</strong> 任何家族必須能在一週內被替換而不改變流程；替代家族（Llama 4、Mistral、Qwen 的自架版本）預先部署為冷備。對應 A.5.20（供應商協議）、NIST CSF 2.0 GV.SC<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C13.4</span></span>。負責：採購與平台團隊。時程：第 3 個月前完成冷備。代價：額外的 GPU 與維運成本；Qwen 同屬中國關聯來源，替代 DeepSeek 時不解決稽核問題。</p>
+<p><strong>G-3 資料主權規則寫進設定檔的驗證邏輯。</strong> 原始碼只送往 on-prem 或 ZDR 的模型，或附核准單號的有限期保留模型；Fable 系列不用於審查；DeepSeek 與 GLM 只自架、不經其廠商 API；送往 Claude 的呼叫不走 Batch API 與 code execution 等不在 ZDR 範圍內的功能，因為 API 本身不會擋下它們<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>；每次回應實際使用的模型要記錄下來，因為 Opus 5.5 會把部分資安請求轉給另一個模型<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span>（雛型自 v0.4.1 起記錄回應自報的模型 ID；轉送是否反映在這個欄位，官方沒有說明）。v0.4.2 新增 <code>vendor_api_retained</code> 一類，指廠商會保留資料一段期間、但不用於訓練的 API，只在該模型自己附有核准單號時放行，正式設定的 Gemini 即屬此類；經 Bedrock 的 Claude 仍標為 <code>vendor_api_zdr</code>，依據的是 AWS 的承諾而非 Anthropic 的 ZDR 協議，須由法務確認。對應 A.5.19 到 A.5.21（供應商關係與 ICT 供應鏈，標題待對照）、A.8.10（資訊刪除）；Anthropic 的資料保留條款【B81】。負責：CISO 與法務。時程：第 1 個月。代價：放棄 Anthropic 最強的 Fable 模型；GLM（以及冷備援的 DeepSeek）需自備 GPU；Gemini 的有限期保留要逐模型核准，換模型或換方案時重新核准。</p>
+<p><strong>G-4 模型可抽換性作為採購條件。</strong> 任何家族必須能在一週內被替換而不改變流程；替代家族（Llama 4、Mistral、Qwen 的自架版本）預先部署為冷備。雛型自 v0.4.2 起的三份冷備設定（<code>standby-for-{anthropic,gemini,glm}.yaml</code>）各以地端 DeepSeek 取代正式面板的一個家族，mock 排練已記錄，實地演練尚未進行。對應 A.5.20（供應商協議）、NIST CSF 2.0 GV.SC<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C13.4</span></span>。負責：採購與平台團隊。時程：第 3 個月前完成冷備。代價：額外的 GPU 與維運成本；Qwen 同屬中國關聯來源，替代 DeepSeek 時不解決稽核問題；同理，以 DeepSeek 替代 GLM 也不解決「排除中國關聯模型」的客戶要求，這種要求需要另備一個非中國關聯的自架家族。</p>
 <h3 id="s116">25.2 技術層</h3>
 <p><strong>G-5 L0 工具固定版本並簽章驗證。</strong> semgrep、gitleaks、OSV-Scanner、zizmor、Scorecard 的版本寫進 lockfile；TruffleHog 只在隔離 runner 執行（Shai-Hulud 曾濫用它搜尋機密【C6.15】）。對應 A.8.8（技術弱點管理，標題待對照）、SLSA v1.2 Build L2【C11.1】。負責：平台團隊。時程：第 2 個月。代價：工具升版需走變更管理。</p>
 <p><strong>G-6 審查 workflow 本身套用組織層級的 SHA pinning 政策與 <code>pull_request</code> 限制。</strong> 對應 GitHub 2025 年 8 月的政策功能【C7.8】、OpenSSF Scorecard Dangerous-Workflow 與 Pinned-Dependencies【C7.13】、A.8.32（變更管理，標題待對照）。負責：平台團隊。時程：第 1 個月。代價：所有既有 workflow 都要重新固定 SHA。</p>
-<p><strong>G-7 模型權重納入 SBOM 並簽章。</strong> 自架權重的來源、雜湊與授權寫進 CycloneDX 1.6 以上的 ML-BOM【C11.2】；以 cosign 或 NGC 簽章驗證；只載入 safetensors。對應 EU CRA Annex I Part II (1)【C11.9】、A.5.21。負責：平台團隊與 PSIRT。時程：第 2 個月。代價：自架權重的雜湊與簽章需要平台團隊逐版補齊；DeepSeek V4 的權重已確認發布於 Hugging Face 的官方組織【A78】，但 NGC 之外的來源沒有發行者簽章，只能靠第一次固定的雜湊。</p>
-<p><strong>G-8 每季對三個家族執行 garak 與 CyberSecEval 4 的 Prompt Injection 與 False Refusal Rate 測試。</strong> 結果寫進校準權重與偏誤稽核。garak 應使用 0.17.0 以上的版本（含 EU AI Act 對照標籤）【B104】；CyberSecEval 自 2025 年 6 月起處於低維護狀態，沒有新的基準版本【B113】。對應 NIST AI 600-1 的 Information Security 類別【B118】、OWASP Agentic Top 10 ASI01【B45】。負責：安全團隊。時程：第 3 個月起每季。代價：每季約一人週。</p>
+<p><strong>G-7 模型權重納入 SBOM 並簽章。</strong> 自架權重的來源、雜湊與授權寫進 CycloneDX 1.6 以上的 ML-BOM【C11.2】；以 cosign 或 NGC 簽章驗證；只載入 safetensors。對應 EU CRA Annex I Part II (1)【C11.9】、A.5.21。負責：平台團隊與 PSIRT。時程：第 2 個月。代價：自架權重的雜湊與簽章需要平台團隊逐版補齊；正式面板的 GLM 在 ML-BOM 中仍是 PENDING（來源、版本、授權與雜湊都待 IEC 平台團隊填入）；DeepSeek V4 的權重已確認發布於 Hugging Face 的官方組織【A78】，但 NGC 之外的來源沒有發行者簽章，只能靠第一次固定的雜湊，而冷備援實際使用的 V4-Flash 權重尚無 ML-BOM 項目。</p>
+<p><strong>G-8 每季對三個家族執行 garak 與 CyberSecEval 4 的 Prompt Injection 與 False Refusal Rate 測試。</strong> 結果寫進校準權重與偏誤稽核。garak 應使用 0.17.0 以上的版本（含 EU AI Act 對照標籤）【B104】；CyberSecEval 自 2025 年 6 月起處於低維護狀態，沒有新的基準版本【B113】。雛型的 <code>scripts/model_eval.py</code> 目前只能對直連的 Anthropic API 與 OpenAI 相容端點產生命令；Bedrock 上的 Claude 與 Gemini API 尚無包裝，正式面板中只有自架的 GLM 能跑，G-8 對另外兩個家族維持紅燈。對應 NIST AI 600-1 的 Information Security 類別【B118】、OWASP Agentic Top 10 ASI01【B45】。負責：安全團隊。時程：第 3 個月起每季。代價：每季約一人週。</p>
 <p><strong>G-9 校準迴圈每季重跑，並以 Alternative Annotator Test 作為無監督「不採納」的驗收門檻。</strong> 對應 A.8.29、ISO/IEC 23894 的 AI 風險管理流程【B122】。負責：安全團隊與資料科學。時程：第 3 個月第一次，之後每季。代價：每季約兩人週，且需維護輪替的校準集。</p>
 <h3 id="s117">25.3 流程層</h3>
 <p><strong>G-10 三階段導入：影子（2 個月）、建議（3 個月）、門檻阻擋（第 6 個月起）。</strong> 對應 A.8.25、IEC 62443-4-1 SM 實務。負責：PSO。時程：如述。代價：前五個月沒有阻擋效果。</p>
@@ -1043,7 +1053,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <h2 id="s119">第 26 章　上海浦東與重慶廠區的單獨建議</h2>
 <p>以下條目依 CSL、DSL 與 PIPL 的資料出境規則單獨處理，不併入第 25 章的任何 action item。</p>
 <p><strong>CN-1 境內管線完全獨立。</strong> repo、runner、L0 工具、三個家族的部署與報告全部在境內；原始碼、SARIF、校準資料與人工裁決結果不出境。對應 DSL 的資料分類分級與出境安全評估、PIPL 的個人資訊出境規定。負責：中國區 IT 與法務。時程：與全球管線同步規劃，但獨立驗收。代價：境內管線的家族數可能只有兩個、無 Claude、校準資料不與全球共用，能力低於全球管線。</p>
-<p><strong>CN-2 境內自架的 DeepSeek 仍適用敏感詞校準。</strong> 第 13 章第 14 項的配對樣本測試在境內管線同樣執行，結果留在境內。負責：中國區安全團隊。代價：校準集需在境內獨立維護。</p>
+<p><strong>CN-2 境內自架的中國關聯模型仍適用敏感詞校準。</strong> 第 13 章第 14 項的配對樣本測試在境內管線同樣執行（DeepSeek 之外，GLM 若進入境內管線也一樣），結果留在境內。負責：中國區安全團隊。代價：校準集需在境內獨立維護。</p>
 <p><strong>CN-3 全球安全團隊只接收面向分數的彙總，不接收 finding 明細。</strong> 明細若需跨境，走 DSL 與 PIPL 的出境評估程序。負責：中國區法務。代價：全球團隊對境內程式碼的可見度降低，需以境內團隊的裁決為準。</p>
 <p><strong>CN-4 境內管線的稽核對應以中國標準為主。</strong> 等保 2.0 與 GB/T 相關標準的對應由境內團隊另行製作，本報告不代為對應。負責：中國區合規。代價：兩套稽核文件。</p>
 <h1 id="s120">附錄A　引用來源清單</h1>
@@ -2461,6 +2471,136 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <td>是</td>
 <td>原文核對（2026-10-06）</td>
 </tr>
+<tr>
+<td>B137</td>
+<td>AWS</td>
+<td>Amazon Bedrock：Abuse detection（另見 Data protection、Model invocation logging）</td>
+<td><a href="https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html" rel="noopener noreferrer">https://docs.aws.amazon.com/bedrock/latest/userguide/abuse-detection.html</a></td>
+<td>活文件（2026-10-07 讀取）</td>
+<td>已證實（雲端供應商文件）</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B138</td>
+<td>AWS</td>
+<td>Amazon Bedrock：Cross-Region inference 與 Global cross-Region inference（另見 Claude Opus 5.5 model card）</td>
+<td><a href="https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html" rel="noopener noreferrer">https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html</a></td>
+<td>活文件（2026-10-07 讀取）</td>
+<td>已證實（雲端供應商文件）</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B139</td>
+<td>Google</td>
+<td>Gemini API Additional Terms of Service</td>
+<td><a href="https://ai.google.dev/gemini-api/terms" rel="noopener noreferrer">https://ai.google.dev/gemini-api/terms</a></td>
+<td>最後修改 2026-04-28</td>
+<td>已證實（服務條款）</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B140</td>
+<td>Google</td>
+<td>Gemini API：Zero data retention</td>
+<td><a href="https://ai.google.dev/gemini-api/docs/zdr" rel="noopener noreferrer">https://ai.google.dev/gemini-api/docs/zdr</a></td>
+<td>活文件（2026-10-07 讀取）</td>
+<td>已證實</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B141</td>
+<td>Google</td>
+<td>Gemini API：Models 與 Release notes（changelog）</td>
+<td><a href="https://ai.google.dev/gemini-api/docs/models" rel="noopener noreferrer">https://ai.google.dev/gemini-api/docs/models</a></td>
+<td>活文件（2026-10-07 讀取）</td>
+<td>已證實</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B142</td>
+<td>Google DeepMind</td>
+<td>Gemini 3 Pro Frontier Safety Framework Report（另見 Gemini 3.1 Pro model card）</td>
+<td><a href="https://storage.googleapis.com/deepmind-media/gemini/gemini_3_pro_fsf_report.pdf" rel="noopener noreferrer">https://storage.googleapis.com/deepmind-media/gemini/gemini_3_pro_fsf_report.pdf</a></td>
+<td>2025-11／2026-02-19</td>
+<td>廠商主張</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B143</td>
+<td>Z.ai（智譜）</td>
+<td>zai-org/GLM-5.3-Flash 模型卡（另見 Hugging Face API 的 zai-org 模型清單）</td>
+<td><a href="https://huggingface.co/zai-org/GLM-5.3-Flash" rel="noopener noreferrer">https://huggingface.co/zai-org/GLM-5.3-Flash</a></td>
+<td>2026-08-25</td>
+<td>已證實（授權與日期）；China-affiliated</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B144</td>
+<td>U.S. Department of Commerce, BIS</td>
+<td>Additions to the Entity List（Federal Register 2025-00704）</td>
+<td><a href="https://www.federalregister.gov/documents/full_text/text/2025/01/16/2025-00704.txt" rel="noopener noreferrer">https://www.federalregister.gov/documents/full_text/text/2025/01/16/2025-00704.txt</a></td>
+<td>2025-01-16</td>
+<td>已證實（政府出版物）</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B145</td>
+<td>Z.ai（智譜）</td>
+<td>Privacy Policy</td>
+<td><a href="https://docs.z.ai/legal-agreement/privacy-policy" rel="noopener noreferrer">https://docs.z.ai/legal-agreement/privacy-policy</a></td>
+<td>2025-09-29</td>
+<td>廠商主張；China-affiliated</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B146</td>
+<td>NIST CAISI</td>
+<td>CAISI&#x27;s Assessment of Z.ai&#x27;s GLM-5.3 Cyber Capabilities</td>
+<td><a href="https://www.nist.gov/news-events/news/2026/09/caisis-assessment-zais-glm-53-cyber-capabilities" rel="noopener noreferrer">https://www.nist.gov/news-events/news/2026/09/caisis-assessment-zais-glm-53-cyber-capabilities</a></td>
+<td>2026-09-17</td>
+<td>已證實（只含能力評估）</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B147</td>
+<td>NIST CAISI</td>
+<td>CAISI Assessment of Z.ai&#x27;s GLM-5.2</td>
+<td><a href="https://www.nist.gov/news-events/news/2026/07/caisi-assessment-zais-glm-52" rel="noopener noreferrer">https://www.nist.gov/news-events/news/2026/07/caisi-assessment-zais-glm-52</a></td>
+<td>2026-07-17</td>
+<td>已證實</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B148</td>
+<td>Google</td>
+<td>Gemini API：Pricing</td>
+<td><a href="https://ai.google.dev/gemini-api/docs/pricing" rel="noopener noreferrer">https://ai.google.dev/gemini-api/docs/pricing</a></td>
+<td>活文件（2026-10-07 讀取）</td>
+<td>已證實</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
+<tr>
+<td>B149</td>
+<td>AWS</td>
+<td>Amazon Bedrock Security and Privacy（產品頁）</td>
+<td><a href="https://aws.amazon.com/bedrock/security-compliance/" rel="noopener noreferrer">https://aws.amazon.com/bedrock/security-compliance/</a></td>
+<td>活頁面（2026-10-07 讀取）</td>
+<td>廠商主張</td>
+<td>是</td>
+<td>原文核對（2026-10-07）</td>
+</tr>
 </tbody>
 </table></div>
 <h2 id="s123">C 組：十一面向的標準、工具與事件</h2>
@@ -3521,7 +3661,11 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <li><strong>bias sensitivity 測試</strong>（第 13 章第 16 項）未實作。</li>
 <li><strong>三家族設定的獨立 judge 不足</strong>是固有性質而非缺口，但四家族的效果未驗證。</li>
 <li><strong>L0 工具版本未固定</strong>：雛型「有就跑」。關閉方式：附錄E prompt 7。已於 2026-09-26 關閉：自 2026-09-12（a9867dc）起 <code>tools/versions.lock</code> 以版本、下載 URL 與 SHA-256 固定全部 L0 工具並指定發行者驗證方式，<code>scripts/install_tools.py</code> 驗證後裝入 <code>.mara-tools/bin</code>，<code>mara/tools/runner.py</code> 只從該目錄執行、不查 PATH；CI 每次重新安裝並驗證，治理檢查 G-5 通過（<code>docs/governance-check-2026-09-26.md</code>）。2026-10-06 補記：鎖定工具於 2026-10-01 增為九個（加入 csp-evaluator，以 npm registry 的 <code>dist.integrity</code> 驗證）；工具目錄改為相對 MARA workspace（<code>MARA_HOME</code>）解析，位於被審查目標之內時拒絕執行，被審查的 repo 不能以自帶的工具頂替。</li>
-<li><strong>正式面板的 Gemini 與 GLM 未經本報告評估</strong>：v0.4.2 起雛型的正式設定改為 Amazon Bedrock 上的 Claude、付費層的 Gemini API 與 IEC 內網自架的 GLM，但本報告的模型比較（第七部、第 20 章）只涵蓋 Claude、DeepSeek 與 Nemotron。Gemini 的資料保留條款、GLM 的權重來源與授權、兩者的拒答率與資安評估都未查證；Gemini 與 GLM 的模型 ID 在設定檔中也仍是暫定值。另外，經 Bedrock 的 Claude 標為 <code>vendor_api_zdr</code>，依據的是 AWS 的承諾而非 Anthropic 的 ZDR 協議，需法務確認。暫採：尚未證實。</li>
+<li><strong>正式面板的 Gemini 與 GLM 未經本報告評估</strong>：v0.4.2 起雛型的正式設定改為 Amazon Bedrock 上的 Claude、付費層的 Gemini API 與 IEC 內網自架的 GLM，但本報告的模型比較（第七部、第 20 章）只涵蓋 Claude、DeepSeek 與 Nemotron。Gemini 的資料保留條款、GLM 的權重來源與授權、兩者的拒答率與資安評估都未查證；Gemini 與 GLM 的模型 ID 在設定檔中也仍是暫定值。另外，經 Bedrock 的 Claude 標為 <code>vendor_api_zdr</code>，依據的是 AWS 的承諾而非 Anthropic 的 ZDR 協議，需法務確認。暫採：尚未證實。 2026-10-07 部分核對（未關閉）：第 7.1 節與第 20 章已改以正式面板比較；Gemini API 付費層的保留條款（B139、B140）、Bedrock 的預設不儲存與 <code>global.</code> 路由（B137、B138）、GLM-5.3-Flash 的授權與發布日期（B143）、智譜的實體清單紀錄（B144）與 CAISI 對 GLM-5.2／5.3 的評估（B146、B147）已直接讀取。仍未關閉：Bedrock 的不保留承諾與 Anthropic ZDR 是否等同（法務）、IEC 實際部署的 GLM 權重來源與版本、兩個新家族的拒答率與真實校準。</li>
+<li><strong>設定檔的模型 ID 與廠商現行清單不符</strong>：<code>config/mara.yaml</code> 的 <code>gemini-3-pro</code> 不在 Gemini API 的現行模型清單上（現行 Pro 級為 <code>gemini-3.1-pro-preview</code>，<code>gemini-3-pro-preview</code> 已於 2026-03-09 關閉並改指向 3.1 Pro【B141】）；GLM 的 <code>GLM-5.3-Flash-FP8</code> 在 Hugging Face 上沒有同名倉庫（官方倉庫為 <code>zai-org/GLM-5.3-Flash</code>，標示 fp8【B143】），可能只是部署端的服務名稱。需要：以正式金鑰列出 Gemini 的可用模型、向 IEC 平台團隊確認 GLM 端點的 <code>/v1/models</code> 與下載來源。暫採：尚未證實；第一次 live 執行前必須關閉。</li>
+<li><strong>Bedrock 的 <code>global.</code> 跨區路由與資料保留模式</strong>：<code>global.</code> 設定檔可在任一 AWS 商用區域處理，被保留的資料存於目的區域【B138】；Bedrock 新增的資料保留模式設定對 Opus 5.5 是否提供「不保留」，文件沒有載明【B137】。需要：以 AWS 帳戶查詢 Opus 5.5 允許的保留模式，並由各廠區（尤其 Brno 的 EU 合約）確認跨區路由是否可接受。暫採：尚未證實。</li>
+<li><strong>Gemini API 付費層的保留天數</strong>：條款只寫「有限期間」【B139】，沒有天數；常被引用的 55 天是 AI Studio 中開發者自有紀錄的預設上限，不是濫用偵測紀錄。需要：Google 的書面確認或企業資料處理協議。暫採：尚未證實；核准單號 20261006-GISMD-Approve-01 依據的保留條件應附在核准紀錄中。</li>
+<li><strong>GLM 的安全面獨立評估</strong>：CAISI 對 GLM-5.2 的評估只給定性結論【B147】，對 GLM-5.3 的評估只含能力、未涵蓋 Flash 版本【B146】；本次未找到 CrowdStrike、Cisco 等對 GLM 的 jailbreak 或敏感詞研究，也未找到台灣對智譜或 GLM 的公務機關限制。需要：上述研究或政府文件，以及治理檢查 G-8 對 IEC 端點實際執行的 garak 與 CyberSecEval 結果。暫採：尚未證實。</li>
 </ol>
 <h1 id="s130">附錄C　術語對照表</h1>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 11"><table>
@@ -3545,7 +3689,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 <tr>
 <td>Model family</td>
-<td>同一供應商或同一訓練譜系的模型集合（Anthropic、DeepSeek、Nemotron）</td>
+<td>同一供應商或同一訓練譜系的模型集合（正式面板：Anthropic、Gemini、GLM；冷備援 DeepSeek；初版另有 Nemotron）</td>
 <td>異質性的單位</td>
 </tr>
 <tr>
@@ -3781,7 +3925,22 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <tr>
 <td>On-prem</td>
 <td>組織內部署，資料不離境</td>
-<td>設定檔 <code>data_residency: on_prem</code>（須為私有位址上的 OpenAI 相容端點）；另一個允許值 <code>vendor_api_zdr</code> 表示在零資料保留協議下送往廠商 API</td>
+<td>設定檔 <code>data_residency: on_prem</code>（須為私有位址或宣告的私有 DNS 區上的 OpenAI 相容端點）；另一個允許值 <code>vendor_api_zdr</code> 表示在零資料保留協議或雲端平台的不保留承諾下送往廠商 API</td>
+</tr>
+<tr>
+<td>vendor_api_retained</td>
+<td>廠商會保留資料一段期間、但不用於訓練的 API（正式面板的 Gemini）</td>
+<td>第 7.1 節；policy P5 只在該模型附 <code>retention_approval_ref</code> 時放行</td>
+</tr>
+<tr>
+<td>Cross-region inference profile</td>
+<td>Amazon Bedrock 的跨區推論設定檔；<code>global.</code> 前綴可路由到任一 AWS 商用區域</td>
+<td>第 7.1 節、第 21.1 節</td>
+</tr>
+<tr>
+<td>Entity List</td>
+<td>美國商務部 BIS 的出口管制實體清單（智譜列於其上）</td>
+<td>第 7.1 節、第 7.3 節</td>
 </tr>
 <tr>
 <td>CSL / DSL / PIPL</td>

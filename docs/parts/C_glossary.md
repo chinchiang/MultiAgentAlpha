@@ -4,7 +4,7 @@
 |---|---|---|
 | Vibe Coding | 以自然語言描述意圖、由 AI 產生大部分程式碼並以「跑起來像不像對的」驗收的開發方式 | 第 2.1 節 |
 | Multi-agent | 多個獨立的模型呼叫各司其職、以結構化資料交換 | 第三部；本報告不含代理間自由對話 |
-| Model family | 同一供應商或同一訓練譜系的模型集合（Anthropic、DeepSeek、Nemotron） | 異質性的單位 |
+| Model family | 同一供應商或同一訓練譜系的模型集合（正式面板：Anthropic、Gemini、GLM；冷備援 DeepSeek；初版另有 Nemotron） | 異質性的單位 |
 | Evidence tier | finding 的可信度層級 A 到 D | 第 11.2 節；勿與 source grade 混淆 |
 | Source grade | 本報告引用來源的四級（已證實、廠商主張、第三方評論、尚未證實） | 第 12.6 節 |
 | Provenance | finding 的來源證據：檔案、行號、逐字引用 | 第 12.3 節 |
@@ -51,7 +51,10 @@
 | Covered Models | Anthropic 對需 30 天保留、不得 ZDR 的模型的稱呼 | 第 7.1 節 |
 | NIM | NVIDIA Inference Microservices | 第 7.1 節 |
 | vLLM | 開源推論伺服器，提供 OpenAI 相容端點 | 第 7.2 節 |
-| On-prem | 組織內部署，資料不離境 | 設定檔 `data_residency: on_prem`（須為私有位址上的 OpenAI 相容端點）；另一個允許值 `vendor_api_zdr` 表示在零資料保留協議下送往廠商 API |
+| On-prem | 組織內部署，資料不離境 | 設定檔 `data_residency: on_prem`（須為私有位址或宣告的私有 DNS 區上的 OpenAI 相容端點）；另一個允許值 `vendor_api_zdr` 表示在零資料保留協議或雲端平台的不保留承諾下送往廠商 API |
+| vendor_api_retained | 廠商會保留資料一段期間、但不用於訓練的 API（正式面板的 Gemini） | 第 7.1 節；policy P5 只在該模型附 `retention_approval_ref` 時放行 |
+| Cross-region inference profile | Amazon Bedrock 的跨區推論設定檔；`global.` 前綴可路由到任一 AWS 商用區域 | 第 7.1 節、第 21.1 節 |
+| Entity List | 美國商務部 BIS 的出口管制實體清單（智譜列於其上） | 第 7.1 節、第 7.3 節 |
 | CSL / DSL / PIPL | 中國網路安全法、資料安全法、個人資訊保護法 | 第 21.2 節、第 26 章 |
 | CRA | EU Cyber Resilience Act，Regulation (EU) 2024/2847 | 第 10.11 節 |
 | PSIRT | Product Security Incident Response Team | G-12 |
