@@ -33,8 +33,8 @@ def _bedrock_spec(**kw):
     return ModelSpec(**d)
 
 
-def _fake_client(stop_reason="end_turn", text=json.dumps(GOOD), raises=None):
-    msg = SimpleNamespace(stop_reason=stop_reason, content=[SimpleNamespace(type="text", text=text)],
+def _fake_client(stop_reason="end_turn", text=json.dumps(GOOD), raises=None, served="claude-opus-5-5"):
+    msg = SimpleNamespace(stop_reason=stop_reason, content=[SimpleNamespace(type="text", text=text)], model=served,
                           usage=SimpleNamespace(input_tokens=5, output_tokens=3))
 
     @contextmanager
@@ -81,6 +81,11 @@ def test_bedrock_credential_errors_become_a_sanitised_code():
     client, _ = _fake_client(raises=KeyError("bug"))
     with pytest.raises(KeyError):  # not a botocore failure: left to the agent layer, which logs and codes it
         _call(BedrockProvider(_bedrock_spec(), client=client))
+
+
+def test_bedrock_records_the_model_the_response_names():
+    client, _ = _fake_client(served="claude-opus-4-8")
+    assert _call(BedrockProvider(_bedrock_spec(), client=client)).served_model == "claude-opus-4-8"
 
 
 def test_make_provider_builds_a_bedrock_client_for_the_region():
@@ -161,3 +166,9 @@ def test_gemini_failures_are_sanitised_codes_and_transient_ones_are_retried():
 
     with pytest.raises(RuntimeError, match=r"^provider_connection_failed$"):
         _call(_gemini(down))
+
+
+def test_gemini_records_the_model_version_that_answered():
+    c = _call(_gemini(lambda req: _answer(json.dumps(GOOD), modelVersion="gemini-test-pro-001")))
+    assert c.data == GOOD and c.served_model == "gemini-test-pro-001"
+    assert _call(_gemini(lambda req: _answer(json.dumps(GOOD)))).served_model == "", "absent modelVersion stays empty"

@@ -1,6 +1,7 @@
 """Anthropic provider using the official SDK with structured outputs.
 
-Defaults: claude-opus-5, adaptive thinking (on by default for Opus 5), effort high,
+Defaults: claude-opus-5-5, adaptive thinking (always on for Opus 5.5), effort high set explicitly
+(Opus 5.5 defaults to medium),
 output_config.format json_schema so the first text block is guaranteed-valid JSON.
 Refusals (stop_reason == "refusal") are surfaced, never silently swallowed: a
 reviewer that refuses is recorded as an abstention, which Krippendorff's alpha
@@ -46,17 +47,22 @@ class AnthropicProvider(Provider):
         except anthropic.APIConnectionError:
             raise RuntimeError("provider_connection_failed") from None
         tokens_in, tokens_out = msg.usage.input_tokens, msg.usage.output_tokens
+        # Top-level `model` names the model that produced the message (a vendor-side fallback changes it).
+        served = getattr(msg, "model", "") or ""
         if msg.stop_reason == "refusal":
-            return Completion(data=None, raw_text="", refused=True, input_tokens=tokens_in, output_tokens=tokens_out)
+            return Completion(data=None, raw_text="", refused=True, input_tokens=tokens_in, output_tokens=tokens_out,
+                              served_model=served)
         text = next((b.text for b in msg.content if b.type == "text"), "")
         if msg.stop_reason == "max_tokens":
             # Output budget exhausted: the JSON text block is cut off. Distinguished from a refusal so
             # the bias audit does not attribute a too-small max_tokens to the model.
-            return Completion(data=None, raw_text=text, truncated=True, input_tokens=tokens_in, output_tokens=tokens_out)
+            return Completion(data=None, raw_text=text, truncated=True, input_tokens=tokens_in, output_tokens=tokens_out,
+                              served_model=served)
         if not text:
-            return Completion(data=None, raw_text="", input_tokens=tokens_in, output_tokens=tokens_out)
+            return Completion(data=None, raw_text="", input_tokens=tokens_in, output_tokens=tokens_out, served_model=served)
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            return Completion(data=None, raw_text=text, truncated=True, input_tokens=tokens_in, output_tokens=tokens_out)
-        return Completion(data=data, raw_text=text, input_tokens=tokens_in, output_tokens=tokens_out)
+            return Completion(data=None, raw_text=text, truncated=True, input_tokens=tokens_in, output_tokens=tokens_out,
+                              served_model=served)
+        return Completion(data=data, raw_text=text, input_tokens=tokens_in, output_tokens=tokens_out, served_model=served)

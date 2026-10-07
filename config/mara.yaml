@@ -7,7 +7,9 @@ models:
     provider: bedrock                   # SigV4 via the AWS default chain: AWS_PROFILE=<the SSO profile>, `aws sso login`
     model: global.anthropic.claude-opus-5-5   # global cross-region inference profile
     region: ap-southeast-1
-    data_residency: vendor_api_zdr      # Bedrock neither stores nor trains on prompts; keep model-invocation logging off
+    data_residency: vendor_api_zdr      # Bedrock neither stores nor trains on prompts; keep model-invocation logging off.
+                                        # This is AWS's commitment as the data processor, not an Anthropic ZDR agreement:
+                                        # legal to confirm the two are equivalent (report Appendix B #75)
     weight: 1.0
   - name: gemini-reviewer
     family: gemini
@@ -35,7 +37,7 @@ roles:
   skeptic: glm-reviewer                 # the pipeline still re-assigns per finding so skeptic family != finder family
   redteam: gemini-reviewer
   judges: [claude-reviewer, gemini-reviewer, glm-reviewer]
-  context: claude-reviewer              # L1 context builder: the C4-lite view the architecture reviewers get as context facts
+  context: claude-reviewer              # L1 context builder: quote-verified C4-lite view for the architecture reviewers; reaches them as untrusted data, not trusted facts
 
 dimensions: [architecture, vulnerabilities, xss, csp, authn_authz, dependencies, github_actions, secrets, input_validation, error_handling, supply_chain]
 
@@ -54,7 +56,7 @@ require_family_diversity: true
 #   P2 deepseek-on-prem DeepSeek only via openai_compatible on an RFC 1918 / .internal host; never *.deepseek.com
 #   P3 panel-size       reviewers and judges each span >= 3 families (2 only with reduced_panel_reason)
 #   P4 gate-bounds      self_judge_discount <= 0.5, human_threshold_alpha >= 0.3
-#   P5 data-residency   non-mock models must be on_prem or vendor_api_zdr
+#   P5 data-residency   non-mock models must be on_prem or vendor_api_zdr, or vendor_api_retained with their own retention_approval_ref
 #   P6 psirt-scope      when the PSIRT hand-off is enabled: https webhook, product set, token from env, tiers within A/B, severities within Critical/High
 #   P7 ml-bom           when ml_bom.required: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature)
 #   P8 unsupervised-reject  gate.unsupervised_reject_allowed=true only while calib/latest.json records a passing Alternative Annotator Test (live, < 90 days); false queues every rejected non-D finding for a human
@@ -64,7 +66,9 @@ reduced_panel_reason: ""
 
 # G-12: PSIRT hand-off (EU CRA Article 14). When enabled and the reviewed target is a shipped product,
 # every accepted finding matching trigger_tiers × trigger_severities is written to out/psirt-notifications.json
-# with the 24 h / 72 h / 14 d deadlines counted from the review, and POSTed with `mara review --notify-psirt`.
+# as an internal hand-off and POSTed with `mara review --notify-psirt`. The review time is not the time of awareness:
+# the legal 24 h / 72 h deadlines run only from an event the PSIRT confirms, and since 2026-09-11 Article 14
+# notifications go through the ENISA Single Reporting Platform (the PSIRT needs an SRP account).
 # See docs/psirt-integration.md and config/examples/psirt-enabled.yaml.
 psirt:
   enabled: false

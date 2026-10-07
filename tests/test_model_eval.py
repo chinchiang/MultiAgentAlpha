@@ -46,7 +46,7 @@ def test_targets_and_commands_never_carry_keys(monkeypatch):
         with pytest.raises(ValueError, match="no garak generator"):
             me.garak_command(t, ["dan"], "/tmp/out")
     assert me.unsupported(ds) is None
-    an = me.EvalTarget("anthropic", "claude-reviewer", "claude-opus-5", "anthropic", "", "")  # the direct Anthropic API
+    an = me.EvalTarget("anthropic", "claude-reviewer", "claude-opus-5-5", "anthropic", "", "")  # the direct Anthropic API
     argv, env = me.garak_command(an, ["dan"], "/tmp/out")
     assert argv[3:6] == ["--target_type", "anthropic", "--target_name"] and env == {"ANTHROPIC_API_KEY": "$ANTHROPIC_API_KEY"}
     assert me.garak_generator_options(an) is None
@@ -54,7 +54,7 @@ def test_targets_and_commands_never_carry_keys(monkeypatch):
     assert set(cmds) == {"prompt-injection", "mitre-frr"}
     assert f"--llm-under-test=OPENAI::{ds.model}::{me.MASK}::https://llm.iec.inventec/v1" in cmds["prompt-injection"]
     assert "--judge-llm=$CSE_JUDGE_LLM" in cmds["prompt-injection"] and "--benchmark=mitre-frr" in cmds["mitre-frr"]
-    assert me.cse_spec(an, "sk-real") == "ANTHROPIC::claude-opus-5::sk-real"
+    assert me.cse_spec(an, "sk-real") == "ANTHROPIC::claude-opus-5-5::sk-real"
     with pytest.raises(RuntimeError):
         me.resolve_key("MARA_TEST_UNSET_KEY")
 

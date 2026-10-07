@@ -74,7 +74,9 @@ class GeminiProvider(Provider):
         except (ValueError, AttributeError):
             raise RuntimeError("provider_malformed_payload") from None
         tokens = {"input_tokens": usage.get("promptTokenCount", 0),
-                  "output_tokens": usage.get("candidatesTokenCount", 0) + usage.get("thoughtsTokenCount", 0)}
+                  "output_tokens": usage.get("candidatesTokenCount", 0) + usage.get("thoughtsTokenCount", 0),
+                  # the model version that answered, e.g. an alias resolved to a dated release
+                  "served_model": str(payload.get("modelVersion") or "")[:200]}
         if blocked or not candidates:
             return Completion(data=None, raw_text="", refused=True, **tokens)
         cand = candidates[0]
