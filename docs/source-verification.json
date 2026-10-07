@@ -2379,7 +2379,7 @@
       "access_record": "是",
       "checked_at": "2026-10-07",
       "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
-      "claim_excerpt": "Preview：gemini-3.1-pro-preview、gemini-3-flash-preview；changelog：gemini-3-pro-preview 2025-11-18 推出，3.1 Pro Preview 2026-02-19 發布，2026-03-09 \"The Gemini 3 Pro Preview model has been shut down. The gemini-3-pro-preview now points to gemini-3.1-pro-preview\""
+      "claim_excerpt": "Preview：gemini-3.1-pro-preview、gemini-3-flash-preview；changelog：gemini-3-pro-preview 2025-11-18 推出，3.1 Pro Preview 2026-02-19 發布，2026-03-09 \"The Gemini 3 Pro Preview model has been shut down. The gemini-3-pro-preview now points to gemini-3.1-pro-preview\" / 2026-09-02 \"Gemini 3.8 Flash generally available (GA) : Released gemini-3.8-flash\"；穩定版清單含 gemini-3.8-flash、3.7、3.6、3.5 Flash；2026-10-07 以正式金鑰呼叫 models 端點：gemini-3.8-flash 在清單上（inputTokenLimit 1048576），gemini-3-pro 不在"
     },
     {
       "id": "B142",
@@ -2449,7 +2449,7 @@
       "access_record": "是",
       "checked_at": "2026-10-07",
       "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
-      "claim_excerpt": "gemini-3.1-pro-preview Standard：input \"$2.00, prompts <= 200k tokens\"（> 200k 為 $4.00），output $12.00（> 200k 為 $18.00）；Batch 與 Flex 半價；\"Used to improve our products\"：Free Yes、Paid No"
+      "claim_excerpt": "gemini-3.1-pro-preview Standard：input \"$2.00, prompts <= 200k tokens\"（> 200k 為 $4.00），output $12.00（> 200k 為 $18.00）；Batch 與 Flex 半價；\"Used to improve our products\"：Free Yes、Paid No / gemini-3.8-flash Paid：input \"$0.75 through December 31, 2026. $1.50 starting January 1, 2027.\"，output（含 thinking）\"$3.75 through December 31, 2026. $7.50 starting January 1, 2027.\""
     },
     {
       "id": "B149",
@@ -2460,6 +2460,16 @@
       "checked_at": "2026-10-07",
       "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
       "claim_excerpt": "\"Your data is not shared with model providers, and is not used to improve the base models.\""
+    },
+    {
+      "id": "B150",
+      "url": "https://storage.googleapis.com/deepmind-media/Model-Cards/Gemini-3-8-Flash-Model-Card.pdf",
+      "source_type": "廠商資料",
+      "verification_status": "原文核對",
+      "access_record": "是",
+      "checked_at": "2026-10-07",
+      "reviewer": "Claude Code 代理（WebFetch／官方 API 讀取；未經人工複核）",
+      "claim_excerpt": "\"Published: September, 2026\" / \"Gemini 3.8 Flash does not have meaningful new capabilities or material increases in performance with respect to the domains outlined in our Frontier Safety Framework compared to Gemini 3.7 Flash; therefore, based on Gemini 3.7 Flash results, we are confident that Gemini 3.8 Flash is also unlikely to reach any T/CCLs.\""
     }
   ]
 }

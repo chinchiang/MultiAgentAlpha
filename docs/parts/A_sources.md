@@ -164,6 +164,7 @@
 | B147 | NIST CAISI | CAISI Assessment of Z.ai's GLM-5.2 | https://www.nist.gov/news-events/news/2026/07/caisi-assessment-zais-glm-52 | 2026-07-17 | 已證實 | 是 | 原文核對（2026-10-07） |
 | B148 | Google | Gemini API：Pricing | https://ai.google.dev/gemini-api/docs/pricing | 活文件（2026-10-07 讀取） | 已證實 | 是 | 原文核對（2026-10-07） |
 | B149 | AWS | Amazon Bedrock Security and Privacy（產品頁） | https://aws.amazon.com/bedrock/security-compliance/ | 活頁面（2026-10-07 讀取） | 廠商主張 | 是 | 原文核對（2026-10-07） |
+| B150 | Google DeepMind | Gemini 3.8 Flash Model Card | https://storage.googleapis.com/deepmind-media/Model-Cards/Gemini-3-8-Flash-Model-Card.pdf | 2026-09 | 廠商主張 | 是 | 原文核對（2026-10-07） |
 
 ## C 組：十一面向的標準、工具與事件
 

@@ -14,7 +14,7 @@ models:
   - name: gemini-reviewer
     family: gemini
     provider: gemini
-    model: gemini-3-pro                 # confirm against the key's model list before a live run
+    model: gemini-3.8-flash             # GA 2026-09-02; in the key's model list on 2026-10-07
     api_key_env: GEMINI_API_KEY
     data_residency: vendor_api_retained # paid tier: no training, prompts kept for a limited time for abuse monitoring
     retention_approval_ref: 20261006-GISMD-Approve-01
