@@ -89,6 +89,87 @@ def test_p2_does_not_trust_the_declared_family():
         MaraConfig.model_validate(misdeclared)
 
 
+def _panel(**gemini_over):
+    """The Bedrock Claude + Gemini API + on-prem GLM panel."""
+    gemini = {"name": "g", "family": "gemini", "provider": "gemini", "model": "gemini-test-pro", "api_key_env": "GEMINI_API_KEY",
+              "data_residency": "vendor_api_retained", "retention_approval_ref": "SEC-2026-117"}
+    gemini.update(gemini_over)
+    return {"models": [
+        {"name": "c", "family": "anthropic", "provider": "bedrock", "model": "global.anthropic.claude-opus-5-5", "region": "ap-southeast-1",
+         "data_residency": "vendor_api_zdr"},
+        gemini,
+        {"name": "z", "family": "glm", "provider": "openai_compatible", "model": "glm-5", "base_url": "https://vllm-glm.internal:8000/v1",
+         "data_residency": "on_prem"},
+    ], "roles": {"reviewers": ["c", "g", "z"], "skeptic": "z", "redteam": "g", "judges": ["c", "g", "z"]}}
+
+
+def test_the_bedrock_gemini_glm_panel_passes_with_a_recorded_retention_approval():
+    cfg = MaraConfig.model_validate(_panel())
+    p5 = [r for r in evaluate_policies(cfg) if r.id == "P5"][0]
+    assert all(r.passed for r in evaluate_policies(cfg)) and "approval SEC-2026-117" in p5.reason
+
+
+def test_p5_admits_a_retained_model_only_with_an_approval_and_only_that_model():
+    with pytest.raises(ValueError, match="vendor_api_retained needs retention_approval_ref"):
+        MaraConfig.model_validate(_panel(retention_approval_ref=""))
+    other = _panel()
+    other["models"][0]["data_residency"] = "vendor_api_retained"  # no approval of its own: the Gemini one does not cover it
+    with pytest.raises(ValueError, match="c: data_residency=vendor_api_retained needs"):
+        MaraConfig.model_validate(other)
+
+
+def test_p2_holds_glm_to_private_endpoints_and_p1_covers_bedrock():
+    vendor = _panel()
+    vendor["models"][2]["base_url"] = "https://open.bigmodel.cn/api/paas/v4"
+    with pytest.raises(ValueError, match="P2 deepseek-on-prem.*DeepSeek/Qwen vendor API"):
+        MaraConfig.model_validate(vendor)
+    misdeclared = _panel()
+    misdeclared["models"][2]["family"] = "other"  # model glm-5, declared as another family
+    with pytest.raises(ValueError, match="declares family 'other'"):
+        MaraConfig.model_validate(misdeclared)
+    fable = _panel()
+    fable["models"][0]["model"] = "global.anthropic.claude-fable-5-1"
+    with pytest.raises(ValueError, match="P1 covered-models"):
+        MaraConfig.model_validate(fable)
+
+
+def test_private_dns_zones_admit_the_organisations_hosts_and_nothing_wider():
+    """llm.iec.inventec resolves to 10.6.94.120 but is not .internal/.local/.lan: the config may declare
+    the organisation's private zone; a public suffix or a single label is refused."""
+    raw = _panel()
+    raw["models"][2]["base_url"] = "https://llm.iec.inventec/v1"
+    with pytest.raises(ValueError, match="P2 deepseek-on-prem"):
+        MaraConfig.model_validate(raw)
+    assert MaraConfig.model_validate(dict(raw, private_dns_suffixes=[".iec.inventec"]))
+    for bad in (".com", "inventec", ".inventec", "iec.inventec", ".IEC.inventec"):
+        with pytest.raises(ValueError, match="private_dns_suffixes"):
+            MaraConfig.model_validate(dict(raw, private_dns_suffixes=[bad]), context={"skip_policies": True})
+    outside = dict(raw, private_dns_suffixes=[".iec.inventec"])
+    outside["models"][2] = dict(outside["models"][2], base_url="https://llm.iec.inventec.attacker.example/v1")
+    with pytest.raises(ValueError, match="P2"):
+        MaraConfig.model_validate(outside)
+
+
+def test_a_ca_bundle_adds_trust_and_never_disables_verification(tmp_path):
+    import ssl
+
+    import certifi
+
+    from mara.config import ModelSpec
+    from mara.providers.openai_compatible import OpenAICompatibleProvider, _trust
+
+    assert _trust(None) is True
+    pem = tmp_path / "corp-ca.pem"
+    pem.write_text(open(certifi.where(), encoding="utf-8").read(), encoding="utf-8")  # any valid PEM bundle
+    ctx = _trust(str(pem))
+    assert isinstance(ctx, ssl.SSLContext) and ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname
+    spec = ModelSpec(name="z", family="glm", provider="openai_compatible", model="glm-5", base_url="https://llm.iec.inventec/v1",
+                     data_residency="on_prem", ca_bundle=str(pem))
+    assert OpenAICompatibleProvider(spec).client is not None
+    with pytest.raises(FileNotFoundError):
+        _trust(str(tmp_path / "missing.pem"))
+
+
 def test_p5_on_prem_must_match_the_endpoint():
     public = _base()
     public["models"][2]["base_url"] = "https://models.example.com/v1"  # nemotron, declared on_prem

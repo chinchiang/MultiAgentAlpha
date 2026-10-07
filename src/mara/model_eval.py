@@ -46,7 +46,7 @@ class EvalTarget:
     family: str
     name: str
     model: str
-    provider: str            # openai_compatible | anthropic
+    provider: str            # openai_compatible | anthropic (bedrock, gemini: no wrapper yet, see unsupported())
     base_url: str
     api_key_env: str
 
@@ -66,6 +66,18 @@ def targets_from_config(cfg: MaraConfig) -> list[EvalTarget]:
 
 
 # ---------------------------------------------------------------- commands
+
+SUPPORTED_PROVIDERS = ("openai_compatible", "anthropic")
+
+
+def unsupported(target: EvalTarget) -> str | None:
+    """Why this target has no garak / CyberSecEval command, or None. Claude on Bedrock and the Gemini
+    API are not wired to either tool yet: such a family stays without results, so G-8 keeps failing
+    for it instead of passing on the families that could be run."""
+    if target.provider in SUPPORTED_PROVIDERS:
+        return None
+    return f"{target.name}: no garak / CyberSecEval wrapper for provider {target.provider} yet (G-8 gap)"
+
 
 def garak_generator_options(target: EvalTarget) -> dict | None:
     if target.provider == "openai_compatible":

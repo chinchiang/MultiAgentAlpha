@@ -47,6 +47,8 @@ PassId = Literal["forward", "reverse"]  # judge pass: findings in presented orde
 
 class ModelFamily(StrEnum):
     ANTHROPIC = "anthropic"
+    GEMINI = "gemini"      # Google Gemini (Gemini API)
+    GLM = "glm"            # Zhipu GLM, self-hosted; PRC-affiliated, so policy P2 applies as for DeepSeek
     DEEPSEEK = "deepseek"
     NEMOTRON = "nemotron"
     LLAMA = "llama"        # cold-standby family (G-4): self-hosted Llama

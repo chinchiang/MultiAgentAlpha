@@ -17,9 +17,11 @@ from __future__ import annotations
 import json
 import os
 import random
+import ssl
 import time
 from collections.abc import Callable
 
+import certifi
 import httpx
 
 from ..config import ModelSpec
@@ -41,6 +43,19 @@ def retry_delay(attempt: int, retry_after: str | None) -> float:
     return min(BACKOFF_BASE * 2 ** (attempt - 1) + random.random(), RETRY_AFTER_CAP)  # nosec B311 - jitter, not crypto
 
 
+def _trust(ca_bundle: str | None) -> ssl.SSLContext | bool:
+    """Verification stays on: the default trust (certifi, or SSL_CERT_FILE / SSL_CERT_DIR), plus the
+    organisation's CA chain when the endpoint is signed by an internal CA (ModelSpec.ca_bundle)."""
+    if not ca_bundle:
+        return True
+    from ..workspace import resolve
+
+    path = resolve(os.path.expanduser(ca_bundle))
+    ctx = ssl.create_default_context(cafile=os.environ.get("SSL_CERT_FILE") or certifi.where())
+    ctx.load_verify_locations(cafile=str(path))
+    return ctx
+
+
 class OpenAICompatibleProvider(Provider):
     def __init__(self, spec: ModelSpec, timeout: float = 600.0, client: httpx.Client | None = None,
                  max_attempts: int = MAX_ATTEMPTS, sleep: Callable[[float], None] = time.sleep):
@@ -49,13 +64,14 @@ class OpenAICompatibleProvider(Provider):
         if not spec.base_url:
             raise ValueError(f"model {spec.name}: base_url required for openai_compatible provider")
         key = os.environ.get(spec.api_key_env, "") if spec.api_key_env else ""
-        headers = {"Authorization": f"Bearer {key}"} if key else {}
+        headers = ({spec.api_key_header: key} if spec.api_key_header else {"Authorization": f"Bearer {key}"}) if key else {}
         # `client` is for tests (httpx.MockTransport); production always builds its own from the spec.
         # An explicit transport switches off httpx's HTTP_PROXY/HTTPS_PROXY/ALL_PROXY handling (the
         # transport still honours SSL_CERT_FILE / SSL_CERT_DIR for an internal CA): these endpoints are
         # on-prem, and a proxy in between would receive the source code - in cleartext for the
         # loopback-only http:// case that ModelSpec approved as never leaving the host.
-        self.client = client or httpx.Client(base_url=spec.base_url, headers=headers, timeout=timeout, transport=httpx.HTTPTransport())
+        self.client = client or httpx.Client(base_url=spec.base_url, headers=headers, timeout=timeout,
+                                             transport=httpx.HTTPTransport(verify=_trust(spec.ca_bundle)))
 
     def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> Completion:
         body = {

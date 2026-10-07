@@ -90,3 +90,4 @@
 72. **bias sensitivity 測試**（第 13 章第 16 項）未實作。
 73. **三家族設定的獨立 judge 不足**是固有性質而非缺口，但四家族的效果未驗證。
 74. **L0 工具版本未固定**：雛型「有就跑」。關閉方式：附錄E prompt 7。已於 2026-09-26 關閉：自 2026-09-12（a9867dc）起 `tools/versions.lock` 以版本、下載 URL 與 SHA-256 固定全部 L0 工具並指定發行者驗證方式，`scripts/install_tools.py` 驗證後裝入 `.mara-tools/bin`，`mara/tools/runner.py` 只從該目錄執行、不查 PATH；CI 每次重新安裝並驗證，治理檢查 G-5 通過（`docs/governance-check-2026-09-26.md`）。2026-10-06 補記：鎖定工具於 2026-10-01 增為九個（加入 csp-evaluator，以 npm registry 的 `dist.integrity` 驗證）；工具目錄改為相對 MARA workspace（`MARA_HOME`）解析，位於被審查目標之內時拒絕執行，被審查的 repo 不能以自帶的工具頂替。
+75. **正式面板的 Gemini 與 GLM 未經本報告評估**：v0.4.2 起雛型的正式設定改為 Amazon Bedrock 上的 Claude、付費層的 Gemini API 與 IEC 內網自架的 GLM，但本報告的模型比較（第七部、第 20 章）只涵蓋 Claude、DeepSeek 與 Nemotron。Gemini 的資料保留條款、GLM 的權重來源與授權、兩者的拒答率與資安評估都未查證；Gemini 與 GLM 的模型 ID 在設定檔中也仍是暫定值。另外，經 Bedrock 的 Claude 標為 `vendor_api_zdr`，依據的是 AWS 的承諾而非 Anthropic 的 ZDR 協議，需法務確認。暫採：尚未證實。

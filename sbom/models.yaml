@@ -14,10 +14,35 @@
 #                 An empty list means PENDING: the BOM component is emitted without hashes, policy P7
 #                 refuses it once ml_bom.required is true, and governance check G-7 fails naming it.
 #
-# Both production entries are PENDING in this repository: it does not host the weights, and the
+# Every entry is PENDING in this repository: it does not host the weights, and the
 # authoring environment could not reach huggingface.co or NGC to fetch registry hashes. Nothing
 # below is a placeholder hash; hashes appear only once someone has computed them.
 models:
+  - model_id: GLM-5.3-Flash-FP8
+    family: glm
+    name: GLM-5.3-Flash (FP8)
+    version: "5.3"
+    source:
+      kind: huggingface
+      url: ""                          # the official repository the IEC deployment downloaded from; not yet recorded
+      revision: ""
+    license:
+      id: ""                           # not yet recorded
+    format: safetensors
+    serving: openai-compatible endpoint https://llm.iec.inventec/v1 (IEC network)
+    architecture:
+      family: GLM
+    signature:
+      method: cosign-keyless
+      identity: ""
+      issuer: ""
+      bundle: sbom/ml-bom.cdx.json.sigstore.json
+    files: []
+    note: >-
+      PENDING. The production on-prem family since 2026-10-06 (config/mara.yaml glm-reviewer). The platform team that
+      runs llm.iec.inventec must record the official source, revision, licence and per-file SHA-256 of the deployed
+      weights; nothing here is filled in from guesswork. GLM is PRC-affiliated, so policy P2 keeps it on-prem.
+
   - model_id: deepseek-v3.2
     family: deepseek
     name: DeepSeek-V3.2

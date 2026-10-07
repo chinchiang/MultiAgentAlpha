@@ -9,9 +9,15 @@ labelled `live` (the scripts refuse), so the governance checks cannot be satisfi
 ## 1. Prerequisites (both items)
 
 - A host inside the network of the self-hosted endpoints (`config/mara.yaml` `base_url`s), with
-  the ZDR-covered Anthropic key. Keys only in environment variables (`DEEPSEEK_LOCAL_KEY`,
-  `NIM_LOCAL_KEY`, `ANTHROPIC_API_KEY`); no script prints or stores them.
-- `mara check-config config/mara.yaml` passes (P1–P7).
+  AWS credentials for Bedrock (`AWS_PROFILE`, e.g. after `aws sso login`) and the Gemini key. Keys
+  only in environment variables (`GLM_LOCAL_KEY`, `GEMINI_API_KEY`; `DEEPSEEK_LOCAL_KEY` for the
+  standbys); no script prints or stores them. The GLM endpoint is signed by the IEC internal CA:
+  garak and CyberSecEval do not read `ca_bundle`, so export `SSL_CERT_FILE` pointing at a bundle
+  that holds both the public roots and the IEC chain for their runs.
+- G-8 gap: `scripts/model_eval.py` has no garak or CyberSecEval wrapper for Claude on Bedrock or the
+  Gemini API yet. `plan` lists both families as skipped, `run` evaluates the rest and exits 1, and
+  the live report refuses to cover the missing families, so G-8 stays red until a wrapper exists.
+- `mara check-config config/mara.yaml` passes (P1–P8).
 - Python 3.11 on Linux x86_64, this package installed from the hash-pinned closure
   (`pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt && pip install --require-hashes --only-binary=:all: -r tools/build-requirements.txt && pip install --no-deps --no-build-isolation -e .`).
 
@@ -83,6 +89,12 @@ report `docs/calibration-<date>.md` carries front matter (`mode`, `families`, `s
 `provider_modes`, `model_eval`) that governance check G-9 reads: within 90 days, `mode: live`,
 families covering the config. Human decisions from `calib/decisions/` (G-11, trained adjudicators
 only, G-13) are applied as labels.
+
+The samples carry planted credentials (their answer keys label them CWE-798), which the live secret
+preflight would otherwise refuse to send. The runner passes `--calibration-sample` for targets below
+`calib/samples/` only; `mara review` then exempts exactly the gitleaks findings at a labelled file
+and line, logs `secret_preflight_calibration_exempted` in the audit trail, and still blocks live
+egress for any other secret.
 
 The report's section 7 states that the Alternative Annotator Test the report requires cannot be
 computed until each item has at least two independent human annotations; until then every

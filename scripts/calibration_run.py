@@ -66,7 +66,10 @@ def main() -> int:
         out = a.out_dir / s.name
         # a previous run's report must never stand in for this one
         (out / "report.json").unlink(missing_ok=True)
-        cmd = [*base, "review", str(s), "--config", str(config), "--provider", a.mode, "--out", str(out)]
+        # --calibration-sample: the seeded secrets the sample's answer key declares must not block live egress.
+        # Only for the labelled samples under calib/samples/; anything else (calib/corpora/...) keeps the strict preflight.
+        seeded = (ROOT / "calib" / "samples").resolve() in s.resolve().parents
+        cmd = [*base, "review", str(s), "--config", str(config), "--provider", a.mode, "--out", str(out)] + (["--calibration-sample"] if seeded else [])
         print(f"+ {' '.join(cmd)}")
         r = subprocess.run(cmd, **io)
         # exit 2 is a blocked gate in the blocking phase, still a completed review - but a usage error

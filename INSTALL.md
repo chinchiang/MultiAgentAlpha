@@ -161,16 +161,20 @@ For the full feature set on a Windows machine use **WSL 2** (Ubuntu): following 
 
 ## 4. live 模型端點（可選）/ Live model endpoints (optional)
 
-要用真實模型審查才需要。設定檔 `config/mara.yaml` 記錄的拓撲是：Anthropic API（零資料保留協議）、自架的 DeepSeek 權重、NVIDIA NIM 上的 Nemotron，三者都以環境變數提供金鑰，原始碼只會送給標示為 `on_prem` 或 `vendor_api_zdr` 的模型。
+要用真實模型審查才需要。設定檔 `config/mara.yaml` 記錄的拓撲是：Amazon Bedrock 上的 Claude（AWS 預設憑證鏈，例如 `aws sso login` 後設 `AWS_PROFILE`）、付費層 Gemini API（金鑰放 `x-goog-api-key` 標頭）、IEC 網路內自架的 GLM（OpenAI 相容端點）。金鑰一律來自環境變數；原始碼只會送給標示為 `on_prem`、`vendor_api_zdr`，或附有該模型自己 `retention_approval_ref` 核准單號的 `vendor_api_retained` 模型。內部 CA 簽發的端點以 `ca_bundle` 指定 PEM 憑證鏈（只會加入信任清單，不會關閉驗證）；公司私有 DNS 區寫在 `private_dns_suffixes`。
 
-Needed only for reviews with real models. `config/mara.yaml` documents the topology: the Anthropic API under a zero-data-retention agreement, self-hosted DeepSeek weights, and Nemotron on NVIDIA NIM. All keys come from environment variables, and source code is sent only to models declared `on_prem` or `vendor_api_zdr`.
+Needed only for reviews with real models. `config/mara.yaml` documents the topology: Claude on Amazon Bedrock (the AWS default credential chain, e.g. `AWS_PROFILE` after `aws sso login`), the Gemini API on the paid tier (key in the `x-goog-api-key` header), and GLM self-hosted on the IEC network behind an OpenAI-compatible endpoint. All keys come from environment variables, and source code is sent only to models declared `on_prem` or `vendor_api_zdr`, or `vendor_api_retained` with that model's own `retention_approval_ref`. An endpoint signed by an internal CA names its PEM chain in `ca_bundle` (added to the trust store, never disabling verification); the organisation's private DNS zones go in `private_dns_suffixes`.
 
 ```bash
-export ANTHROPIC_API_KEY=...
-export DEEPSEEK_LOCAL_KEY=... NIM_LOCAL_KEY=...
+export AWS_PROFILE=...                      # Bedrock (after `aws sso login --profile ...`)
+export GEMINI_API_KEY=... GLM_LOCAL_KEY=...
 mara check-config config/mara.yaml          # the eight policy checks first / 先過八條政策檢查
 mara review path/to/repo --config config/mara.yaml --out out
 ```
+
+設定檔中標為暫定（provisional）的模型 id，第一次 live 執行前要先對照各端點的模型清單確認。
+
+The model ids marked provisional in the file must be confirmed against each endpoint's model list before the first live run.
 
 非 loopback 的推論端點必須是 HTTPS 並驗證憑證，設定檔載入時就會拒絕 `http://`。細節見 README 的「Live mode」與「Policies enforced by the config」。
 

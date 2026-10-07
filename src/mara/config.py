@@ -16,15 +16,28 @@ class ModelSpec(BaseModel):
 
     name: str
     family: ModelFamily
-    provider: Literal["anthropic", "openai_compatible", "mock"]
+    provider: Literal["anthropic", "bedrock", "gemini", "openai_compatible", "mock"]
     model: str
     base_url: str | None = None
     api_key_env: str | None = None
-    data_residency: Literal["on_prem", "vendor_api_zdr", "vendor_api_30d", "unknown"] = "unknown"
+    region: str | None = Field(default=None, description="bedrock: the AWS region the runtime client calls "
+                               "(credentials: the AWS default chain, e.g. AWS_PROFILE)")
+    # vendor_api_retained: the vendor keeps prompts and responses for a limited period (abuse monitoring) without
+    # training on them - not ZDR. Policy P5 admits such a model only with retention_approval_ref.
+    data_residency: Literal["on_prem", "vendor_api_zdr", "vendor_api_retained", "vendor_api_30d", "unknown"] = "unknown"
+    retention_approval_ref: str = Field(default="", description="Policy P5: the approval (ticket, contract clause) for a vendor_api_retained model")
+    api_key_header: str | None = Field(default=None, description="openai_compatible: send the key raw in this header (e.g. apikey) "
+                                       "instead of Authorization: Bearer, for gateways that expect it")
+    ca_bundle: str | None = Field(default=None, description="openai_compatible: PEM file of the CA chain that signs this on-prem endpoint, "
+                                  "added to the default trust store (never replaces or disables verification); ~ and workspace-relative paths")
     weight: float = Field(default=1.0, ge=0.0, le=2.0, description="Vote weight; updated by calibration")
 
     @model_validator(mode="after")
     def _secure_endpoint(self):
+        if self.provider == "bedrock" and not self.region:
+            raise ValueError(f"model {self.name}: provider bedrock needs region (e.g. ap-southeast-1)")
+        if self.provider in ("bedrock", "gemini") and self.base_url:
+            raise ValueError(f"model {self.name}: provider {self.provider} takes no base_url; the vendor endpoint is fixed")
         if self.provider != "openai_compatible":
             return self
         import ipaddress
@@ -219,6 +232,10 @@ class MaraConfig(BaseModel):
         default="", description="Policy P1: reference of the authorization (ticket, contract clause)"
     )
     reduced_panel_reason: str = Field(default="", description="Policy P3: why only two model families are available (e.g. PRC in-country pipeline)")
+    private_dns_suffixes: list[str] = Field(
+        default_factory=list,
+        description="Policies P2/P5: the organisation's private DNS zones (e.g. .iec.inventec), treated like .internal; each needs two labels",
+    )
     standby_for: str = Field(
         default="",
         description="G-4: production family this cold-standby config replaces (e.g. 'anthropic'); empty for a production config",
@@ -251,6 +268,10 @@ class MaraConfig(BaseModel):
         for d in self.dimensions:
             if d not in DIMENSIONS:
                 raise ValueError(f"unknown dimension {d!r}")
+        for suffix in self.private_dns_suffixes:
+            # ".iec.inventec" names a zone; ".com" or "inventec" alone would make the whole internet "private"
+            if not suffix.startswith(".") or len([p for p in suffix.split(".") if p]) < 2 or suffix != suffix.lower().strip():
+                raise ValueError(f"private_dns_suffixes: {suffix!r} must be a lower-case zone with at least two labels, like .iec.inventec")
         # `mara check-config` validates the structure first and then renders every policy result;
         # load_config runs the policies here so a violating file is refused outright.
         if info.context and info.context.get("skip_policies"):

@@ -220,10 +220,10 @@ def test_repository_bom_is_pending_but_valid_and_governance_g7_says_why(tmp_path
     assert mlbom.validate_schema(bom) == []
     assert mlbom.bom_equal_ignoring_volatile(bom, mlbom.build_bom(mlbom.load_manifest(ROOT / "sbom" / "models.yaml"), allow_pending=True))
     comps = mlbom.ml_components(bom)
-    assert set(comps) == {"deepseek-v3.2", "nvidia/nemotron-3-super"}
+    assert set(comps) == {"GLM-5.3-Flash-FP8", "deepseek-v3.2", "nvidia/nemotron-3-super"}
     assert all("hashes" not in c and mlbom.props(c)["status"] == "pending" for c in comps.values())
     r = gc.check_g7(ROOT, ROOT / "config" / "mara.yaml")
-    assert r.status == gc.FAIL and "deepseek-v3.2" in r.evidence and "nvidia/nemotron-3-super" in r.evidence and "hash-dir" in r.evidence
+    assert r.status == gc.FAIL and "GLM-5.3-Flash-FP8" in r.evidence and "hash-dir" in r.evidence  # the production on-prem model
     # a repository whose config points at a complete, signed BOM passes
     root = tmp_path / "repo"
     (root / "sbom").mkdir(parents=True)
@@ -248,7 +248,7 @@ def test_pipeline_records_ml_bom_status_in_the_report(tmp_path):
     assert report.bias_audit["ml_bom"] == {} and "## Model provenance" in render_markdown(report)
     live = load_config(ROOT / "config" / "mara.yaml")
     st = mlbom.status_for_config(live, ROOT)
-    assert {s.status for s in st.values()} == {"pending"} and set(st) == {"deepseek-reviewer", "nemotron-reviewer"}
+    assert {s.status for s in st.values()} == {"pending"} and set(st) == {"glm-reviewer"}
 
 
 def test_pipeline_logs_ml_bom_status_when_self_hosted_models_are_configured(tmp_path):
@@ -259,7 +259,7 @@ def test_pipeline_logs_ml_bom_status_when_self_hosted_models_are_configured(tmp_
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)
     pipe.ml_bom_status = mlbom.status_for_config(load_config(ROOT / "config" / "mara.yaml"), ROOT)
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
-    assert set(report.bias_audit["ml_bom"]) == {"deepseek-reviewer", "nemotron-reviewer"}
+    assert set(report.bias_audit["ml_bom"]) == {"glm-reviewer"}
     assert any(line.startswith("L0: ML-BOM: ") and "pending" in line for line in pipe.log)
 
 

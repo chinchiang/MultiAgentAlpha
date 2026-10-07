@@ -2,11 +2,11 @@
 
   python3 scripts/model_swap_drill.py check [--config config/mara.yaml]
       per production family: standby config present and loadable, last live drill; exit 1 when G-4 fails.
-  python3 scripts/model_swap_drill.py rehearse --standby config/examples/standby-for-deepseek.yaml
+  python3 scripts/model_swap_drill.py rehearse --standby config/examples/standby-for-glm.yaml
       load the standby config through the policies, confirm it swaps exactly one family, then run the
       pipeline on the seeded fixture with every model switched to the mock provider to prove the
       process (roles, dimensions, gate) is unchanged; appends a `rehearsal` entry. Does NOT satisfy G-4.
-  python3 scripts/model_swap_drill.py record --replaced deepseek --standby-config config/examples/standby-for-deepseek.yaml \\
+  python3 scripts/model_swap_drill.py record --replaced glm --standby-config config/examples/standby-for-glm.yaml \\
       --started 2026-10-01T09:00 --completed 2026-10-03T15:00 --outcome pass --performed-by <login> --evidence CHG-123
       a live drill on the real endpoints; appends a `live` entry (the one G-4 counts).
 """
@@ -84,7 +84,7 @@ def cmd_rehearse(a: argparse.Namespace) -> int:
           f"families {report.families_used}, dimensions unchanged: {same_dims}, context seat unchanged: {same_context}")
     outcome = "pass" if same_dims and same_context and report.findings else "fail"
     hours = round((dt.datetime.now(dt.UTC) - started).total_seconds() / 3600, 3)
-    drill = govdocs.Drill(a.today, "rehearsal", replaced, sb_fam, str(a.standby.relative_to(ROOT)) if a.standby.is_relative_to(ROOT) else str(a.standby),
+    drill = govdocs.Drill(a.today, "rehearsal", replaced, sb_fam, a.standby.relative_to(ROOT).as_posix() if a.standby.is_relative_to(ROOT) else a.standby.as_posix(),
                           max(hours, 0.001), outcome, a.performed_by or "rehearsal", "mock review of fixtures/vuln-sample")
     govdocs.append_drill(a.drills, drill)
     print(f"rehearsal recorded in {a.drills} ({outcome}); a live drill on the real endpoints is still needed for G-4")
@@ -112,7 +112,7 @@ def cmd_record(a: argparse.Namespace) -> int:
     if problem:
         print(f"ERROR: {a.standby_config}: {problem}", file=sys.stderr)
         return 2
-    rel = str(a.standby_config.relative_to(ROOT)) if a.standby_config.is_relative_to(ROOT) else str(a.standby_config)
+    rel = a.standby_config.relative_to(ROOT).as_posix() if a.standby_config.is_relative_to(ROOT) else a.standby_config.as_posix()
     drill = govdocs.Drill(completed.date(), "live", a.replaced, sb_fam, rel, hours, a.outcome, a.performed_by, a.evidence)
     govdocs.append_drill(a.drills, drill)
     verdict = "counts for G-4" if a.outcome == "pass" and hours <= govdocs.DRILL_MAX_HOURS else f"does not satisfy G-4 (needs pass within {govdocs.DRILL_MAX_HOURS} h)"

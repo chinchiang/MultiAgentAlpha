@@ -20,8 +20,11 @@ from .base import Completion, Provider
 
 
 class AnthropicProvider(Provider):
-    def __init__(self, spec: ModelSpec):
+    def __init__(self, spec: ModelSpec, client: anthropic.Anthropic | anthropic.AnthropicBedrock | None = None):
         super().__init__(spec)
+        if client is not None:  # BedrockProvider and tests
+            self.client = client
+            return
         api_key = os.environ.get(spec.api_key_env) if spec.api_key_env else None
         # Zero-arg client also resolves ANTHROPIC_API_KEY / `ant auth login` profiles.
         self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()

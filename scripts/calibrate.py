@@ -688,7 +688,7 @@ def main() -> int:
     if args.mode == "live":
         for _, rep, _ in runs:
             manifest = rep.get("provider_manifest", [])
-            if (not manifest or any(p.get("type") not in {"anthropic", "openai_compatible"} for p in manifest)
+            if (not manifest or any(p.get("type") not in {"anthropic", "bedrock", "gemini", "openai_compatible"} for p in manifest)
                     or not rep.get("config_hash") or not rep.get("revision")):
                 raise SystemExit("--mode live refused: missing or non-live provider provenance")
         leaked = sorted(s for s, rep, _ in runs if "labels.json" in (rep.get("coverage") or {}).get("included", []))

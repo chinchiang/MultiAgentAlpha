@@ -23,6 +23,7 @@ from mara.pipeline import Pipeline  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
 
 FIX = ROOT / "fixtures" / "model-eval"
+FIXTURE_PANEL = ROOT / "config" / "examples" / "psirt-enabled.yaml"
 TODAY = dt.date(2026, 9, 12)
 SCRIPT = ROOT / "scripts" / "model_eval.py"
 
@@ -30,21 +31,28 @@ SCRIPT = ROOT / "scripts" / "model_eval.py"
 def test_targets_and_commands_never_carry_keys(monkeypatch):
     cfg = load_config(ROOT / "config" / "mara.yaml")
     targets = me.targets_from_config(cfg)
-    assert [t.family for t in targets] == ["anthropic", "deepseek", "nemotron"]
-    monkeypatch.setenv("DEEPSEEK_LOCAL_KEY", "sk-secret-deepseek")
-    ds = next(t for t in targets if t.family == "deepseek")
+    assert [t.family for t in targets] == ["anthropic", "gemini", "glm"]
+    monkeypatch.setenv("GLM_LOCAL_KEY", "sk-secret-glm")
+    ds = next(t for t in targets if t.family == "glm")
     argv, env = me.garak_command(ds, ["promptinject", "encoding"], "/tmp/out")
     assert argv[:5] == ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible"] and "--target_name" in argv
-    assert "probes.promptinject,probes.encoding" in argv and "sk-secret-deepseek" not in " ".join(argv)
-    assert env == {"OPENAICOMPATIBLE_API_KEY": "$DEEPSEEK_LOCAL_KEY"}
-    assert me.garak_generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://vllm-deepseek.internal:8000/v1/"}}}
-    an = next(t for t in targets if t.family == "anthropic")
+    assert "probes.promptinject,probes.encoding" in argv and "sk-secret-glm" not in " ".join(argv)
+    assert env == {"OPENAICOMPATIBLE_API_KEY": "$GLM_LOCAL_KEY"}
+    assert me.garak_generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://llm.iec.inventec/v1/"}}}
+    # Claude on Bedrock and the Gemini API have no wrapper yet: named as a G-8 gap, never a command
+    for fam in ("anthropic", "gemini"):
+        t = next(t for t in targets if t.family == fam)
+        assert "G-8 gap" in me.unsupported(t) and t.provider in me.unsupported(t)
+        with pytest.raises(ValueError, match="no garak generator"):
+            me.garak_command(t, ["dan"], "/tmp/out")
+    assert me.unsupported(ds) is None
+    an = me.EvalTarget("anthropic", "claude-reviewer", "claude-opus-5-5", "anthropic", "", "")  # the direct Anthropic API
     argv, env = me.garak_command(an, ["dan"], "/tmp/out")
     assert argv[3:6] == ["--target_type", "anthropic", "--target_name"] and env == {"ANTHROPIC_API_KEY": "$ANTHROPIC_API_KEY"}
     assert me.garak_generator_options(an) is None
     cmds = me.cyberseceval_commands(ds, "/data", "/tmp/out", "$CSE_JUDGE_LLM")
     assert set(cmds) == {"prompt-injection", "mitre-frr"}
-    assert f"--llm-under-test=OPENAI::deepseek-v3.2::{me.MASK}::https://vllm-deepseek.internal:8000/v1" in cmds["prompt-injection"]
+    assert f"--llm-under-test=OPENAI::{ds.model}::{me.MASK}::https://llm.iec.inventec/v1" in cmds["prompt-injection"]
     assert "--judge-llm=$CSE_JUDGE_LLM" in cmds["prompt-injection"] and "--benchmark=mitre-frr" in cmds["mitre-frr"]
     assert me.cse_spec(an, "sk-real") == "ANTHROPIC::claude-opus-5-5::sk-real"
     with pytest.raises(RuntimeError):
@@ -97,7 +105,8 @@ def test_thresholds_and_verdicts(tmp_path):
 
 
 def _report(tmp_path: Path, mode: str = "dry-run", run_dir: Path = FIX) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, str(SCRIPT), "report", "--run-dir", str(run_dir), "--date", "2026-09-12", "--mode", mode,
+    # the synthetic fixtures were recorded for the anthropic / deepseek / nemotron panel this example keeps
+    return subprocess.run([sys.executable, str(SCRIPT), "--config", str(FIXTURE_PANEL), "report", "--run-dir", str(run_dir), "--date", "2026-09-12", "--mode", mode,
                           "--docs-dir", str(tmp_path / "docs"), "--summary-root", str(tmp_path)], capture_output=True, text=True)
 
 
@@ -130,10 +139,15 @@ def test_report_cli_renders_front_matter_and_refuses_live_from_fixtures(tmp_path
 
 
 def test_plan_masks_keys(monkeypatch):
-    monkeypatch.setenv("NIM_LOCAL_KEY", "nim-secret-value")
+    monkeypatch.setenv("GLM_LOCAL_KEY", "glm-secret-value")
     r = subprocess.run([sys.executable, str(SCRIPT), "plan"], capture_output=True, text=True)
-    assert r.returncode == 0 and "nim-secret-value" not in r.stdout
-    assert "OPENAICOMPATIBLE_API_KEY=$NIM_LOCAL_KEY" in r.stdout and "--target_type anthropic" in r.stdout and "${KEY}" in r.stdout
+    assert r.returncode == 0 and "glm-secret-value" not in r.stdout
+    assert "OPENAICOMPATIBLE_API_KEY=$GLM_LOCAL_KEY" in r.stdout and "${KEY}" in r.stdout
+    assert "# anthropic: SKIPPED" in r.stdout and "provider bedrock" in r.stdout and "# gemini: SKIPPED" in r.stdout
+    # the direct Anthropic API path is still planned (the PSIRT example config keeps it)
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(FIXTURE_PANEL), "plan"],
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and "--target_type anthropic" in r.stdout and "SKIPPED" not in r.stdout
 
 
 def test_calibration_penalty_front_matter_and_live_guard(tmp_path, monkeypatch):
@@ -183,15 +197,15 @@ def test_governance_g8_g9_fail_here_and_pass_on_live_reports(tmp_path):
     (root / "docs").mkdir(parents=True)
     (root / "config").mkdir()
     (root / "config" / "mara.yaml").write_text((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"), encoding="utf-8")
-    fams = ["anthropic", "deepseek", "nemotron"]
+    fams = ["anthropic", "gemini", "glm"]
     def fm(report, mode, families, extra=""):
         return "---\n" + yaml.safe_dump({"report": report, "date": "2026-09-01", "mode": mode, "families": families}) + extra + "---\n# x\n"
     (root / "docs" / "garak-2026-09-01.md").write_text(fm("garak", "dry-run", fams), encoding="utf-8")
     (root / "docs" / "cyberseceval-2026-09-01.md").write_text(fm("cyberseceval", "live", fams), encoding="utf-8")
     r = gc.check_g8(root, TODAY, root / "config" / "mara.yaml")
     assert r.status == gc.FAIL and "不是 live" in r.evidence
-    (root / "docs" / "garak-2026-09-01.md").write_text(fm("garak", "live", ["anthropic", "deepseek"]), encoding="utf-8")
-    assert "未涵蓋家族 ['nemotron']" in gc.check_g8(root, TODAY, root / "config" / "mara.yaml").evidence
+    (root / "docs" / "garak-2026-09-01.md").write_text(fm("garak", "live", ["anthropic", "gemini"]), encoding="utf-8")
+    assert "未涵蓋家族 ['glm']" in gc.check_g8(root, TODAY, root / "config" / "mara.yaml").evidence
     (root / "docs" / "garak-2026-09-01.md").write_text(fm("garak", "live", fams), encoding="utf-8")
     assert gc.check_g8(root, TODAY, root / "config" / "mara.yaml").status == gc.PASS
     assert gc.check_g8(root, TODAY + dt.timedelta(days=100), root / "config" / "mara.yaml").status == gc.FAIL, "older than 90 days"
