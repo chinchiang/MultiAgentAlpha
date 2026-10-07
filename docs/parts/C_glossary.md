@@ -8,7 +8,7 @@
 | Evidence tier | finding 的可信度層級 A 到 D | 第 11.2 節；勿與 source grade 混淆 |
 | Source grade | 本報告引用來源的四級（已證實、廠商主張、第三方評論、尚未證實） | 第 12.6 節 |
 | Provenance | finding 的來源證據：檔案、行號、逐字引用 | 第 12.3 節 |
-| Canary | 植入資料中的隨機標記，用以偵測模型把資料當指令執行 | 第 9 章 |
+| Canary | 植入資料中的隨機標記，用以偵測模型把資料當指令執行；回應 canary 的呼叫整批作廢 | 第 9 章；雛型用於 L1 到 L3 |
 | Skeptic | L3 中負責否證 finding 的 agent | 第 6.4 節 |
 | Red team | L3 中負責判斷可利用性的 agent | 第 6.4 節 |
 | Judge / Jury | L4 中盲審 finding 的 agent 集合 | 第 6.5 節 |
@@ -21,7 +21,16 @@
 | Sycophancy | 模型迎合使用者或上下文中的觀點 | 第 13 章第 6 項 |
 | Correlated errors | 不同模型在同一項目上以相同方式出錯 | 第 13 章第 7 項 |
 | CAPA | Chance Adjusted Probabilistic Agreement，量測模型錯誤相似度的指標 | 第 4.4 節 |
-| Krippendorff's α | 可處理缺值與多評分者的一致性係數 | 第 11.2 節 |
+| Krippendorff's α | 可處理缺值與多評分者的一致性係數 | 第 11.2 節；雛型只在整批 finding（語料層級）計算，單一 finding 改用 agreement proxy |
+| Agreement proxy | 單一 finding 的評審一致度代理指標：每個 judge 家族取一個裁決，計算眾數占比並做機遇校正；不是 Krippendorff's α | 第 13 章第 13 項、附錄B 第 48 項 |
+| Alternative Annotator Test (AAT) | 以人工裁決為對照，檢定管線的判斷能否在統計上替代人類標註者；通過前不允許無監督地不採納 finding | 第 15.3 節、G-9 |
+| Human queue | 人工佇列：不得自動採納、須由安全團隊裁決的 finding；未清空前審查標記為不完整 | 第 15.1 節 |
+| Shadow mode | 影子模式：只產出報告、不評論也不阻擋的導入階段 | 第 15.4 節、G-10 |
+| Cold standby | 冷備家族：事先備妥設定、可在一週內替換既有家族的模型 | 第 7.3 節、G-4 |
+| Seeded benchmark | 刻意植入已知漏洞並附標籤的樣本集，用於校準 | 第 11.5 節、`calib/` |
+| Fail-closed | 任何必要步驟失敗時判為不完整、閘門不通過，而不是當成「沒有發現」 | 第 6.1 節 |
+| MARA_HOME | MARA 工作區（鎖定工具、校準證據）的位置；位於被審 repo 內時拒絕審查 | 第 9 章 |
+| P1–P8 | 雛型在載入設定時強制的政策規則（資料主權、家族多樣性、無監督不採納等） | 第 10 章、`src/mara/policy.py` |
 | Dawid-Skene | 無金標準下同時估計真實標籤與標註者混淆矩陣的 EM 演算法 | 第 11.5 節 |
 | PoLL | Panel of LLM evaluators，不同供應商的小模型評審團 | 第 4.4 節 |
 | SARIF | Static Analysis Results Interchange Format，OASIS 標準 | 第 6.1 節 |
@@ -42,7 +51,7 @@
 | Covered Models | Anthropic 對需 30 天保留、不得 ZDR 的模型的稱呼 | 第 7.1 節 |
 | NIM | NVIDIA Inference Microservices | 第 7.1 節 |
 | vLLM | 開源推論伺服器，提供 OpenAI 相容端點 | 第 7.2 節 |
-| On-prem | 組織內部署，資料不離境 | 設定檔 `data_residency` |
+| On-prem | 組織內部署，資料不離境 | 設定檔 `data_residency: on_prem`（須為私有位址上的 OpenAI 相容端點）；另一個允許值 `vendor_api_zdr` 表示在零資料保留協議下送往廠商 API |
 | CSL / DSL / PIPL | 中國網路安全法、資料安全法、個人資訊保護法 | 第 21.2 節、第 26 章 |
 | CRA | EU Cyber Resilience Act，Regulation (EU) 2024/2847 | 第 10.11 節 |
 | PSIRT | Product Security Incident Response Team | G-12 |

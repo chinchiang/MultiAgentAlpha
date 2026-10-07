@@ -8,21 +8,21 @@
 
 **G-1 把自動審查定義為安全測試的一部分，而非取代。** 對應 ISO/IEC 27001:2022 A.8.29（開發與驗收中的安全測試）、A.8.25（安全開發生命週期）；IEC 62443-4-1 SVV 實務；NIST SSDF PW.7、PW.8。負責：產品安全長（PSO）。時程：導入第 1 個月內以政策文件確立。代價：無法以「AI 審查通過」取代人工安全測試，人力節省的預期需下修。
 
-**G-2 家族數不低於三、反序 pass 不關閉、judge 不見分數，列為政策。** 對應 NIST AI 600-1 的「Harmful Bias and Homogenization」風險類別【尚未證實｜B118】與 ISO/IEC 42001:2023 的 AI 管理系統要求【尚未證實｜B121】。負責：PSO 與 AI 治理委員會。時程：第 1 個月。代價：成本下限被鎖定，第 22 章的裁減空間縮小約三分之一。
+**G-2 家族數不低於三、反序 pass 不關閉、judge 不見分數，列為政策。** 對應 NIST AI 600-1 的「Harmful Bias and Homogenization」風險類別【已證實｜B118】與 ISO/IEC 42001:2023 的 AI 管理系統要求【尚未證實｜B121】。負責：PSO 與 AI 治理委員會。時程：第 1 個月。代價：成本下限被鎖定，第 22 章的裁減空間縮小約三分之一。
 
-**G-3 資料主權規則寫進設定檔的驗證邏輯。** 原始碼只送往 on-prem 或 ZDR 的模型；Fable 系列不用於審查；DeepSeek 只自架。對應 A.5.19 到 A.5.21（供應商關係與 ICT 供應鏈，標題待對照）、A.8.10（資訊刪除）；Anthropic 的資料保留條款【B81】。負責：CISO 與法務。時程：第 1 個月。代價：放棄 Anthropic 最強的 Fable 模型；DeepSeek 需自備 GPU。
+**G-3 資料主權規則寫進設定檔的驗證邏輯。** 原始碼只送往 on-prem 或 ZDR 的模型；Fable 系列不用於審查；DeepSeek 只自架；送往 Claude 的呼叫不走 Batch API 與 code execution 等不在 ZDR 範圍內的功能，因為 API 本身不會擋下它們【已證實｜B81】；每次回應實際使用的模型要記錄下來，因為 Opus 5.5 會把部分資安請求轉給另一個模型【廠商主張｜B125】（雛型目前只記錄設定的模型 ID）。對應 A.5.19 到 A.5.21（供應商關係與 ICT 供應鏈，標題待對照）、A.8.10（資訊刪除）；Anthropic 的資料保留條款【B81】。負責：CISO 與法務。時程：第 1 個月。代價：放棄 Anthropic 最強的 Fable 模型；DeepSeek 需自備 GPU。
 
-**G-4 模型可抽換性作為採購條件。** 任何家族必須能在一週內被替換而不改變流程；替代家族（Llama 4、Mistral、Qwen 的自架版本）預先部署為冷備。對應 A.5.20（供應商協議）、NIST CSF 2.0 GV.SC【尚未證實｜C13.4】。負責：採購與平台團隊。時程：第 3 個月前完成冷備。代價：額外的 GPU 與維運成本；Qwen 同屬中國關聯來源，替代 DeepSeek 時不解決稽核問題。
+**G-4 模型可抽換性作為採購條件。** 任何家族必須能在一週內被替換而不改變流程；替代家族（Llama 4、Mistral、Qwen 的自架版本）預先部署為冷備。對應 A.5.20（供應商協議）、NIST CSF 2.0 GV.SC【已證實｜C13.4】。負責：採購與平台團隊。時程：第 3 個月前完成冷備。代價：額外的 GPU 與維運成本；Qwen 同屬中國關聯來源，替代 DeepSeek 時不解決稽核問題。
 
 ### 25.2 技術層
 
-**G-5 L0 工具固定版本並簽章驗證。** semgrep、gitleaks、OSV-Scanner、zizmor、Scorecard 的版本寫進 lockfile；TruffleHog 只在隔離 runner 執行（Shai-Hulud 曾用它採集憑證【C6.13】）。對應 A.8.8（技術弱點管理，標題待對照）、SLSA v1.2 Build L2【C11.1】。負責：平台團隊。時程：第 2 個月。代價：工具升版需走變更管理。
+**G-5 L0 工具固定版本並簽章驗證。** semgrep、gitleaks、OSV-Scanner、zizmor、Scorecard 的版本寫進 lockfile；TruffleHog 只在隔離 runner 執行（Shai-Hulud 曾濫用它搜尋機密【C6.15】）。對應 A.8.8（技術弱點管理，標題待對照）、SLSA v1.2 Build L2【C11.1】。負責：平台團隊。時程：第 2 個月。代價：工具升版需走變更管理。
 
 **G-6 審查 workflow 本身套用組織層級的 SHA pinning 政策與 `pull_request` 限制。** 對應 GitHub 2025 年 8 月的政策功能【C7.8】、OpenSSF Scorecard Dangerous-Workflow 與 Pinned-Dependencies【C7.13】、A.8.32（變更管理，標題待對照）。負責：平台團隊。時程：第 1 個月。代價：所有既有 workflow 都要重新固定 SHA。
 
-**G-7 模型權重納入 SBOM 並簽章。** 自架權重的來源、雜湊與授權寫進 CycloneDX 1.6 以上的 ML-BOM【C11.2】；以 cosign 或 NGC 簽章驗證；只載入 safetensors。對應 EU CRA Annex I Part II (1)【C11.9】、A.5.21。負責：平台團隊與 PSIRT。時程：第 2 個月。代價：DeepSeek V4 權重的正式來源在本次研究無法確認【A78】，可能延遲其導入。
+**G-7 模型權重納入 SBOM 並簽章。** 自架權重的來源、雜湊與授權寫進 CycloneDX 1.6 以上的 ML-BOM【C11.2】；以 cosign 或 NGC 簽章驗證；只載入 safetensors。對應 EU CRA Annex I Part II (1)【C11.9】、A.5.21。負責：平台團隊與 PSIRT。時程：第 2 個月。代價：自架權重的雜湊與簽章需要平台團隊逐版補齊；DeepSeek V4 的權重已確認發布於 Hugging Face 的官方組織【A78】，但 NGC 之外的來源沒有發行者簽章，只能靠第一次固定的雜湊。
 
-**G-8 每季對三個家族執行 garak 與 CyberSecEval 4 的 Prompt Injection 與 False Refusal Rate 測試。** 結果寫進校準權重與偏誤稽核。對應 NIST AI 600-1 的 Information Security 類別【B118】、OWASP Agentic Top 10 ASI01【B45】。負責：安全團隊。時程：第 3 個月起每季。代價：每季約一人週。
+**G-8 每季對三個家族執行 garak 與 CyberSecEval 4 的 Prompt Injection 與 False Refusal Rate 測試。** 結果寫進校準權重與偏誤稽核。garak 應使用 0.17.0 以上的版本（含 EU AI Act 對照標籤）【B104】；CyberSecEval 自 2025 年 6 月起處於低維護狀態，沒有新的基準版本【B113】。對應 NIST AI 600-1 的 Information Security 類別【B118】、OWASP Agentic Top 10 ASI01【B45】。負責：安全團隊。時程：第 3 個月起每季。代價：每季約一人週。
 
 **G-9 校準迴圈每季重跑，並以 Alternative Annotator Test 作為無監督「不採納」的驗收門檻。** 對應 A.8.29、ISO/IEC 23894 的 AI 風險管理流程【B122】。負責：安全團隊與資料科學。時程：第 3 個月第一次，之後每季。代價：每季約兩人週，且需維護輪替的校準集。
 
@@ -32,9 +32,9 @@
 
 **G-11 人工佇列接工單系統，裁決結果回寫校準集；佇列超量時收緊門檻而非加速核准。** 對應 A.8.29、NIST SSDF RV.1。負責：安全團隊。時程：第 2 個月。代價：安全團隊每週需保留固定時段處理佇列。
 
-**G-12 A 級 Critical finding 若涉及已出貨產品，直接接入 PSIRT 的 CRA 第 14 條通報流程。** 24 小時預警義務自 2026 年 9 月 11 日適用【C11.9】。對應 IEC 62443-4-1 DM 與 SUM 實務。負責：PSIRT。時程：立即。代價：審查管線的誤報會消耗 PSIRT 的判斷時間，因此只限 A 級。
+**G-12 A 級 Critical finding 若涉及已出貨產品，直接接入 PSIRT 的 CRA 第 14 條通報流程。** 24 小時預警義務已於 2026 年 9 月 11 日生效，通報經 ENISA Single Reporting Platform 提交【C11.9、C11.15】；PSIRT 須先取得該平台的帳號。對應 IEC 62443-4-1 DM 與 SUM 實務。負責：PSIRT。時程：立即。代價：審查管線的誤報會消耗 PSIRT 的判斷時間，因此只限 A 級。
 
-**G-13 AI 素養訓練。** EU AI Act 第 4 條自 2025 年 2 月 2 日起要求所有 deployer 確保操作 AI 系統的人員具備足夠的 AI 素養，不論風險等級【尚未證實（頁面被擋）｜B123】。審查管線的使用者（開發者、安全團隊、人工裁決者）都需要理解證據層級、偏誤稽核與「通過不等於安全」。負責：人資與 PSO。時程：第 2 個月起。代價：每人約半天。
+**G-13 AI 素養訓練。** EU AI Act 第 4 條自 2025 年 2 月 2 日起對所有 deployer 課以 AI 素養義務，不論風險等級；2026 年 7 月 27 日生效的 AI Omnibus 修正後，義務由「確保足夠的 AI 素養」改為「採取措施支持 AI 素養的發展」，不要求保證特定程度【第三方評論（修正條文經彙整網站讀取，EUR-Lex 原文未讀到）｜B123】【已證實（生效日期）｜B133】。義務變輕不代表訓練可以省略：審查管線的使用者（開發者、安全團隊、人工裁決者）都需要理解證據層級、偏誤稽核與「通過不等於安全」。負責：人資與 PSO。時程：第 2 個月起。代價：每人約半天。
 
 ### 25.4 對應總表
 
