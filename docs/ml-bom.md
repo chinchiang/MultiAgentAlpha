@@ -1,10 +1,11 @@
 # ML-BOM for the self-hosted model weights (governance item G-7)
 
 The report (Part VI, section 16; Part X, G-7) requires that the weights behind the self-hosted
-DeepSeek and Nemotron endpoints are recorded in a CycloneDX 1.6 or later ML-BOM with their source,
-hashes and licence, that the BOM is signed (cosign or NGC), and that only safetensors is loaded.
-This document describes how the prototype does it and why the two production entries are still
-pending in this repository.
+endpoints are recorded in a CycloneDX 1.6 or later ML-BOM with their source, hashes and licence,
+that the BOM is signed (cosign or NGC), and that only safetensors is loaded. Since 2026-10-06 the
+production self-hosted model is GLM on `llm.iec.inventec` (`config/mara.yaml` `glm-reviewer`); the
+DeepSeek and Nemotron entries remain for the example configurations. This document describes how
+the prototype does it and why every entry is still pending in this repository.
 
 ## 1. Pieces
 
@@ -103,7 +104,7 @@ bias audit (`ml_bom`: model id, status, component name and version, digest); `re
 under "Model provenance". A report therefore states which weights, by hash, produced it once the
 BOM is complete, and says `pending` until then.
 
-## 5. Why the production entries are pending here
+## 5. Why the entries are pending here
 
 This repository does not host the weights, and the environment the prototype was written in could
 not reach huggingface.co, hf-mirror or NGC to fetch registry hashes (`registry-hashes` exists for
@@ -113,7 +114,12 @@ the source and licence for DeepSeek-V3.2 (GitHub repository, MIT; the formal sou
 weights could not be confirmed, report Appendix B item 20, source A78) and Nemotron 3 Super (NVIDIA Open Model
 License; exact repository and licence text still to be confirmed, Appendix B items 39 and 21) with empty `files:`.
 The BOM is built with `--allow-pending`, its components are marked `mara:status=pending`, policy P7
-reports them, and governance check G-7 fails naming both models and the procedure above. No
+reports them, and governance check G-7 fails naming the production model and the procedure above.
+The GLM entry carries no source, revision or licence at all: the platform team that runs
+`llm.iec.inventec` has to record what it deployed, and nothing was filled in from guesswork. The
+cold standbys use `deepseek-v4-flash-fp8`, a V4 build whose formal source is exactly what Appendix B
+item 20 could not confirm; it has no entry yet and needs one, with a confirmed source, before a
+standby swap makes it a production model. No
 placeholder hash was written anywhere; hashes appear only once someone has computed them.
 
 ## 6. Schema provenance

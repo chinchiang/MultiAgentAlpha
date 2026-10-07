@@ -47,8 +47,8 @@ class PolicyResult:
 PRIVATE_NETWORKS = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8",
                                                          "::1/128", "fc00::/7"))
 # Vendor APIs of the PRC-affiliated families (policy P2): never a destination for source code.
-PRC_VENDOR_API_HOSTS = ("deepseek.com", "dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com")
-PRC_MODEL_MARKERS = ("deepseek", "qwen")
+PRC_VENDOR_API_HOSTS = ("deepseek.com", "dashscope.aliyuncs.com", "dashscope-intl.aliyuncs.com", "bigmodel.cn", "z.ai")
+PRC_MODEL_MARKERS = ("deepseek", "qwen", "glm")
 
 
 def _host(url: str) -> str:
@@ -62,7 +62,8 @@ def _is_vendor_api(host: str) -> bool:
     return any(host == h or host.endswith("." + h) for h in PRC_VENDOR_API_HOSTS)
 
 
-def _host_is_private(url: str) -> tuple[bool, str]:
+def _host_is_private(url: str, extra_suffixes: tuple[str, ...] = ()) -> tuple[bool, str]:
+    """extra_suffixes: the organisation's private DNS zones from the config (private_dns_suffixes)."""
     host = _host(url)
     if not host:
         return False, "base_url has no host (or cannot be parsed)"
@@ -70,6 +71,8 @@ def _host_is_private(url: str) -> tuple[bool, str]:
         return False, f"host {host} is a DeepSeek/Qwen vendor API"
     if host == "localhost" or host.endswith(PRIVATE_SUFFIXES):
         return True, f"host {host} is a private name"
+    if extra_suffixes and host.endswith(tuple(extra_suffixes)):
+        return True, f"host {host} is in a private DNS zone the config declares ({', '.join(extra_suffixes)})"
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
@@ -82,7 +85,8 @@ def _host_is_private(url: str) -> tuple[bool, str]:
 
 
 def p1_covered_models(cfg: MaraConfig) -> PolicyResult:
-    covered = [m for m in cfg.models if m.provider == "anthropic" and any(k in m.model.lower() for k in COVERED_MODEL_MARKERS)]
+    # Claude on Bedrock counts too: the authorization concerns the model class, not the transport
+    covered = [m for m in cfg.models if m.provider in ("anthropic", "bedrock") and any(k in m.model.lower() for k in COVERED_MODEL_MARKERS)]
     if not covered:
         return PolicyResult("P1", "covered-models", True, "no Fable/Mythos-class Anthropic model configured")
     names = ", ".join(f"{m.name}({m.model})" for m in covered)
@@ -95,7 +99,7 @@ def p1_covered_models(cfg: MaraConfig) -> PolicyResult:
     )
 
 
-PRC_AFFILIATED = (ModelFamily.DEEPSEEK, ModelFamily.QWEN)
+PRC_AFFILIATED = (ModelFamily.DEEPSEEK, ModelFamily.QWEN, ModelFamily.GLM)
 
 
 def _prc_affiliated(m) -> bool:
@@ -124,7 +128,7 @@ def p2_deepseek_on_prem(cfg: MaraConfig) -> PolicyResult:
         if m.provider != "openai_compatible":
             problems.append(f"{m.name}: provider must be openai_compatible (self-hosted), got {m.provider}")
             continue
-        ok, why = _host_is_private(m.base_url or "")
+        ok, why = _host_is_private(m.base_url or "", tuple(cfg.private_dns_suffixes))
         (notes if ok else problems).append(f"{m.name}: {why}")
     if not any(_prc_affiliated(m) for m in cfg.models):
         return PolicyResult("P2", "deepseek-on-prem", True, "no DeepSeek/Qwen model configured")
@@ -167,7 +171,17 @@ def p5_data_residency(cfg: MaraConfig) -> PolicyResult:
     if cfg.allow_source_code_to_non_on_prem:
         return PolicyResult("P5", "data-residency", True, "allow_source_code_to_non_on_prem is true (explicit override)")
     bad = [f"{m.name}: data_residency={m.data_residency}" for m in cfg.models
-           if m.provider != "mock" and m.data_residency not in ("on_prem", "vendor_api_zdr")]
+           if m.provider != "mock" and m.data_residency not in ("on_prem", "vendor_api_zdr", "vendor_api_retained")]
+    retained = []
+    for m in cfg.models:
+        if m.provider == "mock" or m.data_residency != "vendor_api_retained":
+            continue
+        # a per-model, recorded exception: the vendor keeps prompts for a while (abuse monitoring) but the
+        # organisation approved sending source code to this one model; it never widens P5 for any other
+        if not m.retention_approval_ref.strip():
+            bad.append(f"{m.name}: data_residency=vendor_api_retained needs retention_approval_ref (ticket or contract clause)")
+        else:
+            retained.append(f"{m.name} (approval {m.retention_approval_ref.strip()})")
     # on_prem is a claim about where the weights run; it must match the endpoint: a self-hosted
     # OpenAI-compatible server on a private host. A public URL declared on_prem is not on-prem.
     for m in cfg.models:
@@ -176,12 +190,16 @@ def p5_data_residency(cfg: MaraConfig) -> PolicyResult:
         if m.provider != "openai_compatible":
             bad.append(f"{m.name}: data_residency=on_prem but provider {m.provider} is a vendor API")
             continue
-        ok, why = _host_is_private(m.base_url or "")
+        ok, why = _host_is_private(m.base_url or "", tuple(cfg.private_dns_suffixes))
         if not ok:
             bad.append(f"{m.name}: data_residency=on_prem but {why}")
     if bad:
         return PolicyResult("P5", "data-residency", False,
-                            "source code may only be sent to on_prem or vendor_api_zdr models: " + "; ".join(bad))
+                            "source code may only be sent to on_prem or vendor_api_zdr models, or to a vendor_api_retained "
+                            "model with a recorded approval: " + "; ".join(bad))
+    if retained:
+        return PolicyResult("P5", "data-residency", True,
+                            "every non-mock model is on_prem or vendor_api_zdr, except approved vendor_api_retained: " + ", ".join(retained))
     return PolicyResult("P5", "data-residency", True, "every non-mock model is on_prem or vendor_api_zdr")
 
 

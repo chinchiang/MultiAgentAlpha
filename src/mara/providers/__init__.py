@@ -9,6 +9,14 @@ def make_provider(spec: ModelSpec, fixtures_dir: str | None = None) -> Provider:
         from .anthropic_provider import AnthropicProvider
 
         return AnthropicProvider(spec)
+    if spec.provider == "bedrock":
+        from .bedrock_provider import BedrockProvider
+
+        return BedrockProvider(spec)
+    if spec.provider == "gemini":
+        from .gemini_provider import GeminiProvider
+
+        return GeminiProvider(spec)
     if spec.provider == "openai_compatible":
         from .openai_compatible import OpenAICompatibleProvider
 

@@ -6,8 +6,9 @@
 #
 #   date              YYYY-MM-DD the drill finished
 #   kind              live | rehearsal
-#   replaced_family   the production family taken out (anthropic | deepseek | nemotron)
-#   standby_family    the family that took its place (llama | mistral | qwen)
+#   replaced_family   the production family taken out (anthropic | gemini | glm since 2026-10-06;
+#                     earlier entries: anthropic | deepseek | nemotron)
+#   standby_family    the family that took its place (deepseek since 2026-10-06; earlier: llama | mistral)
 #   config            the standby configuration used (config/examples/standby-for-<family>.yaml)
 #   duration_hours    from the decision to swap until the pipeline reviewed a real PR on the standby
 #   outcome           pass | fail
@@ -16,9 +17,10 @@
 #
 # Governance check G-4 passes when every production family has a standby configuration that loads
 # through the policies and a live drill within the last 365 days that passed in 168 hours or less.
-# The register holds mock rehearsals only (kind: rehearsal, one per production family, 2026-10-03):
-# they prove the standby panels run the unchanged process, but NO live drill has been run and G-4
-# stays red until one has (record with `record`, never by hand).
+# The register holds mock rehearsals only (kind: rehearsal): one per family of the former panel on
+# 2026-10-03 (two of those standby files were retired with that panel on 2026-10-06) and one per
+# family of the current panel on 2026-10-06. They prove the standby panels run the unchanged process,
+# but NO live drill has been run and G-4 stays red until one has (record with `record`, never by hand).
 drills:
 - date: '2026-10-03'
   kind: rehearsal
@@ -43,6 +45,33 @@ drills:
   replaced_family: nemotron
   standby_family: mistral
   config: config/examples/standby-for-nemotron.yaml
+  duration_hours: 0.001
+  outcome: pass
+  performed_by: chinchiang
+  evidence: mock review of fixtures/vuln-sample
+- date: '2026-10-06'
+  kind: rehearsal
+  replaced_family: anthropic
+  standby_family: deepseek
+  config: config/examples/standby-for-anthropic.yaml
+  duration_hours: 0.001
+  outcome: pass
+  performed_by: chinchiang
+  evidence: mock review of fixtures/vuln-sample
+- date: '2026-10-06'
+  kind: rehearsal
+  replaced_family: gemini
+  standby_family: deepseek
+  config: config/examples/standby-for-gemini.yaml
+  duration_hours: 0.001
+  outcome: pass
+  performed_by: chinchiang
+  evidence: mock review of fixtures/vuln-sample
+- date: '2026-10-06'
+  kind: rehearsal
+  replaced_family: glm
+  standby_family: deepseek
+  config: config/examples/standby-for-glm.yaml
   duration_hours: 0.001
   outcome: pass
   performed_by: chinchiang

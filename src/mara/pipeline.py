@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import json
 from collections import Counter, defaultdict
 from dataclasses import asdict
 from pathlib import Path
@@ -445,7 +446,7 @@ class Pipeline:
 
     # ------------------------------------------------------------------ run
     def run(self, target: str | Path, *, sarif_dir: Path | None = None, mode: str = "live",
-            base_ref: str | None = None) -> ReviewReport:
+            base_ref: str | None = None, calibration_sample: bool = False) -> ReviewReport:
         actual_modes = {p.spec.provider for p in self.providers.values()}
         actual_mode = "mock" if actual_modes == {"mock"} else "live"
         if mode not in {"mock", "live"} or actual_mode != mode or (mode == "live" and "mock" in actual_modes):
@@ -454,6 +455,7 @@ class Pipeline:
         # before anything runs: the tools come from, and P8/the backlog were read from, the MARA
         # workspace; none of it may be supplied by the repository under review
         check_outside(target)
+        answer_key = calibration_answer_key(target) if calibration_sample else None
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = build_context(target)
         if base_ref:
@@ -476,7 +478,16 @@ class Pipeline:
         # Live source egress is blocked before any provider sees data if the trusted local
         # secret scan is unavailable or reports secrets. The masked manifest remains reviewable.
         secret_runs = [r for r in tool_runs if r.tool == "gitleaks"]
-        egress_blocked = mode == "live" and (not secret_runs or any(not r.ran or r.results for r in secret_runs))
+        unexplained = [res for run in secret_runs for res in run.results]
+        if answer_key is not None and unexplained:
+            # calibration only: a seeded secret the sample's answer key declares (CWE-798, same file and
+            # line) is expected and does not block; anything else the scan finds still does
+            exempt = [res for res in unexplained if _declared_secret(res, answer_key)]
+            unexplained = [res for res in unexplained if res not in exempt]
+            self.audit["secret_preflight_calibration_exempted"] = len(exempt)
+            self._say(f"L0: secret preflight: {len(exempt)} seeded secret(s) declared by the calibration answer key, "
+                      f"{len(unexplained)} other finding(s)")
+        egress_blocked = mode == "live" and (not secret_runs or any(not r.ran for r in secret_runs) or bool(unexplained))
         # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked
         context_view = None if egress_blocked else self.run_context(ctx)
         if context_view is not None:
@@ -671,6 +682,31 @@ def _norm_path(path: str) -> str:
     while path.startswith("./"):
         path = path[2:]
     return path
+
+
+def calibration_answer_key(target: Path) -> list[dict]:
+    """The seeded-secret labels (CWE-798) of a calibration sample, for the secret-preflight exemption.
+
+    Only an operator flag (`mara review --calibration-sample`) asks for it, and only a directory below
+    the MARA workspace's calib/samples/ with a MARA answer key qualifies: a reviewed repository cannot
+    exempt its own secrets by shipping a labels.json, since its location is the operator's choice and
+    the exemption is off for every ordinary review."""
+    from .context.repo_map import is_calibration_answer_key
+    from .workspace import root as workspace_root
+
+    samples = (workspace_root() / "calib" / "samples").resolve()
+    target = Path(target).resolve()
+    if samples not in target.parents:
+        raise ValueError(f"--calibration-sample needs a target below {samples}, got {target}")
+    path = target / "labels.json"
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if not is_calibration_answer_key("labels.json", text):
+        raise ValueError(f"--calibration-sample: {path} is not a calibration answer key")
+    return [lab for lab in json.loads(text)["labels"] if str(lab.get("cwe", "")).upper() == "CWE-798"]
+
+
+def _declared_secret(res: ToolResult, answer_key: list[dict]) -> bool:
+    return any(_norm_path(str(lab["file"])) == _norm_path(res.file) and int(lab["line"]) == res.line for lab in answer_key)
 
 
 def _alpha_units(findings: list[Finding], votes: list[JudgeVote]) -> dict[str, list[str]]:

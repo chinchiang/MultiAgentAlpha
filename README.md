@@ -14,8 +14,9 @@ This repository contains two things:
    CSL/DSL/PIPL isolation rule for PRC sites), limitations, and governance recommendations mapped
    to ISO/IEC 27001:2022, IEC 62443-4-1, EU CRA, NIST SSDF and ISO/IEC 42001.
 2. **A runnable prototype** (`src/mara`) that implements the six-layer architecture the report
-   describes. It runs fully offline with mock providers, and against live models (Anthropic API
-   plus self-hosted DeepSeek / Nemotron behind an OpenAI-compatible endpoint) when configured.
+   describes. It runs fully offline with mock providers, and against live models (Claude on Amazon
+   Bedrock, Gemini through the Gemini API and a self-hosted GLM behind an OpenAI-compatible
+   endpoint) when configured.
 
 ## Online report (GitHub Pages)
 
@@ -70,7 +71,8 @@ database (`cd target && mara review .` would let the reviewed repository supply 
 executes and the evidence the policies trust); run it from the workspace (`mara review path/to/target`)
 or set `MARA_HOME` outside the target. Secret files, symlinks, unsafe paths and file/request-size
 limits are visible in the coverage manifest; omitted required text prevents a complete result. Live
-model calls require a current local secret preflight, even when other SARIF was pre-recorded. Use
+model calls require a current local secret preflight, even when other SARIF was pre-recorded; the only
+exception is `--calibration-sample` (see Live mode). Use
 HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
 lack two independent judge families when several reviewers find the same issue; add independently
 operated families or complete human review instead of weakening the quorum.
@@ -90,7 +92,7 @@ Three rules are enforced by code, not by prompt:
 
 - **Provenance**: every finding must quote a verbatim excerpt that exists in the file (±3 lines) and pins something: at least 8 non-whitespace characters including a letter or digit, unless the quote is the whole claimed line (so `flask` in a requirements file still counts, `}` or `if ` never does). Fabricated or trivial quotes are tier D and never accepted.
 - **Pinned ground truth**: standard ids (ASVS 5.0 chapters, OWASP Top 10:2025, API Top 10 2023, LLM Top 10 2025, CWE subset) are validated against `mara/groundtruth/*.json`; unknown ids are stripped.
-- **Data residency**: source code is only sent to models declared `on_prem` or `vendor_api_zdr`. The default config refuses anything else.
+- **Data residency**: source code is only sent to models declared `on_prem` or `vendor_api_zdr`, or `vendor_api_retained` with a recorded `retention_approval_ref` for that model. The default config refuses anything else.
 
 Found a security problem in this repository's own code? See [SECURITY.md](SECURITY.md)
 (private vulnerability reporting; the seeded fixtures are out of scope by design).
@@ -117,16 +119,41 @@ a vote between the forward and reverse pass) so the tests exercise every defence
 ## Live mode
 
 ```bash
-export ANTHROPIC_API_KEY=...        # or `ant auth login`
-export DEEPSEEK_LOCAL_KEY=... NIM_LOCAL_KEY=...
+export AWS_PROFILE=...              # Bedrock: the AWS default credential chain, e.g. after `aws sso login --profile ...`
+export GEMINI_API_KEY=... GLM_LOCAL_KEY=...
 mara check-config config/mara.yaml
 mara review path/to/repo --config config/mara.yaml --out out
 ```
 
-`config/mara.yaml` documents the intended topology: Claude Opus 5 through the Anthropic API under a
-zero-data-retention agreement, DeepSeek weights self-hosted on vLLM, Nemotron on NVIDIA NIM. The
-DeepSeek vendor API is never used for source code. See the report, Part VIII, for the site-by-site
-deployment pattern and the separate handling of 上海／重慶.
+`config/mara.yaml` is the production panel since 2026-10-06: Claude Opus 5.5 on Amazon Bedrock
+(`provider: bedrock`, the `global.` cross-region inference profile, `region` required, SigV4 through
+boto3; declared `vendor_api_zdr` on Bedrock's terms that prompts and completions are neither stored nor
+used for training: keep the account's model invocation logging off, or that log holds the source code), Gemini through the
+Gemini API on the paid tier (`provider: gemini`, the key in the `x-goog-api-key` header, never the
+URL; structured output through `responseJsonSchema`), and a GLM model self-hosted on the IEC network
+behind an OpenAI-compatible endpoint (`on_prem`). The Gemini API keeps prompts for a limited period
+and is not ZDR, so the model is declared `vendor_api_retained` and policy P5 admits it only with
+the approval recorded in `retention_approval_ref`; any other retained model still fails. GLM is
+PRC-affiliated: policy P2 holds it to on-prem endpoints and refuses its vendor APIs (bigmodel.cn,
+z.ai) exactly like DeepSeek's. The model ids marked provisional in the file must be confirmed
+against each endpoint's model list before the first live run. Garak and CyberSecEval have no
+wrapper for Bedrock or the Gemini API yet (see G-8 below). See the report, Part VIII, for the
+site-by-site deployment pattern and the separate handling of 上海／重慶.
+
+The organisation's private DNS zones go in `private_dns_suffixes` (`.iec.inventec`), which P2 and P5
+then treat like `.internal`; a zone needs two labels and lower case, so `.com` or a single label is
+refused. An endpoint signed by an internal CA names its PEM chain in `ca_bundle` (`~` and
+workspace-relative paths): it is added to the default trust store and never replaces or disables
+verification. A gateway that expects the key in another header (`apikey`) sets `api_key_header`.
+The cold standbys in `config/examples/standby-for-{anthropic,gemini,glm}.yaml` each replace one
+family with the on-prem DeepSeek endpoint and leave everything else unchanged (G-4).
+
+The labelled calibration samples under `calib/samples/` carry planted credentials on purpose, so the
+secret preflight would block every live calibration call. `mara review --calibration-sample`
+(`scripts/calibration_run.py` sets it only for targets below `calib/samples/`) exempts exactly the
+gitleaks findings whose file and line match a CWE-798 label in the sample's MARA answer key; any
+other secret, a target elsewhere, or a sample without an answer key still blocks live egress, and
+the exemption is written to the audit trail.
 
 A failed provider call is recorded as a provider error (`reviewer_errors`, per family), not as a
 refusal, so a rate limit or an outage is never charged to the model in the bias audit or the
@@ -213,11 +240,11 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 
 | Policy | Rule |
 |---|---|
-| P1 covered-models | Fable/Mythos-class Anthropic models (30-day retention, not ZDR-eligible) need `anthropic_covered_models_authorized: true` and an authorization reference |
-| P2 deepseek-on-prem | DeepSeek (and Qwen) only through an OpenAI-compatible endpoint on an RFC 1918, loopback, IPv6 unique-local or `.internal`/`.local`/`.lan` host; the DeepSeek and DashScope vendor APIs are rejected, and so are link-local and documentation addresses. A model is DeepSeek/Qwen by its family, its model id or its host, so a misdeclared `family: other` fails instead of switching P2 off |
+| P1 covered-models | Fable/Mythos-class Anthropic models, direct or on Bedrock (30-day retention, not ZDR-eligible), need `anthropic_covered_models_authorized: true` and an authorization reference |
+| P2 deepseek-on-prem | DeepSeek, Qwen and GLM only through an OpenAI-compatible endpoint on an RFC 1918, loopback, IPv6 unique-local, `.internal`/`.local`/`.lan` or declared `private_dns_suffixes` host; the DeepSeek, DashScope and Zhipu (bigmodel.cn, z.ai) vendor APIs are rejected, and so are link-local and documentation addresses. A model is PRC-affiliated by its family, its model id or its host, so a misdeclared `family: other` fails instead of switching P2 off |
 | P3 panel-size | reviewers and judges each span at least three model families; exactly two only with a stated `reduced_panel_reason` (see `config/examples/prc-site.yaml`) |
 | P4 gate-bounds | `gate.self_judge_discount` at most 0.5, `gate.human_threshold_alpha` at least 0.3 |
-| P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr` unless `allow_source_code_to_non_on_prem` is set; `on_prem` must match the endpoint (an OpenAI-compatible server on a private host, not a vendor API or a public URL) |
+| P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr`, or `vendor_api_retained` with its own `retention_approval_ref`, unless `allow_source_code_to_non_on_prem` is set; `on_prem` must match the endpoint (an OpenAI-compatible server on a private host, not a vendor API or a public URL) |
 | P6 psirt-scope | when the PSIRT hand-off is enabled: HTTPS webhook, product set, token from the environment, trigger tiers within A/B and severities within Critical/High |
 | P7 ml-bom | when `ml_bom.required`: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature method), signed when `require_signature` |
 | P8 unsupervised-reject | `gate.unsupervised_reject_allowed` may be `true` only while `calib/latest.json` records a passing Alternative Annotator Test (current method: chance-corrected agreement and a bounded miss rate on the rejections themselves, see Calibration) on a live calibration within 90 days; while `false` every rejected non-D finding goes to the human queue |
@@ -442,7 +469,7 @@ is a complete example.
 
 ## ML-BOM for the self-hosted weights (governance item G-7)
 
-The weights served by the on-prem DeepSeek and Nemotron endpoints are inference dependencies, so
+The weights served by the on-prem endpoints (GLM in production; DeepSeek, Nemotron in the examples) are inference dependencies, so
 they are listed in a CycloneDX 1.6 ML-BOM. `sbom/models.yaml` is the manifest the platform team
 fills (official source, licence, per-file SHA-256 of the safetensors weights, signature method);
 `scripts/ml_bom.py` hashes a weights directory (pickle checkpoints are refused) or, with
@@ -450,8 +477,8 @@ fills (official source, licence, per-file SHA-256 of the safetensors weights, si
 repository at a pinned commit without downloading the weights, builds `sbom/ml-bom.cdx.json`, validates it against the vendored schema, re-verifies a directory on the
 inference host and checks the cosign bundle with the locked cosign. Policy P7 refuses the config
 once `ml_bom.required` is true and a self-hosted model has no complete component; until then
-`mara check-config` and the review report show each model's BOM status. Both production entries
-are pending in this repository: it hosts no weights and the registry hashes could not be fetched
+`mara check-config` and the review report show each model's BOM status. Every entry, the production
+GLM one included, is pending in this repository: it hosts no weights and the registry hashes could not be fetched
 from the authoring environment, so governance check G-7 stays red and says exactly what is missing.
 See `docs/ml-bom.md`.
 
@@ -459,7 +486,8 @@ See `docs/ml-bom.md`.
 
 `scripts/model_eval.py` turns the config into the exact garak (`openai.OpenAICompatible` or
 `anthropic` generator, probes from `model_eval.garak_probes`) and CyberSecEval 4
-(`prompt-injection`, `mitre-frr`) commands for every non-mock family, runs them on a host that
+(`prompt-injection`, `mitre-frr`) commands for every non-mock family on the direct Anthropic API or an
+OpenAI-compatible endpoint, runs them on a host that
 reaches the endpoints (keys only from the environment), parses the tools' native outputs, applies
 the thresholds in `model_eval.thresholds` and writes `docs/garak-<date>.md`,
 `docs/cyberseceval-<date>.md` and `calib/model-eval-<date>.json`. Calibration multiplies a
@@ -467,7 +495,9 @@ failing family's suggested weight by `weight_penalty_on_fail` and the review's b
 the latest verdict per family. `scripts/calibration_run.py --mode live` runs the whole calibration
 loop (check-config, every sample, `calibrate.py --mode live`) and both scripts refuse to label
 mock or fixture-based output as live. Governance checks G-8 and G-9 read the reports' front
-matter (`mode: live`, families covering the config, within 90 days). Nothing has run here: no
+matter (`mode: live`, families covering the config, within 90 days). Claude on Bedrock and the Gemini
+API have no garak or CyberSecEval wrapper yet: `plan` lists them as skipped, `run` exits 1, and
+G-8 stays red for those two families until one exists. Nothing has run here: no
 endpoint, no key, no garak; `fixtures/model-eval/` holds synthetic outputs for the parser tests.
 See `docs/model-eval-runbook.md`.
 
@@ -478,7 +508,7 @@ decides and says what is missing: `docs/policy/mara-review-policy.md` (front mat
 `status`/`approved_by`/`approved_on`/`review_by` and six marked mandatory statements; shipped as a
 draft), `config/examples/standby-for-<family>.yaml` plus `ops/model-swap-drills.yaml` and
 `scripts/model_swap_drill.py` (`rehearse` proves the process is unchanged on a mock panel, `record`
-logs a live swap timed from decision to first real PR; mock rehearsals for all three families are recorded, live drills are still missing), and `rollout:` in
+logs a live swap timed from decision to first real PR; mock rehearsals for all three production families are recorded, live drills are still missing), and `rollout:` in
 `config/mara.yaml` with `scripts/rollout_phase.py` (`status`, `baseline`, `advance`). The rollout
 phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking` (or with
 `--fail-on-gate`); exit 3 is reserved for a failed PSIRT hand-off. All three fail

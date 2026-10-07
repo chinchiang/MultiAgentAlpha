@@ -59,12 +59,12 @@ def test_policy_status_states(tmp_path):
 def test_standby_configs_swap_exactly_one_family_and_pass_policies():
     prod = load_config(ROOT / "config" / "mara.yaml")
     fams = govdocs.production_families(prod)
-    assert fams == ["anthropic", "deepseek", "nemotron"]
+    assert fams == ["anthropic", "gemini", "glm"]
     standbys = govdocs.standby_configs(ROOT)
     assert set(standbys) == set(fams)
     for fam, path in standbys.items():
         sb_fam, problem = govdocs._standby_family_of(fams, path, fam)
-        assert not problem and sb_fam in ("llama", "mistral", "qwen"), (fam, problem)
+        assert not problem and sb_fam == "deepseek", (fam, problem)  # the on-prem DeepSeek stands in for any one family
         cfg = load_config(path)
         assert all(r.passed for r in evaluate_policies(cfg))
         assert yaml.safe_load(path.read_text(encoding="utf-8"))["standby_for"] == fam
@@ -80,14 +80,16 @@ def test_standby_configs_swap_exactly_one_family_and_pass_policies():
 
 
 def test_p2_holds_qwen_to_private_endpoints():
-    raw = yaml.safe_load((ROOT / "config" / "examples" / "standby-for-deepseek.yaml").read_text(encoding="utf-8"))
-    raw["models"][1].update({"family": "qwen", "name": "qwen-reviewer", "base_url": "https://dashscope.example.com/v1"})
-    raw["roles"] = {k: ([n if n != "llama-reviewer" else "qwen-reviewer" for n in v] if isinstance(v, list) else (v if v != "llama-reviewer" else "qwen-reviewer"))
+    raw = yaml.safe_load((ROOT / "config" / "examples" / "standby-for-glm.yaml").read_text(encoding="utf-8"))
+    i = next(i for i, m in enumerate(raw["models"]) if m["name"] == "deepseek-reviewer")
+    raw["models"][i] = {"name": "qwen-reviewer", "family": "qwen", "provider": "openai_compatible", "model": "qwen3-coder",
+                        "base_url": "https://dashscope.example.com/v1", "data_residency": "on_prem"}
+    raw["roles"] = {k: ([n if n != "deepseek-reviewer" else "qwen-reviewer" for n in v] if isinstance(v, list) else (v if v != "deepseek-reviewer" else "qwen-reviewer"))
                     for k, v in raw["roles"].items()}
     with pytest.raises(ValueError, match="P2"):
         MaraConfig.model_validate(raw)
-    raw["models"][1]["base_url"] = "https://vllm-qwen.internal:8000/v1"
-    assert MaraConfig.model_validate(raw).models[1].family == ModelFamily.QWEN
+    raw["models"][i]["base_url"] = "https://vllm-qwen.internal:8000/v1"
+    assert MaraConfig.model_validate(raw).models[i].family == ModelFamily.QWEN
 
 
 def test_drills_register_and_status(tmp_path):
@@ -96,17 +98,17 @@ def test_drills_register_and_status(tmp_path):
     prod = load_config(ROOT / "config" / "mara.yaml")
     st = {s.family: s for s in govdocs.drill_status(prod, ROOT, TODAY, drills)}
     assert all(s.config_ok and not s.drill_ok and s.drill_problem == "no live drill recorded" for s in st.values())
-    govdocs.append_drill(drills, govdocs.Drill(TODAY, "rehearsal", "deepseek", "llama", "config/examples/standby-for-deepseek.yaml", 0.01, "pass", "x", "mock"))
-    assert not govdocs.drill_status(prod, ROOT, TODAY, drills)[1].drill_ok, "a rehearsal never satisfies G-4"
-    govdocs.append_drill(drills, govdocs.Drill(TODAY - dt.timedelta(days=10), "live", "deepseek", "llama",
-                                               "config/examples/standby-for-deepseek.yaml", 200.0, "pass", "x", "CHG-1"))
-    s = {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills)}["deepseek"]
+    govdocs.append_drill(drills, govdocs.Drill(TODAY, "rehearsal", "glm", "deepseek", "config/examples/standby-for-glm.yaml", 0.01, "pass", "x", "mock"))
+    assert not {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills)}["glm"].drill_ok, "a rehearsal never satisfies G-4"
+    govdocs.append_drill(drills, govdocs.Drill(TODAY - dt.timedelta(days=10), "live", "glm", "deepseek",
+                                               "config/examples/standby-for-glm.yaml", 200.0, "pass", "x", "CHG-1"))
+    s = {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills)}["glm"]
     assert not s.drill_ok and "need pass within 168 h" in s.drill_problem
-    govdocs.append_drill(drills, govdocs.Drill(TODAY - dt.timedelta(days=5), "live", "deepseek", "llama",
-                                               "config/examples/standby-for-deepseek.yaml", 54.0, "pass", "x", "CHG-2"))
-    s = {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills)}["deepseek"]
+    govdocs.append_drill(drills, govdocs.Drill(TODAY - dt.timedelta(days=5), "live", "glm", "deepseek",
+                                               "config/examples/standby-for-glm.yaml", 54.0, "pass", "x", "CHG-2"))
+    s = {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills)}["glm"]
     assert s.drill_ok and s.drill.evidence == "CHG-2"
-    assert not {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY + dt.timedelta(days=400), drills)}["deepseek"].drill_ok, "older than a year"
+    assert not {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY + dt.timedelta(days=400), drills)}["glm"].drill_ok, "older than a year"
     text = drills.read_text(encoding="utf-8")
     assert text.startswith("# Model-swap drill register") and text.count("kind: live") == 2
 
@@ -118,19 +120,22 @@ def test_drill_cli_rehearse_record_check(tmp_path):
     run = lambda *a: subprocess.run([sys.executable, str(script), "--drills", str(drills), "--today", "2026-09-12", *a],  # noqa: E731
                                     capture_output=True, text=True)
     assert run("check").returncode == 1
-    r = run("rehearse", "--standby", str(ROOT / "config" / "examples" / "standby-for-nemotron.yaml"))
-    assert r.returncode == 0 and "replaces nemotron with mistral" in r.stdout and "dimensions unchanged: True" in r.stdout
+    r = run("rehearse", "--standby", str(ROOT / "config" / "examples" / "standby-for-glm.yaml"))
+    assert r.returncode == 0 and "replaces glm with deepseek" in r.stdout and "dimensions unchanged: True" in r.stdout
     assert "context seat unchanged: True" in r.stdout
-    r = run("record", "--replaced", "nemotron", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-nemotron.yaml"),
+    r = run("record", "--replaced", "glm", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-glm.yaml"),
             "--started", "2026-09-01T09:00", "--completed", "2026-09-02T09:00", "--outcome", "pass", "--performed-by", "ops", "--evidence", "CHG-9")
     assert r.returncode == 0 and "24.0 h pass; counts for G-4" in r.stdout
+    # the register is shared across hosts: a Windows run must not write config\examples\...
+    recorded = yaml.safe_load(drills.read_text(encoding="utf-8"))["drills"][-2:]
+    assert [d["config"] for d in recorded] == ["config/examples/standby-for-glm.yaml"] * 2
     r = run("check")
-    assert r.returncode == 1 and "nemotron: OK" in r.stdout and "anthropic: MISSING" in r.stdout
-    r = run("record", "--replaced", "anthropic", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-nemotron.yaml"),
+    assert r.returncode == 1 and "glm: OK" in r.stdout and "anthropic: MISSING" in r.stdout
+    r = run("record", "--replaced", "anthropic", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-glm.yaml"),
             "--started", "2026-09-01T09:00", "--completed", "2026-09-02T09:00", "--outcome", "pass", "--performed-by", "ops", "--evidence", "x")
     assert r.returncode == 2 and "still contains the anthropic family" in r.stderr
     # an offset on one end only used to crash with TypeError (aware vs naive comparison)
-    r = run("record", "--replaced", "nemotron", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-nemotron.yaml"),
+    r = run("record", "--replaced", "glm", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-glm.yaml"),
             "--started", "2026-09-01T09:00+08:00", "--completed", "2026-09-02T09:00", "--outcome", "pass", "--performed-by", "ops", "--evidence", "x")
     assert r.returncode == 2 and "same form" in r.stderr and "Traceback" not in r.stderr
 
@@ -234,10 +239,10 @@ def test_live_calibration_rule_is_g9(tmp_path):
     today = dt.date(2026, 10, 5)
     (docs / "calibration-2026-09-11.md").write_text("# 校準報告\n\n執行模式：**mock**。\n", encoding="utf-8")
     assert not rollout_phase._live_calibration(tmp_path, today, ROOT / "config" / "mara.yaml")[0]
-    live = "---\nmode: live\nfamilies: [anthropic, deepseek, nemotron]\nprovider_modes: [live]\nlabels: 51\n---\n# 校準報告\n"
+    live = "---\nmode: live\nfamilies: [anthropic, gemini, glm]\nprovider_modes: [live]\nlabels: 51\n---\n# 校準報告\n"
     (docs / "calibration-2026-09-30.md").write_text(live, encoding="utf-8")
     assert rollout_phase._live_calibration(tmp_path, today, ROOT / "config" / "mara.yaml")[0]
-    partial = live.replace("[anthropic, deepseek, nemotron]", "[anthropic, deepseek]")
+    partial = live.replace("[anthropic, gemini, glm]", "[anthropic, gemini]")
     (docs / "calibration-2026-09-30.md").write_text(partial, encoding="utf-8")
     assert not rollout_phase._live_calibration(tmp_path, today, ROOT / "config" / "mara.yaml")[0], "a family is missing"
     (docs / "calibration-2026-09-30.md").unlink()
@@ -255,6 +260,6 @@ def test_governance_rows_are_decidable_now():
     g10 = gc.check_g10(ROOT, ROOT / "config" / "mara.yaml", TODAY)
     assert (g1.status, g4.status, g10.status) == (gc.FAIL, gc.FAIL, gc.FAIL)
     assert "草案" in g1.evidence and "approved_by" in g1.evidence
-    assert "no live drill recorded" in g4.evidence and "standby-for-deepseek.yaml" in g4.evidence
+    assert "no live drill recorded" in g4.evidence and "standby-for-glm.yaml" in g4.evidence
     assert "not_started" in g10.evidence
     assert all(r.status != gc.MANUAL for r in gc.run_all(ROOT, ROOT / "config" / "mara.yaml", TODAY))

@@ -173,16 +173,24 @@ def check_g3(root: Path, config_path: Path) -> CheckResult:
     from mara.config import load_config
 
     cfg = load_config(config_path)
-    problems, rows = [], []
+    problems, rows, approvals = [], [], []
     for m in cfg.models:
         res = getattr(m, "data_residency", None)
         res = getattr(res, "value", res)
         rows.append(f"{m.name}={m.provider}/{m.model}/{res}")
         if m.provider != "mock" and res not in ALLOWED_RESIDENCY:
-            problems.append(f"{m.name} 的 data_residency={res} 不在 {sorted(ALLOWED_RESIDENCY)}")
+            # P5 admits vendor_api_retained only with a recorded approval; G-3 reports which one
+            if res == "vendor_api_retained" and m.retention_approval_ref.strip():
+                approvals.append(f"{m.name}={m.retention_approval_ref.strip()}")
+            else:
+                problems.append(f"{m.name} 的 data_residency={res} 不在 {sorted(ALLOWED_RESIDENCY)}，"
+                                "也不是附 retention_approval_ref 的 vendor_api_retained")
         if any(k in m.model.lower() for k in COVERED_MARKERS):
             problems.append(f"{m.name} 使用 Fable/Mythos 級模型 {m.model}")
-    ev = f"`{config_path.relative_to(root).as_posix()}` 模型：{', '.join(rows)}；`src/mara/policy.py` P1/P2/P5 在載入時強制"
+    ev = f"`{config_path.relative_to(root).as_posix()}` 模型：{', '.join(rows)}"
+    if approvals:
+        ev += f"；保留資料的廠商 API 經核准：{', '.join(approvals)}"
+    ev += "；`src/mara/policy.py` P1/P2/P5 在載入時強制"
     return CheckResult("G-3", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + ev)
 
 

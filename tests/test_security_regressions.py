@@ -461,6 +461,70 @@ def test_trust_anchors_never_come_from_the_review_target(tmp_path, monkeypatch):
     workspace.check_outside(target)
 
 
+def test_the_calibration_secret_exemption_is_narrow(tmp_path, monkeypatch):
+    """Calibration samples seed hard-coded credentials on purpose (CWE-798 labels), and the live secret
+    preflight blocked egress for three of the five. The exemption: only on the operator's flag, only for
+    a target below <workspace>/calib/samples/ with an answer key, only for findings at a declared
+    CWE-798 file:line; any other secret still blocks."""
+    from mara import pipeline as pl
+
+    sample = tmp_path / "calib" / "samples" / "s9"
+    sample.mkdir(parents=True)
+    labels = {"sample": "s9", "labels": [
+        {"dimension": "secrets", "cwe": "CWE-798", "file": "app.py", "line": 3, "quote": "TOKEN = \"x\"", "title": "seeded"},
+        {"dimension": "xss", "cwe": "CWE-79", "file": "app.py", "line": 9, "quote": "q", "title": "xss"}]}
+    (sample / "labels.json").write_text(json.dumps(labels), encoding="utf-8")
+    monkeypatch.setenv("MARA_HOME", str(tmp_path))
+    key = pl.calibration_answer_key(sample)
+    assert [(lab["file"], lab["line"]) for lab in key] == [("app.py", 3)]
+    seeded = ToolResult("gitleaks", "generic-api-key", "error", "secret", "app.py", 3, "CWE-798")
+    assert pl._declared_secret(seeded, key)
+    assert not pl._declared_secret(ToolResult("gitleaks", "aws", "error", "secret", "app.py", 4, "CWE-798"), key), "another line"
+    assert not pl._declared_secret(ToolResult("gitleaks", "aws", "error", "secret", "config.py", 3, "CWE-798"), key), "another file"
+    # a reviewed repository cannot claim the exemption by shipping its own labels.json
+    elsewhere = tmp_path / "repo"
+    elsewhere.mkdir()
+    (elsewhere / "labels.json").write_text(json.dumps(labels), encoding="utf-8")
+    with pytest.raises(ValueError, match="needs a target below"):
+        pl.calibration_answer_key(elsewhere)
+    (sample / "labels.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="not a calibration answer key"):
+        pl.calibration_answer_key(sample)
+
+
+def test_live_egress_with_the_exemption_passes_only_declared_secrets(tmp_path, monkeypatch):
+    import mara.pipeline as mod
+
+    sample = tmp_path / "calib" / "samples" / "s9"
+    sample.mkdir(parents=True)
+    (sample / "app.py").write_text("import os\n\nTOKEN = 'seeded-test-value'\n", encoding="utf-8")
+    (sample / "labels.json").write_text(json.dumps({"labels": [
+        {"dimension": "secrets", "cwe": "CWE-798", "file": "app.py", "line": 3, "quote": "TOKEN", "title": "seeded"}]}), encoding="utf-8")
+    monkeypatch.setenv("MARA_HOME", str(tmp_path))
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
+
+    def run(extra_secret):
+        pipe = pipeline(tmp_path)
+        pipe.providers = {n: Reply(p.spec, {"findings": []}) for n, p in pipe.providers.items()}
+        results = [ToolResult("gitleaks", "generic-api-key", "error", "secret", "app.py", 3, "CWE-798")]
+        if extra_secret:
+            results.append(ToolResult("gitleaks", "aws-access-token", "error", "secret", "app.py", 1, "CWE-798"))
+        monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun("gitleaks", True, results)])
+        report = pipe.run(sample, mode="mock", calibration_sample=True)
+        return pipe, report
+
+    pipe, report = run(extra_secret=False)
+    assert report.bias_audit["secret_preflight_calibration_exempted"] == 1
+    assert any("1 seeded secret(s) declared by the calibration answer key, 0 other finding(s)" in line for line in pipe.log)
+    pipe, report = run(extra_secret=True)
+    assert report.bias_audit["secret_preflight_calibration_exempted"] == 1, "the undeclared one is not exempted"
+    assert any("0 other finding(s)" not in line and "1 other finding(s)" in line for line in pipe.log), "and it still blocks"
+    # the egress rule itself: in live mode any unexplained finding blocks, an exempted one does not
+    src = (ROOT / "src" / "mara" / "pipeline.py").read_text(encoding="utf-8")
+    assert 'egress_blocked = mode == "live" and (not secret_runs or any(not r.ran for r in secret_runs) or bool(unexplained))' in src
+    assert mod.Pipeline.run.__kwdefaults__["calibration_sample"] is False, "off unless the operator asks"
+
+
 def test_p8_reads_its_evidence_from_the_workspace(tmp_path, monkeypatch):
     import datetime as dt
 

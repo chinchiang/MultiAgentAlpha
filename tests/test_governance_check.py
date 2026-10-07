@@ -11,7 +11,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from governance_check import FAIL, MANUAL, PASS, check_g6, check_g8, check_g9, check_g12, render, run_all  # noqa: E402
+from governance_check import FAIL, MANUAL, PASS, check_g3, check_g6, check_g8, check_g9, check_g12, render, run_all  # noqa: E402
 
 TODAY = dt.date(2026, 9, 12)
 
@@ -34,6 +34,21 @@ def test_verdicts_on_this_repository(results):
     assert {k: results[k].status for k in failing} == dict.fromkeys(failing, FAIL)
     assert results["G-9"].status == FAIL and "mock" in results["G-9"].evidence
     assert not [k for k, r in results.items() if r.status == MANUAL], "every item is machine-decidable now (templates for G-1, G-4, G-10)"
+
+
+def test_g3_names_the_retention_approval_and_fails_a_retained_model_without_one(tmp_path):
+    import yaml
+
+    assert "gemini-reviewer=20261006-GISMD-Approve-01" in check_g3(ROOT, ROOT / "config" / "mara.yaml").evidence
+    raw = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    gemini = next(m for m in raw["models"] if m["data_residency"] == "vendor_api_retained")
+    gemini["retention_approval_ref"] = ""
+    raw["allow_source_code_to_non_on_prem"] = True  # P5 would refuse the file outright; G-3 must still flag it
+    cfg = tmp_path / "config" / "mara.yaml"
+    cfg.parent.mkdir()
+    cfg.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    r = check_g3(tmp_path, cfg)
+    assert r.status == FAIL and f"{gemini['name']} 的 data_residency=vendor_api_retained" in r.evidence
 
 
 def test_render_has_thirteen_rows_and_nonzero_exit_signal(results):

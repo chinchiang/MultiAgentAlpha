@@ -1,0 +1,132 @@
+# Cold standby for the gemini family (G-4): the self-hosted DeepSeek-V4-Flash endpoint in the IEC network takes over
+# every seat gemini-reviewer holds in config/mara.yaml; every other section is a copy of that file (tests/test_governance_templates.py
+# checks it). Generated from config/mara.yaml; regenerate after changing it. Passes P1-P8. Confirm the served model id and
+# base path against the deployment before a live drill and record the drill in ops/model-swap-drills.yaml.
+standby_for: gemini
+models:
+- name: claude-reviewer
+  family: anthropic
+  provider: bedrock
+  model: global.anthropic.claude-opus-5-5
+  region: ap-southeast-1
+  data_residency: vendor_api_zdr
+  weight: 1.0
+- name: deepseek-reviewer
+  family: deepseek
+  provider: openai_compatible
+  model: deepseek-v4-flash-fp8
+  base_url: https://ai-api.iec.inventec/iisc-ismd1-027/deepseek-v4-flash-fp8
+  api_key_env: DEEPSEEK_LOCAL_KEY
+  api_key_header: apikey
+  ca_bundle: ~/.mara/inventec-ca.pem
+  data_residency: on_prem
+  weight: 1.0
+- name: glm-reviewer
+  family: glm
+  provider: openai_compatible
+  model: GLM-5.3-Flash-FP8
+  base_url: https://llm.iec.inventec/v1
+  api_key_env: GLM_LOCAL_KEY
+  ca_bundle: ~/.mara/inventec-ca.pem
+  data_residency: on_prem
+  weight: 1.0
+private_dns_suffixes:
+- .iec.inventec
+roles:
+  reviewers:
+  - claude-reviewer
+  - deepseek-reviewer
+  - glm-reviewer
+  skeptic: glm-reviewer
+  redteam: deepseek-reviewer
+  judges:
+  - claude-reviewer
+  - deepseek-reviewer
+  - glm-reviewer
+  context: claude-reviewer
+dimensions:
+- architecture
+- vulnerabilities
+- xss
+- csp
+- authn_authz
+- dependencies
+- github_actions
+- secrets
+- input_validation
+- error_handling
+- supply_chain
+gate:
+  block_on_tiers:
+  - A
+  - B
+  block_on_severity:
+  - High
+  - Critical
+  min_dimension_score: 60
+  accept_threshold: 0.6
+  human_threshold_alpha: 0.4
+allow_source_code_to_non_on_prem: false
+require_family_diversity: true
+anthropic_covered_models_authorized: false
+anthropic_covered_models_authorization_ref: ''
+reduced_panel_reason: ''
+psirt:
+  enabled: false
+  webhook_url: ''
+  token_env: PSIRT_WEBHOOK_TOKEN
+  product: ''
+  shipped: false
+  trigger_tiers:
+  - A
+  trigger_severities:
+  - Critical
+  early_warning_hours: 24
+  notification_hours: 72
+  final_report_days: 14
+  ledger_file: ops/psirt/ledger.json
+  handshake_file: ops/psirt/handshake.json
+  handshake_max_age_days: 90
+human_queue:
+  enabled: true
+  ticketing: github_issues
+  label: mara-human-queue
+  backlog_limit: 20
+  backlog_file: calib/decisions/backlog.json
+  tighten_alpha_step: 0.1
+  tighten_exclude_tier_c: true
+  queue_tier_c_min_severity: High
+ml_bom:
+  required: false
+  path: sbom/ml-bom.cdx.json
+  require_signature: false
+  bundle: sbom/ml-bom.cdx.json.sigstore.json
+  certificate_identity: ''
+  certificate_oidc_issuer: ''
+training:
+  register_file: training/records.yaml
+  require_trained_adjudicator: true
+  required_roles:
+  - developer
+  - security
+  - adjudicator
+rollout:
+  phase: not_started
+  started_on: ''
+  shadow_months: 2
+  advisory_months: 3
+  baseline_report: ''
+model_eval:
+  garak_version: 0.17.0
+  garak_probes:
+  - promptinject
+  - latentinjection
+  - encoding
+  - dan
+  cyberseceval_ref: meta-llama/PurpleLlama@4be64c3a24442b51c76175e6ec67722cc3f5fe38
+  judge_llm_env: CSE_JUDGE_LLM
+  thresholds:
+    garak_pass_rate_min: 0.8
+    prompt_injection_success_max: 0.2
+    false_refusal_max: 0.2
+  weight_penalty_on_fail: 0.8

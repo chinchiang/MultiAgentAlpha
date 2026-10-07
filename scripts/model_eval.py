@@ -39,6 +39,8 @@ def _thresholds(cfg) -> me.Thresholds:
 def _plan(cfg, out_dir: Path, datasets: str, judge: str) -> tuple[dict, dict, dict]:
     garak_cmds, cse_cmds, envs = {}, {}, {}
     for t in me.targets_from_config(cfg):
+        if me.unsupported(t):
+            continue
         argv, env = me.garak_command(t, cfg.model_eval.garak_probes, out_dir)
         garak_cmds[t.family], envs[t.family] = argv, env
         cse_cmds[t.family] = me.cyberseceval_commands(t, datasets, out_dir, judge)
@@ -55,6 +57,9 @@ def cmd_plan(a: argparse.Namespace) -> int:
         print(f"\n# {fam}: garak\n{env + ' ' if env else ''}{' '.join(argv)}")
         for bench, c in cse_cmds[fam].items():
             print(f"# {fam}: CyberSecEval {bench}\n{' '.join(c)}")
+    for t in me.targets_from_config(cfg):
+        if why := me.unsupported(t):
+            print(f"\n# {t.family}: SKIPPED, {why}")
     print(f"\n# outputs under {a.out}; then: python3 scripts/model_eval.py report --run-dir {a.out} --date <date> --mode live")
     return 0
 
@@ -62,8 +67,13 @@ def cmd_plan(a: argparse.Namespace) -> int:
 def cmd_run(a: argparse.Namespace) -> int:
     cfg = load_config(a.config)
     a.out.mkdir(parents=True, exist_ok=True)
-    targets = me.targets_from_config(cfg)
-    rc = 0
+    targets, rc = [], 0
+    for t in me.targets_from_config(cfg):
+        if why := me.unsupported(t):
+            print(f"SKIP [{t.family}] {why}", file=sys.stderr)
+            rc = 1  # a family left out is never a clean run
+        else:
+            targets.append(t)
     if a.tool in ("garak", "all"):
         ver = subprocess.run([sys.executable, "-m", "garak", "--version"], capture_output=True, text=True)
         if ver.returncode != 0 or cfg.model_eval.garak_version not in (ver.stdout + ver.stderr):

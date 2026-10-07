@@ -31,6 +31,9 @@ def review(
     psirt_resend: bool = typer.Option(False, "--psirt-resend", help="With --notify-psirt: send even findings the ledger says were already delivered"),
     base: str | None = typer.Option(None, "--base",
                                     help="Incremental review: files changed since this git ref, plus import neighbours, manifests and workflows"),
+    calibration_sample: bool = typer.Option(False, "--calibration-sample",
+                                            help="The target is a labelled sample under <workspace>/calib/samples/: the secrets its "
+                                                 "answer key declares (CWE-798) do not block live egress; any other secret still does"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
     cfg_path = config
@@ -45,13 +48,13 @@ def review(
     from .workspace import WorkspaceInsideTarget
 
     try:
-        report = pipe.run(target, sarif_dir=sarif_dir, mode=provider, base_ref=base)
+        report = pipe.run(target, sarif_dir=sarif_dir, mode=provider, base_ref=base, calibration_sample=calibration_sample)
     except WorkspaceInsideTarget as e:
         raise typer.BadParameter(str(e), param_hint="TARGET") from e
     except ValueError as e:
-        # a broken base ref is a usage error, not an empty 'nothing changed' review
-        if base is not None:
-            raise typer.BadParameter(str(e), param_hint="--base") from e
+        # a broken base ref or an ineligible calibration target is a usage error, not an empty review
+        if base is not None or calibration_sample:
+            raise typer.BadParameter(str(e), param_hint="--base" if base is not None else "--calibration-sample") from e
         raise
     if psirt_event:
         from .report.psirt_out import build_notifications
