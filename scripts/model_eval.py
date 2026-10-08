@@ -42,9 +42,22 @@ def _plan(cfg, out_dir: Path, datasets: str, judge: str) -> tuple[dict, dict, di
         if me.unsupported(t):
             continue
         argv, env = me.garak_command(t, cfg.model_eval.garak_probes, out_dir)
+        if t.ca_bundle:
+            env = {**env, "SSL_CERT_FILE": str(out_dir / f"ca-{t.slug}.pem")}
         garak_cmds[t.family], envs[t.family] = argv, env
-        cse_cmds[t.family] = me.cyberseceval_commands(t, datasets, out_dir, judge)
+        why = me.unsupported(t, "cyberseceval")
+        cse_cmds[t.family] = why if why else me.cyberseceval_commands(t, datasets, out_dir, judge)
     return garak_cmds, cse_cmds, envs
+
+
+def _tls_env(t: me.EvalTarget, out_dir: Path) -> dict[str, str]:
+    """SSL_CERT_FILE for a target behind an internal CA (public roots + its ca_bundle), else nothing."""
+    pem = me.ca_bundle_pem(t)
+    if pem is None:
+        return {}
+    path = out_dir / f"ca-{t.slug}.pem"
+    path.write_text(pem, encoding="utf-8")
+    return {"SSL_CERT_FILE": str(path)}
 
 
 def cmd_plan(a: argparse.Namespace) -> int:
@@ -55,6 +68,9 @@ def cmd_plan(a: argparse.Namespace) -> int:
     for fam, argv in garak_cmds.items():
         env = " ".join(f"{k}={v}" for k, v in envs[fam].items())
         print(f"\n# {fam}: garak\n{env + ' ' if env else ''}{' '.join(argv)}")
+        if isinstance(cse_cmds[fam], str):
+            print(f"# {fam}: CyberSecEval SKIPPED, {cse_cmds[fam]}")
+            continue
         for bench, c in cse_cmds[fam].items():
             print(f"# {fam}: CyberSecEval {bench}\n{' '.join(c)}")
     for t in me.targets_from_config(cfg):
@@ -89,6 +105,7 @@ def cmd_run(a: argparse.Namespace) -> int:
             env = dict(os.environ)
             for k, v in env_map.items():
                 env[k] = me.resolve_key(v.lstrip("$"))
+            env.update(_tls_env(t, a.out))
             print(f"+ [{t.family}] {' '.join(argv)}")
             r = subprocess.run(argv, env=env)
             rc |= r.returncode
@@ -98,14 +115,19 @@ def cmd_run(a: argparse.Namespace) -> int:
             return 2
         judge = me.resolve_key(cfg.model_eval.judge_llm_env)
         for t in targets:
-            key = me.resolve_key(t.api_key_env or me.ANTHROPIC_KEY_ENV)
+            if why := me.unsupported(t, "cyberseceval"):
+                print(f"SKIP [{t.family}] {why}", file=sys.stderr)
+                rc = 1  # a metric left out is never a clean run
+                continue
+            key = me.resolve_key(t.api_key_env or (me.GEMINI_KEY_ENV if t.provider == "gemini" else me.ANTHROPIC_KEY_ENV))
+            tls = _tls_env(t, a.out)
             for bench, argv in me.cyberseceval_commands(t, a.datasets, a.out, judge, key).items():
                 shown = [x.replace(key, me.MASK).replace(judge, "$" + cfg.model_eval.judge_llm_env) for x in argv]
                 print(f"+ [{t.family}] {bench}: {' '.join(shown)}")
                 (a.out / t.slug).mkdir(parents=True, exist_ok=True)
                 # the keys travel in the child's environment, never in its (world-readable) command line
                 argv, secret_env = me.argv_without_secrets(argv, {"MARA_CSE_KEY": key, "MARA_CSE_JUDGE": judge})
-                r = subprocess.run(argv, env={**os.environ, **secret_env})
+                r = subprocess.run(argv, env={**os.environ, **tls, **secret_env})
                 rc |= r.returncode
     (a.out / "run.json").write_text(json.dumps({"date": dt.date.today().isoformat(), "tool": a.tool, "garak_version": cfg.model_eval.garak_version,
                                                "cyberseceval_ref": cfg.model_eval.cyberseceval_ref, "families": [t.family for t in targets],

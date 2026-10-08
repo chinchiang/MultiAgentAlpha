@@ -21,6 +21,19 @@ Verified against the tools' sources on 2026-09-12:
   prompt-injection stats: stat_per_model -> injection_successful_count / total_count /
   injection_successful_percentage; mitre-frr stats: per model accept_count / refusal_count /
   refusal_rate.
+
+Re-checked on 2026-10-08 for the production panel (Claude on Bedrock, Gemini, GLM on the IEC gateway):
+- garak 0.17.0 has a `bedrock` generator (Converse API, boto3 credential chain, generator options
+  `region` and `suppressed_params`). Claude Opus 5.5 on Bedrock refuses `temperature` and `top_p`
+  ("deprecated for this model"), so both are suppressed.
+- CyberSecEval at the pinned ref has providers OPENAI, TOGETHER, ANTHROPIC, GOOGLEGENAI and LLAMA, no
+  Bedrock: a Bedrock target gets no CyberSecEval commands and its two metrics stay `missing`.
+- Gemini runs through its OpenAI-compatible endpoint in both tools (garak OpenAICompatible, CyberSecEval
+  OPENAI with that base_url): CyberSecEval's GOOGLEGENAI puts the API key in the URL query (`?key=`),
+  which MARA's own Gemini provider avoids so the key never lands in a proxy or access log.
+- An endpoint with `ca_bundle` (the IEC gateway) runs garak and CyberSecEval with SSL_CERT_FILE pointing
+  at the public roots plus that chain (httpx honours SSL_CERT_FILE), so the CyberSecEval judge LLM, a
+  different endpoint in the same process, still verifies too.
 """
 
 from __future__ import annotations
@@ -46,9 +59,11 @@ class EvalTarget:
     family: str
     name: str
     model: str
-    provider: str            # openai_compatible | anthropic (bedrock, gemini: no wrapper yet, see unsupported())
+    provider: str            # openai_compatible | anthropic | bedrock | gemini (see unsupported())
     base_url: str
     api_key_env: str
+    region: str = ""         # bedrock
+    ca_bundle: str = ""      # openai_compatible behind an internal CA
 
     @property
     def slug(self) -> str:
@@ -61,29 +76,55 @@ def targets_from_config(cfg: MaraConfig) -> list[EvalTarget]:
         if m.provider == "mock" or m.family.value in seen:
             continue
         seen.add(m.family.value)
-        out.append(EvalTarget(m.family.value, m.name, m.model, m.provider, m.base_url or "", m.api_key_env or ""))
+        out.append(EvalTarget(m.family.value, m.name, m.model, m.provider, m.base_url or "", m.api_key_env or "",
+                              m.region or "", m.ca_bundle or ""))
     return out
 
 
 # ---------------------------------------------------------------- commands
 
-SUPPORTED_PROVIDERS = ("openai_compatible", "anthropic")
+SUPPORTED_PROVIDERS = {"garak": ("openai_compatible", "anthropic", "bedrock", "gemini"),
+                       "cyberseceval": ("openai_compatible", "anthropic", "gemini")}
+GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
+GEMINI_KEY_ENV = "GEMINI_API_KEY"
 
 
-def unsupported(target: EvalTarget) -> str | None:
-    """Why this target has no garak / CyberSecEval command, or None. Claude on Bedrock and the Gemini
-    API are not wired to either tool yet: such a family stays without results, so G-8 keeps failing
-    for it instead of passing on the families that could be run."""
-    if target.provider in SUPPORTED_PROVIDERS:
+def unsupported(target: EvalTarget, tool: str | None = None) -> str | None:
+    """Why this target has no command for `tool` (garak / cyberseceval), or None; with tool=None, why it
+    has none for either. A metric that cannot be produced stays `missing`, so G-8 keeps failing for that
+    family instead of passing on the families that could be run."""
+    tools = [tool] if tool else list(SUPPORTED_PROVIDERS)
+    missing = [t for t in tools if target.provider not in SUPPORTED_PROVIDERS[t]]
+    if len(missing) < len(tools):
         return None
-    return f"{target.name}: no garak / CyberSecEval wrapper for provider {target.provider} yet (G-8 gap)"
+    if target.provider == "bedrock":
+        return f"{target.name}: CyberSecEval at the pinned ref has no Bedrock provider; its two metrics stay missing"
+    return f"{target.name}: no {' / '.join(missing)} wrapper for provider {target.provider} (G-8 gap)"
 
 
 def garak_generator_options(target: EvalTarget) -> dict | None:
-    if target.provider == "openai_compatible":
-        uri = target.base_url if target.base_url.endswith("/") else target.base_url + "/"
-        return {"openai": {"OpenAICompatible": {"uri": uri}}}
+    if target.provider in ("openai_compatible", "gemini"):
+        base = GEMINI_OPENAI_BASE if target.provider == "gemini" else target.base_url
+        return {"openai": {"OpenAICompatible": {"uri": base if base.endswith("/") else base + "/"}}}
+    if target.provider == "bedrock":
+        opts: dict[str, Any] = {"suppressed_params": ["temperature", "top_p"]}
+        if target.region:
+            opts["region"] = target.region
+        return {"bedrock": {"BedrockGenerator": opts}}
     return None
+
+
+def ca_bundle_pem(target: EvalTarget) -> str | None:
+    """PEM for SSL_CERT_FILE when the target sits behind an internal CA: the public roots (certifi) plus
+    target.ca_bundle, so another endpoint in the same process (the CyberSecEval judge) still verifies."""
+    if not target.ca_bundle:
+        return None
+    import certifi
+
+    from .workspace import resolve
+
+    internal = Path(resolve(os.path.expanduser(target.ca_bundle))).read_text(encoding="utf-8")
+    return Path(certifi.where()).read_text(encoding="utf-8").rstrip("\n") + "\n" + internal
 
 
 def garak_command(target: EvalTarget, probes: list[str], out_dir: Path | str,
@@ -92,11 +133,18 @@ def garak_command(target: EvalTarget, probes: list[str], out_dir: Path | str,
     into the variable garak reads, at run time only; the argv never contains it."""
     out_dir = Path(out_dir)
     spec = ",".join(f"probes.{p}" for p in probes)
-    if target.provider == "openai_compatible":
+    if target.provider in ("openai_compatible", "gemini"):
         argv = ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible", "--target_name", target.model, "--spec", spec,
                 "--generator_option_file", str(option_file or out_dir / f"garak-{target.slug}.generator.json"),
                 "--report_prefix", str(out_dir / f"garak-{target.slug}")]
-        env = {GARAK_KEY_ENV: f"${target.api_key_env}"} if target.api_key_env else {}
+        key_env = target.api_key_env or (GEMINI_KEY_ENV if target.provider == "gemini" else "")
+        env = {GARAK_KEY_ENV: f"${key_env}"} if key_env else {}
+    elif target.provider == "bedrock":
+        # no key: boto3 resolves AWS_PROFILE / the SSO cache, as for the review itself
+        argv = ["python3", "-m", "garak", "--target_type", "bedrock", "--target_name", target.model, "--spec", spec,
+                "--generator_option_file", str(option_file or out_dir / f"garak-{target.slug}.generator.json"),
+                "--report_prefix", str(out_dir / f"garak-{target.slug}")]
+        env = {}
     elif target.provider == "anthropic":
         argv = ["python3", "-m", "garak", "--target_type", "anthropic", "--target_name", target.model, "--spec", spec,
                 "--report_prefix", str(out_dir / f"garak-{target.slug}")]
@@ -111,6 +159,8 @@ def cse_spec(target: EvalTarget, key: str | None = None) -> str:
     k = MASK if key is None else key
     if target.provider == "openai_compatible":
         return f"OPENAI::{target.model}::{k}::{target.base_url}"
+    if target.provider == "gemini":
+        return f"OPENAI::{target.model}::{k}::{GEMINI_OPENAI_BASE}"
     if target.provider == "anthropic":
         return f"ANTHROPIC::{target.model}::{k}"
     raise ValueError(f"{target.name}: no CyberSecEval provider for {target.provider}")
@@ -357,7 +407,8 @@ def render_garak_report(summary: dict, results: list[FamilyResult], commands: di
     return "\n".join(L) + "\n"
 
 
-def render_cyberseceval_report(summary: dict, results: list[FamilyResult], commands: dict[str, dict[str, list[str]]]) -> str:
+def render_cyberseceval_report(summary: dict, results: list[FamilyResult], commands: dict[str, dict[str, list[str]] | str]) -> str:
+    """`commands`: per family the benchmark argvs, or the reason the family has none (a Bedrock target)."""
     fams = [r.target.family for r in results]
     th = summary["thresholds"]
     L = [_front_matter("cyberseceval", summary, fams), f"# CyberSecEval 4 評測（{summary['date']}）", "",
@@ -375,6 +426,9 @@ def render_cyberseceval_report(summary: dict, results: list[FamilyResult], comma
                  f"| {fr.get('refusal', '—')} / {denom} | {_fmt(vf.get('value'))} | {vf.get('status', 'missing')} |")
     L += ["", "## 執行指令（`" + MASK + "` 在執行時以環境變數取代）", "", "```"]
     for fam, cmds in commands.items():
+        if isinstance(cmds, str):
+            L.append(f"# {fam}: skipped: {cmds}")
+            continue
         for bench, argv in cmds.items():
             L.append(f"# {fam} {bench}\n{' '.join(argv)}")
     L += ["```", ""]

@@ -139,8 +139,9 @@ and is not ZDR, so the model is declared `vendor_api_retained` and policy P5 adm
 the approval recorded in `retention_approval_ref`; any other retained model still fails. GLM is
 PRC-affiliated: policy P2 holds it to on-prem endpoints and refuses its vendor APIs (bigmodel.cn,
 z.ai) exactly like DeepSeek's. The model ids marked provisional in the file must be confirmed
-against each endpoint's model list before the first live run. Garak and CyberSecEval have no
-wrapper for Bedrock or the Gemini API yet (see G-8 below). See the report, Part VIII, for the
+against each endpoint's model list before the first live run. G-8 runs garak against all three families
+(Claude through garak's `bedrock` generator, Gemini and GLM through OpenAI-compatible endpoints) and
+CyberSecEval against Gemini and GLM; CyberSecEval has no Bedrock provider (see G-8 below). See the report, Part VIII, for the
 site-by-site deployment pattern and the separate handling of 上海／重慶.
 
 The organisation's private DNS zones go in `private_dns_suffixes` (`.iec.inventec`), which P2 and P5
@@ -533,10 +534,13 @@ failing family's suggested weight by `weight_penalty_on_fail` and the review's b
 the latest verdict per family. `scripts/calibration_run.py --mode live` runs the whole calibration
 loop (check-config, every sample, `calibrate.py --mode live`) and both scripts refuse to label
 mock or fixture-based output as live. Governance checks G-8 and G-9 read the reports' front
-matter (`mode: live`, families covering the config, within 90 days). Claude on Bedrock and the Gemini
-API have no garak or CyberSecEval wrapper yet: `plan` lists them as skipped, `run` exits 1, and
-G-8 stays red for those two families until one exists. Nothing has run here: no
-endpoint, no key, no garak; `fixtures/model-eval/` holds synthetic outputs for the parser tests.
+matter (`mode: live`, families covering the config, within 90 days). garak reaches Claude through its
+`bedrock` generator (AWS credential chain, `temperature` and `top_p` suppressed: Opus 5.5 refuses both) and
+Gemini through its OpenAI-compatible endpoint; CyberSecEval reaches Gemini the same way (its own GOOGLEGENAI
+provider would put the key in the URL) and GLM with `SSL_CERT_FILE` set to the public roots plus `ca_bundle`.
+CyberSecEval at the pinned ref has no Bedrock provider: `plan` lists that as skipped, `run` exits 1 and the
+anthropic family's two CyberSecEval metrics stay missing, so G-8 stays red for it until there is a route.
+`fixtures/model-eval/` holds synthetic outputs for the parser tests.
 See `docs/model-eval-runbook.md`.
 
 ## Policy, cold standby and rollout templates (governance items G-1, G-4, G-10)
