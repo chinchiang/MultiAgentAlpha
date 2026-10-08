@@ -128,10 +128,13 @@ mara review path/to/repo --config config/mara.yaml --out out
 `config/mara.yaml` is the production panel since 2026-10-06: Claude Opus 5.5 on Amazon Bedrock
 (`provider: bedrock`, the `global.` cross-region inference profile, `region` required, SigV4 through
 boto3; declared `vendor_api_zdr` on Bedrock's terms that prompts and completions are neither stored nor
-used for training: keep the account's model invocation logging off, or that log holds the source code), Gemini through the
+used for training: keep the account's model invocation logging off, or that log holds the source code; Bedrock refuses
+structured outputs and a forced tool choice for Opus 5.x, so the answer comes back as the input of one `submit_result`
+tool call), Gemini through the
 Gemini API on the paid tier (`provider: gemini`, the key in the `x-goog-api-key` header, never the
 URL; structured output through `responseJsonSchema`), and a GLM model self-hosted on the IEC network
-behind an OpenAI-compatible endpoint (`on_prem`). The Gemini API keeps prompts for a limited period
+behind an OpenAI-compatible endpoint (`on_prem`; the gateway serves it as `model: glm`, and the same endpoint and
+key serve the standby DeepSeek as `model: deepseek`). The Gemini API keeps prompts for a limited period
 and is not ZDR, so the model is declared `vendor_api_retained` and policy P5 admits it only with
 the approval recorded in `retention_approval_ref`; any other retained model still fails. GLM is
 PRC-affiliated: policy P2 holds it to on-prem endpoints and refuses its vendor APIs (bigmodel.cn,
@@ -147,6 +150,34 @@ workspace-relative paths): it is added to the default trust store and never repl
 verification. A gateway that expects the key in another header (`apikey`) sets `api_key_header`.
 The cold standbys in `config/examples/standby-for-{anthropic,gemini,glm}.yaml` each replace one
 family with the on-prem DeepSeek endpoint and leave everything else unchanged (G-4).
+
+What the first live reviews against these endpoints showed (2026-10-07), each fixed with a regression test:
+
+- **Claude on Bedrock answered HTTP 400 on every call.** Bedrock refuses `output_config.format` and
+  `tool_choice` tool/any for Opus 5 and 5.5; the schema is now the input_schema of one `submit_result` tool
+  (tool_choice auto), and the agents' pydantic models validate the input. The direct-API path now sends
+  `anthropic.transform_schema(schema)` (structured outputs reject minLength, pattern, maxItems...).
+- **The gateway renamed its models.** The key may access only `glm` and `deepseek` on one endpoint;
+  `GLM-5.3-Flash-FP8` answered 403 and the old DeepSeek endpoint 401.
+- **Canary reports read as echoes.** Every model reported the planted canary file as a prompt-injection
+  attempt and quoted it, token included, next to its real findings; the substring check dropped every
+  finding of the call. Findings and context facts that cite the planted file are now set aside and counted
+  (`canary_reports`, `[CANARY REPORTED]`); the token anywhere else, prose around a Bedrock tool call
+  included, still drops the whole call.
+- **Full-match patterns.** A grammar-constrained decoder (the gateway's strict `json_schema`) matches a
+  `pattern` against the whole string, so the prefix-only `^CVSS:4\.0/` admitted nothing but `CVSS:4.0/` and
+  every gateway finding failed validation. The CVSS pattern is anchored at both ends now.
+- **Cut-off strings.** Those decoders enforce `maxLength` by ending the string mid-sentence, after which GLM
+  closed the whole answer early; Claude, which sees bounds only as descriptions, overran them (a 671-character
+  skeptic reason) and pydantic discarded the whole batch. String bounds now travel as descriptions to the
+  gateway, and every provider clips the answer to them (`providers.base.clip_strings`).
+- **Thinking budget.** Reasoning tokens count against `max_tokens`: GLM as skeptic ran out at 16000 and
+  finished at 13861 with 32768, now the OpenAI-compatible default (the gateway's models accept a 1M-token
+  context); Claude, with adaptive thinking at effort high, gets 64000 on a streamed request.
+- **Constrained decoding and a reasoning model.** Even so, GLM as skeptic answered an empty list after ~15k
+  reasoning tokens, three times out of three; with the schema as guidance only it answered every finding.
+  `strict_schema: false` (openai_compatible) does that and is set for `glm-reviewer`; DeepSeek keeps strict
+  decoding. Every answer is re-validated either way, and one ```json fence is tolerated.
 
 The labelled calibration samples under `calib/samples/` carry planted credentials on purpose, so the
 secret preflight would block every live calibration call. `mara review --calibration-sample`

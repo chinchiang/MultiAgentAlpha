@@ -30,10 +30,14 @@ class ModelSpec(BaseModel):
                                        "instead of Authorization: Bearer, for gateways that expect it")
     ca_bundle: str | None = Field(default=None, description="openai_compatible: PEM file of the CA chain that signs this on-prem endpoint, "
                                   "added to the default trust store (never replaces or disables verification); ~ and workspace-relative paths")
+    strict_schema: bool = Field(default=True, description="openai_compatible: ask for grammar-constrained decoding (json_schema "
+                                "strict); false sends the schema as guidance only. Every answer is re-validated either way")
     weight: float = Field(default=1.0, ge=0.0, le=2.0, description="Vote weight; updated by calibration")
 
     @model_validator(mode="after")
     def _secure_endpoint(self):
+        if not self.strict_schema and self.provider != "openai_compatible":
+            raise ValueError(f"model {self.name}: strict_schema is only valid with provider openai_compatible")
         if self.provider == "bedrock" and not self.region:
             raise ValueError(f"model {self.name}: provider bedrock needs region (e.g. ap-southeast-1)")
         if self.provider in ("bedrock", "gemini") and self.base_url:

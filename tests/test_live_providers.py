@@ -62,6 +62,70 @@ def test_openai_compatible_happy_path_sends_json_schema_and_parses():
     assert c.data == GOOD and not c.refused and not c.truncated and (c.input_tokens, c.output_tokens) == (11, 7)
     assert seen["path"].endswith("/chat/completions")
     assert seen["body"]["response_format"]["json_schema"]["schema"] == SCHEMA and seen["body"]["temperature"] == 0.0
+    assert seen["body"]["response_format"]["json_schema"]["strict"] is True
+    assert seen["body"]["max_tokens"] == 32768, "reasoning models need room: GLM ran out at 16000 as skeptic"
+
+
+def test_openai_compatible_moves_max_length_out_of_the_wire_schema_and_clips_the_answer():
+    """A constrained decoder enforces maxLength by cutting the string mid-sentence, and the model then
+    closes the whole answer early (GLM-5.3 as skeptic returned one verdict for two findings). The bound
+    travels as a description and is applied afterwards, so callers still never see a longer string."""
+    import copy
+
+    from mara.agents.skeptic import SKEPTIC_SCHEMA
+
+    before = copy.deepcopy(SKEPTIC_SCHEMA)
+    seen = {}
+    long_reason = "x" * 936
+    answer = {"items": [{"finding_id": "F-0001", "verdict": "stands", "reason": long_reason, "sanitizer_or_control": "none found"},
+                        {"finding_id": "F-0002", "verdict": "stands", "reason": "short", "sanitizer_or_control": "y" * 500}]}
+
+    def handler(req: httpx.Request):
+        seen["schema"] = json.loads(req.content)["response_format"]["json_schema"]["schema"]
+        return _chat(json.dumps(answer))
+
+    c = _oai(handler).complete(system="s", user="u", schema=SKEPTIC_SCHEMA, role="skeptic")
+    assert "maxLength" not in json.dumps(seen["schema"])
+    item = seen["schema"]["properties"]["items"]["items"]["properties"]
+    assert "At most 600 characters." in item["reason"]["description"] and item["verdict"]["enum"] == ["refuted", "weakened", "stands"]
+    assert [len(i["reason"]) for i in c.data["items"]] == [600, 5] and len(c.data["items"][1]["sanitizer_or_control"]) == 300
+    assert SKEPTIC_SCHEMA == before, "the shared module-level schema is not mutated"
+    assert long_reason in c.raw_text, "raw_text stays what the model said (the canary check reads it)"
+
+
+def test_strict_schema_false_sends_the_schema_as_guidance_and_tolerates_one_fence():
+    """GLM-5.3 answered the skeptic with an empty list under constrained decoding, every time; with the
+    schema as guidance it answered every finding. strict_schema: false asks for exactly that."""
+    seen = []
+
+    def handler(req: httpx.Request):
+        seen.append(json.loads(req.content)["response_format"]["json_schema"]["strict"])
+        return _chat("```json\n" + json.dumps(GOOD) + "\n```")
+
+    spec = _spec(strict_schema=False)
+    p = OpenAICompatibleProvider(spec, client=httpx.Client(base_url=spec.base_url, transport=httpx.MockTransport(handler)))
+    assert _call(p).data == GOOD and seen == [False]
+    assert _call(_oai(lambda req: _chat("```json\n" + json.dumps(GOOD) + "\n```"))).data == GOOD
+    # anything else around the JSON is still unusable output
+    assert _call(_oai(lambda req: _chat("Here you go:\n```json\n" + json.dumps(GOOD) + "\n```"))).truncated
+    assert _call(_oai(lambda req: _chat("```json\n{}\n```\n```json\n{}\n```"))).truncated
+
+
+def test_the_cvss_pattern_means_the_same_to_a_full_match_decoder_and_to_json_schema():
+    """'^CVSS:4\\.0/' as a JSON Schema pattern is a prefix search, but a grammar-constrained decoder
+    full-matches it and admitted only 'CVSS:4.0/': every finding from the gateway failed validation."""
+    import re
+
+    from mara.agents.reviewer import FINDING_SCHEMA
+    from mara.scoring.cvss4 import score
+
+    pattern = FINDING_SCHEMA["properties"]["findings"]["items"]["properties"]["cvss4_vector"]["pattern"]
+    for v in ("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
+              "CVSS:4.0/AV:L/AC:H/AT:P/PR:L/UI:A/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N/E:P/U:Amber/MSI:S"):
+        assert re.fullmatch(pattern, v) and re.search(pattern, v)
+        score(v)
+    for v in ("CVSS:4.0/", "CVSS:4.0/AV:N/AC:L", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"):
+        assert not re.fullmatch(pattern, v) and not re.search(pattern, v)
 
 
 def test_openai_compatible_length_finish_is_truncation_not_refusal():
@@ -210,12 +274,51 @@ def _anthropic(stop_reason, text, usage=(11, 7), served="claude-opus-5-5"):
 
 
 def test_anthropic_happy_path_uses_structured_output_and_first_text_block():
+    import anthropic
+
     p, stream = _anthropic("end_turn", json.dumps(GOOD))
     c = _call(p)
     assert c.data == GOOD and not c.refused and not c.truncated and (c.input_tokens, c.output_tokens) == (11, 7)
-    assert stream.kwargs["output_config"]["format"] == {"type": "json_schema", "schema": SCHEMA}
+    assert stream.kwargs["output_config"]["format"] == {"type": "json_schema", "schema": anthropic.transform_schema(SCHEMA)}
     assert stream.kwargs["thinking"] == {"type": "adaptive"} and stream.kwargs["model"] == "claude-opus-5-5"
+    # thinking counts against max_tokens: the streamed request leaves room for it after a 400k-char batch
+    assert stream.kwargs["max_tokens"] == 64000
     assert stream.kwargs["output_config"]["effort"] == "high", "Opus 5.5 defaults to medium: effort must stay explicit"
+
+
+_UNSUPPORTED_SCHEMA_KEYWORDS = {"minLength", "maxLength", "minimum", "maximum", "pattern", "maxItems"}
+
+
+def _schema_keywords(node) -> set[str]:
+    if isinstance(node, dict):
+        props = node.get("properties", {})
+        own = {k for k in node if k != "properties"}
+        return own.union(*(_schema_keywords(v) for k, v in node.items() if k != "properties"),
+                         *(_schema_keywords(v) for v in props.values()))
+    if isinstance(node, list):
+        return set().union(*(_schema_keywords(v) for v in node))
+    return set()
+
+
+def test_anthropic_sends_every_agent_schema_without_unsupported_keywords():
+    """Structured outputs reject minLength, maximum, pattern, maxItems...; a raw dict schema is not
+    rewritten by the SDK, so the provider must transform each agent schema before sending it."""
+    import copy
+
+    from mara.agents.context_agent import CONTEXT_SCHEMA
+    from mara.agents.judge import JUDGE_SCHEMA
+    from mara.agents.redteam import REDTEAM_SCHEMA
+    from mara.agents.reviewer import FINDING_SCHEMA
+    from mara.agents.skeptic import SKEPTIC_SCHEMA
+
+    schemas = [FINDING_SCHEMA, CONTEXT_SCHEMA, JUDGE_SCHEMA, REDTEAM_SCHEMA, SKEPTIC_SCHEMA]
+    assert any(_schema_keywords(sc) & _UNSUPPORTED_SCHEMA_KEYWORDS for sc in schemas)  # the bounds exist in the source
+    for schema in schemas:
+        before = copy.deepcopy(schema)
+        p, stream = _anthropic("end_turn", json.dumps(GOOD))
+        p.complete(system="s", user="u", schema=schema, role="reviewer:xss")
+        assert not _schema_keywords(stream.kwargs["output_config"]["format"]["schema"]) & _UNSUPPORTED_SCHEMA_KEYWORDS
+        assert schema == before  # the shared module-level schema (also sent to the gateway) is not mutated
 
 
 def test_anthropic_max_tokens_is_truncation_not_refusal_and_does_not_raise():

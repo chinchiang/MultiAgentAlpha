@@ -220,10 +220,10 @@ def test_repository_bom_is_pending_but_valid_and_governance_g7_says_why(tmp_path
     assert mlbom.validate_schema(bom) == []
     assert mlbom.bom_equal_ignoring_volatile(bom, mlbom.build_bom(mlbom.load_manifest(ROOT / "sbom" / "models.yaml"), allow_pending=True))
     comps = mlbom.ml_components(bom)
-    assert set(comps) == {"GLM-5.3-Flash-FP8", "deepseek-v3.2", "nvidia/nemotron-3-super"}
+    assert set(comps) == {"glm", "deepseek-v3.2", "nvidia/nemotron-3-super"}
     assert all("hashes" not in c and mlbom.props(c)["status"] == "pending" for c in comps.values())
     r = gc.check_g7(ROOT, ROOT / "config" / "mara.yaml")
-    assert r.status == gc.FAIL and "GLM-5.3-Flash-FP8" in r.evidence and "hash-dir" in r.evidence  # the production on-prem model
+    assert r.status == gc.FAIL and "glm" in r.evidence and "hash-dir" in r.evidence  # the production on-prem model
     # a repository whose config points at a complete, signed BOM passes
     root = tmp_path / "repo"
     (root / "sbom").mkdir(parents=True)

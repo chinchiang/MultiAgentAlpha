@@ -117,9 +117,10 @@ The BOM is built with `--allow-pending`, its components are marked `mara:status=
 reports them, and governance check G-7 fails naming the production model and the procedure above.
 The GLM entry carries no source, revision or licence at all: the platform team that runs
 `llm.iec.inventec` has to record what it deployed, and nothing was filled in from guesswork. The
-cold standbys use `deepseek-v4-flash-fp8`, a V4 build whose formal source is exactly what Appendix B
-item 20 could not confirm; it has no entry yet and needs one, with a confirmed source, before a
-standby swap makes it a production model. No
+cold standbys use the gateway's `deepseek` model (since 2026-10-07 the same endpoint and key as GLM; the
+gateway does not name the release behind the alias). If it is the V4 build, its formal source is exactly
+what Appendix B item 20 could not confirm; it has no entry yet and needs one, with a confirmed source and
+release, before a standby swap makes it a production model. No
 placeholder hash was written anywhere; hashes appear only once someone has computed them.
 
 ## 6. Schema provenance
