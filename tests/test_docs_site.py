@@ -44,3 +44,22 @@ def test_report_keeps_the_keyboard_and_contrast_fixes():
     assert ".ev-src{margin-left:4px}" in report, "opacity on the evidence source drops it below 4.5:1"
     assert "scrollIntoView({block:'nearest'})" not in report, "moves the Tab starting point into the inert nav"
     assert 'lang="en"' in INDEX
+
+
+def test_public_docs_never_name_the_internal_endpoints():
+    """docs/ is world-readable even while the repository is private (GitHub Pages): the internal DNS zones and
+    endpoint hosts the configs declare belong in the private tree only, never in the report or its notes."""
+    from urllib.parse import urlparse
+
+    from mara.config import load_config
+
+    configs = [ROOT / "config" / "mara.yaml", *sorted((ROOT / "config" / "examples").glob("standby-for-*.yaml"))]
+    needles = set()
+    for cfg in map(load_config, configs):
+        needles |= {z.lstrip(".") for z in cfg.private_dns_suffixes}
+        needles |= {urlparse(m.base_url).hostname for m in cfg.models if m.base_url and m.data_residency == "on_prem"}
+    assert "iec.inventec" in needles, "the production config declares its internal zone"
+    leaks = [(p.relative_to(ROOT).as_posix(), n) for p in sorted(DOCS.rglob("*"))
+             if p.is_file() and p.suffix in {".md", ".html", ".json", ".txt", ".yaml", ".yml"}
+             for n in sorted(needles) if n in p.read_text(encoding="utf-8", errors="replace")]
+    assert not leaks, leaks

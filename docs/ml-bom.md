@@ -3,7 +3,7 @@
 The report (Part VI, section 16; Part X, G-7) requires that the weights behind the self-hosted
 endpoints are recorded in a CycloneDX 1.6 or later ML-BOM with their source, hashes and licence,
 that the BOM is signed (cosign or NGC), and that only safetensors is loaded. Since 2026-10-06 the
-production self-hosted model is GLM on `llm.iec.inventec` (`config/mara.yaml` `glm-reviewer`); the
+production self-hosted model is GLM on the on-prem gateway (`config/mara.yaml` `glm-reviewer`); the
 DeepSeek and Nemotron entries remain for the example configurations. This document describes how
 the prototype does it and why every entry is still pending in this repository.
 
@@ -116,7 +116,7 @@ License; exact repository and licence text still to be confirmed, Appendix B ite
 The BOM is built with `--allow-pending`, its components are marked `mara:status=pending`, policy P7
 reports them, and governance check G-7 fails naming the production model and the procedure above.
 The GLM entry carries no source, revision or licence at all: the platform team that runs
-`llm.iec.inventec` has to record what it deployed, and nothing was filled in from guesswork. The
+the on-prem gateway has to record what it deployed, and nothing was filled in from guesswork. The
 cold standbys use the gateway's `deepseek` model (since 2026-10-07 the same endpoint and key as GLM; the
 gateway does not name the release behind the alias). If it is the V4 build, its formal source is exactly
 what Appendix B item 20 could not confirm; it has no entry yet and needs one, with a confirmed source and

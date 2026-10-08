@@ -89,3 +89,54 @@ def test_real_semgrep_scans_what_the_targets_semgrepignore_hides(tmp_path, monke
     [run] = runner.run_all(target, tmp_path / "out", enabled=["semgrep"])
     assert run.ran, run.note
     assert {r.file for r in run.results} == {"app.py", "hidden.py"}
+
+
+def _zizmor_with(monkeypatch, tmp_path, returncode, stderr):
+    def fake_run(cmd, cwd, timeout=600, env=None):
+        return subprocess.CompletedProcess(cmd, returncode, stdout="", stderr=stderr)
+
+    monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
+    monkeypatch.setattr(runner, "installed_version", lambda tool: "1.30.1")
+    monkeypatch.setattr(runner, "_run", fake_run)
+
+
+NO_INPUTS = "Error: no audit was performed\n\nCaused by:\n    no inputs collected\n"
+
+
+def test_zizmor_with_nothing_to_audit_is_a_complete_run_only_when_the_target_really_has_no_inputs(tmp_path, monkeypatch):
+    """zizmor 1.30.1 exits 3 'no inputs collected' on a target without workflows, actions or dependabot:
+    every review of such a repository used to be incomplete (required_tool_incomplete)."""
+    _zizmor_with(monkeypatch, tmp_path, 3, NO_INPUTS)
+    target = tmp_path / "plain"
+    target.mkdir()
+    (target / "app.py").write_text("print(1)\n", encoding="utf-8")
+    [run] = runner.run_all(target, tmp_path / "out1", enabled=["zizmor"])
+    assert run.ran and run.results == [] and "no GitHub Actions inputs" in run.note
+    # the target's word is not taken: a workflow present with the same exit code is a failed scan
+    (target / ".github" / "workflows").mkdir(parents=True)
+    (target / ".github" / "workflows" / "ci.yml").write_text("on: push\n", encoding="utf-8")
+    [run] = runner.run_all(target, tmp_path / "out2", enabled=["zizmor"])
+    assert not run.ran
+    # exit 3 for any other reason is a failure as before
+    _zizmor_with(monkeypatch, tmp_path, 3, "Error: something else\n")
+    plain = tmp_path / "plain2"
+    plain.mkdir()
+    [run] = runner.run_all(plain, tmp_path / "out3", enabled=["zizmor"])
+    assert not run.ran
+
+
+def test_actions_inputs_are_found_where_zizmor_collects_them(tmp_path):
+    for rel in ("tools/x/action.yaml", ".github/dependabot.yml", ".github/workflows/deploy.yaml"):
+        t = tmp_path / rel.replace("/", "_")
+        (t / rel).parent.mkdir(parents=True)
+        (t / rel).write_text("x: 1\n", encoding="utf-8")
+        assert runner.has_actions_inputs(t), rel
+    t = tmp_path / "none"
+    (t / "docs" / "workflows").mkdir(parents=True)
+    (t / "docs" / "workflows" / "a.yml").write_text("x: 1\n", encoding="utf-8")  # not under .github
+    assert not runner.has_actions_inputs(t)
+    outside = tmp_path / "outside" / ".github" / "workflows"
+    outside.mkdir(parents=True)
+    (outside / "ci.yml").write_text("on: push\n", encoding="utf-8")
+    (t / "linked").symlink_to(tmp_path / "outside", target_is_directory=True)
+    assert not runner.has_actions_inputs(t), "a symlink out of the target is not followed"
