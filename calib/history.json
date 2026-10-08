@@ -1,0 +1,12 @@
+[
+  {
+    "date": "2026-10-08",
+    "mode": "live",
+    "global_alpha": 0.7073,
+    "judge_agreement": {
+      "anthropic~gemini": 0.8048,
+      "anthropic~glm": 0.8306,
+      "gemini~glm": 0.7463
+    }
+  }
+]
