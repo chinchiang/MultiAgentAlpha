@@ -104,14 +104,14 @@ class Pipeline:
         self.audit["context_calls"] += audit["calls"]
         self.audit[f"context_calls[{fam}]"] += audit["calls"]
         for key, counter in (("refused", "context_refusals"), ("truncated", "context_truncations"),
-                             ("errored", "context_errors"), ("canary_echoed", "canary_echoes"),
+                             ("errored", "context_errors"), ("canary_echoed", "canary_echoes"), ("canary_reported", "canary_reports"),
                              ("invalid", "context_invalid_items"), ("unverified", "context_unverified_items")):
             self.audit[counter] += int(audit[key])
             self.audit[f"{counter}[{fam}]"] += int(audit[key])
         self.audit["input_tokens"] += audit["input_tokens"]
         self.audit["output_tokens"] += audit["output_tokens"]
         flags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "errored": " [PROVIDER ERROR]",
-                 "canary_echoed": " [CANARY ECHOED]"}
+                 "canary_echoed": " [CANARY ECHOED]", "canary_reported": " [CANARY REPORTED]"}
         self._say(f"L1: context {fam}: {len(view.items) if view else 0} fact(s)"
                   + "".join(tag for key, tag in flags.items() if audit[key]))
         return view
@@ -130,12 +130,14 @@ class Pipeline:
                     self.audit["reviewer_truncations"] += int(audit["truncated"])
                     self.audit["reviewer_errors"] += int(audit["errored"])
                     self.audit["canary_echoes"] += int(audit["canary_echoed"])
+                    self.audit["canary_reports"] += audit["canary_reported"]
                     fam = prov.family.value
                     self.audit[f"reviewer_calls[{fam}]"] += 1
                     self.audit[f"reviewer_refusals[{fam}]"] += int(audit["refused"])
                     self.audit[f"reviewer_truncations[{fam}]"] += int(audit["truncated"])
                     self.audit[f"reviewer_errors[{fam}]"] += int(audit["errored"])
                     self.audit[f"canary_echoes[{fam}]"] += int(audit["canary_echoed"])
+                    self.audit[f"canary_reports[{fam}]"] += audit["canary_reported"]
                     self.audit[f"findings_with_unverified_quotes[{fam}]"] += audit["unverified_quotes"]
                     self.audit[f"invalid_findings_dropped[{fam}]"] += audit["invalid"]
                     self.audit["invalid_findings_dropped"] += audit["invalid"]
@@ -143,7 +145,8 @@ class Pipeline:
                     self.audit["input_tokens"] += audit["input_tokens"]
                     self.audit["output_tokens"] += audit["output_tokens"]
                     raw.extend(findings)
-                    tags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "errored": " [PROVIDER ERROR]", "canary_echoed": " [CANARY ECHOED]"}
+                    tags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "errored": " [PROVIDER ERROR]", "canary_echoed": " [CANARY ECHOED]",
+                            "canary_reported": " [CANARY REPORTED]"}
                     flags = [tag for key, tag in tags.items() if audit[key]]
                     self._say(f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)" + "".join(flags))
         # assign ids and strip unknown standard references. Ids are content-ordered (file, line,

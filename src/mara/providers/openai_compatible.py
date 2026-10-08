@@ -3,7 +3,15 @@ endpoint (vLLM, NVIDIA NIM, SGLang). Used for DeepSeek and Nemotron weights that
 inside the organisation's perimeter. Plain httpx; no vendor SDK required.
 
 Structured output is requested via `response_format: json_schema` where the server
-supports it; the returned text is always re-validated by the caller.
+supports it; the returned text is always re-validated by the caller. String `maxLength` is not
+sent as a constraint: a grammar-constrained decoder enforces it by cutting the string off
+mid-sentence, and the model then closes the whole answer early (GLM-5.3 as skeptic, 2026-10-07:
+one verdict for two findings, every time). The bound travels in the description and is applied
+to the answer afterwards (`clip_strings`), so the caller sees the same shape strict decoding
+promises. `strict_schema: false` turns the constrained decoding off for a model that answers
+worse under it (GLM-5.3: an empty skeptic list after ~15k reasoning tokens, three times out of
+three; with the schema as guidance only, every finding answered); a single ```json fence is then
+tolerated.
 
 Transient failures (timeouts and other transport errors, 408, 429, 500, 502, 503, 504, 529) are retried
 up to MAX_ATTEMPTS calls in total, with exponential backoff plus jitter, or the server's Retry-After in
@@ -25,12 +33,16 @@ import certifi
 import httpx
 
 from ..config import ModelSpec
-from .base import Completion, Provider
+from .base import Completion, Provider, clip_strings, wire_schema
 
 MAX_ATTEMPTS = 3
 BACKOFF_BASE = 2.0  # seconds before the second attempt; doubled for each further one, plus up to 1 s of jitter
 RETRY_AFTER_CAP = 30.0
 RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504, 529})
+# Reasoning models (GLM-5.3, DeepSeek) spend most of the budget thinking, and it counts against max_tokens:
+# GLM as skeptic over six findings ran out at 16000 and finished at 13861 with room (2026-10-07). The
+# gateway's models accept a 1M-token context, so a 400k-character batch plus this cap still fits.
+MAX_TOKENS = 32768
 
 
 def retry_delay(attempt: int, retry_after: str | None) -> float:
@@ -73,13 +85,14 @@ class OpenAICompatibleProvider(Provider):
         self.client = client or httpx.Client(base_url=spec.base_url, headers=headers, timeout=timeout,
                                              transport=httpx.HTTPTransport(verify=_trust(spec.ca_bundle)))
 
-    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> Completion:
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> Completion:
         body = {
             "model": self.spec.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "max_tokens": max_tokens,
             "temperature": 0.0,
-            "response_format": {"type": "json_schema", "json_schema": {"name": "mara", "schema": schema, "strict": True}},
+            "response_format": {"type": "json_schema",
+                                "json_schema": {"name": "mara", "schema": wire_schema(schema), "strict": self.spec.strict_schema}},
         }
         for attempt in range(1, self.max_attempts + 1):
             last = attempt == self.max_attempts
@@ -117,7 +130,15 @@ class OpenAICompatibleProvider(Provider):
         if finish == "content_filter" or not text.strip():
             return Completion(data=None, raw_text=text, refused=True, **tokens)
         try:
-            data = json.loads(text)
+            data = json.loads(_unfenced(text))
         except json.JSONDecodeError:
             return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        return Completion(data=data, raw_text=text, **tokens)
+        return Completion(data=clip_strings(data, schema), raw_text=text, **tokens)
+
+
+def _unfenced(text: str) -> str:
+    """The JSON inside one Markdown code fence (```json ... ```), else the text as is."""
+    t = text.strip()
+    if t.startswith("```") and t.endswith("```") and t.count("```") == 2:
+        return t[3:-3].removeprefix("json").strip()
+    return text

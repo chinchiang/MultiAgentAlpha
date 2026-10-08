@@ -18,7 +18,7 @@
 # authoring environment could not reach huggingface.co or NGC to fetch registry hashes. Nothing
 # below is a placeholder hash; hashes appear only once someone has computed them.
 models:
-  - model_id: GLM-5.3-Flash-FP8
+  - model_id: glm
     family: glm
     name: GLM-5.3-Flash (FP8)
     version: "5.3"
@@ -42,6 +42,7 @@ models:
       PENDING. The production on-prem family since 2026-10-06 (config/mara.yaml glm-reviewer). The platform team that
       runs llm.iec.inventec must record the official source, revision, licence and per-file SHA-256 of the deployed
       weights; nothing here is filled in from guesswork. GLM is PRC-affiliated, so policy P2 keeps it on-prem.
+      Since 2026-10-07 the gateway serves it under the alias `glm` (model_id follows config/mara.yaml `model`).
 
   - model_id: deepseek-v3.2
     family: deepseek

@@ -33,8 +33,9 @@ def _bedrock_spec(**kw):
     return ModelSpec(**d)
 
 
-def _fake_client(stop_reason="end_turn", text=json.dumps(GOOD), raises=None, served="claude-opus-5-5"):
-    msg = SimpleNamespace(stop_reason=stop_reason, content=[SimpleNamespace(type="text", text=text)], model=served,
+def _fake_client(stop_reason="end_turn", text=json.dumps(GOOD), raises=None, served="claude-opus-5-5", content=None):
+    blocks = content if content is not None else [SimpleNamespace(type="text", text=text)]
+    msg = SimpleNamespace(stop_reason=stop_reason, content=[SimpleNamespace(type="thinking", thinking="…"), *blocks], model=served,
                           usage=SimpleNamespace(input_tokens=5, output_tokens=3))
 
     @contextmanager
@@ -52,14 +53,58 @@ def test_bedrock_needs_a_region_and_no_base_url():
         _bedrock_spec(region=None)
     with pytest.raises(ValueError, match="takes no base_url"):
         _bedrock_spec(base_url="https://bedrock.example")
+    with pytest.raises(ValueError, match="strict_schema is only valid with provider openai_compatible"):
+        _bedrock_spec(strict_schema=False)
 
 
-def test_bedrock_uses_the_anthropic_request_shape_with_the_profile_id():
-    client, stream = _fake_client()
+def _tool(data, name="submit_result"):
+    return SimpleNamespace(type="tool_use", name=name, input=data)
+
+
+def _text(t):
+    return SimpleNamespace(type="text", text=t)
+
+
+def test_bedrock_sends_the_schema_as_its_one_tool_not_as_output_format():
+    """Bedrock refuses output_config.format and tool_choice tool/any for Opus 5 and 5.5 (HTTP 400 on every
+    call, 2026-10-07): the schema is the input_schema of the one tool, with tool_choice auto."""
+    import anthropic
+
+    client, stream = _fake_client(stop_reason="tool_use", content=[_tool(GOOD)])
     c = _call(BedrockProvider(_bedrock_spec(), client=client))
     assert c.data == GOOD and not c.refused and not c.truncated
-    assert stream.kwargs["model"] == "global.anthropic.claude-opus-5-5"
-    assert stream.kwargs["output_config"]["format"] == {"type": "json_schema", "schema": SCHEMA}
+    kw = stream.kwargs
+    assert kw["model"] == "global.anthropic.claude-opus-5-5" and kw["max_tokens"] == 64000 and kw["thinking"] == {"type": "adaptive"}
+    assert kw["output_config"] == {"effort": "high"} and kw["tool_choice"] == {"type": "auto"}
+    assert [t["name"] for t in kw["tools"]] == ["submit_result"] and kw["tools"][0]["input_schema"] == anthropic.transform_schema(SCHEMA)
+    assert kw["system"][0]["cache_control"] == {"type": "ephemeral"} and "submit_result tool exactly once" in kw["system"][1]["text"]
+    assert "temperature" not in kw and "top_p" not in kw  # Opus 5.5 on Bedrock: "deprecated for this model"
+
+
+def test_bedrock_tool_answers_keep_the_prose_for_the_canary_and_are_clipped():
+    from mara.agents.skeptic import SKEPTIC_SCHEMA
+
+    client, _ = _fake_client(stop_reason="tool_use", content=[_text("Looking at the code…"), _tool({"findings": [{"title": "CANARY-1"}]})])
+    c = _call(BedrockProvider(_bedrock_spec(), client=client))
+    assert c.aside == "Looking at the code…" and c.raw_text.startswith("Looking at the code…\n") and "CANARY-1" in c.raw_text
+    # Claude as skeptic wrote a 671-character reason (bound 600) and pydantic discarded the whole batch
+    item = {"finding_id": "F-1", "verdict": "stands", "reason": "r" * 671, "sanitizer_or_control": "app.py:3 " + "c" * 400}
+    client, _ = _fake_client(stop_reason="tool_use", content=[_tool({"items": [item]})])
+    got = BedrockProvider(_bedrock_spec(), client=client).complete(system="s", user="u", schema=SKEPTIC_SCHEMA, role="skeptic").data["items"][0]
+    assert (len(got["reason"]), len(got["sanitizer_or_control"])) == (600, 300) and got["sanitizer_or_control"].startswith("app.py:3 ")
+
+
+def test_bedrock_without_the_tool_call_is_unusable_not_a_refusal():
+    def call(**kw):
+        client, _ = _fake_client(**kw)
+        return _call(BedrockProvider(_bedrock_spec(), client=client))
+
+    assert call(stop_reason="end_turn", content=[_text(json.dumps(GOOD))]).data == GOOD  # a bare JSON answer still counts
+    c = call(stop_reason="end_turn", content=[_text("I reviewed the files and found nothing.")])
+    assert c.truncated and not c.refused and c.data is None
+    assert call(stop_reason="tool_use", content=[_tool(GOOD, name="other")]).data is None
+    assert call(stop_reason="tool_use", content=[_tool(["x"])]).truncated
+    assert call(stop_reason="max_tokens", content=[_tool({})]).truncated
 
 
 def test_bedrock_refusal_and_truncation_keep_their_meaning():
@@ -172,3 +217,21 @@ def test_gemini_records_the_model_version_that_answered():
     c = _call(_gemini(lambda req: _answer(json.dumps(GOOD), modelVersion="gemini-test-pro-001")))
     assert c.data == GOOD and c.served_model == "gemini-test-pro-001"
     assert _call(_gemini(lambda req: _answer(json.dumps(GOOD)))).served_model == "", "absent modelVersion stays empty"
+
+
+def test_the_gateway_models_use_its_current_names_and_one_endpoint():
+    """Since 2026-10-07 the IEC gateway serves GLM and DeepSeek from one endpoint with one key, told apart by
+    `model` (glm / deepseek); the key may access only those two names, and the old DeepSeek endpoint answers 401."""
+    from pathlib import Path
+
+    from mara.config import load_config
+
+    root = Path(__file__).resolve().parents[1]
+    prod = {m.name: m for m in load_config(root / "config" / "mara.yaml").models}
+    assert (prod["glm-reviewer"].model, prod["glm-reviewer"].strict_schema) == ("glm", False)
+    for sb in sorted((root / "config" / "examples").glob("standby-for-*.yaml")):
+        models = {m.name: m for m in load_config(sb).models}
+        ds = models["deepseek-reviewer"]
+        assert (ds.model, ds.base_url, ds.api_key_header, ds.strict_schema) == ("deepseek", prod["glm-reviewer"].base_url, None, True), sb.name
+        if "glm-reviewer" in models:
+            assert models["glm-reviewer"] == prod["glm-reviewer"], sb.name

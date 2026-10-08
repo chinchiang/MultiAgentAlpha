@@ -22,10 +22,15 @@ models:
   - name: glm-reviewer
     family: glm
     provider: openai_compatible
-    model: GLM-5.3-Flash-FP8            # self-hosted weights in the IEC network (10.6.94.120); never the vendor API
+    model: glm                          # GLM-5.3-Flash (FP8), self-hosted in the IEC network (10.6.94.120); never the vendor API.
+                                        # The gateway serves it as `glm` since 2026-10-07 (the key may access only glm and deepseek)
     base_url: https://llm.iec.inventec/v1
     api_key_env: GLM_LOCAL_KEY
     ca_bundle: ~/.mara/inventec-ca.pem  # iec-TAO-SUBCA-1-CA + IEC-CA, exported from the Windows trust store
+    # Under the gateway's grammar-constrained decoding GLM answered the skeptic with an empty list after ~15k
+    # reasoning tokens, three times out of three; with the schema as guidance it answered every finding
+    # (2026-10-07). Answers are re-validated either way.
+    strict_schema: false
     data_residency: on_prem
     weight: 1.0
 

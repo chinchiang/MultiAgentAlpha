@@ -1,4 +1,4 @@
-# Cold standby for the glm family (G-4): the self-hosted DeepSeek-V4-Flash endpoint in the IEC network takes over
+# Cold standby for the glm family (G-4): the self-hosted DeepSeek on the IEC gateway (`deepseek`) takes over
 # every seat glm-reviewer holds in config/mara.yaml; every other section is a copy of that file (tests/test_governance_templates.py
 # checks it). Generated from config/mara.yaml; regenerate after changing it. Passes P1-P8. Confirm the served model id and
 # base path against the deployment before a live drill and record the drill in ops/model-swap-drills.yaml.
@@ -22,10 +22,9 @@ models:
 - name: deepseek-reviewer
   family: deepseek
   provider: openai_compatible
-  model: deepseek-v4-flash-fp8
-  base_url: https://ai-api.iec.inventec/iisc-ismd1-027/deepseek-v4-flash-fp8
+  model: deepseek
+  base_url: https://llm.iec.inventec/v1
   api_key_env: DEEPSEEK_LOCAL_KEY
-  api_key_header: apikey
   ca_bundle: ~/.mara/inventec-ca.pem
   data_residency: on_prem
   weight: 1.0

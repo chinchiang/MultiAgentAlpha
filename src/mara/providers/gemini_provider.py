@@ -25,7 +25,7 @@ from collections.abc import Callable
 import httpx
 
 from ..config import ModelSpec
-from .base import Completion, Provider
+from .base import Completion, Provider, clip_strings
 from .openai_compatible import MAX_ATTEMPTS, RETRY_STATUSES, retry_delay
 
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -92,4 +92,4 @@ class GeminiProvider(Provider):
             data = json.loads(text)
         except json.JSONDecodeError:
             return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        return Completion(data=data, raw_text=text, **tokens)
+        return Completion(data=clip_strings(data, schema), raw_text=text, **tokens)

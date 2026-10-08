@@ -8,6 +8,11 @@ from ..schemas import DIMENSION_LABELS, Finding, Provenance
 from . import base
 from .context_agent import ContextView
 
+# The 11 base metrics in specification order, then optional supplemental/environmental ones (scoring/cvss4.py
+# parses and scores the vector; this only shapes what a constrained decoder may emit).
+CVSS4_VECTOR_PATTERN = (r"^CVSS:4\.0/AV:[NALP]/AC:[LH]/AT:[NP]/PR:[NLH]/UI:[NPA]/VC:[HLN]/VI:[HLN]/VA:[HLN]"
+                        r"/SC:[HLN]/SI:[HLN]/SA:[HLN](/[A-Z]{1,3}:[A-Za-z]{1,5})*$")
+
 FINDING_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -34,7 +39,9 @@ FINDING_SCHEMA = {
                     "reachability": {"type": "string", "enum": ["reachable", "conditional", "unreachable", "unknown"]},
                     "reachability_argument": {"type": "string", "maxLength": 600},
                     "exploit_sketch": {"type": "string", "maxLength": 600},
-                    "cvss4_vector": {"type": "string", "pattern": "^CVSS:4\\.0/"},
+                    # anchored at both ends: grammar-constrained decoders (vLLM strict json_schema) full-match a
+                    # pattern, so a prefix-only "^CVSS:4\.0/" admitted nothing but "CVSS:4.0/" itself
+                    "cvss4_vector": {"type": "string", "pattern": CVSS4_VECTOR_PATTERN},
                     "model_confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 },
             },
@@ -63,19 +70,21 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
         "Return {\"findings\": [...]} following the schema."
     )
     comp = base.call(provider, system_extra=system_extra, user=user, schema=FINDING_SCHEMA, role=f"reviewer:{dimension}")
+    # a finding that cites the planted file reports the injection attempt (resisting it); it is set aside, and
+    # only the token anywhere else in the answer counts as an echo
+    data, echoed, reported = canary.screen(comp, ("findings",))
     audit = {"refused": comp.refused or (comp.data is None and not comp.truncated and not comp.error),
-             "truncated": comp.truncated, "errored": bool(comp.error),
-             "canary_echoed": bool(comp.raw_text and canary.echoed(comp.raw_text)),
+             "truncated": comp.truncated, "errored": bool(comp.error), "canary_echoed": echoed, "canary_reported": reported,
              "input_tokens": comp.input_tokens, "output_tokens": comp.output_tokens, "invalid": 0, "unverified_quotes": 0}
     if comp.refused or comp.data is None:
         return [], audit
-    if not isinstance(comp.data, dict) or not isinstance(comp.data.get("findings"), list):
+    if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
         audit["invalid"] += 1
         return [], audit
     if audit["canary_echoed"]:
         return [], audit
     findings: list[Finding] = []
-    for raw in comp.data.get("findings", []):
+    for raw in data.get("findings", []):
         try:
             prov = [Provenance(**p) for p in raw["provenance"]]
             for p in prov:
