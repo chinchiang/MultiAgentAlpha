@@ -38,7 +38,9 @@ def test_targets_and_commands_never_carry_keys(monkeypatch, tmp_path):
     assert argv[:5] == ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible"] and "--target_name" in argv
     assert "probes.promptinject,probes.encoding" in argv and "sk-secret-glm" not in " ".join(argv)
     assert env == {"OPENAICOMPATIBLE_API_KEY": "$GLM_LOCAL_KEY"}
-    assert me.garak_generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://llm.iec.inventec/v1/"}}}
+    # reasoning models need room, and garak's default stop sequences end a chat answer at its first "#"
+    assert me.garak_generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://llm.iec.inventec/v1/", "max_tokens": 4096,
+                                                                               "suppressed_params": ["stop"]}}}
     assert me.unsupported(ds) is None and me.unsupported(ds, "cyberseceval") is None
     # Claude on Bedrock: garak's bedrock generator on the AWS credential chain, no key; CyberSecEval has no
     # Bedrock provider, so that family's two CyberSecEval metrics stay missing (named, never a command)
@@ -56,7 +58,8 @@ def test_targets_and_commands_never_carry_keys(monkeypatch, tmp_path):
     gm = next(t for t in targets if t.family == "gemini")
     argv, env = me.garak_command(gm, ["dan"], "/tmp/out")
     assert argv[3:5] == ["--target_type", "openai.OpenAICompatible"] and env == {"OPENAICOMPATIBLE_API_KEY": "$GEMINI_API_KEY"}
-    assert me.garak_generator_options(gm) == {"openai": {"OpenAICompatible": {"uri": me.GEMINI_OPENAI_BASE}}}
+    assert me.garak_generator_options(gm) == {"openai": {"OpenAICompatible": {
+        "uri": me.GEMINI_OPENAI_BASE, "max_tokens": 4096, "suppressed_params": ["stop", "frequency_penalty", "presence_penalty"]}}}
     assert me.cse_spec(gm) == f"OPENAI::gemini-3.8-flash::{me.MASK}::{me.GEMINI_OPENAI_BASE}"
     other = me.EvalTarget("x", "x-reviewer", "x", "mock", "", "")
     assert "G-8 gap" in me.unsupported(other)
@@ -264,3 +267,25 @@ def test_pipeline_records_model_eval_status(tmp_path, monkeypatch):
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
     assert report.bias_audit["model_eval"] == {} and "## Model red-team evaluation" in render_markdown(report)
     assert me.family_eval_status(ROOT, ["deepseek"]) == {"deepseek": {"date": None, "mode": None, "status": "none"}}
+
+
+def test_a_garak_run_of_mostly_empty_outputs_is_not_a_measurement(tmp_path):
+    """garak records a failed call (Gemini's 400 on frequency_penalty) or an answer cut by a stop sequence as an empty
+    output, and every detector scores it as a pass: the 2026-10-08 smoke run read 1.000 for Gemini with 0/80 answers."""
+    def report(outputs_per_attempt):
+        rows = [{"entry_type": "init", "garak_version": "0.17.0"}]
+        for outs in outputs_per_attempt:
+            rows.append({"entry_type": "attempt", "status": 1, "outputs": [None] * len(outs)})
+            rows.append({"entry_type": "attempt", "status": 2, "outputs": [{"text": t} if t is not None else None for t in outs]})
+        rows.append({"entry_type": "eval", "probe": "test.Test", "detector": "always.Pass", "passed": 10, "total_evaluated": 10})
+        p = tmp_path / f"r{len(list(tmp_path.iterdir()))}.report.jsonl"
+        p.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+        return me.parse_garak_report(p)
+
+    th = me.Thresholds()
+    empty = report([[None, None, "", "  ", None], [None] * 5])
+    assert (empty["outputs"], empty["empty_outputs"]) == (10, 10), "only the evaluated (status 2) copy of each attempt counts"
+    v = me.evaluate_family(empty, None, None, th)["garak_pass_rate"]
+    assert v["status"] == "missing" and v["empty_rate"] == 1.0 and v["value"] == 1.0
+    ok = report([["a", "b", "c", "d", "e"], ["f", "g", "h", "i", ""]])
+    assert me.evaluate_family(ok, None, None, th)["garak_pass_rate"]["status"] == "pass", "one blank answer in ten is fine"

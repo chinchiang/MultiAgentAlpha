@@ -50,6 +50,12 @@ def _plan(cfg, out_dir: Path, datasets: str, judge: str) -> tuple[dict, dict, di
     return garak_cmds, cse_cmds, envs
 
 
+def _this_python(argv: list[str]) -> list[str]:
+    """The planned `python3 -m ...` run by this interpreter, the one whose garak version was just checked:
+    PATH's python3 is another installation unless the venv happens to be activated."""
+    return [sys.executable, *argv[1:]] if argv and argv[0] == "python3" else argv
+
+
 def _tls_env(t: me.EvalTarget, out_dir: Path) -> dict[str, str]:
     """SSL_CERT_FILE for a target behind an internal CA (public roots + its ca_bundle), else nothing."""
     pem = me.ca_bundle_pem(t)
@@ -107,7 +113,7 @@ def cmd_run(a: argparse.Namespace) -> int:
                 env[k] = me.resolve_key(v.lstrip("$"))
             env.update(_tls_env(t, a.out))
             print(f"+ [{t.family}] {' '.join(argv)}")
-            r = subprocess.run(argv, env=env)
+            r = subprocess.run(_this_python(argv), env=env)
             rc |= r.returncode
     if a.tool in ("cyberseceval", "all"):
         if not a.datasets:
@@ -126,7 +132,7 @@ def cmd_run(a: argparse.Namespace) -> int:
                 print(f"+ [{t.family}] {bench}: {' '.join(shown)}")
                 (a.out / t.slug).mkdir(parents=True, exist_ok=True)
                 # the keys travel in the child's environment, never in its (world-readable) command line
-                argv, secret_env = me.argv_without_secrets(argv, {"MARA_CSE_KEY": key, "MARA_CSE_JUDGE": judge})
+                argv, secret_env = me.argv_without_secrets(_this_python(argv), {"MARA_CSE_KEY": key, "MARA_CSE_JUDGE": judge})
                 r = subprocess.run(argv, env={**os.environ, **tls, **secret_env})
                 rc |= r.returncode
     (a.out / "run.json").write_text(json.dumps({"date": dt.date.today().isoformat(), "tool": a.tool, "garak_version": cfg.model_eval.garak_version,
