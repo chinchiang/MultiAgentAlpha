@@ -125,6 +125,9 @@ def check_g1(root: Path, today: dt.date | None = None) -> CheckResult:
                        "需要：PSO 核定後在 front matter 填 `status: approved`、`approved_by`、`approved_on`、`review_by`")
 
 
+REVERSE_PASS_RE = re.compile(r'run_judge(?:\(|,\s*)prov,\s*rev,\s*"reverse"')
+
+
 def check_g2(root: Path, config_path: Path) -> CheckResult:
     from mara.bias.blinding import blind_finding
     from mara.config import load_config
@@ -142,7 +145,8 @@ def check_g2(root: Path, config_path: Path) -> CheckResult:
         problems.append(f"judge 家族數 {len(jud)} < 3")
     pipeline = (root / "src/mara/pipeline.py").read_text(encoding="utf-8")
     config_src = (root / "src/mara/config.py").read_text(encoding="utf-8")
-    if 'run_judge(prov, rev, "reverse"' in pipeline:
+    # a direct call or a deferred one (partial(judge.run_judge, prov, rev, "reverse", ...) for the one-retry wrapper)
+    if REVERSE_PASS_RE.search(pipeline):
         evidence.append("`src/mara/pipeline.py` 對每個 judge 執行 forward 與 reverse 兩個 pass")
     else:
         problems.append("pipeline.py 找不到 reverse pass 的呼叫")
