@@ -9,7 +9,8 @@ The structured answer differs: Bedrock refuses `output_config.format` and a forc
 ("tool" / "any") for Claude Opus 5 and 5.5 (ValidationException "Extra inputs are not permitted" /
 "not supported for this model", verified 2026-10-07), so every call failed with HTTP 400. The
 schema is therefore the input_schema of the one tool the model is told to call, with tool_choice
-auto; `effort` and adaptive thinking are accepted as on the Anthropic API. That JSON is not
+auto; `effort` and adaptive thinking are accepted as on the Anthropic API, except by the models that
+have neither (Haiku 4.5, Sonnet 4.5: anthropic_provider.thinking_for sends a thinking budget). That JSON is not
 grammar-constrained: the agents' pydantic models enforce it, exactly as for the OpenAI-compatible
 endpoints. Text blocks around the call are kept in `raw_text` and `aside`, so the canary check sees them.
 
@@ -24,7 +25,7 @@ import json
 import anthropic
 
 from ..config import ModelSpec
-from .anthropic_provider import MAX_TOKENS, AnthropicProvider
+from .anthropic_provider import MAX_TOKENS, AnthropicProvider, thinking_for
 from .base import Completion, clip_strings
 
 SUBMIT_TOOL = "submit_result"
@@ -42,7 +43,11 @@ class BedrockProvider(AnthropicProvider):
         req["tools"] = [{"name": SUBMIT_TOOL, "description": "Submit the complete answer as one JSON object.",
                          "input_schema": anthropic.transform_schema(schema)}]
         req["tool_choice"] = {"type": "auto"}
-        req["output_config"] = {"effort": "high"}
+        effort = thinking_for(self.spec.model)[1]
+        if effort:
+            req["output_config"] = effort
+        else:
+            req.pop("output_config")
         return req
 
     def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> Completion:

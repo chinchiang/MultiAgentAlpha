@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -32,7 +34,21 @@ class ModelSpec(BaseModel):
                                   "added to the default trust store (never replaces or disables verification); ~ and workspace-relative paths")
     strict_schema: bool = Field(default=True, description="openai_compatible: ask for grammar-constrained decoding (json_schema "
                                 "strict); false sends the schema as guidance only. Every answer is re-validated either way")
+    model_env: str | None = Field(default=None, description="Environment variable that, when set and non-empty, replaces `model` "
+                                  "(config/mara.test.yaml: AWS_MODEL). Applied before validation, so the policies judge the model used")
     weight: float = Field(default=1.0, ge=0.0, le=2.0, description="Vote weight; updated by calibration")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _model_from_env(cls, data):
+        if isinstance(data, dict) and data.get("model_env"):
+            name = str(data["model_env"])
+            if not re.fullmatch(r"[A-Z_][A-Z0-9_]*", name):
+                raise ValueError(f"model_env {name!r} is not an environment variable name")
+            override = os.environ.get(name, "").strip()
+            if override:
+                data = {**data, "model": override}
+        return data
 
     @model_validator(mode="after")
     def _secure_endpoint(self):
