@@ -68,6 +68,54 @@ def test_unknown_provenance_is_refused_unless_explicitly_allowed(fake_trivy, mon
     assert ok and any("provenance unverified" in line for line in lines), "status says so; the content check still applies"
 
 
+def test_pin_digest_is_enforced_against_what_the_registry_names(fake_trivy, monkeypatch, capsys):
+    """--pin-digest used to query repo@<pin> and then download repo@<whatever digest the registry answered>,
+    never comparing the two: a mirror answering with another manifest was downloaded and recorded."""
+    tools, cache = fake_trivy
+    other = "sha256:" + "ef" * 32
+    asked: list[str] = []
+    answers = {"mirror.invalid": other, "ghcr.invalid": DIGEST}
+
+    def head(ref):
+        asked.append(ref)
+        return {"manifest_digest": answers[ref.split("/")[0]], "layer_digest": "sha256:" + "cd" * 32, "created": "x"}
+
+    monkeypatch.setattr(trivy_db_script, "head_manifest", head)
+    monkeypatch.setattr(trivy_db_script, "load_config", lambda: {"repositories": ["mirror.invalid/aquasec/trivy-db:2",
+                                                                                 "ghcr.invalid/aquasecurity/trivy-db:2"], "max_age_hours": 48})
+
+    def download(*args):
+        return trivy_db_script.main(["--cache-dir", str(cache), "download", "--pin-digest", DIGEST.upper().replace("SHA256", "sha256"), *args])
+
+    # the mirror answers with another manifest: refused, and the next repository (which matches) is used
+    assert download() == 0
+    assert asked == [f"mirror.invalid/aquasec/trivy-db@{DIGEST}", f"ghcr.invalid/aquasecurity/trivy-db@{DIGEST}"]
+    out = capsys.readouterr().out
+    assert f"answered with manifest {other}, not the pinned {DIGEST}; refusing it" in out
+    argv = (tools / "argv.txt").read_text()
+    assert other not in argv and argv.count("--download-db-only") == 1 and f"ghcr.invalid/aquasecurity/trivy-db@{DIGEST}" in argv
+    rec = json.loads(tdb.record_path(cache).read_text())
+    assert rec["pinned_digest"] == DIGEST and rec["manifest_digest"] == DIGEST and rec["provenance"] == "digest"
+    assert rec["downloaded_ref"] == f"ghcr.invalid/aquasecurity/trivy-db@{DIGEST}"
+    # every repository disagrees: nothing is downloaded, the old record stays, exit 1
+    (tools / "argv.txt").unlink()
+    before = tdb.record_path(cache).read_text()
+    answers["ghcr.invalid"] = other
+    assert download() == 1
+    assert not (tools / "argv.txt").exists() and tdb.record_path(cache).read_text() == before
+    assert "not the pinned" in capsys.readouterr().err
+    # the registry names no digest: refused by default; allowed, the pin itself is fetched, never a tag
+    answers.update({"mirror.invalid": "unknown", "ghcr.invalid": "unknown"})
+    assert download() == 1 and not (tools / "argv.txt").exists()
+    assert download("--allow-unknown-provenance") == 0
+    assert f"mirror.invalid/aquasec/trivy-db@{DIGEST}" in (tools / "argv.txt").read_text()
+    rec = json.loads(tdb.record_path(cache).read_text())
+    assert rec["provenance"] == "unverified" and rec["pinned_digest"] == DIGEST
+    # a malformed pin is a usage error
+    for bad in ("sha256:abc", "md5:" + "ab" * 16, "ab" * 32):
+        assert trivy_db_script.main(["--cache-dir", str(cache), "download", "--pin-digest", bad]) == 2
+
+
 # ------------------------------------------------------------------ 9. ASVS to the requirement
 
 def test_asvs_requirements_are_pinned_from_the_release_csv():
