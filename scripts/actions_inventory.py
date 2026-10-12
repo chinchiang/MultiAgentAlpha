@@ -8,6 +8,8 @@ are Critical, unpinned actions High). Non-SHA references are resolved to a full 
 `git ls-remote` (skip with --offline). zizmor runs when present on PATH (offline mode, so the online
 audits are skipped); otherwise the report says it was not executed. Nothing is modified.
 
+Triggers (and so pull_request_target) come from the parsed document, the way GitHub reads it: block,
+flow (`on: {pull_request_target: ...}`), list and scalar forms, any indentation, comments ignored.
 Files that are not valid YAML (GitHub would refuse them) are still inventoried line by line and
 flagged, because a seeded or half-written workflow is exactly what a reviewer needs to see.
 """
@@ -147,7 +149,24 @@ def _block_value(lines: list[str], i: int, indent: int) -> str:
     return "{" + ", ".join(body) + "}" if body else "{}"
 
 
+def _parsed_triggers(doc: object) -> list[str] | None:
+    """The event names under `on:` of a parsed workflow, or None when it is not a mapping. PyYAML reads
+    a bare `on` key as the boolean True (YAML 1.1), so both keys are looked up; `on: push`,
+    `on: [push, pull_request_target]` and `on: {pull_request_target: {types: [opened]}}` all count."""
+    if not isinstance(doc, dict):
+        return None
+    on = doc["on"] if "on" in doc else doc.get(True)
+    if isinstance(on, str):
+        return [on]
+    if isinstance(on, list):
+        return [str(e) for e in on if isinstance(e, str | int | float | bool)]
+    if isinstance(on, dict):
+        return [str(e) for e in on]
+    return []
+
+
 def _triggers(lines: list[str]) -> list[str]:
+    """Line-based fallback for a file that is not valid YAML."""
     for i, ln in enumerate(lines):
         m = re.match(r"^(?:on|\"on\"|'on'|true):\s*(.*?)\s*$", ln)
         if not m:
@@ -205,16 +224,22 @@ def inventory_workflow(path: Path, root: Path) -> WorkflowInventory:
     text = path.read_text(encoding="utf-8", errors="replace")
     lines = text.splitlines()
     inv = WorkflowInventory(path=str(path.relative_to(root)).replace("\\", "/"))
+    parsed: list[str] | None = None
     try:
-        yaml.safe_load(text)
+        parsed = _parsed_triggers(yaml.safe_load(text))
     except yaml.YAMLError as e:
         where = next((ln.strip() for ln in str(e).splitlines() if "line" in ln and "column" in ln), "")
         inv.parse_error = str(e).splitlines()[0] + (f"，{where.rstrip(':')}" if where else "")
 
-    inv.triggers = _triggers(lines)
-    inv.pull_request_target = "pull_request_target" in inv.triggers or any(
-        re.match(r"^\s*(-\s*)?pull_request_target\s*:?\s*$", ln) for ln in lines if not ln.lstrip().startswith("#")
-    )
+    if parsed is not None:
+        # what GitHub will run on; the line patterns below missed flow-style, re-indented and commented triggers
+        inv.triggers = parsed
+        inv.pull_request_target = "pull_request_target" in parsed
+    else:
+        inv.triggers = _triggers(lines)
+        inv.pull_request_target = "pull_request_target" in inv.triggers or any(
+            re.match(r"^\s*(-\s*)?pull_request_target\s*:?\s*(#.*)?$", ln) for ln in lines if not ln.lstrip().startswith("#")
+        )
 
     current_job = None
     last_cache_uses = -100

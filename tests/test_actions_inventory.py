@@ -4,6 +4,8 @@ report the hardened self-review workflow correctly, without network or zizmor.""
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -58,6 +60,47 @@ def test_find_workflows_skips_the_tool_checkouts_under_mara_tools(tmp_path):
     vendored.mkdir(parents=True)
     (vendored / "a.yml").write_text("on: push\njobs: {}\n", encoding="utf-8")
     assert [p.relative_to(tmp_path).as_posix() for p in find_workflows(tmp_path)] == [".github/workflows/b.yml"]
+
+
+CHECKOUT_HEAD = ("jobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n"
+                 "      - uses: actions/checkout@0000000000000000000000000000000000000000\n"
+                 "        with:\n          ref: ${{ github.event.pull_request.head.sha }}\n")
+
+
+@pytest.mark.parametrize("on", [
+    "on: {pull_request_target: {types: [opened]}}\n",     # flow mapping: the line patterns saw no trigger at all
+    "on: {push: {branches: [main]}, pull_request_target: {}}\n",
+    "on: [push, pull_request_target]\n",
+    "on: pull_request_target\n",
+    "on:\n    pull_request_target:    # four-space indent and a trailing comment\n      types: [opened]\n",
+    "'on':\n  - push\n  - pull_request_target\n",
+    "\"on\": {pull_request_target: null}\n",
+])
+def test_pull_request_target_is_read_from_the_parsed_triggers(tmp_path, on):
+    wf = tmp_path / ".github" / "workflows" / "x.yml"
+    wf.parent.mkdir(parents=True)
+    wf.write_text("name: x\n" + on + CHECKOUT_HEAD, encoding="utf-8")
+    inv = inventory_workflow(wf, tmp_path)
+    assert inv.parse_error is None
+    assert "pull_request_target" in inv.triggers and inv.pull_request_target, inv.triggers
+    assert inv.severity == "Critical" and any("pwn request" in t for _, t in inv.findings)
+    # and governance G-6 sees it
+    from governance_check import FAIL, check_g6
+
+    r = check_g6(tmp_path)
+    assert r.status == FAIL and "使用 pull_request_target" in r.evidence
+
+
+def test_parsed_triggers_ignore_what_github_ignores(tmp_path):
+    wf = tmp_path / ".github" / "workflows" / "x.yml"
+    wf.parent.mkdir(parents=True)
+    # the event name inside a filter, a step name or a comment is not a trigger
+    wf.write_text("name: pull_request_target\non: {push: {branches: [pull_request_target]}}  # not pull_request_target\n"
+                  "jobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n"
+                  "      - name: pull_request_target\n        run: \"echo pull_request_target:\"\n", encoding="utf-8")
+    inv = inventory_workflow(wf, tmp_path)
+    assert inv.parse_error is None
+    assert inv.triggers == ["push"] and not inv.pull_request_target
 
 
 def test_invalid_yaml_is_flagged_but_still_inventoried(tmp_path):
