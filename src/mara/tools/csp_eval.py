@@ -23,6 +23,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from .runner import tool_env
 from .sarif import ToolResult
 
 DRIVER_NAME = "mara_driver.js"
@@ -148,7 +149,7 @@ def evaluate(policies: list[CspPolicy], *, driver: Path, node: str,
     request = json.dumps({"policies": [{"id": i, "policy": p.policy} for i, p in enumerate(policies)]})
     try:
         cp = subprocess.run([node, str(driver), "-"], input=request, capture_output=True, text=True,
-                            timeout=timeout, check=False, cwd=str(driver.parent))
+                            timeout=timeout, check=False, cwd=str(driver.parent), env=tool_env())
     except (OSError, subprocess.TimeoutExpired) as e:
         return None, f"failed: {e}"
     if cp.returncode != 0:

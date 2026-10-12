@@ -420,7 +420,12 @@ semgrep runs with `--metrics=off --disable-version-check` and explicit local rul
 --no-resolve`, so only package names and versions go to api.osv.dev and nothing to deps.dev. All
 SARIF files land in the `l0-sarif` artifact, and the eight scans of the repository itself (six tools; osv-scanner
 twice more: the model-evaluation and semgrep tool closures) are also uploaded to GitHub Code Scanning (see below). `mara review` uses the same pinned rulesets by default
-(`MARA_SEMGREP_CONFIG` overrides). zizmor on the real workflows runs the same way since 2026-09-14:
+(`MARA_SEMGREP_CONFIG` overrides them, but such a run is labelled `UNPINNED rules` in the tool note, the
+pipeline log and the report's `tool_health`, with a warning, and a registry config such as `p/default` or `auto`
+is named as fetched from semgrep.dev). Every tool subprocess gets an allowlisted environment
+(`runner.TOOL_ENV_ALLOWLIST`: search path, home, temp, locale, proxies, CA bundles, Windows system variables),
+never the review's provider keys, AWS credentials or tokens; zizmor alone also gets `GH_TOKEN`/`GITHUB_TOKEN`,
+and only for its online audits. zizmor on the real workflows runs the same way since 2026-09-14:
 `scripts/zizmor_ci.py` executes the locked zizmor (online audits with the workflow token), keeps the
 SARIF and fails on any finding; zizmor-action is gone.
 

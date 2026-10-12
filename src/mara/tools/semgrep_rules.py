@@ -19,7 +19,7 @@ import os
 import re
 from pathlib import Path
 
-from .runner import installed_manifest_entry, tools_dir
+from .runner import installed_manifest_entry, tool_env, tools_dir
 
 RULES_DIR_NAME = "semgrep-rules"
 _PREFIX_RE = re.compile(r"^.*?\b" + re.escape(RULES_DIR_NAME) + r"\.")
@@ -37,6 +37,26 @@ def installed_rule_paths() -> list[Path]:
     return [base / p for p in entry.get("paths", []) if (base / p).is_dir()]
 
 
+def override_configs() -> list[str]:
+    """The rule configs MARA_SEMGREP_CONFIG names (comma-separated), or [] when it is unset or blank."""
+    env = os.environ.get("MARA_SEMGREP_CONFIG", "")
+    return [c.strip() for c in env.split(",") if c.strip()]
+
+
+# semgrep fetches these from semgrep.dev (registry rulesets, `auto`): neither pinned nor offline
+_REGISTRY_CONFIG = re.compile(r"^(?:auto|[pr]/\S+|https?://\S+)$")
+
+
+def unpinned_note(configs: list[str]) -> str:
+    """How a run with MARA_SEMGREP_CONFIG is labelled (ToolRun note, pipeline log, report tool_health): the binary
+    is the pinned one, the rules are not, and a registry config also reaches semgrep.dev."""
+    registry = [c for c in configs if _REGISTRY_CONFIG.match(c)]
+    note = f"UNPINNED rules from MARA_SEMGREP_CONFIG ({', '.join(configs)}), not the semgrep-rules commit in tools/versions.lock"
+    if registry:
+        note += f"; {', '.join(registry)} fetched from semgrep.dev"
+    return note
+
+
 def default_configs() -> list[str]:
     """MARA_SEMGREP_CONFIG (comma-separated) wins; otherwise the installed pinned rule directories;
     otherwise none. There is no silent fallback to the registry ruleset p/default: it fetches rules
@@ -44,16 +64,14 @@ def default_configs() -> list[str]:
     would label an unpinned rule set as the pinned run. Without rules the runner records semgrep as
     not run, which keeps the review incomplete; p/default stays available explicitly, through
     MARA_SEMGREP_CONFIG."""
-    env = os.environ.get("MARA_SEMGREP_CONFIG", "")
-    if env.strip():
-        return [c.strip() for c in env.split(",") if c.strip()]
-    return [str(p) for p in installed_rule_paths()]
+    return override_configs() or [str(p) for p in installed_rule_paths()]
 
 
 def scan_env() -> dict[str, str]:
-    """Environment for every semgrep invocation: no version check (the call to semgrep.dev hangs on networks
-    that block it, even for `--version`) and no metrics, on top of the command-line flags."""
-    return {**os.environ, "SEMGREP_ENABLE_VERSION_CHECK": "0", "SEMGREP_SEND_METRICS": "off"}
+    """Environment for every semgrep invocation: the tool allowlist (runner.tool_env: no provider keys or tokens,
+    no SEMGREP_* setting from the parent) plus no version check (the call to semgrep.dev hangs on networks that
+    block it, even for `--version`) and no metrics, on top of the command-line flags."""
+    return tool_env(SEMGREP_ENABLE_VERSION_CHECK="0", SEMGREP_SEND_METRICS="off")
 
 
 def scan_args(exe: str, configs: list[str], sarif_out: Path) -> list[str]:
