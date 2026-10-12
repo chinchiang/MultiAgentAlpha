@@ -199,6 +199,18 @@ def p5_data_residency(cfg: MaraConfig) -> PolicyResult:
         ok, why = _host_is_private(m.base_url or "", tuple(cfg.private_dns_suffixes))
         if not ok:
             bad.append(f"{m.name}: data_residency=on_prem but {why}")
+    # vendor_api_zdr / vendor_api_retained are claims about a vendor's contract. The SDK providers call a
+    # fixed vendor endpoint; an openai_compatible model sends the code (and its api_key_env value as the
+    # bearer token) to whatever base_url says, so the claim only holds for a host the config names as a
+    # contracted vendor endpoint, never for any HTTPS host at all.
+    vendor_hosts = set(cfg.vendor_api_hosts)
+    for m in cfg.models:
+        if m.provider != "openai_compatible" or m.data_residency not in ("vendor_api_zdr", "vendor_api_retained"):
+            continue
+        host = _host(m.base_url or "")
+        if host not in vendor_hosts:
+            bad.append(f"{m.name}: data_residency={m.data_residency} but host {host or '(none)'} is not in vendor_api_hosts "
+                       "(the vendor endpoints the organisation's contract covers)")
     if bad:
         return PolicyResult("P5", "data-residency", False,
                             "source code may only be sent to on_prem or vendor_api_zdr models, or to a vendor_api_retained "

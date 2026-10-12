@@ -20,9 +20,10 @@ console = Console()
 @app.command()
 def review(
     target: Path = typer.Argument(..., help="Repository or directory to review"),
-    config: Path = typer.Option(Path("config/mara.yaml"), "--config", "-c"),
+    config: Path | None = typer.Option(None, "--config", "-c", show_default=False,
+                                       help="default: <workspace>/config/mara.yaml (config/mara.mock.yaml with --provider mock)"),
     provider: str = typer.Option("live", "--provider", help="live | mock"),
-    out: Path = typer.Option(Path("out"), "--out", "-o"),
+    out: Path | None = typer.Option(None, "--out", "-o", show_default=False, help="default: <workspace>/out"),
     sarif_dir: Path | None = typer.Option(None, "--sarif-dir", help="Ingest pre-recorded L0 SARIF instead of running tools"),
     mock_fixtures: Path | None = typer.Option(None, "--mock-fixtures"),
     fail_on_gate: bool = typer.Option(False, "--fail-on-gate", help="Exit 2 when the gate blocks (implied by rollout.phase: blocking)"),
@@ -36,17 +37,28 @@ def review(
                                                  "answer key declares (CWE-798) do not block live egress; any other secret still does"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
+    from .workspace import WorkspaceInsideTarget, check_outside, resolve
+
+    # The defaults are MARA's own files, so they resolve against the workspace (MARA_HOME, else the working
+    # directory) like every other trust anchor: with MARA_HOME set and the job running inside the target,
+    # a relative default would let the reviewed repository supply the config (models, endpoints, gate).
     cfg_path = config
-    if provider == "mock" and config == Path("config/mara.yaml") and Path("config/mara.mock.yaml").exists():
-        cfg_path = Path("config/mara.mock.yaml")
+    if cfg_path is None:
+        mock_cfg = resolve("config/mara.mock.yaml")
+        cfg_path = mock_cfg if provider == "mock" and mock_cfg.exists() else resolve("config/mara.yaml")
+    out = out if out is not None else resolve("out")
+    try:
+        # before the config is even read; the pipeline repeats the workspace, tool and trivy checks
+        check_outside(target, {f"the config file {cfg_path}": cfg_path, f"the output directory {out}": out})
+    except WorkspaceInsideTarget as e:
+        raise typer.BadParameter(str(e), param_hint="TARGET") from e
     if not cfg_path.is_file():
-        raise typer.BadParameter(f"config file not found: {cfg_path} (run from the repository root or pass --config)", param_hint="--config")
+        raise typer.BadParameter(f"config file not found: {cfg_path} (run from the MARA workspace, set MARA_HOME or pass --config)",
+                                 param_hint="--config")
     cfg = load_config(cfg_path)
     if provider == "mock" and any(m.provider != "mock" for m in cfg.models):
         raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock")
     pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out)
-    from .workspace import WorkspaceInsideTarget
-
     try:
         report = pipe.run(target, sarif_dir=sarif_dir, mode=provider, base_ref=base, calibration_sample=calibration_sample)
     except WorkspaceInsideTarget as e:
@@ -74,8 +86,6 @@ def review(
 
         write_psirt(report.psirt, out / "psirt-notifications.json")
         if notify_psirt and report.psirt:
-            from .workspace import resolve
-
             for s in send_psirt(report.psirt, cfg, ledger_path=resolve(cfg.psirt.ledger_file), resend=psirt_resend):
                 if s.get("skipped"):
                     console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: skipped, {s['reason']} (ledger {cfg.psirt.ledger_file})")
@@ -126,7 +136,7 @@ def cvss(vector: str):
 
 @app.command()
 def check_config(
-    config: Path = typer.Argument(Path("config/mara.yaml")),
+    config: Path | None = typer.Argument(None, show_default=False, help="default: <workspace>/config/mara.yaml"),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
 ):
     """Evaluate every configuration policy (P1-P8) and exit non-zero if any fails."""
@@ -134,9 +144,12 @@ def check_config(
 
     from .config import MaraConfig
     from .policy import evaluate_policies
+    from .workspace import resolve
 
+    config = config if config is not None else resolve("config/mara.yaml")
     if not config.is_file():
-        raise typer.BadParameter(f"config file not found: {config} (run from the repository root or pass the path)", param_hint="CONFIG")
+        raise typer.BadParameter(f"config file not found: {config} (run from the MARA workspace, set MARA_HOME or pass the path)",
+                                 param_hint="CONFIG")
     raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
     # Full structural validation (fields, cross-field checks, unknown keys) so check-config can
     # never report "policies pass" for a file load_config would refuse; policies are rendered
