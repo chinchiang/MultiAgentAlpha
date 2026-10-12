@@ -95,13 +95,10 @@ def _label_driven(self: MockProvider, kind: str, arg: str, fam: str, user: str) 
 
 
 def _parse_batch(user: str) -> list[dict]:
-    marker = "BEGIN_JSON_ARRAY\n"
-    if marker not in user:
-        return []
-    try:
-        return json.loads(user[user.rindex(marker) + len(marker):])
-    except json.JSONDecodeError:
-        return []
+    """The findings a skeptic, red team or judge prompt carries (its derived data block)."""
+    from ..exchange import read_derived
+
+    return read_derived(user, "findings")
 
 
 def _resolve_judge(data: dict, user: str) -> dict:

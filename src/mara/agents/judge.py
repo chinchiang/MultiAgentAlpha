@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from typing import Literal
 
@@ -34,8 +33,11 @@ class _JudgeRaw(BaseModel):
 def run_judge(provider: Provider, batch: list[dict], pass_id: PassId, self_ids: set[str] | None = None) -> tuple[list[JudgeVote], list[str]]:
     if not batch:
         return [], []
-    user = f"pass_id: {pass_id}\nBlinded findings, judge each independently.\nBEGIN_JSON_ARRAY\n" + json.dumps(batch, ensure_ascii=False)
-    outcome = exchange.call(provider, system_extra=base.load_prompt("judge"), user=user, schema=JUDGE_SCHEMA, role="judge")
+    # the blinded views quote the repository verbatim: derived data, fenced (no canary: a judge sees no bundle)
+    outcome = exchange.ask(provider, role="judge", system_extra=base.load_prompt("judge"), schema=JUDGE_SCHEMA,
+                           lead=f"pass_id: {pass_id}\nBlinded findings, judge each independently: every finding in the findings "
+                                "block below, by finding_id.",
+                           derived=(exchange.Derived("findings", batch),))
     items, errors = exchange.parse_items(outcome, _JudgeRaw)
     order = {b["finding_id"]: i for i, b in enumerate(batch)}
     counts = Counter(i.finding_id for i in items)

@@ -9,7 +9,7 @@ The tagged region of a prompt that holds data under review; everything inside it
 _Avoid_: wrapper, sandbox, boundary
 
 **Repository data**:
-Text taken from the repository under review (file contents, file names, routes), shown to a model only inside the fence.
+Text taken from the repository under review (file contents, file names, routes, and the repository summary built from them), shown to a model only inside the fence.
 _Avoid_: bundle (the bundle is one rendering of it), source
 
 **Derived data**:

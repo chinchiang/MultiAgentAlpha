@@ -83,7 +83,7 @@ def test_a_truncated_ballot_is_a_truncation_not_invalid_output_and_still_blocks(
     assert audit[f"{role}_truncations"] > 0 and audit.get(f"{role}_invalid_items", 0) == 0
     assert f"{role}_truncations" in report.incomplete_reasons and not report.gate_passed
     assert audit[f"{role}_retries"] > 0, "retried once, as before (the retry policy is unchanged)"
-    assert audit["exchange_version"] == exchange.EXCHANGE_VERSION == 2
+    assert audit["exchange_version"] == exchange.EXCHANGE_VERSION, "every report names its accounting"
 
 
 def test_an_unparseable_ballot_is_invalid_output_with_its_own_count(tmp_path):
