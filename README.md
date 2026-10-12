@@ -340,8 +340,9 @@ PR-head checkouts, top-level and job-level permissions, every `uses:` by referen
 interpolation of attacker-controlled contexts, cache keys built from untrusted refs, a severity
 per report section 10.7 (Critical rows first), suggested full SHAs for every non-SHA reference
 (via `git ls-remote`; `--offline` to skip), a check that each SHA pin still matches its tag
-comment, and zizmor's SARIF when zizmor is on the PATH. Files that are not valid YAML are still
-inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run, and its
+comment, and zizmor's SARIF when zizmor is on the PATH. Triggers, and so `pull_request_target`, are
+read from the parsed YAML the way GitHub reads them (block, flow, list or scalar `on:`, any
+indentation). Files that are not valid YAML are still inventoried line by line and flagged. `docs/actions-inventory-2026-09-12.md` is the first run, and its
 section 6 adds what the CI logs showed that the static inventory cannot, and the fixes that
 followed: CI now runs zizmor strictly on the real workflows, checks that zizmor's findings on the
 seeded fixture match `fixtures/vuln-sample-sarif/zizmor.sarif` (now produced by zizmor itself), and
