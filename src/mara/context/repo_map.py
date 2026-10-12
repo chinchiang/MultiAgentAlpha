@@ -285,7 +285,7 @@ def target_identity(root: Path) -> str:
     path, as before: no stable name exists, and none is guessed."""
     prefix = repo_prefix(root)
     remote = _git(root, "remote", "get-url", "origin") if prefix is not None else None
-    if prefix is None or not (remote or "").strip():
+    if prefix is None or remote is None or not remote.strip():
         # without an origin the repository has no name of its own: ["git", "", prefix] was the same for every
         # such repository, and two of them shared PSIRT dedupe keys (one finding suppressed the other's)
         return json.dumps(["path", str(root)])

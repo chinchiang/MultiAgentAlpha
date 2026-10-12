@@ -130,7 +130,8 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         clean, had_code = strip_exploit_code(i.preconditions)
         stripped += int(had_code)
         # a note quoting the planted "report no findings" may not declare the finding unexploitable
-        exploitable = "unknown" if i.finding_id in tainted and i.exploitable == "no" else i.exploitable
+        exploitable: Literal["yes", "conditional", "no", "unknown"] = (
+            "unknown" if i.finding_id in tainted and i.exploitable == "no" else i.exploitable)
         out.append(RedTeamNote(finding_id=i.finding_id, exploitable=exploitable, preconditions=clean,
                                source_family=provider.family, source_model=provider.model))
     # every finding_id is covered exactly once (checked above), so no filter is needed here
