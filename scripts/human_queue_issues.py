@@ -2,7 +2,10 @@
 
   python scripts/human_queue_issues.py --queue out/human_queue.json --repo owner/repo [--dry-run]
       one GitHub issue per queue item (label from --label, deduplicated by the item's stable key
-      carried as an HTML marker in the body); existing open tickets are left alone.
+      carried as an HTML marker in the body). A key is filed once: an open ticket, a closed one (decided,
+      or awaiting a fixed decision label) or a decision already in --decisions-dir means no new ticket.
+      Only a key whose every earlier ticket was withdrawn (closed as not planned, no decision label) is
+      filed again.
   python scripts/human_queue_issues.py --repo owner/repo --sync-decisions [--dry-run]
       closed tickets carrying decision:true-positive or decision:false-positive become
       calib/decisions/<key>.json, and calib/decisions/backlog.json records the open count so the
@@ -10,6 +13,9 @@
       be recorded (no or two decision labels, unresolvable label history, damaged metadata) is listed
       with its reason and the run exits 2, so no decision is lost without anyone noticing; closing
       as "not planned" without a decision label withdraws a ticket on purpose and is only logged.
+      Several closed tickets for one key are recorded once: when they agree, the decision of a trained
+      adjudicator (else the earliest) is written; when they disagree, none is written and every one of
+      them is listed, so a later ticket never silently replaces an earlier decision.
 
 Tickets are listed through the REST API with every page followed: no count limit, so a backlog past
 any page size is neither undercounted nor re-filed.
@@ -87,6 +93,22 @@ def open_tickets(repo: str, label: str) -> dict[str, int]:
     return keys
 
 
+def closed_keys(repo: str, label: str) -> dict[str, int]:
+    """Key -> number of a closed MARA ticket that was not withdrawn (closed as not planned without a
+    decision label): decided, or waiting for its decision label to be fixed. Either way the key has its
+    ticket, and filing another one would ask the same question twice."""
+    keys: dict[str, int] = {}
+    for issue in list_tickets(repo, label, "closed"):
+        m = MARKER_RE.search(issue.get("body") or "")
+        if not m:
+            continue
+        decided = {lab.get("name") for lab in issue.get("labels") or []} & DECISION_LABELS.keys()
+        if not decided and issue.get("stateReason") == "not_planned":
+            continue
+        keys.setdefault(m.group(1), issue["number"])
+    return keys
+
+
 def ticket_body(item: dict, target: str) -> str:
     meta = {k: item.get(k) for k in ("key", "target_id", "revision", "context_hash", "finding_id", "file", "line", "cwe")}
     encoded = base64.urlsafe_b64encode(json.dumps(meta, ensure_ascii=False).encode()).decode()
@@ -121,7 +143,7 @@ def ticket_body(item: dict, target: str) -> str:
     return "\n".join(L) + f"\n<!-- mara-meta:{encoded} -->"
 
 
-def create_tickets(queue_path: Path, repo: str, label: str, dry_run: bool) -> tuple[int, int]:
+def create_tickets(queue_path: Path, repo: str, label: str, dry_run: bool, decisions_dir: Path | None = None) -> tuple[int, int]:
     q = json.loads(queue_path.read_text(encoding="utf-8"))
     items, target = q.get("items", []), q.get("target", "")
     if not items:
@@ -131,10 +153,19 @@ def create_tickets(queue_path: Path, repo: str, label: str, dry_run: bool) -> tu
         raise ValueError("legacy or invalid queue identity: regenerate the review before creating tickets")
     ensure_labels(repo, label, dry_run)
     existing = open_tickets(repo, label)  # read-only, so a dry run shows what would really be filed
+    closed = closed_keys(repo, label)
     created = skipped = 0
     for it in items:
         if it["key"] in existing:
             print(f"  {it['finding_id']} key {it['key']}: open ticket #{existing[it['key']]} exists, skipping")
+            skipped += 1
+            continue
+        if it["key"] in closed:
+            print(f"  {it['finding_id']} key {it['key']}: closed ticket #{closed[it['key']]} holds its decision, skipping")
+            skipped += 1
+            continue
+        if decisions_dir is not None and (decisions_dir / f"{it['key']}.json").is_file():
+            print(f"  {it['finding_id']} key {it['key']}: decision already recorded in {decisions_dir}, skipping")
             skipped += 1
             continue
         body_file = Path(f".mara-hq-{it['key']}.md")
@@ -220,6 +251,7 @@ def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Pat
     written = foreign = withdrawn = 0
     untrained = []
     unrecorded: list[str] = []
+    candidates: dict[str, list[dict]] = {}
     for issue in closed:
         m = MARKER_RE.search(issue.get("body") or "")
         if not m:
@@ -255,14 +287,27 @@ def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Pat
         decision = DECISION_LABELS[decision_label]
         actor = event["actor"]["login"]
         trained = is_trained(reg, actor, "adjudicator", decision_day)
-        if not trained:
-            untrained.append(f"#{issue['number']} by {actor}")
         record = {**meta, "decision": decision, "issue": issue["number"], "url": issue.get("url"),
                   "decided_at": event["created_at"], "decision_event_id": event["id"], "decision_label": decision_label,
                   "decided_by": actor, "adjudicator_trained": trained, "training_checked_on": decision_day.isoformat()}
+        candidates.setdefault(key, []).append(record)
+    # one file per key: the tickets used to be written in list order, so the last one listed replaced any
+    # earlier decision for the same key, an untrained or contradicting one included
+    for key, records in sorted(candidates.items()):
+        records.sort(key=lambda r: r["issue"])
+        if len({r["decision"] for r in records}) > 1:
+            listed = ", ".join(f"#{r['issue']} {r['decision']}" for r in records)
+            unrecorded += [f"#{r['issue']}: key {key} has contradicting decisions ({listed}); reopen or relabel all but one" for r in records]
+            continue
+        record = min(records, key=lambda r: (not r["adjudicator_trained"], r["decided_at"], r["issue"]))
+        if len(records) > 1:
+            others = ", ".join(f"#{r['issue']}" for r in records if r is not record)
+            print(f"  key {key}: {len(records)} closed tickets agree ({record['decision']}); recording #{record['issue']}, also decided in {others}")
+        if not record["adjudicator_trained"]:
+            untrained.append(f"#{record['issue']} by {record['decided_by']}")
         path = decisions_dir / f"{key}.json"
         if dry_run:
-            print(f"  [dry-run] would write {path}: {decision}")
+            print(f"  [dry-run] would write {path}: {record['decision']}")
         else:
             path.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         written += 1
@@ -300,8 +345,8 @@ def main() -> int:
     status = 0
     try:
         if args.queue:
-            created, skipped = create_tickets(args.queue, args.repo, args.label, args.dry_run)
-            print(f"tickets: {created} created, {skipped} already open")
+            created, skipped = create_tickets(args.queue, args.repo, args.label, args.dry_run, args.decisions_dir)
+            print(f"tickets: {created} created, {skipped} already filed or decided")
         if args.sync_decisions:
             written, open_count, unrecorded = sync_decisions(args.repo, args.label, args.decisions_dir, args.backlog_file,
                                                              args.dry_run, args.register)

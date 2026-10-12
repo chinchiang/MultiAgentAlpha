@@ -623,9 +623,11 @@ become `HumanQueueItem`s in
 `out/human_queue.md/json` with the full un-blinded context: finder families, the skeptic's verdict,
 the red team's call and every judge vote from both passes. `scripts/human_queue_issues.py` opens one
 GitHub issue per item (deduplicated by its v2 key: a SHA-256 over the target identity, the reviewed tree's
-revision, the context hash, file, line and CWE; legacy 12-hex keys are never auto-synced) and, with `--sync-decisions`,
+revision, the context hash, file, line and CWE; legacy 12-hex keys are never auto-synced; a key with an open ticket, a closed
+one that was not withdrawn as not planned, or a recorded decision is never filed again) and, with `--sync-decisions`,
 turns closed tickets labelled `decision:true-positive` / `decision:false-positive` into
-`calib/decisions/<key>.json`, which `scripts/calibrate.py` uses as labels. When
+`calib/decisions/<key>.json` (several closed tickets for one key: a trained adjudicator's decision when they
+agree, none and a failed sync when they disagree), which `scripts/calibrate.py` uses as labels. When
 `calib/decisions/backlog.json` shows more open tickets than `human_queue.backlog_limit`, the pipeline
 raises the alpha threshold and — with `human_queue.tighten_exclude_tier_c`, the default — stops queuing
 tier C at `human_queue.queue_tier_c_min_severity`. Nobody then looks at those findings, so one the jury
