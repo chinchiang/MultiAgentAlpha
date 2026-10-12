@@ -16,6 +16,7 @@ Tools are never executed against code they could run: they parse, they do not bu
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -24,7 +25,32 @@ from pathlib import Path
 
 from .sarif import ToolResult, read_sarif, scan_complete
 
+_log = logging.getLogger("mara.tools")
 NOT_INSTALLED = "not installed under {bin_dir}; run `python scripts/install_tools.py`"
+
+# The only parent environment variables a tool subprocess sees. The tools scan an untrusted target and some
+# reach the network (osv-scanner queries api.osv.dev), so the review's own secrets - provider keys, AWS
+# credentials, GH_TOKEN, HF_TOKEN, the PSIRT token - must not be in their environment; neither may a TRIVY_*,
+# GITLEAKS_* or SEMGREP_* setting change what the pinned, explicitly configured scan does. What remains is what
+# a process needs to run and to reach the network: the search path, home and temp directories, locale and time
+# zone, proxies and CA bundles, and the Windows system variables.
+TOOL_ENV_ALLOWLIST = (
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "TZ",
+    "TMPDIR", "TMP", "TEMP",
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+    "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "NODE_EXTRA_CA_CERTS",
+    "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+    "PROGRAMDATA", "PROGRAMFILES",
+)
+
+
+def tool_env(*extra: str, **set_vars: str) -> dict[str, str]:
+    """The environment for a tool subprocess: the allowlisted parent variables, plus the named `extra` ones a
+    particular call needs (zizmor's online audits: GH_TOKEN), plus `set_vars` set explicitly."""
+    keep = set(TOOL_ENV_ALLOWLIST) | set(extra)
+    env = {k: v for k, v in os.environ.items() if k in keep}
+    env.update(set_vars)
+    return env
 
 
 def tools_dir() -> Path:
@@ -77,6 +103,8 @@ class ToolRun:
 
 
 def _run(cmd: list[str], cwd: Path, timeout: int = 600, env: dict | None = None) -> subprocess.CompletedProcess:
+    """Run a tool; without an explicit `env`, with tool_env() - never the full parent environment."""
+    env = tool_env() if env is None else env
     try:
         return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
     except OSError as e:
@@ -164,10 +192,18 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 # Pinned local rulesets (tools/versions.lock `semgrep-rules`) unless MARA_SEMGREP_CONFIG says
                 # otherwise; never `--config auto`, which turns metrics on and sends project identity to
                 # semgrep.dev (data-residency policy P5). Rule ids are normalised to the registry form.
-                from .semgrep_rules import default_configs, normalize_sarif, scan_env
+                from .semgrep_rules import default_configs, normalize_sarif, override_configs, scan_env
                 from .semgrep_rules import scan_args as semgrep_args
 
                 configs = default_configs()
+                override = override_configs()
+                if override:
+                    # MARA_SEMGREP_CONFIG replaced the pinned rules: the run is still recorded, but never as pinned
+                    from .semgrep_rules import unpinned_note
+
+                    rules_note = unpinned_note(override)
+                    _log.warning("semgrep: %s", rules_note)
+                    version = f"{version}; {rules_note}" if version else rules_note
                 if not configs:
                     runs.append(ToolRun(tool=tool, ran=False, note="pinned semgrep-rules not installed under "
                                         f"{tools_dir() / 'semgrep-rules'} (scripts/install_tools.py); no registry fallback"))
@@ -192,8 +228,10 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                     # empty SARIF, which must not be read as "ran, nothing found"
                     sarif.unlink(missing_ok=True)
             elif tool == "zizmor":
-                cp = _run([exe, "--no-progress", "--format", "sarif", *ZIZMOR_TARGET_FLAGS] + (["--offline"] if _offline_zizmor() else []) + ["."],
-                          target)
+                offline = _offline_zizmor()
+                # the token reaches zizmor only for the online audits it is needed for
+                cp = _run([exe, "--no-progress", "--format", "sarif", *ZIZMOR_TARGET_FLAGS] + (["--offline"] if offline else []) + ["."],
+                          target, env=tool_env() if offline else tool_env("GH_TOKEN", "GITHUB_TOKEN"))
                 if cp.stdout.strip():
                     sarif.write_text(cp.stdout, encoding="utf-8")
                 elif cp.returncode == 3 and "no inputs collected" in cp.stderr and not has_actions_inputs(target):
