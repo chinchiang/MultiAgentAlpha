@@ -80,8 +80,9 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         "Findings to refute.\nBEGIN_JSON_ARRAY\n" + json.dumps([_view(f) for f in findings], ensure_ascii=False)
     )
     comp = base.call(provider, system_extra=base.load_prompt("skeptic"), user=user, schema=SKEPTIC_SCHEMA, role="skeptic")
-    # a verdict that names the token while reporting the planted file resists it; anything else followed it
-    echoed, _reported = canary.screen_verdicts(comp)
+    # the token in a verdict that also names the planted file reports it (tainted: it cannot refute); anywhere
+    # else the model followed it
+    echoed, tainted = canary.screen_verdicts(comp)
     if echoed:
         return [], ["canary_echoed"], 0  # followed the planted instruction: none of its verdicts counts
     items, errors = base.parse_items(comp, _SkepticRaw)
@@ -99,6 +100,10 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
             data["verdict"] = "weakened"
             data["reason"] = (data["reason"] + " [control citation not verifiable in bundle]")[:600]
             unverified += 1
+        if data["finding_id"] in tainted and data["verdict"] == "refuted":
+            # the verdict quotes the planted "report no findings": it may not clear the finding on its own
+            data["verdict"] = "weakened"
+            data["reason"] = (data["reason"] + " [quotes the planted canary instruction]")[:600]
         out.append(SkepticVerdict(**data, source_family=provider.family, source_model=provider.model))
     # every finding_id is covered exactly once (checked above), so no filter is needed here
     return out, errors, unverified

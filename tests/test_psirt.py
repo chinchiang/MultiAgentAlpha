@@ -168,6 +168,60 @@ def test_dedupe_key_follows_the_target_identity_not_the_checkout_path(shipped_re
     assert keys != [n["dedupe_key"] for n in build_notifications(moved, cfg)], "a different repository is a different finding"
 
 
+def test_repositories_without_an_origin_do_not_share_an_identity(tmp_path):
+    """#74 review, item 3: every repository without an origin remote, reviewed at its top level, was named
+    ["git", "", ""]; two of them shared PSIRT dedupe keys and one finding suppressed the other's hand-off."""
+    import subprocess
+
+    from mara.context.repo_map import build_context
+
+    ids = []
+    for name in ("one", "two"):
+        repo = tmp_path / name
+        repo.mkdir()
+        (repo / "app.py").write_text("unsafe()\n")
+        for args in (["init", "-q"], ["add", "-A"], ["-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "-m", "x"]):
+            subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+        ids.append(json.loads(build_context(repo).identity))
+    assert ids == [["path", str((tmp_path / "one").resolve())], ["path", str((tmp_path / "two").resolve())]]
+    assert pl.dedupe_key("p", "id-one", "app.py", 1, "CWE-89") != pl.dedupe_key("p", "id-two", "app.py", 1, "CWE-89")
+
+
+def test_ledger_items_under_the_path_based_key_migrate_instead_of_being_sent_again(shipped_report, monkeypatch, tmp_path):
+    """#74 review, item 4: v0.4.10 moved the key from the checkout path to the target identity. An item
+    delivered, confirmed and staged under the old key must keep that history under the new key, not be sent
+    again as a fresh, unconfirmed hand-off."""
+    import datetime as dt
+
+    cfg, report = shipped_report
+    monkeypatch.setenv("PSIRT_WEBHOOK_TOKEN", "s3cret")
+    first = report.psirt[0]
+    loc = first["location"]
+    legacy = pl.dedupe_key(first["product"], first["target"], loc["file"], loc["line"], first["cwe"])
+    assert legacy != first["dedupe_key"]
+    old_payload = {**first, "dedupe_key": legacy}
+    ledger_path = tmp_path / "ledger.json"
+    led = pl.load_ledger(ledger_path)
+    when = dt.datetime(2026, 10, 1, tzinfo=dt.UTC)
+    pl.record_attempt(led, old_payload, 202, True, when)
+    pl.record_stage(led, legacy, "early_warning", "PSIRT-1", when)
+    pl.save_ledger(led, ledger_path)
+
+    calls = []
+    with httpx.Client(transport=httpx.MockTransport(lambda r: (calls.append(json.loads(r.content)["dedupe_key"]), httpx.Response(202))[1])) as c:
+        results = send_psirt(report.psirt, cfg, client=c, ledger_path=ledger_path)
+    assert results[0]["skipped"] and first["dedupe_key"] not in calls, "the delivered finding is not sent again"
+    led = pl.load_ledger(ledger_path)
+    assert legacy not in led["items"]
+    item = led["items"][first["dedupe_key"]]
+    assert item["key"] == first["dedupe_key"] and item["migrated_from"] == [legacy]
+    assert item["stages"]["early_warning"]["reference"] == "PSIRT-1" and item["stages"]["internal_handoff"]["sent_at"]
+    # an operator holding the old key still reaches the item
+    pl.record_stage(led, legacy, "notification", "PSIRT-2", when)
+    assert led["items"][first["dedupe_key"]]["stages"]["notification"]["reference"] == "PSIRT-2"
+    assert not pl.migrate_key(led, legacy, first["dedupe_key"]), "migration runs once"
+
+
 def test_ledger_skips_delivered_findings_records_attempts_and_sends_idempotency_key(shipped_report, monkeypatch, tmp_path):
     cfg, report = shipped_report
     monkeypatch.setenv("PSIRT_WEBHOOK_TOKEN", "s3cret")

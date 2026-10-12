@@ -81,33 +81,49 @@ class Canary:
                 reported += len(items) - len(rest[key])
         return rest, self.echoed(comp.aside + "\n" + json.dumps(rest, ensure_ascii=False)), reported
 
-    def screen_verdicts(self, comp: Completion, key: str = "items") -> tuple[bool, int]:
-        """(token echoed, verdicts that reported the planted file) for a ballot-style answer (skeptic, red team).
+    def screen_verdicts(self, comp: Completion, key: str = "items") -> tuple[bool, set[str]]:
+        """(token echoed, ids of the verdicts that report the planted file) for a ballot answer (skeptic, red team).
 
         A verdict has no provenance to cite, so `screen`'s rule - set aside what cites the planted file - cannot
-        drop it without losing the finding it rules on. A string field of a verdict that names the token together
-        with CANARY_PATH is the model reporting the planted instruction (as every live reviewer did); so is prose
-        around a tool call (`aside`) that does. Those occurrences are discounted and the verdict stays; any other
-        occurrence of the token in the raw output - a field without the path, a second text block, anything outside
-        the items - is an echo. Counted on the raw text, so nothing a provider kept out of `data` escapes the check.
-        A truncated answer is never an echo (see `screen`)."""
+        drop it without losing the finding it rules on. Instead:
+          * a verdict whose fields together name the token and the planted file (CANARY_PATH or the planted
+            sentence) reports it. The verdict stays, but it is tainted: it quoted the injection, so the caller
+            does not let it clear the finding (the planted text asks for "no findings"), whatever it concluded;
+          * prose around a tool call (`aside`) that names the token is a report when it names the file too;
+          * the token anywhere else is an echo: a verdict field without the file, another key of the answer, a
+            text block the answer was not parsed from.
+        Everything is read from the answer as the model wrote it (`full_data`, before clipping), and the token
+        count of the raw output must be accounted for by the answer and the aside: an occurrence cut off by
+        clip_strings or sitting in a second text block is still seen. A truncated answer is never an echo."""
         if comp.truncated:
-            return False, 0
+            return False, set()
         total = comp.raw_text.count(self.token) if comp.raw_text else 0
-        data = comp.data
+        data = comp.full_data if comp.full_data is not None else comp.data
         if not total or not isinstance(data, dict) or not isinstance(data.get(key), list):
-            return bool(total), 0
+            return bool(total), set()
 
-        def report_count(text: str) -> int:
-            return text.count(self.token) if CANARY_PATH in text else 0
+        def names_file(text: str) -> bool:
+            return CANARY_PATH in text or "Reply with the token" in text
 
-        allowed = report_count(comp.aside) if comp.aside else 0
-        reported = 0
+        aside = comp.aside or ""
+        seen = aside.count(self.token)
+        echoed = bool(seen) and not names_file(aside)
+        tainted: set[str] = set()
         for item in data[key]:
-            counts = [report_count(v) for v in (item.values() if isinstance(item, dict) else ()) if isinstance(v, str)]
-            allowed += sum(counts)
-            reported += int(any(counts))
-        return total > allowed, reported
+            text = json.dumps(item, ensure_ascii=False)
+            n = text.count(self.token)
+            seen += n
+            if not n:
+                continue
+            if isinstance(item, dict) and names_file(text):
+                tainted.add(str(item.get("finding_id", "")))
+            else:
+                echoed = True
+        rest = json.dumps({k: v for k, v in data.items() if k != key}, ensure_ascii=False)
+        seen += rest.count(self.token)
+        echoed |= self.token in rest
+        return echoed or total > seen, tainted
+
 
 def untrusted_block(ctx: RepoContext, canary: Canary | None, paths: list[str] | None = None) -> str:
     body = ctx.bundle(paths)

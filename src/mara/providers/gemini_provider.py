@@ -95,4 +95,4 @@ class GeminiProvider(Provider):
             data = json.loads(text)
         except json.JSONDecodeError:
             return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        return Completion(data=clip_strings(data, schema), raw_text=text, **tokens)
+        return Completion(data=clip_strings(data, schema), full_data=data, raw_text=text, **tokens)

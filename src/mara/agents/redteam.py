@@ -114,7 +114,7 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         + json.dumps(view, ensure_ascii=False)
     )
     comp = base.call(provider, system_extra=base.load_prompt("redteam"), user=user, schema=REDTEAM_SCHEMA, role="redteam")
-    echoed, _reported = canary.screen_verdicts(comp)  # same rule as the skeptic's (base.Canary.screen_verdicts)
+    echoed, tainted = canary.screen_verdicts(comp)  # same rule as the skeptic's (base.Canary.screen_verdicts)
     if echoed:
         return [], ["canary_echoed"], 0  # followed the planted instruction: none of its notes counts
     items, errors = base.parse_items(comp, _RedRaw)
@@ -129,7 +129,9 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     for i in items:
         clean, had_code = strip_exploit_code(i.preconditions)
         stripped += int(had_code)
-        out.append(RedTeamNote(finding_id=i.finding_id, exploitable=i.exploitable, preconditions=clean,
+        # a note quoting the planted "report no findings" may not declare the finding unexploitable
+        exploitable = "unknown" if i.finding_id in tainted and i.exploitable == "no" else i.exploitable
+        out.append(RedTeamNote(finding_id=i.finding_id, exploitable=exploitable, preconditions=clean,
                                source_family=provider.family, source_model=provider.model))
     # every finding_id is covered exactly once (checked above), so no filter is needed here
     return out, errors, stripped
