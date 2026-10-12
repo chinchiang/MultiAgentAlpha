@@ -127,11 +127,19 @@ def item_by_key(ledger: dict, key: str) -> dict | None:
 
 
 def already_sent(ledger: dict, key: str) -> str | None:
-    """The time the internal hand-off was first delivered (HTTP 2xx), or None."""
+    """The time the internal hand-off was first delivered (HTTP 2xx), or None. Closing an item does not
+    undo its delivery: the time is still returned."""
     item = ledger["items"].get(key)
-    if not item or item.get("closed"):
+    if not item:
         return None
     return item["stages"].get("internal_handoff", {}).get("sent_at")
+
+
+def closed_at(ledger: dict, key: str) -> dict | None:
+    """The PSIRT's closure record (`at`, `reason`) of the item under `key`, or None while it is open. A
+    closed item is the PSIRT's final word on that finding: a later review must not send it again."""
+    item = ledger["items"].get(key)
+    return (item or {}).get("closed") or None
 
 
 def record_attempt(ledger: dict, payload: dict, status_code: int | None, ok: bool, now: dt.datetime | None = None,

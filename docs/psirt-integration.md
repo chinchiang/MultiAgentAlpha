@@ -43,7 +43,7 @@ python3 scripts/psirt_ops.py record --key <key> --stage final_report --reference
 python3 scripts/psirt_ops.py status
 ```
 
-`confirm-event` 可在原交接送達後補登或更新事件，保留歷次事件參考與原送達紀錄。若最終報告起算點稍後才確定，再以完整事件 JSON 更新。`mara review --psirt-event event.json` 可在新交接附上同樣資料。`close --key … --reason …` 由 PSIRT 記錄結案理由。
+`confirm-event` 可在原交接送達後補登或更新事件，保留歷次事件參考與原送達紀錄。若最終報告起算點稍後才確定，再以完整事件 JSON 更新。`mara review --psirt-event event.json` 可在新交接附上同樣資料。`close --key … --reason …` 由 PSIRT 記錄結案理由；結案的項目之後的審查不再送出（不論當初是否送達），除非加 `--psirt-resend`。
 
 ## 握手與驗證界線
 

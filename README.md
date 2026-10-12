@@ -523,7 +523,8 @@ configured tiers and severities (default: tier A, Critical) is written to
 Review time anchors only internal service targets. Legal deadlines stay empty until PSIRT confirms
 an event type and awareness timestamp; the final-report anchor depends on that event type.
 `mara review --notify-psirt` POSTs the hand-off to the configured webhook with an environment token;
-`--psirt-resend` (with `--notify-psirt`) sends even findings the ledger records as delivered, and
+`--psirt-resend` (with `--notify-psirt`) sends even findings the ledger records as delivered or the
+PSIRT closed, and
 `--psirt-event event.json` attaches a PSIRT-confirmed event so the legal deadlines are computed.
 A hand-off that fails (an HTTP error or no response at all) is recorded in the ledger, does not stop the
 other payloads, and makes `mara review` exit 3 after the reports are written, whatever the gate says.
