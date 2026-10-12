@@ -115,8 +115,9 @@ human_queue:
 # (source, licence, per-file SHA-256 of the safetensors weights, signature); scripts/ml_bom.py builds
 # sbom/ml-bom.cdx.json from it, verifies a weights directory against it and checks the cosign bundle.
 # Policy P7 enforces it once `required` is true; until then check-config and the review report only
-# show each self-hosted model's BOM status (both are PENDING in this repository: no weights here, and
-# the registry hashes could not be fetched). See docs/ml-bom.md.
+# show each self-hosted model's BOM status. The production panel has one self-hosted model, `glm`, and its
+# entry is PENDING: no weights in this repository, and the platform team has not yet recorded the source,
+# licence and hashes of what the gateway serves. See docs/ml-bom.md.
 ml_bom:
   required: false
   path: sbom/ml-bom.cdx.json
