@@ -3,6 +3,8 @@ from __future__ import annotations
 from ..config import ModelSpec
 from .base import Provider
 
+__all__ = ["Provider", "make_provider"]
+
 
 def make_provider(spec: ModelSpec, fixtures_dir: str | None = None) -> Provider:
     if spec.provider == "anthropic":

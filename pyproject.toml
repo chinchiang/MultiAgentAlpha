@@ -51,4 +51,4 @@ python_version = "3.11"  # the oldest supported interpreter, even when run on 3.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = [".", "src"]

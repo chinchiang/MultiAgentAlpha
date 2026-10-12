@@ -21,3 +21,6 @@ calib-out/
 # model-evaluation run directories: only the reports derived from them (docs/garak-*, docs/cyberseceval-*,
 # calib/model-eval-*.json) are committed (docs/model-eval-runbook.md)
 /ops/model-eval/
+# uv's lock file: CI and INSTALL.md install from the hash-pinned pip closures under tools/; a uv.lock would be a
+# second, unscanned lock that drifts from them, so it stays local
+/uv.lock
