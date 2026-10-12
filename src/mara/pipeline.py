@@ -219,7 +219,8 @@ class Pipeline:
                 k_ok = all(x.verified for x in k.provenance)
                 # never merge an unverified (possibly fabricated) finding into a verified one:
                 # it would inherit the verified finding's acceptance and hide the fabrication
-                if k.dimension == f.dimension and k.cwe == f.cwe and q.file == p.file and abs(q.line - p.line) <= 3 and k_ok == f_ok:
+                same_file = _norm_path(q.file) == _norm_path(p.file)  # ./app.py and app.py are one file
+                if k.dimension == f.dimension and k.cwe == f.cwe and same_file and abs(q.line - p.line) <= 3 and k_ok == f_ok:
                     match = k
                     break
             if match is None:
@@ -709,7 +710,11 @@ class Pipeline:
         # G-8: latest red-team evaluation verdict per family (garak / CyberSecEval), 'none' until one has run
         from .model_eval import family_eval_status
 
-        me = family_eval_status(Path.cwd(), sorted({m.family.value for m in self.cfg.models if m.provider != "mock"}))
+        # the MARA workspace (MARA_HOME), like every other piece of MARA's own evidence: never the working
+        # directory, which may be the repository under review
+        from .workspace import root as workspace_root
+
+        me = family_eval_status(workspace_root(), sorted({m.family.value for m in self.cfg.models if m.provider != "mock"}))
         self.audit["model_eval"] = me
         report.bias_audit["model_eval"] = me
         if ml_bom:

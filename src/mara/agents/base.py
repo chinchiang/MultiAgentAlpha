@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..context.repo_map import RepoContext
+from ..context.repo_map import RepoContext, fence_safe
 from ..providers.base import Completion, Provider
 
 
@@ -159,8 +159,10 @@ def verify_quote(ctx: RepoContext, file: str, line: int, quote: str) -> bool:
     if len(norm.replace(" ", "")) < MIN_QUOTE_CHARS and norm != " ".join(lines[line - 1].split()):
         return False
     lo, hi = max(0, line - 4), min(len(lines), line + 3)
-    window = "\n".join(lines[lo:hi])
-    return norm in " ".join(window.split())
+    window = " ".join("\n".join(lines[lo:hi]).split())
+    # a line with a prompt fence tag was shown with that tag defused (repo_map.fence_safe): quoting what the
+    # model saw is as verbatim as quoting the file
+    return norm in window or norm in fence_safe(window)
 
 
 def call(provider: Provider, *, system_extra: str, user: str, schema: dict, role: str) -> Completion:

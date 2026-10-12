@@ -97,7 +97,12 @@ def review(
                   + (f", {out/'psirt-notifications.json'} ({len(report.psirt)} PSIRT payload(s))" if cfg.psirt.enabled else ""))
     phase = cfg.rollout.phase
     if not report.gate_passed and phase != "blocking":
-        console.print(f"rollout phase [bold]{phase}[/bold]: the gate would have blocked; result recorded, merge not enforced (G-10)")
+        # G-10: outside `blocking` the phase records a blocked gate without enforcing it; an explicit
+        # --fail-on-gate overrides that for this run (docs/governance-templates.md), and the message says so
+        if fail_on_gate:
+            console.print(f"rollout phase [bold]{phase}[/bold]: the gate blocked; --fail-on-gate enforces it for this run (exit 2)")
+        else:
+            console.print(f"rollout phase [bold]{phase}[/bold]: the gate would have blocked; result recorded, merge not enforced (G-10)")
     if psirt_failed:
         # an internal hand-off that did not arrive is an operational failure (EU CRA Article 14 clocks
         # may depend on it): never a green run. It outranks the gate's 2; the reports are written.
@@ -112,7 +117,10 @@ def cvss(vector: str):
     """Score a CVSS 4.0 vector with the FIRST-equivalent calculator."""
     from .scoring import cvss4
 
-    s = cvss4.score(vector)
+    try:
+        s = cvss4.score(vector)
+    except cvss4.CVSS4Error as e:
+        raise typer.BadParameter(str(e), param_hint="VECTOR") from e
     console.print(json.dumps({"vector": vector, "score": s, "severity": cvss4.severity(s), "nomenclature": cvss4.nomenclature(vector)}))
 
 

@@ -9,7 +9,6 @@ import json
 import os
 import re
 import subprocess
-from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from html import escape
 from pathlib import Path
@@ -68,6 +67,18 @@ MAX_REPOSITORY_CHARS = 16_000_000
 def bundle_cost(rel: str, text: str) -> int:
     """Characters one file costs in a bundle: its text, the line-number prefixes and the <file> fence."""
     return len(text) + len(text.splitlines()) * 8 + len(rel) + 50
+
+
+# The tags that delimit untrusted data in a prompt. A repository file holding `</file>` or
+# `</untrusted_repository_data>` would otherwise close the fence early and make what follows read as
+# instructions; inside a bundled file their `<` is shown as `&lt;`. Only these tags change, so quotes from
+# every other line stay verbatim (verify_quote accepts a quote of an escaped line in either form).
+_FENCE_TAG = re.compile(r"<(?=/?\s*(?:file|untrusted_repository_data|context_facts)\b)", re.IGNORECASE)
+
+
+def fence_safe(text: str) -> str:
+    """`text` with every prompt fence tag defused (`<file` -> `&lt;file`, `</untrusted_repository_data` -> ...)."""
+    return _FENCE_TAG.sub("&lt;", text)
 
 
 @dataclass
@@ -132,7 +143,7 @@ class RepoContext:
         for rel, text in self.content.items():
             if paths and rel not in paths:
                 continue
-            numbered = "\n".join(f"{i + 1:5d}| {line}" for i, line in enumerate(text.splitlines()))
+            numbered = "\n".join(f"{i + 1:5d}| {line}" for i, line in enumerate(fence_safe(text).splitlines()))
             parts.append(f'<file path="{escape(rel, quote=True)}">\n{numbered}\n</file>')
         return "\n".join(parts)
 
@@ -398,32 +409,47 @@ def _import_specs(rel: str, text: str) -> set[str]:
     return set()
 
 
+def _module_matches(names: set[str], spec: str) -> bool:
+    """A dotted import `spec` names a module known as one of `names` (its full dotted path or bare name):
+    exactly, or as a dotted suffix of the full path (`app.models` is `src/app/models.py`). Never a mere string
+    prefix: `re` must not match `requirements.txt` or `report/`."""
+    return any(n == spec or n.endswith("." + spec) for n in names)
+
+
+def _in_package(rel: str, spec: str) -> bool:
+    """`rel` lies below the package directory `spec` (dotted), at the bundle root or below another directory."""
+    pkg = spec.strip(".").replace(".", "/")
+    return bool(pkg) and ("/" + rel).find("/" + pkg + "/") != -1
+
+
 def import_neighbours(ctx: RepoContext, changed: list[str]) -> list[str]:
     """Bundle files related to the changed set by imports, in both directions (assessment #14):
     files the changed files import, and files that import them. Over-inclusion is safe — a
-    wider bundle only adds context; under-inclusion would hide it."""
+    wider bundle only adds context; under-inclusion would hide it. Matching is by module, not by
+    string prefix: a bare `import re` used to pull in every path beginning with "re" (README.md,
+    requirements.txt, report/...), and `from flask import request` every request.py in the bundle."""
     specs_of = {rel: _import_specs(rel, text) for rel, text in ctx.content.items()}
     names_of = {rel: _py_module_names(rel) for rel in ctx.content}
-    by_name: dict[str, set[str]] = defaultdict(set)
-    for rel, names in names_of.items():
-        for n in names:
-            by_name[n].add(rel)
+
+    def imports(importer: str, spec: str, rel: str, *, package: bool = True) -> bool:
+        """`importer`'s import `spec` reaches bundle file `rel`. A package import also reaches the files below
+        it when looking forward (context for the changed file); looking back, importing a package is no
+        import of each of its submodules (`from app import helpers` does not use app/models.py)."""
+        if not importer.endswith(".py"):  # a resolved JS/TS path (one per candidate suffix): that file itself
+            return spec == rel
+        return _module_matches(names_of[rel], spec) or (package and _in_package(rel, spec))
+
     related: set[str] = set()
     for c in changed:
         if c not in ctx.content:
             continue
         for spec in specs_of[c]:
-            related |= by_name.get(spec, set())
-            related |= by_name.get(spec.rsplit(".", 1)[-1], set())
-            related |= {p for p in ctx.content if p.startswith(spec)}
-        names = names_of[c]
+            related |= {p for p in ctx.content if p != c and imports(c, spec, p)}
         for other, specs in specs_of.items():
             if other == c or other in related:
                 continue
-            for spec in specs:
-                if spec in names or spec.rsplit(".", 1)[-1] in names or spec == c:
-                    related.add(other)
-                    break
+            if any(imports(other, spec, c, package=False) for spec in specs):
+                related.add(other)
     related -= set(changed)
     return sorted(related)
 
