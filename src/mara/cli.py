@@ -61,7 +61,7 @@ def review(
         report.psirt = build_notifications(report, cfg, event=json.loads(psirt_event.read_text(encoding="utf-8")))
     out.mkdir(parents=True, exist_ok=True)
     write_sarif(report, out / "report.sarif")
-    write_markdown(report, out / "report.md")
+    write_markdown(report, out / "report.md", fail_on_gate=fail_on_gate)
     (out / "report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
     (out / "pipeline.log").write_text("\n".join(pipe.log) + "\n", encoding="utf-8")
     if cfg.human_queue.enabled:

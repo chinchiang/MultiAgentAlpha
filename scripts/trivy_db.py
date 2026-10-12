@@ -9,10 +9,11 @@
       exit 1 when the database is missing, its trivy.db no longer matches the record, or UpdatedAt is
       older than N hours (default tools/trivy-db.yaml max_age_hours). What CI runs before any scan.
   python3 scripts/trivy_db.py export --out trivy-db-bundle.tar.gz [--cache-dir DIR]
-  python3 scripts/trivy_db.py import --bundle trivy-db-bundle.tar.gz [--cache-dir DIR]
+  python3 scripts/trivy_db.py import --bundle trivy-db-bundle.tar.gz --bundle-sha256 <hex> [--cache-dir DIR]
       move the database to a runner without egress (report part VIII: the isolated pipelines). The
-      bundle holds db/trivy.db, db/metadata.json and the record; import refuses a trivy.db whose SHA-256
-      differs from the record it travels with.
+      bundle holds db/trivy.db, db/metadata.json and the record; import requires the bundle's SHA-256 as
+      `export` printed it, obtained out of band (--trust-bundle skips that), and refuses a trivy.db whose
+      SHA-256 differs from the record it travels with.
 
 trivy comes only from MARA_TOOLS_DIR/bin and its manifest version must equal tools/versions.lock. The
 database is NOT pinned in the lock (upstream refreshes it every six hours); the record is its provenance.
@@ -180,7 +181,8 @@ def cmd_export(a: argparse.Namespace) -> int:
     out.with_name(out.name + ".sha256").write_text(f"{digest}  {out.name}\n", encoding="utf-8")
     rec = tdb.read_record(cache) or {}
     print(f"wrote {out} ({out.stat().st_size} bytes) sha256 {digest}\n  database UpdatedAt {rec.get('metadata', {}).get('UpdatedAt')} from {rec.get('repository')}"
-          f"\n  carry the bundle and the .sha256 file to the isolated runner and run: scripts/trivy_db.py import --bundle {out.name}")
+          f"\n  carry the bundle to the isolated runner, send this digest separately (ticket, chat, signed note), and run:"
+          f"\n  scripts/trivy_db.py import --bundle {out.name} --bundle-sha256 {digest}")
     return 0
 
 
@@ -188,6 +190,13 @@ def cmd_import(a: argparse.Namespace) -> int:
     bundle = a.bundle.resolve()
     if not bundle.is_file():
         print(f"ERROR: bundle {bundle} not found", file=sys.stderr)
+        return 2
+    # The expected digest must come from somewhere other than the bundle: the .sha256 file travels with it, and
+    # whoever can alter the bundle in transit can rewrite a self-consistent database, record and sidecar together.
+    # Without --bundle-sha256 the import is refused unless --trust-bundle accepts that risk explicitly.
+    if not a.bundle_sha256 and not a.trust_bundle:
+        print("ERROR: --bundle-sha256 is required: pass the digest `export` printed, obtained through a channel other than "
+              "the one that carried the bundle (or --trust-bundle to accept the bundle's own consistency)", file=sys.stderr)
         return 2
     if a.bundle_sha256:
         got = tdb.sha256_file(bundle)
@@ -246,7 +255,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--out", type=Path, required=True)
     s = sub.add_parser("import")
     s.add_argument("--bundle", type=Path, required=True)
-    s.add_argument("--bundle-sha256", help="expected sha256 of the bundle file (from the .sha256 sidecar)")
+    s.add_argument("--bundle-sha256", help="expected sha256 of the bundle file, as `export` printed it, obtained out of band "
+                   "(not from the .sha256 file that travels with the bundle); required unless --trust-bundle")
+    s.add_argument("--trust-bundle", action="store_true",
+                   help="import without --bundle-sha256, relying only on the bundle's own record (never in CI)")
     a = ap.parse_args(argv)
     try:
         return {"download": cmd_download, "status": cmd_status, "export": cmd_export, "import": cmd_import}[a.cmd](a)

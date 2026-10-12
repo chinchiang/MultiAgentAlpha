@@ -155,7 +155,7 @@ def test_export_import_round_trip_and_tamper_refusal(tmp_path):
         tf.add(cache / tdb.RECORD_NAME, arcname=tdb.RECORD_NAME)
         (tmp_path / "evil.db").write_text("evil")
         tf.add(tmp_path / "evil.db", arcname="db/trivy.db")
-    r = _run(tools, "import", "--bundle", str(bad), cache=tmp_path / "o3")
+    r = _run(tools, "import", "--bundle", str(bad), "--trust-bundle", cache=tmp_path / "o3")
     assert r.returncode == 1 and "refusing to import" in r.stderr and not (tmp_path / "o3" / "db").exists()
 
 

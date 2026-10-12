@@ -1,10 +1,13 @@
 # In-country pipeline for 上海／重慶 (report chapter 26, CN-1): two on-prem families, no cross-border model.
 # Passes the policies only because reduced_panel_reason is stated.
 models:
+  # DeepSeek as the IEC gateway serves it (`model: deepseek`, the same alias the cold standbys use), from the
+  # site's own in-country instance of the gateway: the address below is a placeholder, and source code must not
+  # leave the country, so it may never be the gateway outside the site.
   - name: deepseek-local
     family: deepseek
     provider: openai_compatible
-    model: deepseek-v3.2
+    model: deepseek
     base_url: https://10.20.30.40:8000/v1
     api_key_env: DEEPSEEK_LOCAL_KEY
     data_residency: on_prem

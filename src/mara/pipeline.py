@@ -457,12 +457,10 @@ class Pipeline:
                 consensus_score=score,
                 accept_threshold=self.cfg.gate.accept_threshold,
             )
-            try:
-                num = cvss4.score(f.cvss4_vector)
-                sev = cvss4.severity(num)
-            except cvss4.CVSS4Error:
-                num, sev = None, "Unknown"
-                self.audit["invalid_cvss_vectors"] += 1
+            # every Finding's vector was fully parsed and scored when it was built (schemas.Finding._cvss): a model
+            # finding with an invalid vector is dropped at L2 as an invalid item, so scoring here cannot fail
+            num = cvss4.score(f.cvss4_vector)
+            sev = cvss4.severity(num)
             # Keep mathematical CVSS severity separate from the jury's operational opinion.
             family_bands = [max((v.severity_band for v in fv if v.judge_family == fam), key=SEVERITY_ORDER.index) for fam in valid_families]
             operational = sorted(family_bands, key=SEVERITY_ORDER.index)[len(family_bands) // 2] if family_bands else None
@@ -477,8 +475,6 @@ class Pipeline:
                 reasons.append("insufficient_independent_judges")
             if len(fv) != len(raw_votes):
                 reasons.append("invalid_or_incomplete_judge_passes")
-            if num is None:
-                reasons.append("invalid_cvss_vector")
             if alpha is not None and alpha < self.human_alpha_threshold:
                 reasons.append("agreement_below_threshold")
             if human > tp and human > fp:

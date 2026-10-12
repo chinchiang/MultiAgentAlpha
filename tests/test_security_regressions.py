@@ -316,8 +316,12 @@ def test_quorum_requires_two_independent_families_and_both_passes(tmp_path):
     assert accepted.accepted and accepted.independent_judges == 2
     repeated = pipe.score([f], finders, {}, {}, full + [full[0]] * 100, [])[0]
     assert not repeated.accepted and repeated.needs_human
-    unknown = pipe.score([f.model_copy(update={"cvss4_vector": "CVSS:4.0/invalid"})], finders, {}, {}, full, [])[0]
-    assert unknown.cvss4_score is None and not unknown.accepted
+    # an invalid vector cannot reach scoring: Finding rejects it at the model boundary
+    # (test_invalid_cvss_is_rejected_at_model_boundary); one smuggled past validation fails loudly, never as "Unknown"
+    from mara.scoring import cvss4
+
+    with pytest.raises(cvss4.CVSS4Error):
+        pipe.score([f.model_copy(update={"cvss4_vector": "CVSS:4.0/invalid"})], finders, {}, {}, full, [])
 
 
 def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path, monkeypatch):

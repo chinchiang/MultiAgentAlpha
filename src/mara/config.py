@@ -245,7 +245,6 @@ class MaraConfig(BaseModel):
         default=False,
         description="If false, any model without on_prem/vendor_api_zdr residency is refused source code",
     )
-    require_family_diversity: bool = Field(default=True, description="Kept for compatibility; policy P3 now enforces the panel size")
     anthropic_covered_models_authorized: bool = Field(
         default=False, description="Policy P1: allow Fable/Mythos-class models only with a recorded authorization"
     )
