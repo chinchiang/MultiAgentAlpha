@@ -303,3 +303,51 @@ def test_a_deleted_file_does_not_make_every_incremental_review_incomplete(tmp_pa
     changed, _ = restrict_to_increment(ctx, "HEAD~1")
     assert changed == ["app.py"] and ctx.deleted == ["legacy.py"]
     assert not ctx.omitted and ctx.complete and ctx.coverage()["deleted"] == ["legacy.py"]
+
+
+# ------------------------------------------------------------------ one retry for a rejected L3/L4 reply
+
+def _pipe(tmp_path):
+    from pathlib import Path
+
+    from mara.config import load_config
+    from mara.pipeline import Pipeline
+
+    root = Path(__file__).resolve().parents[1]
+    return Pipeline(load_config(root / "config" / "mara.mock.yaml"), out_dir=tmp_path)
+
+
+def test_a_malformed_or_incomplete_reply_is_asked_once_more_but_signals_are_not(tmp_path):
+    from mara.pipeline import _retryable
+
+    assert _retryable(["unexpected_verdict", "incomplete_or_duplicate_response"]) and _retryable(["empty"])
+    for signal in (["refused"], ["canary_echoed"], ["provider_http_error:500"], ["provider_call_failed"], []):
+        assert not _retryable(signal), signal
+    pipe = _pipe(tmp_path)
+    replies = iter([([], ["unexpected_verdict", "incomplete_or_duplicate_response"], 0), (["v1", "v2"], [], 0)])
+    assert pipe._once_more("skeptic", "glm", lambda: next(replies)) == (["v1", "v2"], [], 0)
+    assert pipe.audit["skeptic_retries"] == 1 and pipe.audit["skeptic_retries[glm]"] == 1
+    calls = []
+    out = pipe._once_more("redteam", "glm", lambda: calls.append(1) or ([], ["canary_echoed"], 0))
+    assert out == ([], ["canary_echoed"], 0) and len(calls) == 1, "an echo is a finding about the model, not noise"
+    replies = iter([([], ["empty"], 0), ([], ["missing_verdict", "incomplete_or_duplicate_response"], 0)])
+    assert pipe._once_more("judge", "gemini", lambda: next(replies))[1] == ["missing_verdict", "incomplete_or_duplicate_response"]
+    assert pipe.audit["judge_retries"] == 1, "only one more call; the second answer stands"
+
+
+def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path, monkeypatch):
+    from mara.agents import skeptic
+    from mara.context.repo_map import RepoContext
+
+    pipe = _pipe(tmp_path)
+    f = Finding(id="F-0001", dimension="xss", title="t", cwe="CWE-79", provenance=[Provenance(file="a.py", line=1, quote="print(name)")],
+                reachability="reachable", reachability_argument="r", exploit_sketch="e",
+                cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N", model_confidence=0.5,
+                source_family=ModelFamily.ANTHROPIC, source_model="m")
+    good = SkepticVerdict(finding_id="F-0001", verdict="stands", reason="r", sanitizer_or_control="none",
+                          source_family=ModelFamily.DEEPSEEK, source_model="m")
+    replies = iter([([], ["unexpected_verdict", "incomplete_or_duplicate_response"], 0), ([good], [], 0)])
+    monkeypatch.setattr(skeptic, "run_skeptic", lambda *a, **k: next(replies))
+    verdicts, abstained = pipe.run_skeptics(RepoContext(root=tmp_path), [f], {"F-0001": {ModelFamily.ANTHROPIC}})
+    assert verdicts == [good] and not abstained
+    assert pipe.audit["skeptic_invalid_items"] == 0 and pipe.audit["skeptic_retries"] == 1

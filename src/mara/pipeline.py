@@ -9,7 +9,9 @@ import datetime as dt
 import hashlib
 import json
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import asdict
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +47,13 @@ from .workspace import check_outside
 # incomplete_or_duplicate_* entries are summary markers the agents append to signal that a
 # partially-failed call returned no verdicts at all; neither is an unusable item itself
 _ERROR_MARKERS = frozenset({"refused", "canary_echoed", "incomplete_or_duplicate_response", "incomplete_or_duplicate_judge_response"})
+
+
+def _retryable(errors: list[str]) -> bool:
+    """A reply the agent rejected as malformed, cut off or not covering every finding exactly once: worth one
+    more call (GLM as skeptic answered four verdicts for three findings on one call and exactly three on the
+    next, 2026-10-08). Refusals and canary echoes are signals, never retried; providers retry their own failures."""
+    return bool(errors) and not any(e in ("refused", "canary_echoed") or base.PROVIDER_ERROR_RE.fullmatch(e) for e in errors)
 
 
 def _count_invalid(errors: list[str]) -> int:
@@ -187,6 +196,18 @@ class Pipeline:
                 finders[match.id].add(f.source_family)
         return kept, finders
 
+    def _once_more(self, role: str, fam: str, call: Callable[[], tuple]) -> tuple:
+        """`call()` -> (items, errors, ...); called once more when it kept nothing and _retryable(errors). Only
+        the answer used counts toward completeness; the discarded attempt is recorded as <role>_retries. The
+        retry depends on whether the reply was well-formed, never on what it concluded."""
+        out = call()
+        if not out[0] and _retryable(out[1]):
+            self.audit[f"{role}_retries"] += 1
+            self.audit[f"{role}_retries[{fam}]"] += 1
+            self._say(f"L3/L4: {role} {fam} reply rejected ({', '.join(sorted(set(out[1])))}); asked once more")
+            out = call()
+        return out
+
     # ------------------------------------------------------------------ L3
     def run_skeptics(
         self, ctx: RepoContext, findings: list[Finding], finders: dict[str, set[ModelFamily]]
@@ -206,7 +227,7 @@ class Pipeline:
             self.audit["skeptic_calls"] += 1
             self.audit[f"skeptic_calls[{fam}]"] += 1
             self.audit[f"skeptic_items[{fam}]"] += len(fs)
-            v, errors, unverified = skeptic.run_skeptic(self._p(name), ctx, fs)
+            v, errors, unverified = self._once_more("skeptic", fam, partial(skeptic.run_skeptic, self._p(name), ctx, fs))
             refusals = errors.count("refused")
             invalid = _count_invalid(errors)
             self.audit["skeptic_invalid_items"] += invalid
@@ -249,7 +270,7 @@ class Pipeline:
             self.audit["redteam_calls"] += 1
             self.audit[f"redteam_calls[{fam}]"] += 1
             self.audit[f"redteam_items[{fam}]"] += len(fs)
-            n, errors, stripped = redteam.run_redteam(self._p(name), ctx, fs)
+            n, errors, stripped = self._once_more("redteam", fam, partial(redteam.run_redteam, self._p(name), ctx, fs))
             refusals = errors.count("refused")
             invalid = _count_invalid(errors)
             self.audit["redteam_invalid_items"] += invalid
@@ -298,8 +319,8 @@ class Pipeline:
             self.audit[f"judge_calls[{fam}]"] += 2
             self.audit[f"judge_items[{fam}]"] += len(eligible)
             fwd, rev = blinded_batches(eligible, skeptic_by_id, ctx.content_hash + prov.family.value)
-            v1, e1 = judge.run_judge(prov, fwd, "forward", self_ids)
-            v2, e2 = judge.run_judge(prov, rev, "reverse", self_ids)
+            v1, e1 = self._once_more("judge", fam, partial(judge.run_judge, prov, fwd, "forward", self_ids))
+            v2, e2 = self._once_more("judge", fam, partial(judge.run_judge, prov, rev, "reverse", self_ids))
             refusals = int(e1 == ["refused"]) + int(e2 == ["refused"])
             invalid = _count_invalid(e1) + _count_invalid(e2)
             self.audit["judge_invalid_items"] += invalid

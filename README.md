@@ -178,6 +178,13 @@ What the first live reviews against these endpoints showed (2026-10-07), each fi
   reasoning tokens, three times out of three; with the schema as guidance only it answered every finding.
   `strict_schema: false` (openai_compatible) does that and is set for `glm-reviewer`; DeepSeek keeps strict
   decoding. Every answer is re-validated either way, and one ```json fence is tolerated.
+- **Nondeterministic replies.** Even without strict decoding GLM sometimes answered four skeptic verdicts for three
+  findings, and the next call exactly three. A skeptic, red-team or judge reply the agent rejects as malformed, cut off
+  or not covering every finding exactly once is now asked once more (`<role>_retries` in the bias audit); refusals,
+  canary echoes and provider failures are never retried, and only the answer used counts toward completeness.
+- **zizmor on a repository without GitHub Actions** exits 3 (`no inputs collected`), which marked every such review
+  incomplete. MARA now checks the target itself (no workflow, `action.yml` or dependabot file, symlinks not
+  followed) and only then records zizmor as run with no results; any other exit 3 is still a failed scan.
 
 The labelled calibration samples under `calib/samples/` carry planted credentials on purpose, so the
 secret preflight would block every live calibration call. `mara review --calibration-sample`

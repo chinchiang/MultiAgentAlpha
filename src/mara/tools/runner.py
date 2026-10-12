@@ -127,6 +127,21 @@ SEMGREP_TARGET_FLAGS = ["--x-ignore-semgrepignore-files"]
 ZIZMOR_TARGET_FLAGS = ["--no-config", "--no-ignores", "--collect=all"]  # all: also what .gitignore hides
 
 
+def has_actions_inputs(target: Path) -> bool:
+    """Whether the target holds anything zizmor --collect=all audits: a workflow under .github/workflows/, an
+    action.yml / action.yaml anywhere, or .github/dependabot.yml. Walked without following symlinks."""
+    for dirpath, _dirs, files in os.walk(target, followlinks=False):
+        d = Path(dirpath)
+        for f in files:
+            if f in ("action.yml", "action.yaml"):
+                return True
+            if f.endswith((".yml", ".yaml")) and d.name == "workflows" and d.parent.name == ".github":
+                return True
+            if f in ("dependabot.yml", "dependabot.yaml") and d.name == ".github":
+                return True
+    return False
+
+
 def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> list[ToolRun]:
     # tools run with cwd=target, so the report path must be absolute or it lands inside the target
     out_dir = out_dir.resolve()
@@ -181,6 +196,12 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                           target)
                 if cp.stdout.strip():
                     sarif.write_text(cp.stdout, encoding="utf-8")
+                elif cp.returncode == 3 and "no inputs collected" in cp.stderr and not has_actions_inputs(target):
+                    # zizmor exits 3 when there is nothing to audit. A target without workflows, actions or a
+                    # dependabot file (checked here, not taken from zizmor's word) has been fully covered.
+                    runs.append(ToolRun(tool=tool, ran=True, note=f"pinned {version}; the target has no GitHub Actions inputs"
+                                        if version else "pinned; the target has no GitHub Actions inputs"))
+                    continue
             elif tool == "trivy":
                 # Offline only: the database recorded by scripts/trivy_db.py (never downloaded during a review)
                 from .trivy_db import cache_dir, db_path, read_metadata

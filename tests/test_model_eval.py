@@ -160,12 +160,15 @@ def test_calibration_penalty_front_matter_and_live_guard(tmp_path, monkeypatch):
     assert base["a"]["weight"] == base["b"]["weight"] and not base["b"]["penalised"]
     assert evald["b"]["penalised"] and evald["b"]["weight"] == round(base["b"]["weight"] * 0.8, 2) and evald["a"]["weight"] == base["a"]["weight"]
     # a mock run cannot be labelled live; the mock label produces front matter with mode mock
-    out = tmp_path / "calib-out" / "s1"
-    out.mkdir(parents=True)
-    src = ROOT / "calib-out" / "s1-fastapi-inventory" / "report.json"
-    if not src.exists():
-        pytest.skip("no calib-out run available")
-    out.joinpath("report.json").write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    # a mock review of the first sample, made here (no tools, label-driven mock families): the test used to copy
+    # calib-out/s1-fastapi-inventory/report.json left on disk by an earlier run, into a directory named `s1` that
+    # matches no sample, so it was skipped on CI and failed wherever such a run existed
+    out = tmp_path / "calib-out" / "s1-fastapi-inventory"
+    no_sarif = tmp_path / "no-sarif"
+    no_sarif.mkdir()
+    report = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), out_dir=out).run(
+        ROOT / "calib" / "samples" / "s1-fastapi-inventory", sarif_dir=no_sarif, mode="mock")
+    out.joinpath("report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "calibrate.py"), "--mode", "live", "--out-dir", str(tmp_path / "calib-out"),
                         "--report", str(tmp_path / "c.md")], capture_output=True, text=True)
     assert r.returncode != 0 and "cannot be labelled live" in (r.stdout + r.stderr)
@@ -173,8 +176,8 @@ def test_calibration_penalty_front_matter_and_live_guard(tmp_path, monkeypatch):
                         "--report", str(tmp_path / "c.md"), "--date", "2026-09-12"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     text = (tmp_path / "c.md").read_text(encoding="utf-8")
-    # since a real calib-out run exists on disk, the mock calibration computes concrete suggested
-    # weights from the review data instead of reporting 無法計算; G-8 has still never run
+    # with a review on the labelled sample, the mock calibration computes concrete suggested weights from
+    # the review data instead of reporting 無法計算; G-8 has still never run
     assert text.startswith("---\nreport: calibration\ndate: '2026-09-12'\nmode: mock\n")
     assert "無法計算" not in text and "建議權重" in text and "G-8 從未執行" in text
     assert "權重未自動寫入" in text

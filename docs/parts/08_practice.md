@@ -4,7 +4,7 @@
 
 ### 21.1 共用管線：台北、桃園、休士頓、Brno/Blučina
 
-這四個廠區可以共用同一條管線，拓樸如第 8 章的圖。雛型自 v0.4.2 起的正式面板是：Claude（Opus 5.5）經 AWS Bedrock 的 `global.` 跨區推論設定檔呼叫（ZDR 只涵蓋 Anthropic 自己擔任資料處理者的管道，經 Bedrock 時由 AWS 處理資料【已證實｜B81】；`global.` 設定檔可能在任一 AWS 商用區域處理，合約要求固定區域的廠區應改用地理範圍的設定檔【已證實｜B138】），Gemini 經 Gemini API 付費層呼叫（廠商有限期保留、附核准單號），GLM 自架於 IEC 網路內並以私有 DNS 區 `.iec.inventec` 提供端點，冷備援的 DeepSeek 同樣自架；GitHub Enterprise 的 runner 部署於各廠區網段，L0 工具在本地跑，SARIF 上傳到中央的 code scanning。Brno 廠區另需注意 EU CRA 的時程：第 14 條的 24 小時預警義務已於 2026 年 9 月 11 日生效，通報須經 ENISA 的 Single Reporting Platform 提交【已證實（生效日期與 SRP）｜C11.9、C11.15】，審查管線產出的 A 級 Critical finding 若涉及已出貨產品，應自動交給 PSIRT 作為內部交接；是否構成須通報的事件、法定期限從何時起算，由 PSIRT 確認後決定，審查完成時間不等於知悉時間（雛型已實作此交接，預設關閉）。
+這四個廠區可以共用同一條管線，拓樸如第 8 章的圖。雛型自 v0.4.2 起的正式面板是：Claude（Opus 5.5）經 AWS Bedrock 的 `global.` 跨區推論設定檔呼叫（ZDR 只涵蓋 Anthropic 自己擔任資料處理者的管道，經 Bedrock 時由 AWS 處理資料【已證實｜B81】；`global.` 設定檔可能在任一 AWS 商用區域處理，合約要求固定區域的廠區應改用地理範圍的設定檔【已證實｜B138】），Gemini 經 Gemini API 付費層呼叫（廠商有限期保留、附核准單號），GLM 自架於 IEC 網路內並以組織的私有 DNS 區提供端點，冷備援的 DeepSeek 同樣自架；GitHub Enterprise 的 runner 部署於各廠區網段，L0 工具在本地跑，SARIF 上傳到中央的 code scanning。Brno 廠區另需注意 EU CRA 的時程：第 14 條的 24 小時預警義務已於 2026 年 9 月 11 日生效，通報須經 ENISA 的 Single Reporting Platform 提交【已證實（生效日期與 SRP）｜C11.9、C11.15】，審查管線產出的 A 級 Critical finding 若涉及已出貨產品，應自動交給 PSIRT 作為內部交接；是否構成須通報的事件、法定期限從何時起算，由 PSIRT 確認後決定，審查完成時間不等於知悉時間（雛型已實作此交接，預設關閉）。
 
 ### 21.2 隔離管線：上海浦東與重慶
 
