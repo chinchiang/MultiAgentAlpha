@@ -143,5 +143,7 @@ copies, so validation never fetches anything.
 `tests/test_ml_bom.py` covers hashing (pickle refused, safetensors required), the manifest round
 trip, schema validity of the built BOM, `component_problems` for each missing piece, `verify` on a
 tampered and on an extra file, the cosign command line against a fake cosign in `MARA_TOOLS_DIR`,
-policy P7 in its three states, governance G-7 on this repository (FAIL naming both pending models)
-and on a repository with a complete BOM (PASS), and the pipeline's audit entry.
+policy P7 in its three states, governance G-7 on this repository (FAIL naming the production on-prem model
+`glm`, whose entry is pending, and the procedure to complete it; the BOM also still lists the pending
+DeepSeek-V3.2 and Nemotron 3 Super entries of the former panel) and on a repository with a complete BOM
+(PASS), and the pipeline's audit entry.

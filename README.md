@@ -315,7 +315,9 @@ Four runs score this repository's review process against the 60-question questio
 incremental review now runs in CI; the v0.3.13–v0.3.15 hardening — gate validation, the semgrep relock that
 removed thirteen expiring exceptions, corroboration dimension limits, content-ordered finding ids — strengthened
 evidence without crossing a scoring line; L5 lowest at 24, L0 next at 27 — the recorded blocker is the first
-real-family run, not code). Each run has a file-level
+real-family run, not code). A fifth run, `docs/assessment-2026-10-12.md`, is a **draft awaiting the owner's review**:
+its proposed total is 172/240 (question 59 up after the first live calibration), and until it is reviewed the
+2026-10-03 run stays the current one. Each run has a file-level
 evidence cell on every row, per-layer totals, the two lowest questions per layer mapped to governance
 items G-1 to G-13, and a separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <file>` checks the
 acceptance criteria (all 60 rows scored with evidence, layer sums consistent, CN rows present) and
@@ -338,8 +340,10 @@ no longer hides a crashed or leaking gitleaks run behind `continue-on-error` (`.
 allowlists exact known synthetic values; all fixture paths remain scanned). Since 2026-09-13 the scan
 itself is `scripts/gitleaks_ci.py` with the gitleaks pinned in `tools/versions.lock` (PR: the PR's
 commits; push: every new commit), not gitleaks-action, so no action downloads its own tool and the
-L0 job needs no `pull-requests` permission. `docs/actions-inventory-2026-10-03.md` is the current run: four real workflows, all rated None,
-with the job-level `timeout-minutes` detection; the seeded fixtures keep their deliberate gaps and stay Critical.
+L0 job needs no `pull-requests` permission. `docs/actions-inventory-2026-10-12.md` is the current run: four real workflows, all rated None and every
+`uses:` pinned to a SHA that still matches its tag comment (several actions have newer releases, listed in its
+section 3, for Dependabot to bump), with no zizmor finding on them (the 2026-10-03 `bot-conditions` finding is gone
+since the Dependabot guard); the seeded fixtures keep their deliberate gaps and stay Critical.
 
 ## Pinned, verified L0 tools (Appendix E, prompt 7)
 
