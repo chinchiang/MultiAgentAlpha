@@ -376,7 +376,10 @@ def test_missing_config_is_a_usage_error_not_a_traceback(tmp_path, monkeypatch):
     from mara.cli import app
 
     monkeypatch.chdir(tmp_path)
-    for args in (["review", str(tmp_path), "--provider", "mock"], ["check-config"]):
+    monkeypatch.delenv("MARA_HOME", raising=False)
+    target = tmp_path / "target"  # not the workspace itself, which check_outside refuses before the config is looked up
+    target.mkdir()
+    for args in (["review", str(target), "--provider", "mock"], ["check-config"]):
         res = CliRunner().invoke(app, args)
         assert res.exit_code == 2 and not isinstance(res.exception, FileNotFoundError), res.output
         assert "config file not found" in res.output
@@ -465,6 +468,76 @@ def test_trust_anchors_never_come_from_the_review_target(tmp_path, monkeypatch):
     monkeypatch.setenv("MARA_HOME", str(tmp_path))
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / ".mara-tools"))
     workspace.check_outside(target)
+
+
+def test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_in_the_target(tmp_path, monkeypatch):
+    """With MARA_HOME set and the job running inside the target, `mara review .` used to load the target's
+    config/mara.yaml (its models, endpoints and gate) and write out/ into the target, where the next
+    review of a non-git target bundled the previous reports into the prompts."""
+    import re
+    import shutil
+
+    from typer.testing import CliRunner
+
+    from mara import cli
+
+    def words(text):
+        return "".join(re.findall(r"\w+", text))  # the error panel frames the message and wraps it, even inside words
+
+    home =tmp_path / "mara-home"
+    (home / "config").mkdir(parents=True)
+    shutil.copy(ROOT / "config" / "mara.mock.yaml", home / "config" / "mara.mock.yaml")
+    target = tmp_path / "target"
+    (target / "config").mkdir(parents=True)
+    (target / "app.py").write_text("print(1)\n")
+    (target / "config" / "mara.mock.yaml").write_text("planted: true\n")  # would fail to load if it were read
+    monkeypatch.setenv("MARA_HOME", str(home))
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(home / ".mara-tools"))
+    monkeypatch.delenv("MARA_TRIVY_CACHE_DIR", raising=False)
+    monkeypatch.chdir(target)
+    seen = {}
+
+    class Stop(Exception):
+        pass
+
+    def fake_load(path):
+        seen["config"] = Path(path)
+        raise Stop
+
+    monkeypatch.setattr(cli, "load_config", fake_load)
+    res = CliRunner().invoke(cli.app, ["review", str(target), "--provider", "mock"])
+    assert isinstance(res.exception, Stop), res.output
+    assert seen["config"] == home / "config" / "mara.mock.yaml", "the default config is the workspace's, not the target's"
+
+    def run(*args):
+        return CliRunner().invoke(cli.app, ["review", str(target), "--provider", "mock", *args])
+
+    for args, what in ((["--config", str(target / "config" / "mara.mock.yaml")], "the config file"),
+                       (["--config", "config/mara.mock.yaml"], "the config file"),  # relative to the working directory: the target
+                       (["--config", str(home / "config" / "mara.mock.yaml"), "--out", "out"], "the output directory"),
+                       (["--config", str(home / "config" / "mara.mock.yaml"), "--out", str(target)], "the output directory")):
+        seen.clear()
+        res = run(*args)
+        said = words(res.output)
+        assert res.exit_code == 2 and words(what) in said and words("lies inside the review target") in said, (args, res.output)
+        assert not seen, "refused before the config is read"
+    # the default output directory is in the workspace too
+    monkeypatch.setattr(cli, "load_config", load_config)
+    monkeypatch.setattr(cli.Pipeline, "run", lambda self, *a, **k: (_ for _ in ()).throw(Stop()))
+    seen_out = {}
+    real_init = cli.Pipeline.__init__
+
+    def init(self, cfg, **kw):
+        seen_out["out"] = Path(kw["out_dir"])
+        real_init(self, cfg, **kw)
+
+    monkeypatch.setattr(cli.Pipeline, "__init__", init)
+    res = run()
+    assert isinstance(res.exception, Stop), res.output
+    assert seen_out["out"] == home / "out"
+    # check-config's default is the workspace's config as well
+    res = CliRunner().invoke(cli.app, ["check-config"])
+    assert words(str(home / "config" / "mara.yaml")) in words(res.output), res.output
 
 
 def test_the_calibration_secret_exemption_is_narrow(tmp_path, monkeypatch):

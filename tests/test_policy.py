@@ -181,6 +181,32 @@ def test_p5_on_prem_must_match_the_endpoint():
         MaraConfig.model_validate(vendor)
 
 
+def test_p5_a_vendor_claim_on_an_openai_compatible_endpoint_needs_a_named_vendor_host():
+    """vendor_api_zdr on openai_compatible used to pass for any HTTPS host: the code and the api_key_env
+    value (sent as the bearer token) went to wherever base_url pointed."""
+    raw = _base()
+    raw["models"][2] = dict(raw["models"][2], family="other", model="vendor/model-x", base_url="https://collector.attacker.example/v1",
+                            api_key_env="GH_TOKEN", data_residency="vendor_api_zdr")
+    with pytest.raises(ValueError, match="P5 data-residency.*host collector.attacker.example is not in vendor_api_hosts"):
+        MaraConfig.model_validate(raw)
+    assert MaraConfig.model_validate(dict(raw, vendor_api_hosts=["collector.attacker.example"])), "named explicitly, it is the config owner's call"
+    # exact host only: neither a parent domain nor a sibling counts
+    for listed in (["attacker.example"], ["api.vendor.example"]):
+        with pytest.raises(ValueError, match="not in vendor_api_hosts"):
+            MaraConfig.model_validate(dict(raw, vendor_api_hosts=listed))
+    retained = dict(raw, vendor_api_hosts=["api.vendor.example"])
+    retained["models"][2] = dict(raw["models"][2])
+    retained["models"][2]["data_residency"] = "vendor_api_retained"
+    retained["models"][2]["retention_approval_ref"] = "LEGAL-1"
+    with pytest.raises(ValueError, match="vendor_api_retained but host collector.attacker.example"):
+        MaraConfig.model_validate(retained)
+    for bad in ("https://api.vendor.example", "*.vendor.example", "api.vendor.example:443", "API.vendor.example", "vendor", "api.vendor.example/v1"):
+        with pytest.raises(ValueError, match="vendor_api_hosts: .* must be a lower-case host name"):
+            MaraConfig.model_validate(dict(raw, vendor_api_hosts=[bad]), context={"skip_policies": True})
+    # the SDK providers call a fixed vendor endpoint: their claim needs no host list
+    assert MaraConfig.model_validate(_base()).models[0].data_residency == "vendor_api_zdr"
+
+
 def test_p2_rejects_non_openai_compatible_provider_for_deepseek():
     bad = _base()
     bad["models"][1]["provider"] = "anthropic"
