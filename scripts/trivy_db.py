@@ -121,7 +121,20 @@ def cmd_download(a: argparse.Namespace) -> int:
         info = head_manifest(ref)
         print(f"registry {ref}: manifest {info['manifest_digest']} layer {info['layer_digest']} created {info['created']}"
               + (f" (registry query failed: {info['error']})" if "error" in info else ""))
-        argv = [str(exe), "--cache-dir", str(cache), "image", "--download-db-only", "--db-repository", ref]
+        digest = info["manifest_digest"]
+        if not digest.startswith("sha256:"):
+            if not a.allow_unknown_provenance:
+                last = (f"{ref}: the registry did not name the manifest digest, so the record could not say what was "
+                        "downloaded (pass --allow-unknown-provenance to accept that)")
+                print(f"  {last}; trying the next repository" if ref != repos[-1] else f"  {last}")
+                continue
+            fetch_ref = ref
+        else:
+            # download exactly the manifest the registry just named: by tag, the artifact could move between the
+            # query and the download (upstream refreshes it every six hours) and the record would name another one
+            host, path, _ = split_ref(ref)
+            fetch_ref = f"{host}/{path}@{digest}"
+        argv = [str(exe), "--cache-dir", str(cache), "image", "--download-db-only", "--db-repository", fetch_ref]
         print("+ " + " ".join(argv))
         r = subprocess.run(argv, capture_output=True, text=True)
         last = "\n".join(line for line in (r.stderr + r.stdout).splitlines() if "MiB /" not in line)[-1200:]
@@ -129,7 +142,8 @@ def cmd_download(a: argparse.Namespace) -> int:
             meta = tdb.read_metadata(cache) or {}
             ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True).stdout
             trivy_version = next((line.split()[-1] for line in ver.splitlines() if line.startswith("Version:")), installed_version("trivy"))
-            rec = {"repository": ref, "manifest_digest": info["manifest_digest"], "layer_digest": info["layer_digest"], "created": info["created"],
+            rec = {"repository": ref, "downloaded_ref": fetch_ref, "provenance": "digest" if digest.startswith("sha256:") else "unverified",
+                   "manifest_digest": info["manifest_digest"], "layer_digest": info["layer_digest"], "created": info["created"],
                    "metadata": meta, "trivy_db_sha256": tdb.sha256_file(tdb.db_path(cache)), "trivy_db_bytes": tdb.db_path(cache).stat().st_size,
                    "trivy_version": trivy_version, "downloaded_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}
             tdb.record_path(cache).write_text(json.dumps(rec, indent=2) + "\n", encoding="utf-8")
@@ -216,13 +230,16 @@ def cmd_import(a: argparse.Namespace) -> int:
         shutil.rmtree(staging, ignore_errors=True)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--cache-dir", type=Path, default=tdb.cache_dir(), help="default MARA_TRIVY_CACHE_DIR or MARA_TOOLS_DIR/trivy-cache")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("download")
     s.add_argument("--repository", help="OCI reference to use instead of tools/trivy-db.yaml")
     s.add_argument("--pin-digest", help="sha256:<hex> manifest digest to fetch instead of the tag")
+    s.add_argument("--allow-unknown-provenance", action="store_true",
+                   help="download by tag even when the registry does not name the manifest digest; the record then says "
+                        "provenance: unverified (never in CI)")
     s = sub.add_parser("status")
     s.add_argument("--max-age-hours", type=float)
     s = sub.add_parser("export")
@@ -230,7 +247,7 @@ def main() -> int:
     s = sub.add_parser("import")
     s.add_argument("--bundle", type=Path, required=True)
     s.add_argument("--bundle-sha256", help="expected sha256 of the bundle file (from the .sha256 sidecar)")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     try:
         return {"download": cmd_download, "status": cmd_status, "export": cmd_export, "import": cmd_import}[a.cmd](a)
     except PinError as e:

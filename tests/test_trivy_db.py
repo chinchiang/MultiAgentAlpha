@@ -110,11 +110,14 @@ def test_download_records_provenance_and_status_enforces_freshness_and_integrity
     _fake_trivy(tools, _now_iso(3))
     cache = tmp_path / "cache"
     r = _run(tools, "download", "--repository", "example.invalid/aquasec/trivy-db:2", cache=cache)
+    assert r.returncode == 1 and "did not name the manifest digest" in r.stdout + r.stderr, "an unknown provenance is refused by default"
+    assert not (cache / tdb.RECORD_NAME).exists()
+    r = _run(tools, "download", "--repository", "example.invalid/aquasec/trivy-db:2", "--allow-unknown-provenance", cache=cache)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "--download-db-only --db-repository example.invalid/aquasec/trivy-db:2" in (tools / "argv.txt").read_text()
     rec = json.loads((cache / tdb.RECORD_NAME).read_text())
     assert rec["repository"] == "example.invalid/aquasec/trivy-db:2" and rec["trivy_version"] == "0.74.0"
-    assert rec["manifest_digest"] == "unknown" and "error" not in rec, "an unreachable registry is recorded as unknown, not fatal"
+    assert rec["manifest_digest"] == "unknown" and rec["provenance"] == "unverified" and "error" not in rec
     assert rec["trivy_db_sha256"] == tdb.sha256_file(cache / "db" / "trivy.db") and rec["metadata"]["Version"] == 2
     r = _run(tools, "status", cache=cache)
     assert r.returncode == 0 and "3.0 h old" in r.stdout and "offline database OK" in r.stdout, r.stdout
@@ -131,7 +134,7 @@ def test_export_import_round_trip_and_tamper_refusal(tmp_path):
     tools = tmp_path / "tools"
     _fake_trivy(tools, _now_iso(1))
     cache = tmp_path / "cache"
-    assert _run(tools, "download", "--repository", "example.invalid/x/trivy-db:2", cache=cache).returncode == 0
+    assert _run(tools, "download", "--repository", "example.invalid/x/trivy-db:2", "--allow-unknown-provenance", cache=cache).returncode == 0
     bundle = tmp_path / "b" / "trivy-db.tar.gz"
     r = _run(tools, "export", "--out", str(bundle), cache=cache)
     assert r.returncode == 0 and bundle.is_file() and bundle.with_name(bundle.name + ".sha256").is_file(), r.stdout + r.stderr
