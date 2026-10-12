@@ -86,7 +86,7 @@
 
 ## B-5 雛型自身的缺口
 
-71. **真實模型的精確率與召回率**：雛型只在 mock 家族上驗證行為。關閉方式：以真實三家族在 seeded benchmark 上跑第一次校準（附錄E prompt 4）。進度（2026-10-06，未關閉）：`scripts/calibration_run.py --mode live` 與 Alternative Annotator Test 已實作，mock 校準已於 2026-09-11 與 2026-10-03 各跑一次，live 校準前會使結果失真的問題（含答案檔外洩給模型）已修正；尚無真實家族的數字。
+71. **真實模型的精確率與召回率**：雛型原只在 mock 家族上驗證行為。關閉方式：以真實三家族在 seeded benchmark 上跑第一次校準（附錄E prompt 4）。進度（2026-10-12，部分關閉）：第一次 live 校準已於 2026-10-08 完成（`docs/calibration-2026-10-08.md`；Bedrock 上的 Claude Opus 5.5、Gemini 3.8 Flash、自架 GLM；五個樣本、51 個標籤），precision／recall／F1 為 anthropic 0.45／0.82／0.58、gemini 0.58／0.55／0.57、glm 0.41／0.80／0.54，治理檢查 G-9 通過。仍未關閉的部分：五個合成樣本、51 個標籤只能視為方向而非量測；Alternative Annotator Test 因尚無人工裁決（G-13 沒有受訓裁決者）而未通過，P8 仍把每個非 D 級的「不採納」送人工；建議權重未寫入設定。
 72. **bias sensitivity 測試**（第 13 章第 16 項）未實作。
 73. **三家族設定的獨立 judge 不足**是固有性質而非缺口，但四家族的效果未驗證。
 74. **L0 工具版本未固定**：雛型「有就跑」。關閉方式：附錄E prompt 7。已於 2026-09-26 關閉：自 2026-09-12（a9867dc）起 `tools/versions.lock` 以版本、下載 URL 與 SHA-256 固定全部 L0 工具並指定發行者驗證方式，`scripts/install_tools.py` 驗證後裝入 `.mara-tools/bin`，`mara/tools/runner.py` 只從該目錄執行、不查 PATH；CI 每次重新安裝並驗證，治理檢查 G-5 通過（`docs/governance-check-2026-09-26.md`）。2026-10-06 補記：鎖定工具於 2026-10-01 增為九個（加入 csp-evaluator，以 npm registry 的 `dist.integrity` 驗證）；工具目錄改為相對 MARA workspace（`MARA_HOME`）解析，位於被審查目標之內時拒絕執行，被審查的 repo 不能以自帶的工具頂替。

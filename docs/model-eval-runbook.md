@@ -1,9 +1,9 @@
 # Quarterly runbook: model red-team evaluation (G-8) and calibration (G-9)
 
 Two governance items need a host that can reach the three model families' endpoints and hold their
-keys. This repository ships the scripts, parsers, thresholds and report templates; it does not
-ship results. Both checks fail here and say so precisely. Nothing below is a substitute for the
-run itself: a report built from fixtures, or a calibration run on mock providers, cannot be
+keys. This repository ships the scripts, parsers, thresholds and report templates, and commits the
+reports of the runs once they have happened: G-9 has its first live calibration (2026-10-08), G-8 has
+not run yet (section 4). Nothing below is a substitute for the run itself: a report built from fixtures, or a calibration run on mock providers, cannot be
 labelled `live` (the scripts refuse), so the governance checks cannot be satisfied by accident.
 
 ## 1. Prerequisites (both items)
@@ -119,9 +119,18 @@ The mock loop remains reproducible locally without endpoints:
 python3 scripts/calibration_run.py --mode mock --date <date> --report /tmp/calibration-mock.md
 ```
 
-## 4. Why nothing is green in this repository
+## 4. Where things stand (2026-10-12)
 
-No endpoint or key is reachable from the authoring environment, garak and CyberSecEval are not
-installed, and `fixtures/model-eval/` holds synthetic outputs used only to test the parsers. The
-first quarter's evidence appears when someone runs sections 2 and 3 on the right host and commits
-the two G-8 reports, the summary JSON and the calibration report.
+- **G-9 is green.** The first live calibration ran on 2026-10-08 against the production panel (Claude Opus 5.5
+  on Bedrock, Gemini 3.8 Flash, GLM on the IEC gateway), five samples and 51 labels, about four hours:
+  `docs/calibration-2026-10-08.md`, `calib/history.json`, `calib/latest.json`. Precision / recall / F1 were
+  anthropic 0.45 / 0.82 / 0.58, gemini 0.58 / 0.55 / 0.57 and glm 0.41 / 0.80 / 0.54; the suggested weights
+  were not written into `config/mara.yaml`. Its Alternative Annotator Test did not pass because there are no
+  human decisions to compare yet (no trained adjudicator, G-13), so P8 keeps every rejected non-D finding in
+  the human queue. Run section 3 again within 90 days and after any model upgrade.
+- **G-8 is still red.** garak and CyberSecEval have not been run against the endpoints: there is no
+  `docs/garak-*.md`, `docs/cyberseceval-*.md` or `calib/model-eval-<date>.json`. Even after a run,
+  CyberSecEval at the pinned ref has no Bedrock provider, so the anthropic family's two CyberSecEval metrics
+  stay missing until there is a route.
+- `fixtures/model-eval/` holds synthetic outputs used only to test the parsers; nothing generated from them
+  is, or can be, labelled `live`.

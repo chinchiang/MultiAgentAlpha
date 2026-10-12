@@ -172,9 +172,9 @@ mara check-config config/mara.yaml          # the eight policy checks first / �
 mara review path/to/repo --config config/mara.yaml --out out
 ```
 
-設定檔中標為暫定（provisional）的模型 id，第一次 live 執行前要先對照各端點的模型清單確認。
+設定檔中已沒有暫定的模型 id：Gemini 與 GLM 的 id 已於 2026-10-07 對照各端點的模型清單確認（id 旁的註解有記錄），三個模型都在 2026-10-08 的 live 校準中實際回應。換成新的 id 時，第一次 live 執行前要同樣先確認。
 
-The model ids marked provisional in the file must be confirmed against each endpoint's model list before the first live run.
+No model id in the file is provisional any more: the Gemini and GLM ids were checked against their endpoints' model lists on 2026-10-07 (the comments next to them record it), and all three models answered in the live calibration of 2026-10-08. Check a new id the same way before its first live run.
 
 非 loopback 的推論端點必須是 HTTPS 並驗證憑證，設定檔載入時就會拒絕 `http://`。細節見 README 的「Live mode」與「Policies enforced by the config」。
 

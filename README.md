@@ -135,7 +135,7 @@ fails to answer. Haiku 4.5 and Sonnet 4.5 accept neither adaptive thinking nor `
 provider sends them extended thinking with a fixed budget instead; Opus 5.x keeps adaptive thinking at effort
 high. Production reviews and calibration (G-9) keep `config/mara.yaml`.
 
-`config/mara.yaml` is the production panel since 2026-10-06: Claude Opus 5.5 on Amazon Bedrock
+`config/mara.yaml` is the production panel since v0.4.2 (2026-10-07): Claude Opus 5.5 on Amazon Bedrock
 (`provider: bedrock`, the `global.` cross-region inference profile, `region` required, SigV4 through
 boto3; declared `vendor_api_zdr` on Bedrock's terms that prompts and completions are neither stored nor
 used for training: keep the account's model invocation logging off, or that log holds the source code; Bedrock refuses
@@ -148,8 +148,9 @@ key serve the standby DeepSeek as `model: deepseek`). The Gemini API keeps promp
 and is not ZDR, so the model is declared `vendor_api_retained` and policy P5 admits it only with
 the approval recorded in `retention_approval_ref`; any other retained model still fails. GLM is
 PRC-affiliated: policy P2 holds it to on-prem endpoints and refuses its vendor APIs (bigmodel.cn,
-z.ai) exactly like DeepSeek's. The model ids marked provisional in the file must be confirmed
-against each endpoint's model list before the first live run. G-8 runs garak against all three families
+z.ai) exactly like DeepSeek's. No model id in the file is provisional any more: the Gemini and GLM ids were
+checked against their endpoints' model lists on 2026-10-07 (the comments next to them record it), and all three
+models answered in the live calibration of 2026-10-08. Check a new id the same way before its first live run. G-8 runs garak against all three families
 (Claude through garak's `bedrock` generator, Gemini and GLM through OpenAI-compatible endpoints) and
 CyberSecEval against Gemini and GLM; CyberSecEval has no Bedrock provider (see G-8 below). See the report, Part VIII, for the
 site-by-site deployment pattern and the separate handling of 上海／重慶.
@@ -495,8 +496,10 @@ samples, 51 labels; its Alternative Annotator Test has no human decisions to com
 rejected non-D finding in the human queue). Nothing is
 marked passed before the fact. `docs/governance-check-2026-09-12.md` was regenerated in place as those
 mechanisms landed (last on 2026-09-17), so it shows the later state rather than the first run;
-`docs/governance-check-2026-09-26.md` (regenerated in place on 2026-10-03, as its heading shows) is the current record: G-2, G-3, G-5, G-6 and G-11 pass, the
-other eight fail for the reasons above, none is MANUAL.
+`docs/governance-check-2026-09-26.md` was likewise regenerated in place on 2026-10-03 and still shows the
+former Claude/DeepSeek/Nemotron panel. `docs/governance-check-2026-10-12.md` is the current record (the same
+table the weekly run posted that day): G-2, G-3, G-5, G-6, G-9 and G-11 pass, the other seven fail for the
+reasons above, none is MANUAL.
 
 ## PSIRT hand-off (governance item G-12)
 
