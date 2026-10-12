@@ -355,13 +355,13 @@ def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_pa
     monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: (seen.append(("redteam", p.family)), ([], [], 0))[1])
     # the configured skeptic (nemotron) and red team (deepseek) both found it: only anthropic is independent
     two = {f.id: {ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
-    pipe.run_skeptics(None, [f], two)
-    pipe.run_redteam(None, [f], two)
+    pipe.run_skeptics(RepoContext(root=tmp_path), [f], two)
+    pipe.run_redteam(RepoContext(root=tmp_path), [f], two)
     assert seen == [("skeptic", ModelFamily.ANTHROPIC), ("redteam", ModelFamily.ANTHROPIC)]
     assert not pipe.audit["skeptic_same_family"] and not pipe.audit["redteam_same_family"]
     every = {f.id: {ModelFamily.ANTHROPIC, ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
-    pipe.run_skeptics(None, [f], every)
-    pipe.run_redteam(None, [f], every)
+    pipe.run_skeptics(RepoContext(root=tmp_path), [f], every)
+    pipe.run_redteam(RepoContext(root=tmp_path), [f], every)
     assert pipe.audit["skeptic_same_family"] == 1 and pipe.audit["redteam_same_family"] == 1
     assert any("no skeptic outside the finder families" in line for line in pipe.log)
 
@@ -397,7 +397,9 @@ def test_judge_refusal_is_counted_separately_from_invalid_output(tmp_path, monke
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     monkeypatch.setattr("mara.pipeline.judge.run_judge", lambda p, batch, pass_id, self_ids=None: ([], ["refused"]))
     report = pipe.run(tmp_path, mode="mock")
-    assert report.bias_audit["judge_refusals"] == 6 and report.bias_audit["judge_invalid_items"] == 0  # 3 families x 2 passes
+    # every judge call refused: 3 families x 2 chunks (30 findings, MAX_L4_FINDINGS per pass) x 2 passes
+    assert report.bias_audit["judge_refusals"] == report.bias_audit["judge_calls"] == 12
+    assert report.bias_audit["judge_invalid_items"] == 0
     assert "judge_refusals" in report.incomplete_reasons and not report.gate_passed
 
 

@@ -150,8 +150,22 @@ def test_dedupe_key_is_stable_across_reviews_and_in_every_payload(shipped_report
     cfg, report = shipped_report
     assert all(len(p["dedupe_key"]) == 16 for p in report.psirt)
     p = report.psirt[0]
-    assert p["dedupe_key"] == pl.dedupe_key(cfg.psirt.product, report.target, p["location"]["file"], p["location"]["line"], p["cwe"])
+    assert report.target_id
+    assert p["dedupe_key"] == pl.dedupe_key(cfg.psirt.product, report.target_id, p["location"]["file"], p["location"]["line"], p["cwe"])
     assert pl.dedupe_key("a", "t", "f", 1, "CWE-1") != pl.dedupe_key("a", "t", "f", 2, "CWE-1")
+
+
+def test_dedupe_key_follows_the_target_identity_not_the_checkout_path(shipped_report):
+    """Two CI runners check the same repository out under different paths: the report's target differs,
+    its target_id does not, and the PSIRT must not receive the same finding twice."""
+    from mara.report.psirt_out import build_notifications
+
+    cfg, report = shipped_report
+    elsewhere = report.model_copy(update={"target": "/some/other/runner/checkout"})
+    keys = [n["dedupe_key"] for n in build_notifications(report, cfg)]
+    assert keys and keys == [n["dedupe_key"] for n in build_notifications(elsewhere, cfg)]
+    moved = report.model_copy(update={"target_id": report.target_id + "-other"})
+    assert keys != [n["dedupe_key"] for n in build_notifications(moved, cfg)], "a different repository is a different finding"
 
 
 def test_ledger_skips_delivered_findings_records_attempts_and_sends_idempotency_key(shipped_report, monkeypatch, tmp_path):

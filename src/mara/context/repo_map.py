@@ -65,6 +65,11 @@ MAX_TOTAL_CHARS = 400_000
 MAX_REPOSITORY_CHARS = 16_000_000
 
 
+def bundle_cost(rel: str, text: str) -> int:
+    """Characters one file costs in a bundle: its text, the line-number prefixes and the <file> fence."""
+    return len(text) + len(text.splitlines()) * 8 + len(rel) + 50
+
+
 @dataclass
 class RepoContext:
     root: Path
@@ -109,7 +114,7 @@ class RepoContext:
         """Bound every reviewer request, retaining a manifest for the entire review."""
         batch, size = {}, 0
         for path, text in self.content.items():
-            cost = len(text) + len(text.splitlines()) * 8 + len(path) + 50
+            cost = bundle_cost(path, text)
             if batch and size + cost > MAX_TOTAL_CHARS:
                 yield replace(self, content=batch)
                 batch, size = {}, 0
@@ -507,7 +512,7 @@ def build_context(root: str | Path) -> RepoContext:
         raw_hash.update(json.dumps([rel, text], ensure_ascii=False).encode())
         if sanitized != text:
             ctx.redacted.append(rel)
-        if len(sanitized) + len(sanitized.splitlines()) * 8 + len(rel) + 50 > MAX_TOTAL_CHARS:
+        if bundle_cost(rel, sanitized) > MAX_TOTAL_CHARS:
             ctx.omitted[rel] = "request_size_limit"
             continue
         if total + len(sanitized) > MAX_REPOSITORY_CHARS:

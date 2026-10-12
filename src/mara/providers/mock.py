@@ -24,7 +24,7 @@ _MANIFEST_NAMES = {"requirements.txt", "package.json", "pyproject.toml", "poetry
 _DB_HINTS = ("sqlite3.connect(", ".connect(", "create_engine(", "MongoClient(", "redis.Redis(")
 _ROUTE_HINTS = ("@app.route(", "@app.get(", "@app.post(", "@router.", "app.get(", "app.post(")
 # same citation pattern the skeptic harness verifies (assessment #33)
-_CONTROL_REF = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./\\-]*:\d+")
+_CONTROL_REF = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_./\\-]*:\d+")
 
 
 class MockProvider(Provider):

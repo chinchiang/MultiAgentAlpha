@@ -3,7 +3,8 @@
 The review produces internal hand-off payloads (report/psirt_out.py). Three things had to live outside a
 single review run:
   * the ledger (`psirt.ledger_file`, default ops/psirt/ledger.json): one item per finding key
-    (product + target + file:line:cwe), so a finding re-reviewed tomorrow is not sent to the PSIRT
+    (product + target identity + file:line:cwe; the target identity is the report's target_id, the
+    repository and the path below its top level, so every CI runner and clone agree), so a finding re-reviewed tomorrow is not sent to the PSIRT
     again, and every send attempt with its HTTP status is on record;
   * the stage clock: the 72 h notification and the 14 d final report are produced by the PSIRT, not
     by the review, their deadlines require confirmed incident events, never review timestamps; `record` writes the PSIRT's reference
@@ -50,7 +51,8 @@ def parse_iso(s: str) -> dt.datetime:
 
 
 def dedupe_key(product: str, target: str, file: str, line: int, cwe: str) -> str:
-    """Stable identity of a finding across reviews: the receiver dedupes on it, so does the ledger."""
+    """Stable identity of a finding across reviews: the receiver dedupes on it, so does the ledger.
+    `target` is the report's target_id (its absolute path only for a target outside any git history)."""
     return hashlib.sha256(f"{product}\n{target}\n{file}:{line}:{cwe}".encode()).hexdigest()[:16]
 
 

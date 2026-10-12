@@ -280,6 +280,12 @@ class MaraConfig(BaseModel):
             raise ValueError("model names must be unique")
         if len(self.roles.judges) != len(set(self.roles.judges)):
             raise ValueError("judge roles must be unique")
+        by_name = {m.name: m for m in self.models}
+        judge_families = [by_name[n].family.value for n in self.roles.judges if n in by_name]
+        if len(judge_families) != len(set(judge_families)):
+            # the jury counts one vote per family and pass: two judges of one family would give that family
+            # two forward and two reverse votes on every finding, and scoring discards such a family entirely
+            raise ValueError(f"each judge must come from a different model family, got {sorted(judge_families)}")
         for role_names in ([self.roles.skeptic, self.roles.redteam] + ([self.roles.context] if self.roles.context else []),
                            self.roles.reviewers, self.roles.judges):
             for n in role_names:

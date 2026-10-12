@@ -114,7 +114,8 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         + json.dumps(view, ensure_ascii=False)
     )
     comp = base.call(provider, system_extra=base.load_prompt("redteam"), user=user, schema=REDTEAM_SCHEMA, role="redteam")
-    if comp.raw_text and canary.echoed(comp.raw_text):
+    echoed, _reported = canary.screen_verdicts(comp)  # same rule as the skeptic's (base.Canary.screen_verdicts)
+    if echoed:
         return [], ["canary_echoed"], 0  # followed the planted instruction: none of its notes counts
     items, errors = base.parse_items(comp, _RedRaw)
     counts = Counter(i.finding_id for i in items)

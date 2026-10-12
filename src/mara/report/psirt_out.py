@@ -100,7 +100,9 @@ def build_notifications(report: ReviewReport, cfg: MaraConfig, now: dt.datetime 
             "target": report.target,
             "detected_at": detected.isoformat(timespec="seconds"),
             "deadlines": deadlines,
-            "dedupe_key": dedupe_key(ps.product, report.target, p.file, p.line, f.cwe),
+            # target_id (repository + path below its top level), not the checkout path: every CI runner and
+            # clone of one repository must produce the same key, or the ledger and the receiver re-notify
+            "dedupe_key": dedupe_key(ps.product, report.target_id or report.target, p.file, p.line, f.cwe),
             "finding_id": f.id,
             "title": f.title,
             "dimension": f.dimension,
