@@ -66,10 +66,13 @@ if git cannot answer (dubious ownership, a broken index) the review fails closed
 MARA's own trust anchors live in the MARA workspace, never in the code under review: the pinned
 tools (`.mara-tools`, or `MARA_TOOLS_DIR`), policy P8's evidence `calib/latest.json`, the human-queue
 backlog, the ML-BOM and the PSIRT ledger resolve against `MARA_HOME` when set, the working directory
-otherwise. `mara review` refuses a target that contains the workspace, the tool directory or the trivy
-database (`cd target && mara review .` would let the reviewed repository supply the binaries the runner
-executes and the evidence the policies trust); run it from the workspace (`mara review path/to/target`)
-or set `MARA_HOME` outside the target. Secret files, symlinks, unsafe paths and file/request-size
+otherwise; so do the defaults of `mara review --config` (`config/mara.yaml`, `config/mara.mock.yaml`
+with `--provider mock`), `--out` (`out`) and `mara check-config`. `mara review` refuses a target that
+contains the workspace, the tool directory, the trivy database, the config file or the output directory
+(`cd target && mara review .` would let the reviewed repository supply the binaries the runner
+executes, the evidence the policies trust and the config itself, and the reports of one run would be
+bundled into the next); run it from the workspace (`mara review path/to/target`) or set `MARA_HOME`
+outside the target. Secret files, symlinks, unsafe paths and file/request-size
 limits are visible in the coverage manifest; omitted required text prevents a complete result. Live
 model calls require a current local secret preflight, even when other SARIF was pre-recorded; the only
 exception is `--calibration-sample` (see Live mode). Use
@@ -160,6 +163,10 @@ then treat like `.internal`; a zone needs two labels and lower case, so `.com` o
 refused. An endpoint signed by an internal CA names its PEM chain in `ca_bundle` (`~` and
 workspace-relative paths): it is added to the default trust store and never replaces or disables
 verification. A gateway that expects the key in another header (`apikey`) sets `api_key_header`.
+An `openai_compatible` model declared `vendor_api_zdr` or `vendor_api_retained` sends the code (and its
+`api_key_env` value as the bearer token) to whatever `base_url` names, so P5 admits it only when that
+host is listed, exactly, in `vendor_api_hosts` (the vendor endpoints the organisation's contract covers);
+the SDK providers call a fixed vendor endpoint and need no list.
 The cold standbys in `config/examples/standby-for-{anthropic,gemini,glm}.yaml` each replace one
 family with the on-prem DeepSeek endpoint and leave everything else unchanged (G-4). A family may have
 further standbys as `standby-for-<family>.<name>.yaml`; every one of them must load and swap exactly that
@@ -297,7 +304,7 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 | P2 deepseek-on-prem | DeepSeek, Qwen and GLM only through an OpenAI-compatible endpoint on an RFC 1918, loopback, IPv6 unique-local, `.internal`/`.local`/`.lan` or declared `private_dns_suffixes` host; the DeepSeek, DashScope and Zhipu (bigmodel.cn, z.ai) vendor APIs are rejected, and so are link-local and documentation addresses. A model is PRC-affiliated by its family, its model id or its host, so a misdeclared `family: other` fails instead of switching P2 off |
 | P3 panel-size | reviewers and judges each span at least three model families; exactly two only with a stated `reduced_panel_reason` (see `config/examples/prc-site.yaml`) |
 | P4 gate-bounds | `gate.self_judge_discount` at most 0.5, `gate.human_threshold_alpha` at least 0.3 |
-| P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr`, or `vendor_api_retained` with its own `retention_approval_ref`, unless `allow_source_code_to_non_on_prem` is set; `on_prem` must match the endpoint (an OpenAI-compatible server on a private host, not a vendor API or a public URL) |
+| P5 data-residency | every non-mock model is `on_prem` or `vendor_api_zdr`, or `vendor_api_retained` with its own `retention_approval_ref`, unless `allow_source_code_to_non_on_prem` is set; `on_prem` must match the endpoint (an OpenAI-compatible server on a private host, not a vendor API or a public URL); an OpenAI-compatible model may claim `vendor_api_zdr`/`vendor_api_retained` only for a host listed in `vendor_api_hosts` |
 | P6 psirt-scope | when the PSIRT hand-off is enabled: HTTPS webhook, product set, token from the environment, trigger tiers within A/B and severities within Critical/High |
 | P7 ml-bom | when `ml_bom.required`: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature method), signed when `require_signature` |
 | P8 unsupervised-reject | `gate.unsupervised_reject_allowed` may be `true` only while `calib/latest.json` records a passing Alternative Annotator Test (current method: chance-corrected agreement and a bounded miss rate on the rejections themselves, see Calibration) on a live calibration within 90 days; while `false` every rejected non-D finding goes to the human queue |
@@ -523,7 +530,8 @@ configured tiers and severities (default: tier A, Critical) is written to
 Review time anchors only internal service targets. Legal deadlines stay empty until PSIRT confirms
 an event type and awareness timestamp; the final-report anchor depends on that event type.
 `mara review --notify-psirt` POSTs the hand-off to the configured webhook with an environment token;
-`--psirt-resend` (with `--notify-psirt`) sends even findings the ledger records as delivered, and
+`--psirt-resend` (with `--notify-psirt`) sends even findings the ledger records as delivered or the
+PSIRT closed, and
 `--psirt-event event.json` attaches a PSIRT-confirmed event so the legal deadlines are computed.
 A hand-off that fails (an HTTP error or no response at all) is recorded in the ledger, does not stop the
 other payloads, and makes `mara review` exit 3 after the reports are written, whatever the gate says.

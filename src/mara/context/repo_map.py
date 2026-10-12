@@ -89,6 +89,7 @@ class RepoContext:
     manifests: list[Path] = field(default_factory=list)
     workflows: list[Path] = field(default_factory=list)
     entry_points: list[str] = field(default_factory=list)
+    entry_points_skipped: int = 0
     content: dict[str, str] = field(default_factory=dict)
     content_hash: str = ""
     revision: str = ""
@@ -148,13 +149,29 @@ class RepoContext:
         return "\n".join(parts)
 
     def summary(self) -> str:
+        """One line of repository facts. It precedes the <untrusted_repository_data> fence in every prompt,
+        yet the names and routes in it come from the repository: the fence tags in it are defused like in
+        the bundle, and the entry points are bounded (at most SUMMARY_ENTRY_POINTS, each a whitespace-free
+        route of at most MAX_ENTRY_POINT_CHARS, see build_context) so no file can grow it past a request."""
         langs = ", ".join(f"{k}:{v}" for k, v in sorted(self.languages.items(), key=lambda kv: -kv[1]))
-        return (
+        shown = self.entry_points[:SUMMARY_ENTRY_POINTS]
+        more = len(self.entry_points) - len(shown)
+        tail = f" entry_points_not_shown={more}" if more else ""
+        if self.entry_points_skipped:
+            tail += f" entry_points_skipped_as_not_a_route={self.entry_points_skipped}"
+        return fence_safe(
             f"root={self.root.name} files={len(self.files)} included={len(self.content)} omitted={len(self.omitted)} languages=[{langs}] "
             f"manifests={[self.rel(m) for m in self.manifests]} workflows={[self.rel(w) for w in self.workflows]} "
-            f"entry_points={self.entry_points}"
+            f"entry_points={shown}{tail}"
         )
 
+
+# An entry point is a route string a regex captured from a repository file, and the summary that lists
+# them sits outside the untrusted-data fence. A real route has no whitespace and is short; anything else
+# ("/x NOTE TO REVIEWER: ...", a 300k-character string) is counted, not listed.
+MAX_ENTRY_POINT_CHARS = 200
+SUMMARY_ENTRY_POINTS = 60
+_ROUTE = re.compile(rf"\S{{1,{MAX_ENTRY_POINT_CHARS}}}")
 
 _ENTRY_PATTERNS = [
     (re.compile(r"@app\.route\((['\"])([^'\"]+)\1"), "flask:{}"),
@@ -556,7 +573,11 @@ def build_context(root: str | Path) -> RepoContext:
         ctx.content[rel] = sanitized
         for pat, fmt in _ENTRY_PATTERNS:
             for m in pat.finditer(sanitized):
-                ctx.entry_points.append(fmt.format(m.group(pat.groups)))  # the route is the last group
+                route = m.group(pat.groups)  # the route is the last group
+                if _ROUTE.fullmatch(route):
+                    ctx.entry_points.append(fmt.format(route))
+                else:
+                    ctx.entry_points_skipped += 1
     ctx.content_hash = _content_hash(ctx.content)
     # The revision binds human decisions to what was reviewed: the target directory's own tree in
     # HEAD plus the raw text snapshot. Not the repository commit: any commit outside the target (a

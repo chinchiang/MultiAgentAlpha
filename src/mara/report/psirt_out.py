@@ -17,7 +17,7 @@ from pathlib import Path
 import httpx
 
 from ..config import MaraConfig
-from ..psirt_ledger import already_sent, dedupe_key, load_ledger, migrate_key, now_utc, record_attempt, save_ledger
+from ..psirt_ledger import already_sent, closed_at, dedupe_key, load_ledger, migrate_key, now_utc, record_attempt, save_ledger
 from ..schemas import ReviewReport
 
 SCHEMA = "mara-psirt/2"
@@ -132,8 +132,8 @@ def send_psirt(payloads: list[dict], cfg: MaraConfig, *, client: httpx.Client | 
                ledger_path: Path | str | None = None, resend: bool = False, now: dt.datetime | None = None) -> list[dict]:
     """POST each payload as JSON with a bearer token from the environment. Returns per-payload status.
 
-    With a ledger, a finding whose internal hand-off was delivered is skipped (result `skipped: True`)
-    unless resend=True, every attempt is recorded, and the request carries `Idempotency-Key: <dedupe_key>`
+    With a ledger, a finding whose internal hand-off was delivered, or whose item the PSIRT closed, is
+    skipped (result `skipped: True`) unless resend=True, every attempt is recorded, and the request carries `Idempotency-Key: <dedupe_key>`
     so the receiver can dedupe too."""
     ps = cfg.psirt
     token = os.environ.get(ps.token_env, "")
@@ -155,6 +155,12 @@ def send_psirt(payloads: list[dict], cfg: MaraConfig, *, client: httpx.Client | 
     try:
         for payload in payloads:
             key = payload.get("dedupe_key", "")
+            if ledger is not None and not resend and (closed := closed_at(ledger, key)):
+                # before the delivery check: an item closed without a delivered hand-off (every attempt
+                # failed) is closed all the same, and record_attempt would never reopen it
+                results.append({"finding_id": payload["finding_id"], "dedupe_key": key, "skipped": True, "ok": True, "status_code": None,
+                                "reason": f"closed by the PSIRT {closed['at']}: {closed['reason']}"})
+                continue
             if ledger is not None and not resend and (sent := already_sent(ledger, key)):
                 results.append({"finding_id": payload["finding_id"], "dedupe_key": key, "skipped": True, "ok": True, "status_code": None,
                                 "reason": f"internal hand-off already delivered {sent}"})

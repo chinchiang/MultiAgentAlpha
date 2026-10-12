@@ -256,6 +256,11 @@ class MaraConfig(BaseModel):
         default_factory=list,
         description="Policies P2/P5: the organisation's private DNS zones (e.g. .iec.inventec), treated like .internal; each needs two labels",
     )
+    vendor_api_hosts: list[str] = Field(
+        default_factory=list,
+        description="Policy P5: the exact host names of the vendor endpoints (contracted, ZDR or approved retention) an "
+        "openai_compatible model may declare vendor_api_zdr or vendor_api_retained for, e.g. api.example-vendor.com",
+    )
     standby_for: str = Field(
         default="",
         description="G-4: production family this cold-standby config replaces (e.g. 'anthropic'); empty for a production config",
@@ -292,6 +297,11 @@ class MaraConfig(BaseModel):
             # ".iec.inventec" names a zone; ".com" or "inventec" alone would make the whole internet "private"
             if not suffix.startswith(".") or len([p for p in suffix.split(".") if p]) < 2 or suffix != suffix.lower().strip():
                 raise ValueError(f"private_dns_suffixes: {suffix!r} must be a lower-case zone with at least two labels, like .iec.inventec")
+        for host in self.vendor_api_hosts:
+            # a host name, compared exactly: no scheme, port, path or wildcard that would widen it
+            if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+", host):
+                raise ValueError(f"vendor_api_hosts: {host!r} must be a lower-case host name such as api.example-vendor.com "
+                                 "(no scheme, port, path or wildcard)")
         # `mara check-config` validates the structure first and then renders every policy result;
         # load_config runs the policies here so a violating file is refused outright.
         if info.context and info.context.get("skip_policies"):

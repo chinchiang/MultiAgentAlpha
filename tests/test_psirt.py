@@ -254,6 +254,43 @@ def test_ledger_skips_delivered_findings_records_attempts_and_sends_idempotency_
     assert len(led["items"][first[0]["dedupe_key"]]["attempts"]) == 2
 
 
+def test_items_the_psirt_closed_are_not_sent_again(shipped_report, monkeypatch, tmp_path):
+    cfg, report = shipped_report
+    monkeypatch.setenv("PSIRT_WEBHOOK_TOKEN", "s3cret")
+    sent: list[str] = []
+    codes = iter([202])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content)["dedupe_key"])
+        return httpx.Response(next(codes, 503))  # the open item keeps failing, so it is retried every time
+
+    ledger_path = tmp_path / "ledger.json"
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        first = send_psirt(report.psirt, cfg, client=client, ledger_path=ledger_path)
+    delivered, undelivered, still_open = (r["dedupe_key"] for r in first)
+    ledger = pl.load_ledger(ledger_path)
+    # one closed after delivery (false positive), one closed although every attempt failed (fixed meanwhile)
+    pl.close_item(ledger, delivered, "PSIRT: false positive")
+    pl.close_item(ledger, undelivered, "fixed before hand-off")
+    pl.save_ledger(ledger, ledger_path)
+    assert pl.already_sent(ledger, delivered), "closing does not erase the delivery"
+    assert pl.closed_at(ledger, still_open) is None and pl.closed_at(ledger, "nope") is None
+    for _ in range(2):  # and on every later review
+        sent.clear()
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            again = send_psirt(report.psirt, cfg, client=client, ledger_path=ledger_path)
+        assert sent == [still_open], "only the open, undelivered item is retried"
+        assert [r["skipped"] for r in again] == [True, True, False]
+        assert "closed by the PSIRT" in again[0]["reason"] and "false positive" in again[0]["reason"]
+        assert "fixed before hand-off" in again[1]["reason"]
+    led = pl.load_ledger(ledger_path)
+    assert len(led["items"][delivered]["attempts"]) == 1 and len(led["items"][undelivered]["attempts"]) == 1
+    sent.clear()
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        send_psirt(report.psirt, cfg, client=client, ledger_path=ledger_path, resend=True)
+    assert sent == [delivered, undelivered, still_open], "--psirt-resend still forces every send"
+
+
 def test_an_unreachable_send_is_recorded_and_does_not_stop_the_others(shipped_report, monkeypatch, tmp_path):
     """A connection error used to abort the loop: later payloads were never attempted and the failed one
     never reached the ledger."""
