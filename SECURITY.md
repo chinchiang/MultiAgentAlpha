@@ -34,7 +34,8 @@ Use GitHub private vulnerability reporting for this repository:
 Please do not open a public issue or pull request for a security problem. Include the affected
 file and line, the version or commit you tested, and a reproduction (a command, a config, a
 minimal input). If the problem involves a model provider or a self-hosted endpoint, say which
-provider class (`anthropic`, `openai_compatible`, `mock`) and never include a real API key.
+provider class (`anthropic`, `bedrock`, `gemini`, `openai_compatible`, `mock`) and never include a real API key
+or AWS credential.
 
 Private vulnerability reporting was switched on for this repository on 2026-09-17
 (*Settings → Code security → Private vulnerability reporting*), so while the repository is public
@@ -64,8 +65,13 @@ non-reachable condition, the advisory is closed with the reasoning written down.
 
 Every pull request runs the L0 tools pinned and verified in `tools/versions.lock` (semgrep with
 pinned rules, osv-scanner over the hash-locked Python closures, trivy with an offline database,
-gitleaks, zizmor) and uploads their SARIF to GitHub Code Scanning; OpenSSF Scorecard runs on every
-push to `main` and weekly; Dependabot keeps the SHA-pinned actions current. How each tool is
+gitleaks, zizmor). While the repository is public their SARIF goes to GitHub Code Scanning; while it is
+private (since 2026-09-21) that upload job is skipped, because Code Scanning on a private repository needs
+GitHub Advanced Security, and the SARIF is kept as a workflow artifact instead. OpenSSF Scorecard runs on every
+push to `main` and weekly: through the GitHub API while public; while private as `scorecard --local` with the
+locked CLI, which runs only the checks that need no API (Dangerous-Workflow, Token-Permissions,
+Binary-Artifacts, Pinned-Dependencies, Security-Policy, Dependency-Update-Tool) and uploads nothing.
+Dependabot keeps the SHA-pinned actions current. How each tool is
 sourced, verified and what remains unverified is recorded in
 [docs/tools-provenance.md](docs/tools-provenance.md). Vulnerability disclosure for a problem those
 tools miss is what this file is for.

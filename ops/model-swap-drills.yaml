@@ -9,7 +9,8 @@
 #   replaced_family   the production family taken out (anthropic | gemini | glm since 2026-10-06;
 #                     earlier entries: anthropic | deepseek | nemotron)
 #   standby_family    the family that took its place (deepseek since 2026-10-06; earlier: llama | mistral)
-#   config            the standby configuration used (config/examples/standby-for-<family>.yaml)
+#   config            the standby configuration used (config/examples/standby-for-<family>.yaml); for a file
+#                     since retired or rewritten, `<path>@<commit>` names the version the drill ran on
 #   duration_hours    from the decision to swap until the pipeline reviewed a real PR on the standby
 #   outcome           pass | fail
 #   performed_by      GitHub login
@@ -18,7 +19,9 @@
 # Governance check G-4 passes when every production family has a standby configuration that loads
 # through the policies and a live drill within the last 365 days that passed in 168 hours or less.
 # The register holds mock rehearsals only (kind: rehearsal): one per family of the former panel on
-# 2026-10-03 (two of those standby files were retired with that panel on 2026-10-06) and one per
+# 2026-10-03 (run on the standby files as of 472f591: standby-for-deepseek.yaml and
+# standby-for-nemotron.yaml were retired with that panel in v0.4.2, and standby-for-anthropic.yaml was
+# rewritten to use DeepSeek instead of Mistral; `git show 472f591:<path>` shows them) and one per
 # family of the current panel on 2026-10-06. They prove the standby panels run the unchanged process,
 # but NO live drill has been run and G-4 stays red until one has (record with `record`, never by hand).
 drills:
@@ -26,7 +29,7 @@ drills:
   kind: rehearsal
   replaced_family: anthropic
   standby_family: mistral
-  config: config/examples/standby-for-anthropic.yaml
+  config: config/examples/standby-for-anthropic.yaml@472f591
   duration_hours: 0.001
   outcome: pass
   performed_by: chinchiang
@@ -35,7 +38,7 @@ drills:
   kind: rehearsal
   replaced_family: deepseek
   standby_family: llama
-  config: config/examples/standby-for-deepseek.yaml
+  config: config/examples/standby-for-deepseek.yaml@472f591
   duration_hours: 0.001
   outcome: pass
   performed_by: chinchiang
@@ -44,7 +47,7 @@ drills:
   kind: rehearsal
   replaced_family: nemotron
   standby_family: mistral
-  config: config/examples/standby-for-nemotron.yaml
+  config: config/examples/standby-for-nemotron.yaml@472f591
   duration_hours: 0.001
   outcome: pass
   performed_by: chinchiang
