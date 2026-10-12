@@ -62,9 +62,11 @@ def test_standby_configs_swap_exactly_one_family_and_pass_policies():
     assert fams == ["anthropic", "gemini", "glm"]
     standbys = govdocs.standby_configs(ROOT)
     assert set(standbys) == set(fams)
-    for fam, path in standbys.items():
+    for fam, path in ((f, p) for f, paths in standbys.items() for p in paths):
         sb_fam, problem = govdocs._standby_family_of(fams, path, fam)
-        assert not problem and sb_fam == "deepseek", (fam, problem)  # the on-prem DeepSeek stands in for any one family
+        assert not problem, (path.name, problem)
+        if path == standbys[fam][0]:  # the primary standby of every family is the on-prem DeepSeek
+            assert path.name == f"standby-for-{fam}.yaml" and sb_fam == "deepseek", path.name
         cfg = load_config(path)
         assert all(r.passed for r in evaluate_policies(cfg))
         assert yaml.safe_load(path.read_text(encoding="utf-8"))["standby_for"] == fam
@@ -77,6 +79,47 @@ def test_standby_configs_swap_exactly_one_family_and_pass_policies():
         swap = lambda v, old=old, new=new: [new if x == old else x for x in v] if isinstance(v, list) else (new if v == old else v)  # noqa: E731
         assert {k: swap(v) for k, v in pd["roles"].items()} == sb["roles"], fam
     assert {"llama", "mistral", "qwen"} <= {f.value for f in ModelFamily}
+
+
+def _second_standby(standby_for: str = "glm") -> dict:
+    """standby-for-glm.yaml with a self-hosted Llama on loopback in the standby seat (what an LM Studio spare looks like)."""
+    raw = yaml.safe_load((ROOT / "config" / "examples" / "standby-for-glm.yaml").read_text(encoding="utf-8"))
+    i = next(i for i, m in enumerate(raw["models"]) if m["name"] == "deepseek-reviewer")
+    raw["models"][i] = {"name": "llama-reviewer", "family": "llama", "provider": "openai_compatible", "model": "local-model",
+                        "base_url": "http://127.0.0.1:5422/v1", "api_key_env": "LMSTUDIO_API_TOKEN", "data_residency": "on_prem"}
+    raw["roles"] = {k: ([n if n != "deepseek-reviewer" else "llama-reviewer" for n in v] if isinstance(v, list)
+                        else (v if v != "deepseek-reviewer" else "llama-reviewer")) for k, v in raw["roles"].items()}
+    raw["standby_for"] = standby_for
+    return raw
+
+
+def test_a_family_may_have_more_than_one_standby_and_each_one_must_hold(tmp_path):
+    import governance_check as gc
+
+    examples = tmp_path / "config" / "examples"
+    examples.mkdir(parents=True)
+    for p in (ROOT / "config" / "examples").glob("standby-for-*.yaml"):
+        shutil.copy(p, examples / p.name)
+    (examples / "standby-for-glm.lmstudio.yaml").write_text(yaml.safe_dump(_second_standby(), sort_keys=False), encoding="utf-8")
+    prod = load_config(ROOT / "config" / "mara.yaml")
+    assert [p.name for p in govdocs.standby_configs(tmp_path)["glm"]] == ["standby-for-glm.yaml", "standby-for-glm.lmstudio.yaml"]
+    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY)}["glm"]
+    assert glm.config_ok and [(x.standby_family, x.ok) for x in glm.standbys] == [("deepseek", True), ("llama", True)]
+    assert glm.standby_config.endswith("standby-for-glm.yaml"), "single-standby readers still see the primary"
+    g4 = gc.check_g4(tmp_path, ROOT / "config" / "mara.yaml", TODAY)
+    assert "glm→deepseek" in g4.evidence and "glm→llama `config/examples/standby-for-glm.lmstudio.yaml` 可載入" in g4.evidence
+    # a live drill on the second standby proves the family can be swapped out just the same
+    drills = tmp_path / "ops" / "model-swap-drills.yaml"
+    govdocs.append_drill(drills, govdocs.Drill(TODAY - dt.timedelta(days=3), "live", "glm", "llama",
+                                               "config/examples/standby-for-glm.lmstudio.yaml", 30.0, "pass", "ops", "CHG-7"))
+    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY, drills)}["glm"]
+    assert glm.ok and glm.drill.evidence == "CHG-7"
+    # every standby must hold: a broken spare fails the family, named by its file, instead of waiting for the outage
+    (examples / "standby-for-glm.misfiled.yaml").write_text(yaml.safe_dump(_second_standby("anthropic"), sort_keys=False), encoding="utf-8")
+    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY, drills)}["glm"]
+    assert not glm.config_ok and not glm.ok
+    assert "standby-for-glm.misfiled.yaml: declares standby_for: 'anthropic', not 'glm'" in glm.config_problem
+    assert gc.check_g4(tmp_path, ROOT / "config" / "mara.yaml", TODAY).status == gc.FAIL
 
 
 def test_p2_holds_qwen_to_private_endpoints():
@@ -133,7 +176,8 @@ def test_drill_cli_rehearse_record_check(tmp_path):
     assert r.returncode == 1 and "glm: OK" in r.stdout and "anthropic: MISSING" in r.stdout
     r = run("record", "--replaced", "anthropic", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-glm.yaml"),
             "--started", "2026-09-01T09:00", "--completed", "2026-09-02T09:00", "--outcome", "pass", "--performed-by", "ops", "--evidence", "x")
-    assert r.returncode == 2 and "still contains the anthropic family" in r.stderr
+    # the drill names a family the config does not stand in for: refused before anything is recorded
+    assert r.returncode == 2 and "declares standby_for: 'glm', not 'anthropic'" in r.stderr
     # an offset on one end only used to crash with TypeError (aware vs naive comparison)
     r = run("record", "--replaced", "glm", "--standby-config", str(ROOT / "config" / "examples" / "standby-for-glm.yaml"),
             "--started", "2026-09-01T09:00+08:00", "--completed", "2026-09-02T09:00", "--outcome", "pass", "--performed-by", "ops", "--evidence", "x")

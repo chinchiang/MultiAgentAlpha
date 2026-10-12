@@ -209,15 +209,18 @@ def check_g4(root: Path, config_path: Path | None = None, today: dt.date | None 
         return CheckResult("G-4", PASS, "設定中沒有非 mock 的模型家族")
     ev, problems = [], []
     for st in statuses:
-        if st.config_ok:
-            ev.append(f"{st.family}→{st.standby_family} `{Path(st.standby_config).as_posix()}` 可載入")
-        else:
+        # every standby of the family, the second one included: a broken spare must not wait for the outage
+        for sb in st.standbys:
+            if sb.ok:
+                ev.append(f"{st.family}→{sb.standby_family} `{Path(sb.config).as_posix()}` 可載入")
+        if not st.config_ok:
             problems.append(f"{st.family}：冷備設定{st.config_problem}")
         if st.drill_ok and st.drill:
             ev.append(f"{st.family} 換模演練 {st.drill.date} {st.drill.duration_hours:g} h 通過（{st.drill.performed_by}，{st.drill.evidence}）")
         else:
             problems.append(f"{st.family}：{st.drill_problem}")
-    need = (f"需要：每個生產家族一份 `config/examples/standby-for-<family>.yaml`（通過 `mara check-config`）與一年內完成、"
+    need = (f"需要：每個生產家族一份 `config/examples/standby-for-<family>.yaml`（可另加 `standby-for-<family>.<名稱>.yaml` 作為第二備援，"
+            f"每一份都要通過 `mara check-config`）與一年內完成、"
             f"{DRILL_MAX_HOURS} 小時內通過的實地換模演練，以 `scripts/model_swap_drill.py record` 寫入 `ops/model-swap-drills.yaml`")
     if problems:
         return CheckResult("G-4", FAIL, "；".join(problems) + "。已有：" + ("；".join(ev) or "無") + "。" + need)

@@ -3,9 +3,11 @@
 - G-1: the review policy document (docs/policy/mara-review-policy.md) carries YAML front matter
   (status, approver, dates) and mandatory statements marked `<!-- policy:S1 -->` … ; `policy_status`
   decides whether it is approved, current and complete.
-- G-4: cold-standby configurations (config/examples/standby-for-<family>.yaml) and the model-swap
-  drill register (ops/model-swap-drills.yaml); `drill_status` decides, per production family,
-  whether a standby config exists and a live drill finished within a week in the last year.
+- G-4: cold-standby configurations (config/examples/standby-for-<family>.yaml, and further standbys
+  for the same family as standby-for-<family>.<name>.yaml) and the model-swap drill register
+  (ops/model-swap-drills.yaml); `drill_status` decides, per production family, whether every standby
+  config of it loads and swaps exactly that family, and whether a live drill finished within a week
+  in the last year.
 - G-10: the rollout phase in the config (`rollout:`), its dates and the shadow-phase baseline
   report; `rollout_status` decides whether the declared phase is consistent with the report's
   schedule and `baseline_metrics` aggregates review outputs into that report.
@@ -169,25 +171,36 @@ def production_families(cfg: MaraConfig) -> list[str]:
     return fams
 
 
-def standby_configs(root: Path | str) -> dict[str, Path]:
-    """replaced family -> standby config path, from config/examples/standby-for-<family>.yaml."""
-    out = {}
+def standby_configs(root: Path | str) -> dict[str, list[Path]]:
+    """replaced family -> its standby config paths: config/examples/standby-for-<family>.yaml and any further
+    standby-for-<family>.<name>.yaml (a family may have more than one cold standby), primary first."""
+    out: dict[str, list[Path]] = {}
     for p in sorted((Path(root) / "config" / "examples").glob("standby-for-*.y*ml")):
-        fam = p.stem[len("standby-for-"):]
-        out[fam] = p
+        out.setdefault(p.stem[len("standby-for-"):].partition(".")[0], []).append(p)
+    for paths in out.values():  # the file without a variant name is the primary standby
+        paths.sort(key=lambda q: (q.stem.count("."), q.name))
     return out
+
+
+@dataclass(frozen=True)
+class StandbyConfigStatus:
+    config: str
+    standby_family: str
+    ok: bool
+    problem: str
 
 
 @dataclass(frozen=True)
 class FamilyDrillStatus:
     family: str
-    standby_config: str
+    standby_config: str        # the primary standby (kept for single-standby readers); all of them are in `standbys`
     standby_family: str
-    config_ok: bool
+    config_ok: bool            # every standby config of the family loads and swaps exactly this family
     config_problem: str
     drill: Drill | None
     drill_ok: bool
     drill_problem: str
+    standbys: tuple[StandbyConfigStatus, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -196,8 +209,13 @@ class FamilyDrillStatus:
 
 def _standby_family_of(prod: list[str], cfg_path: Path, replaced: str) -> tuple[str, str]:
     """(standby family, problem) after loading the standby config through the policies."""
+    import yaml
+
     from .config import load_config
 
+    declared = str((yaml.safe_load(Path(cfg_path).read_text(encoding="utf-8")) or {}).get("standby_for", ""))
+    if declared != replaced:
+        return "", f"declares standby_for: {declared!r}, not {replaced!r}"
     try:
         sb = load_config(cfg_path)
     except Exception as e:  # policy or structure failure
@@ -221,11 +239,16 @@ def drill_status(cfg: MaraConfig, root: Path | str, today: dt.date, drills_path:
     drills = load_drills(drills_path or (root / "ops" / "model-swap-drills.yaml"))
     out = []
     for fam in prod:
-        sb = standbys.get(fam)
-        if sb is None:
+        paths = standbys.get(fam)
+        if not paths:
             out.append(FamilyDrillStatus(fam, "", "", False, f"no config/examples/standby-for-{fam}.yaml", None, False, "no drill"))
             continue
-        sb_fam, problem = _standby_family_of(prod, sb, fam)
+        statuses = []
+        for sb in paths:
+            sb_fam, why = _standby_family_of(prod, sb, fam)
+            statuses.append(StandbyConfigStatus(str(sb.relative_to(root)), sb_fam, not why, why))
+        # a broken second standby is a failure too: it would only be found out in the outage it exists for
+        problem = "; ".join(f"{Path(x.config).name}: {x.problem}" for x in statuses if not x.ok)
         live = [d for d in drills if d.kind == "live" and d.replaced_family == fam]
         recent = [d for d in live
                   if (today - d.date).days <= DRILL_MAX_AGE_DAYS and d.outcome == "pass" and 0 < d.duration_hours <= DRILL_MAX_HOURS]
@@ -237,7 +260,9 @@ def drill_status(cfg: MaraConfig, root: Path | str, today: dt.date, drills_path:
                   f"need pass within {DRILL_MAX_HOURS} h in the last {DRILL_MAX_AGE_DAYS} days")
         else:
             dp = "no live drill recorded"
-        out.append(FamilyDrillStatus(fam, str(sb.relative_to(root)), sb_fam, not problem, problem, best, bool(recent), dp))
+        primary = statuses[0]
+        out.append(FamilyDrillStatus(fam, primary.config, primary.standby_family, not problem, problem, best, bool(recent), dp,
+                                     tuple(statuses)))
     return out
 
 
