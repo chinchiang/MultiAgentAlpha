@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .. import exchange
 from ..providers.base import Provider
 from ..schemas import JudgeVote, PassId
 from . import base
@@ -34,8 +35,8 @@ def run_judge(provider: Provider, batch: list[dict], pass_id: PassId, self_ids: 
     if not batch:
         return [], []
     user = f"pass_id: {pass_id}\nBlinded findings, judge each independently.\nBEGIN_JSON_ARRAY\n" + json.dumps(batch, ensure_ascii=False)
-    comp = base.call(provider, system_extra=base.load_prompt("judge"), user=user, schema=JUDGE_SCHEMA, role="judge")
-    items, errors = base.parse_items(comp, _JudgeRaw)
+    outcome = exchange.call(provider, system_extra=base.load_prompt("judge"), user=user, schema=JUDGE_SCHEMA, role="judge")
+    items, errors = exchange.parse_items(outcome, _JudgeRaw)
     order = {b["finding_id"]: i for i, b in enumerate(batch)}
     counts = Counter(i.finding_id for i in items)
     if set(counts) != set(order) or any(n != 1 for n in counts.values()) or errors:

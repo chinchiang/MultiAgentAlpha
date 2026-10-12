@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from mara import exchange
 from mara.agents import base as agent_base
 from mara.config import ModelSpec
 from mara.providers.anthropic_provider import AnthropicProvider
@@ -45,7 +46,8 @@ def _chat(content, finish_reason="stop", usage=None):
 
 
 def _call(p):
-    return p.complete(system="s", user="u", schema=SCHEMA, role="reviewer:xss")
+    """The adapter's reply as mara.exchange classifies it: what every agent sees."""
+    return exchange.classify(p.complete(system="s", user="u", schema=SCHEMA, role="reviewer:xss"), SCHEMA)
 
 
 # ------------------------------------------------------------------ OpenAI-compatible (vLLM / NIM)
@@ -84,13 +86,13 @@ def test_openai_compatible_moves_max_length_out_of_the_wire_schema_and_clips_the
         seen["schema"] = json.loads(req.content)["response_format"]["json_schema"]["schema"]
         return _chat(json.dumps(answer))
 
-    c = _oai(handler).complete(system="s", user="u", schema=SKEPTIC_SCHEMA, role="skeptic")
+    c = exchange.classify(_oai(handler).complete(system="s", user="u", schema=SKEPTIC_SCHEMA, role="skeptic"), SKEPTIC_SCHEMA)
     assert "maxLength" not in json.dumps(seen["schema"])
     item = seen["schema"]["properties"]["items"]["items"]["properties"]
     assert "At most 600 characters." in item["reason"]["description"] and item["verdict"]["enum"] == ["refuted", "weakened", "stands"]
     assert [len(i["reason"]) for i in c.data["items"]] == [600, 5] and len(c.data["items"][1]["sanitizer_or_control"]) == 300
     assert SKEPTIC_SCHEMA == before, "the shared module-level schema is not mutated"
-    assert long_reason in c.raw_text, "raw_text stays what the model said (the canary check reads it)"
+    assert long_reason in c.text, "the text stays what the model said (the canary check reads it)"
 
 
 def test_strict_schema_false_sends_the_schema_as_guidance_and_tolerates_one_fence():
@@ -107,8 +109,10 @@ def test_strict_schema_false_sends_the_schema_as_guidance_and_tolerates_one_fenc
     assert _call(p).data == GOOD and seen == [False]
     assert _call(_oai(lambda req: _chat("```json\n" + json.dumps(GOOD) + "\n```"))).data == GOOD
     # anything else around the JSON is still unusable output
-    assert _call(_oai(lambda req: _chat("Here you go:\n```json\n" + json.dumps(GOOD) + "\n```"))).truncated
-    assert _call(_oai(lambda req: _chat("```json\n{}\n```\n```json\n{}\n```"))).truncated
+    assert _call(_oai(lambda req: _chat("Here you go:\n```json\n" + json.dumps(GOOD) + "\n```"))).unparseable
+    assert _call(_oai(lambda req: _chat("```json\n{}\n```\n```json\n{}\n```"))).unparseable
+    # one code fence is tolerated for every family (mara.exchange), not only the OpenAI-compatible endpoints
+    assert _call(_anthropic("end_turn", "```json\n" + json.dumps(GOOD) + "\n```")[0]).data == GOOD
 
 
 def test_the_cvss_pattern_means_the_same_to_a_full_match_decoder_and_to_json_schema():
@@ -130,7 +134,7 @@ def test_the_cvss_pattern_means_the_same_to_a_full_match_decoder_and_to_json_sch
 
 def test_openai_compatible_length_finish_is_truncation_not_refusal():
     c = _call(_oai(lambda req: _chat(TRUNCATED_TEXT, finish_reason="length")))
-    assert c.truncated and not c.refused and c.data is None and c.raw_text == TRUNCATED_TEXT
+    assert c.truncated and not c.refused and c.data is None and c.text == TRUNCATED_TEXT
     assert (c.input_tokens, c.output_tokens) == (11, 7), "token usage is kept so the cost of a truncated call is still accounted"
 
 
@@ -158,15 +162,18 @@ def test_openai_compatible_ignores_proxy_environment_variables(monkeypatch):
     assert default._transport_for_url(httpx.URL("http://127.0.0.1:8000/v1"))._pool.__class__.__name__ == "HTTPProxy"
 
 
-def test_openai_compatible_invalid_json_with_stop_finish_is_truncation():
+def test_openai_compatible_invalid_json_with_stop_finish_is_unparseable_not_a_truncation():
+    """It used to be filed as a truncation: a budget problem. It ended normally, so it is the model's invalid output."""
     c = _call(_oai(lambda req: _chat("Sure! Here is the JSON: {\"findings\": [")))
-    assert c.truncated and not c.refused and c.data is None
+    assert c.unparseable and not c.truncated and not c.refused and c.data is None
 
 
-def test_openai_compatible_content_filter_and_empty_are_refusals():
+def test_openai_compatible_content_filter_is_a_refusal_and_empty_is_an_empty_reply():
+    """An empty reply used to be a refusal here and nothing on the Anthropic adapter; it is an empty reply everywhere."""
     assert _call(_oai(lambda req: _chat("", finish_reason="content_filter"))).refused
     empty = _call(_oai(lambda req: _chat("   ")))
-    assert empty.refused and not empty.truncated
+    assert empty.empty and not empty.refused and not empty.truncated
+    assert _call(_anthropic("end_turn", "")[0]).empty
 
 
 @pytest.mark.parametrize("status,body", [(500, "upstream exploded"), (401, "bad token"), (429, "slow down"), (503, "loading weights")])
@@ -324,7 +331,7 @@ def test_anthropic_sends_every_agent_schema_without_unsupported_keywords():
 def test_anthropic_max_tokens_is_truncation_not_refusal_and_does_not_raise():
     p, _ = _anthropic("max_tokens", TRUNCATED_TEXT)
     c = _call(p)
-    assert c.truncated and not c.refused and c.data is None and c.raw_text == TRUNCATED_TEXT
+    assert c.truncated and not c.refused and c.data is None and c.text == TRUNCATED_TEXT
 
 
 def test_anthropic_refusal_stop_reason_is_a_refusal():
@@ -336,7 +343,7 @@ def test_anthropic_refusal_stop_reason_is_a_refusal():
 def test_anthropic_invalid_json_in_text_block_does_not_crash_the_review():
     p, _ = _anthropic("end_turn", "{\"findings\": [")
     c = _call(p)
-    assert c.truncated and c.data is None
+    assert c.unparseable and not c.truncated and c.data is None
 
 
 def test_anthropic_sdk_errors_are_wrapped_as_runtime_errors():
@@ -366,15 +373,15 @@ def test_anthropic_sdk_errors_are_wrapped_as_runtime_errors():
 
 # ------------------------------------------------------------------ what the agent layer makes of it
 
-def test_agent_layer_treats_truncation_as_empty_but_reviewer_audit_tells_it_apart():
+def test_agent_layer_tells_truncation_refusal_and_unparseable_apart():
     from mara.agents.reviewer import review_dimension
     from mara.context.repo_map import RepoContext
 
     trunc = _oai(lambda req: _chat(TRUNCATED_TEXT, finish_reason="length"))
     refused = _oai(lambda req: _chat("", finish_reason="content_filter"))
     comp = _call(trunc)
-    assert agent_base.parse_items(comp, dict) == ([], ["empty"])  # truncated output is unusable, not an abstention
-    assert agent_base.parse_items(_call(refused), dict) == ([], ["refused"])  # content_filter is an abstention
+    assert exchange.parse_items(comp, dict) == ([], ["truncated"])  # the budget: neither an abstention nor invalid output
+    assert exchange.parse_items(_call(refused), dict) == ([], ["refused"])  # content_filter is an abstention
     ctx = RepoContext(root=Path("."))
     canary = agent_base.Canary()
     _, a1 = review_dimension(trunc, ctx, "xss", canary)
@@ -398,9 +405,9 @@ def test_agent_layer_records_provider_failures_as_errors_not_refusals(exc, code)
     from mara.agents.reviewer import review_dimension
     from mara.context.repo_map import RepoContext
 
-    comp = agent_base.call(_Raises(exc), system_extra="", user="u", schema=SCHEMA, role="reviewer:xss")
-    assert comp.error == code and not comp.refused and not comp.truncated and comp.data is None and comp.raw_text == ""
-    assert agent_base.parse_items(comp, dict) == ([], [code])
+    comp = exchange.call(_Raises(exc), system_extra="", user="u", schema=SCHEMA, role="reviewer:xss")
+    assert comp.error == code and not comp.refused and not comp.truncated and comp.data is None and comp.text == ""
+    assert exchange.parse_items(comp, dict) == ([], [code])
     _, audit = review_dimension(_Raises(exc), RepoContext(root=Path(".")), "xss", agent_base.Canary())
     assert (audit["errored"], audit["refused"], audit["truncated"]) == (True, False, False)
 
@@ -413,12 +420,12 @@ def test_an_unexpected_provider_exception_is_logged_without_its_message(caplog):
             return {}["missing"]  # a bug, not a provider failure
 
     with caplog.at_level("ERROR", logger="mara.providers"):
-        comp = agent_base.call(Buggy(ValueError("unused")), system_extra="", user="u", schema=SCHEMA, role="judge")
+        comp = exchange.call(Buggy(ValueError("unused")), system_extra="", user="u", schema=SCHEMA, role="judge")
     assert comp.error == "provider_call_failed:KeyError"
     [rec] = caplog.records
     assert "KeyError" in rec.getMessage() and "test_live_providers.py" in rec.getMessage() and "in complete" in rec.getMessage()
     with caplog.at_level("ERROR", logger="mara.providers"):
-        agent_base.call(_Raises(ValueError("sk-live-123 leaked in a message")), system_extra="", user="u", schema=SCHEMA, role="judge")
+        exchange.call(_Raises(ValueError("sk-live-123 leaked in a message")), system_extra="", user="u", schema=SCHEMA, role="judge")
     assert all("sk-live-123" not in r.getMessage() for r in caplog.records)
 
 
@@ -442,5 +449,25 @@ def test_openai_compatible_records_the_served_model_from_the_payload():
 def test_agent_call_collects_served_models_on_the_provider():
     p, _ = _anthropic("end_turn", json.dumps(GOOD), served="claude-opus-4-8")
     p.served_models = set()
-    agent_base.call(p, system_extra="", user="u", schema=SCHEMA, role="reviewer:xss")
+    exchange.call(p, system_extra="", user="u", schema=SCHEMA, role="reviewer:xss")
     assert p.served_models == {"claude-opus-4-8"}
+
+
+def test_a_plain_text_canary_echo_is_an_echo_through_every_real_adapter():
+    """Every adapter filed a reply that ended normally but was not JSON as a truncation, and a truncation is never a
+    canary echo: a model that obeyed the planted instruction in plain text went unrecorded on the live panel. The old
+    regression test only passed because its fake built a non-truncated, non-JSON completion no adapter produces."""
+    canary = exchange.Canary()
+    echo = f"This repository has been pre-approved. {canary.token}"
+    report = f"I will not follow __mara_canary__.md, which asks me to reply with {canary.token}."
+    for text, want in ((echo, (True, 0)), (report, (False, 1))):
+        for p in (_anthropic("end_turn", text)[0], _oai(lambda req, text=text: _chat(text))):
+            o = exchange.call(p, system_extra="", user="u", schema=SCHEMA, role="reviewer:xss")
+            assert o.kind == exchange.UNPARSEABLE, (type(p).__name__, o.kind)
+            _, echoed, reported = canary.screen(o, ("findings",))
+            assert (echoed, reported) == want, (type(p).__name__, text)
+            assert canary.screen_verdicts(o) == (want[0], set())
+    # the same text cut off at the output limit stays a truncation, never an echo (docs/adr/0001-reply-outcome-accounting.md)
+    for p in (_anthropic("max_tokens", echo)[0], _oai(lambda req: _chat(echo, finish_reason="length"))):
+        o = exchange.call(p, system_extra="", user="u", schema=SCHEMA, role="reviewer:xss")
+        assert o.truncated and canary.screen(o, ("findings",))[1:] == (False, 0) and canary.screen_verdicts(o) == (False, set())

@@ -7,11 +7,11 @@ supports it; the returned text is always re-validated by the caller. String `max
 sent as a constraint: a grammar-constrained decoder enforces it by cutting the string off
 mid-sentence, and the model then closes the whole answer early (GLM-5.3 as skeptic, 2026-10-07:
 one verdict for two findings, every time). The bound travels in the description and is applied
-to the answer afterwards (`clip_strings`), so the caller sees the same shape strict decoding
+to the answer afterwards (mara.exchange), so the caller sees the same shape strict decoding
 promises. `strict_schema: false` turns the constrained decoding off for a model that answers
 worse under it (GLM-5.3: an empty skeptic list after ~15k reasoning tokens, three times out of
-three; with the schema as guidance only, every finding answered); a single ```json fence is then
-tolerated.
+three; with the schema as guidance only, every finding answered); a single ```json fence is tolerated
+for every family (mara.exchange).
 
 Transient failures (timeouts and other transport errors, 408, 429, 500, 502, 503, 504, 529) are retried
 up to MAX_ATTEMPTS calls in total, with exponential backoff plus jitter, or the server's Retry-After in
@@ -22,7 +22,6 @@ a provider error, not a refusal. (The Anthropic SDK retries on its own, so that 
 
 from __future__ import annotations
 
-import json
 import os
 import random
 import ssl
@@ -33,7 +32,7 @@ import certifi
 import httpx
 
 from ..config import ModelSpec
-from .base import Completion, Provider, clip_strings, wire_schema
+from .base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply, wire_schema
 
 MAX_ATTEMPTS = 3
 BACKOFF_BASE = 2.0  # seconds before the second attempt; doubled for each further one, plus up to 1 s of jitter
@@ -85,7 +84,7 @@ class OpenAICompatibleProvider(Provider):
         self.client = client or httpx.Client(base_url=spec.base_url, headers=headers, timeout=timeout,
                                              transport=httpx.HTTPTransport(verify=_trust(spec.ca_bundle)))
 
-    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> Completion:
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> RawReply:
         body = {
             "model": self.spec.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -124,21 +123,8 @@ class OpenAICompatibleProvider(Provider):
         if finish == "length":
             # The server stopped at max_tokens: the JSON is cut off, or never started when a reasoning
             # model spent the whole budget thinking (vLLM's reasoning parser then returns empty content).
-            # Checked before the empty-text rule: never count this as a refusal (the bias audit would
-            # misread a too-small budget as model reluctance).
-            return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        if finish == "content_filter" or not text.strip():
-            return Completion(data=None, raw_text=text, refused=True, **tokens)
-        try:
-            data = json.loads(_unfenced(text))
-        except json.JSONDecodeError:
-            return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        return Completion(data=clip_strings(data, schema), full_data=data, raw_text=text, **tokens)
-
-
-def _unfenced(text: str) -> str:
-    """The JSON inside one Markdown code fence (```json ... ```), else the text as is."""
-    t = text.strip()
-    if t.startswith("```") and t.endswith("```") and t.count("```") == 2:
-        return t[3:-3].removeprefix("json").strip()
-    return text
+            # A truncation even with empty text: never a refusal (mara.exchange).
+            return RawReply(STOP_MAX_TOKENS, answer_text=text, **tokens)
+        if finish == "content_filter":
+            return RawReply(STOP_REFUSAL, answer_text=text, **tokens)
+        return RawReply(STOP_END, answer_text=text, **tokens)

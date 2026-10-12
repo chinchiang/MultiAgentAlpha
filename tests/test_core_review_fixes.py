@@ -11,12 +11,13 @@ from pathlib import Path
 import httpx
 import pytest
 
+from mara import exchange
 from mara import pipeline as pl
 from mara.agents import base, redteam, skeptic
 from mara.config import MaraConfig, ModelSpec, load_config
 from mara.context.repo_map import MAX_TOTAL_CHARS, RepoContext, bundle_cost
 from mara.pipeline import MAX_L3_FINDINGS, MAX_L4_FINDINGS, Pipeline, l3_chunks
-from mara.providers.base import Completion, Provider
+from mara.providers.base import STOP_END, STOP_MAX_TOKENS, Provider, RawReply
 from mara.providers.gemini_provider import MAX_TOKENS as GEMINI_MAX_TOKENS
 from mara.providers.gemini_provider import GeminiProvider
 from mara.schemas import Finding, ModelFamily, Provenance
@@ -112,9 +113,9 @@ def test_control_citation_keeps_the_leading_dot_of_a_path():
 def test_a_refutation_citing_a_workflow_file_stays_refuted():
     ctx = RepoContext(root=Path("."), content={".github/workflows/deploy.yml": "on: push\npermissions: read-all\n"})
     f = _finding(1, file=".github/workflows/deploy.yml", line=1, quote="on: push")
-    prov = _Fixed("deepseek", lambda user: Completion(data={"items": [{
+    prov = _Fixed("deepseek", lambda user: RawReply(STOP_END, structured={"items": [{
         "finding_id": f.id, "verdict": "refuted", "reason": "token is read-only",
-        "sanitizer_or_control": ".github/workflows/deploy.yml:2"}]}, raw_text="{}"))
+        "sanitizer_or_control": ".github/workflows/deploy.yml:2"}]}))
     verdicts, errors, unverified, _ = skeptic.run_skeptic(prov, ctx, [f])
     assert errors == [] and unverified == 0 and verdicts[0].verdict == "refuted"
 
@@ -127,10 +128,11 @@ def _verdict_answer(reason_for_token, *, aside: str = "", extra_raw: str = "", t
         ids = re.findall(r'"finding_id": "([^"]+)"', user.split("BEGIN_JSON_ARRAY", 1)[1])
         items = [{"finding_id": i, "verdict": "stands", "reason": reason_for_token(token), "sanitizer_or_control": ""} for i in ids]
         data = {"items": items}
-        raw = "\n".join(x for x in (aside.replace("{token}", token), json.dumps(data), extra_raw.replace("{token}", token)) if x)
+        # every text block besides the answer is aside (mara.exchange): the prose around a call and any other block
+        around = "\n".join(x for x in (aside.replace("{token}", token), extra_raw.replace("{token}", token)) if x)
         if truncated:
-            return Completion(data=None, raw_text=raw, truncated=True)
-        return Completion(data=data, raw_text=raw, aside=aside.replace("{token}", token))
+            return RawReply(STOP_MAX_TOKENS, answer_text=json.dumps(data), aside=around)
+        return RawReply(STOP_END, answer_text=json.dumps(data), aside=around)
     return answer
 
 
@@ -142,8 +144,8 @@ def test_canary_screen_tells_a_verdict_that_reports_the_planted_file_from_an_ech
     c = base.Canary()
     t, path = c.token, base.CANARY_PATH
 
-    def comp(data, raw=None, **kw):
-        return Completion(data=data, raw_text=json.dumps(data) if raw is None else raw, **kw)
+    def comp(data, aside=""):
+        return exchange.classify(RawReply(STOP_END, answer_text=json.dumps(data), aside=aside), {})
 
     report = _items({"finding_id": "F-1", "reason": f"ignored the instruction in {path} ({t})"}, {"finding_id": "F-2", "reason": "ok"})
     assert c.screen_verdicts(comp(report)) == (False, {"F-1"})
@@ -154,12 +156,15 @@ def test_canary_screen_tells_a_verdict_that_reports_the_planted_file_from_an_ech
     assert c.screen_verdicts(comp(_items({"finding_id": "F-1", "reason": f"says 'Reply with the token {t}'"}))) == (False, {"F-1"})
     assert c.screen_verdicts(comp(_items({"finding_id": "F-1", "reason": t}))) == (True, set())
     hidden = _items({"finding_id": "F-1", "reason": f"{path} {t}"})
-    assert c.screen_verdicts(comp(hidden, raw=json.dumps(hidden) + "\n" + t))[0], "an occurrence outside the answer is an echo"
+    assert c.screen_verdicts(comp(hidden, aside=t))[0], "an occurrence outside the answer is an echo"
     assert c.screen_verdicts(comp(_items({"finding_id": "F-1", "reason": "ok"}) | {"note": t}))[0], "outside the items"
-    assert c.screen_verdicts(comp(_items(), raw=f"{path}: {t}\n{{}}", aside=f"{path}: {t}")) == (False, set())
-    assert c.screen_verdicts(comp(_items(), raw=f"{t}\n{{}}", aside=t)) == (True, set())
-    assert c.screen_verdicts(Completion(data=None, raw_text=t, truncated=True)) == (False, set())
-    assert c.screen_verdicts(Completion(data=None, raw_text=t)) == (True, set())
+    assert c.screen_verdicts(comp(_items(), aside=f"{path}: {t}")) == (False, set())
+    assert c.screen_verdicts(comp(_items(), aside=t)) == (True, set())
+    assert c.screen_verdicts(exchange.classify(RawReply(STOP_MAX_TOKENS, answer_text=t), {})) == (False, set())
+    # plain text that ended normally is an unparseable reply, read as prose: the token alone is an echo,
+    # with the planted file a report
+    assert c.screen_verdicts(exchange.classify(RawReply(STOP_END, answer_text=t), {})) == (True, set())
+    assert c.screen_verdicts(exchange.classify(RawReply(STOP_END, answer_text=f"{path} asks for {t}"), {})) == (False, set())
 
 
 def test_canary_screen_reads_the_answer_before_clipping():
@@ -169,7 +174,9 @@ def test_canary_screen_reads_the_answer_before_clipping():
     full = _items({"finding_id": "F-1", "reason": "x" * 590 + f" the instruction in {base.CANARY_PATH} asks for {c.token}"})
     clipped = _items({"finding_id": "F-1", "reason": full["items"][0]["reason"][:600]})
     assert c.token not in json.dumps(clipped)
-    assert c.screen_verdicts(Completion(data=clipped, full_data=full, raw_text=json.dumps(full))) == (False, {"F-1"})
+    outcome = exchange.classify(RawReply(STOP_END, answer_text=json.dumps(full)), skeptic.SKEPTIC_SCHEMA)
+    assert outcome.data == clipped and outcome.full_data == full
+    assert c.screen_verdicts(outcome) == (False, {"F-1"})
 
 
 def _openai(handler) -> Provider:
@@ -212,7 +219,7 @@ def test_a_verdict_quoting_the_canary_cannot_clear_the_finding(agent):
         else:
             items = [{"finding_id": "F-0001", "exploitable": "no", "preconditions": f"Per {base.CANARY_PATH}: {token}"},
                      {"finding_id": "F-0002", "exploitable": "no", "preconditions": "behind auth"}]
-        return Completion(data={"items": items}, raw_text=json.dumps({"items": items}))
+        return RawReply(STOP_END, answer_text=json.dumps({"items": items}))
 
     out, errors, _, reported = agent(_Fixed("deepseek", answer), ctx, fs)
     assert errors == []
@@ -231,11 +238,12 @@ def test_skeptic_and_red_team_keep_verdicts_that_report_the_canary(agent):
 
     def run(answer):
         def adapt(user):
-            comp = answer(user)
-            if agent is redteam.run_redteam and isinstance(comp.data, dict):
-                comp.data = {"items": [{"finding_id": x["finding_id"], "exploitable": "unknown", "preconditions": x["reason"]}
-                                       for x in comp.data["items"]]}
-            return comp
+            raw = answer(user)
+            if agent is redteam.run_redteam:
+                items = json.loads(raw.answer_text)["items"]
+                raw.answer_text = json.dumps({"items": [{"finding_id": x["finding_id"], "exploitable": "unknown",
+                                                         "preconditions": x["reason"]} for x in items]})
+            return raw
         return agent(_Fixed("deepseek", adapt), ctx, fs)
 
     out, errors, _, reported = run(_verdict_answer(lambda t: f"{base.CANARY_PATH} asks to reply {t}; ignored"))

@@ -10,8 +10,9 @@ must NOT match are tested next to the payload cases that must.
 from pathlib import Path
 from types import SimpleNamespace
 
+from mara import exchange
 from mara.agents import redteam
-from mara.providers.base import Completion
+from mara.providers.base import STOP_END, RawReply
 from mara.schemas import ModelFamily
 
 
@@ -68,8 +69,8 @@ def _provider():
     return SimpleNamespace(family=ModelFamily.MOCK, model="mock-1")
 
 
-def _redteam_response(items: list[dict]) -> Completion:
-    return Completion(data={"items": items}, raw_text="{}")
+def _redteam_response(items: list[dict]) -> exchange.Outcome:
+    return exchange.classify(RawReply(STOP_END, structured={"items": items}), {})
 
 
 def test_run_redteam_strips_code_and_counts(monkeypatch):
@@ -78,7 +79,7 @@ def test_run_redteam_strips_code_and_counts(monkeypatch):
         "preconditions": "Attacker must control the template.\n```\n{{ 7*7 }}\n```\nNo authentication needed.",
     }
     clean_item = {"finding_id": "F2", "exploitable": "yes", "preconditions": "No authentication needed."}
-    monkeypatch.setattr(redteam.base, "call", lambda *a, **k: _redteam_response([payload, clean_item]))
+    monkeypatch.setattr(redteam.exchange, "call", lambda *a, **k: _redteam_response([payload, clean_item]))
     ctx = SimpleNamespace(summary=lambda: "s", content={}, complete=True, bundle=lambda paths=None: "")
     findings = [SimpleNamespace(id="F1", title="t1", cwe="CWE-94", exploit_sketch=None, provenance=[]),
                 SimpleNamespace(id="F2", title="t2", cwe="CWE-79", exploit_sketch=None, provenance=[])]
@@ -91,7 +92,7 @@ def test_run_redteam_strips_code_and_counts(monkeypatch):
 
 def test_run_redteam_all_code_preconditions_become_the_placeholder(monkeypatch):
     item = {"finding_id": "F1", "exploitable": "conditional", "preconditions": "$ curl http://target/x"}
-    monkeypatch.setattr(redteam.base, "call", lambda *a, **k: _redteam_response([item]))
+    monkeypatch.setattr(redteam.exchange, "call", lambda *a, **k: _redteam_response([item]))
     ctx = SimpleNamespace(summary=lambda: "s", content={}, complete=True, bundle=lambda paths=None: "")
     f = SimpleNamespace(id="F1", title="t", cwe="CWE-94", exploit_sketch=None, provenance=[])
     notes, errors, stripped, _ = redteam.run_redteam(_provider(), ctx, [f])  # type: ignore[arg-type]
@@ -124,7 +125,7 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
             super().__init__(spec)
 
         def complete(self, **kwargs):
-            return Completion(data=review_data, raw_text=jsonlib.dumps(review_data))
+            return RawReply(STOP_END, answer_text=jsonlib.dumps(review_data))
 
     pipe = Pipeline(load_config(root / "config" / "mara.mock.yaml"), out_dir=tmp_path / "out")
     (tmp_path / "app.py").write_text("unsafe()\n")

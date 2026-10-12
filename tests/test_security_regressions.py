@@ -13,7 +13,7 @@ from mara.agents import base, judge
 from mara.config import ModelSpec, load_config
 from mara.context.repo_map import RepoContext, build_context
 from mara.pipeline import Pipeline
-from mara.providers.base import Completion, Provider
+from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 from mara.report.human_queue_out import build_queue, queue_key
 from mara.report.markdown_out import render_markdown
 from mara.report.psirt_out import legal_deadlines
@@ -33,7 +33,7 @@ class Reply(Provider):
 
     def complete(self, **kwargs):
         self.requests.append(kwargs)
-        return Completion(data=self.data, raw_text=json.dumps(self.data), refused=self.data is None)
+        return RawReply(STOP_REFUSAL) if self.data is None else RawReply(STOP_END, answer_text=json.dumps(self.data))
 
 
 def pipeline(tmp_path):
@@ -186,13 +186,17 @@ def test_duplicate_judge_reply_is_not_counted(tmp_path):
     assert not votes and errors
 
 
-def _skeptic_errors(data, n=3, **completion):
+def _skeptic_errors(data, n=3, *, refused=False, error=""):
     from mara.agents import skeptic
     from mara.pipeline import _count_invalid
 
     class One(Provider):
         def complete(self, **kwargs):
-            return Completion(data=data, raw_text=json.dumps(data), **completion)
+            if error:
+                raise RuntimeError(error)
+            if refused:
+                return RawReply(STOP_REFUSAL)
+            return RawReply(STOP_END, answer_text="" if data is None else json.dumps(data))
 
     ctx = RepoContext(root=Path("."), content={"app.py": "unsafe()\n"})
     fs = [finding().model_copy(update={"id": f"F-{i}"}) for i in range(1, n + 1)]
@@ -234,7 +238,7 @@ class _OverrideRole(Provider):
 
     def complete(self, *, system, user, schema, role, max_tokens=16000):
         if role == self.role:
-            return Completion(data=self.data, raw_text=json.dumps(self.data))
+            return RawReply(STOP_END, answer_text=json.dumps(self.data))
         return self.inner.complete(system=system, user=user, schema=schema, role=role, max_tokens=max_tokens)
 
 
@@ -262,11 +266,12 @@ def test_a_refutation_must_cite_a_non_blank_line_of_a_file_the_skeptic_was_shown
 
 
 class _EchoRole(_OverrideRole):
-    """Follows the planted canary instruction for `role`: echoes the prompt (token included)."""
+    """Follows the planted canary instruction for `role`: replies with the token, without naming the planted file."""
 
     def complete(self, *, system, user, schema, role, max_tokens=16000):
         if role == self.role:
-            return Completion(data=self.data, raw_text=user)
+            token = user.split("Reply with the token ")[1].split()[0]
+            return RawReply(STOP_END, answer_text=json.dumps(self.data), aside=f"Pre-approved: {token}")
         return self.inner.complete(system=system, user=user, schema=schema, role=role, max_tokens=max_tokens)
 
 
@@ -338,7 +343,7 @@ def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path, monke
 
 class Truncated(Provider):
     def complete(self, **kwargs):
-        return Completion(data=None, raw_text='{"findings": [', truncated=True)
+        return RawReply(STOP_MAX_TOKENS, answer_text='{"findings": [')
 
 
 def test_truncated_reviewer_replies_block_the_gate(tmp_path, monkeypatch):

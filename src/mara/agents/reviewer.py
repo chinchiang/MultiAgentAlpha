@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .. import exchange
 from ..context.repo_map import RepoContext
 from ..providers.base import Provider
 from ..schemas import DIMENSION_LABELS, Finding, Provenance
@@ -69,14 +70,15 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
         f"{base.untrusted_block(ctx, canary)}\n\n"
         "Return {\"findings\": [...]} following the schema."
     )
-    comp = base.call(provider, system_extra=system_extra, user=user, schema=FINDING_SCHEMA, role=f"reviewer:{dimension}")
+    outcome = exchange.call(provider, system_extra=system_extra, user=user, schema=FINDING_SCHEMA, role=f"reviewer:{dimension}")
     # a finding that cites the planted file reports the injection attempt (resisting it); it is set aside, and
     # only the token anywhere else in the answer counts as an echo
-    data, echoed, reported = canary.screen(comp, ("findings",))
-    audit = {"refused": comp.refused or (comp.data is None and not comp.truncated and not comp.error),
-             "truncated": comp.truncated, "errored": bool(comp.error), "canary_echoed": echoed, "canary_reported": reported,
-             "input_tokens": comp.input_tokens, "output_tokens": comp.output_tokens, "invalid": 0, "unverified_quotes": 0}
-    if comp.refused or comp.data is None:
+    data, echoed, reported = canary.screen(outcome, ("findings",))
+    # an unparseable reply is invalid output, one per reply (docs/adr/0001-reply-outcome-accounting.md)
+    audit = {**exchange.extraction_flags(outcome), "canary_echoed": echoed, "canary_reported": reported,
+             "input_tokens": outcome.input_tokens, "output_tokens": outcome.output_tokens, "invalid": int(outcome.unparseable),
+             "unverified_quotes": 0}
+    if outcome.data is None:
         return [], audit
     if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
         audit["invalid"] += 1

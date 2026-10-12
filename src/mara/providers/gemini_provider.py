@@ -4,9 +4,9 @@ Structured output is requested with `responseMimeType: application/json` and `re
 the returned text is always re-validated by the caller. The key is sent in the `x-goog-api-key`
 header, never in the URL, so it cannot end up in a proxy or access log.
 
-Outcome mapping (Completion): `finishReason` MAX_TOKENS is a truncation even with empty text; a
+Stop mapping (RawReply): `finishReason` MAX_TOKENS is the output limit even with empty text; a
 blocked prompt (`promptFeedback.blockReason`) or a SAFETY / RECITATION / PROHIBITED_CONTENT /
-BLOCKLIST / SPII finish is a refusal; an empty answer that did not hit the limit is a refusal too.
+BLOCKLIST / SPII finish is a refusal; mara.exchange classifies the rest (an empty answer is an empty reply).
 Thought parts (thinking models) are skipped. Transient failures (timeouts and other transport
 errors, 408, 429, 500, 502, 503, 504) are retried exactly like the OpenAI-compatible provider.
 
@@ -17,7 +17,6 @@ for abuse monitoring, so such a model is `vendor_api_retained` and policy P5 adm
 
 from __future__ import annotations
 
-import json
 import os
 import time
 from collections.abc import Callable
@@ -25,7 +24,7 @@ from collections.abc import Callable
 import httpx
 
 from ..config import ModelSpec
-from .base import Completion, Provider, clip_strings
+from .base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 from .openai_compatible import MAX_ATTEMPTS, RETRY_STATUSES, retry_delay
 
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -46,7 +45,7 @@ class GeminiProvider(Provider):
         # `client` is for tests (httpx.MockTransport)
         self.client = client or httpx.Client(base_url=API_BASE, headers=headers, timeout=timeout)
 
-    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> Completion:
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> RawReply:
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -81,18 +80,14 @@ class GeminiProvider(Provider):
                   # the model version that answered, e.g. an alias resolved to a dated release
                   "served_model": str(payload.get("modelVersion") or "")[:200]}
         if blocked or not candidates:
-            return Completion(data=None, raw_text="", refused=True, **tokens)
+            return RawReply(STOP_REFUSAL, **tokens)
         cand = candidates[0]
         finish = cand.get("finishReason", "")
         parts = (cand.get("content") or {}).get("parts") or []
         text = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought"))
         if finish == "MAX_TOKENS":
             # the output budget ran out (thinking models may spend it before any text): never a refusal
-            return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        if finish in REFUSAL_FINISHES or not text.strip():
-            return Completion(data=None, raw_text=text, refused=True, **tokens)
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        return Completion(data=clip_strings(data, schema), full_data=data, raw_text=text, **tokens)
+            return RawReply(STOP_MAX_TOKENS, answer_text=text, **tokens)
+        if finish in REFUSAL_FINISHES:
+            return RawReply(STOP_REFUSAL, answer_text=text, **tokens)
+        return RawReply(STOP_END, answer_text=text, **tokens)

@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 from ..config import ModelSpec
-from .base import Completion, Provider
+from .base import STOP_END, STOP_REFUSAL, Provider, RawReply
 
 _FILE_BLOCK = re.compile(r'<file path="([^"]*)">\n(.*?)\n</file>', re.S)
 _NUMBERED_LINE = re.compile(r"^\s*(\d+)\| (.*)$", re.M)
@@ -47,7 +47,7 @@ class MockProvider(Provider):
         p = self.fixtures / f"{name}.json"
         return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
-    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> Completion:
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> RawReply:
         self.calls.append(role)
         fam = self.spec.family.value
         kind, _, arg = role.partition(":")
@@ -61,9 +61,9 @@ class MockProvider(Provider):
         if data is None:
             data = self._load(f"{kind}_default")
         if data is None:
-            return Completion(data={"findings": []} if kind == "reviewer" else {"items": []}, raw_text="{}")
+            return RawReply(STOP_END, structured={"findings": []} if kind == "reviewer" else {"items": []})
         if data.get("_refuse"):
-            return Completion(data=None, raw_text="", refused=True)
+            return RawReply(STOP_REFUSAL)
         # Judge mocks may specify verdicts keyed by finding title so they survive shuffling.
         if kind == "judge":
             data = _resolve_judge(data, user)
@@ -71,17 +71,17 @@ class MockProvider(Provider):
             data = _resolve_by_title(data, user)
             if kind == "skeptic":
                 data = _fill_control_citation(data, user)
-        return Completion(data=data, raw_text=json.dumps(data))
+        return RawReply(STOP_END, structured=data)
 
 
-def _label_driven(self: MockProvider, kind: str, arg: str, fam: str, user: str) -> Completion:
+def _label_driven(self: MockProvider, kind: str, arg: str, fam: str, user: str) -> RawReply:
     from . import mock_labels
 
     if kind == "reviewer":
         data = mock_labels.reviewer_response(fam, arg, self.labels or [], self.sample)
         if data is None:
-            return Completion(data=None, raw_text="", refused=True)
-        return Completion(data=data, raw_text=json.dumps(data))
+            return RawReply(STOP_REFUSAL)
+        return RawReply(STOP_END, structured=data)
     if kind == "judge":
         data = _resolve_judge(mock_labels.judge_rules(fam), user)
     elif kind == "skeptic":
@@ -90,7 +90,7 @@ def _label_driven(self: MockProvider, kind: str, arg: str, fam: str, user: str) 
         data = _resolve_by_title(mock_labels.REDTEAM_RULES, user)
     else:
         data = {"items": []}
-    return Completion(data=data, raw_text=json.dumps(data))
+    return RawReply(STOP_END, structured=data)
 
 
 
@@ -154,7 +154,7 @@ def _fill_control_citation(data: dict, user: str) -> dict:
     return data
 
 
-def _context_response(user: str) -> Completion:
+def _context_response(user: str) -> RawReply:
     """Deterministic C4-lite view parsed from the bundle itself: a container per application
     file, trust boundaries at HTTP entry points, data stores at connection lines, external
     systems from CI workflows and manifests. Every citation is an exact bundle line, so all
@@ -213,4 +213,4 @@ def _context_response(user: str) -> Completion:
         external.append(item("external_system", "package registry", manifests[0]))
     data = {"containers": [c for c in containers if c], "external_systems": [e for e in external if e],
             "trust_boundaries": [b for b in boundaries if b], "data_stores": [s for s in stores if s]}
-    return Completion(data=data, raw_text=json.dumps(data))
+    return RawReply(STOP_END, structured=data)

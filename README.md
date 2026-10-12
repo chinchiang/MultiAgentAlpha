@@ -219,10 +219,18 @@ refusal, so a rate limit or an outage is never charged to the model in the bias 
 calibration refusal rate; like refusals and truncations it makes the review incomplete and the gate
 fails. The OpenAI-compatible provider retries timeouts, transport errors and 408/429/500/502/503/504/529
 up to three calls in total, with exponential backoff and jitter or the server's `Retry-After`
-(at most 30 s); other statuses fail at once. The Anthropic SDK retries on its own. A response that
-stops at the output limit (`finish_reason: length`) is a truncation even when its content is empty, as
-with a reasoning model that spent the whole budget thinking; only a content filter or an empty answer
-that did not hit the limit counts as a refusal. The OpenAI-compatible provider never uses the
+(at most 30 s); other statuses fail at once. The Anthropic SDK retries on its own. Every reply is
+classified once, for every family, by `mara/exchange.py` (the adapters only report the vendor's stop
+reason and text; `CONTEXT.md`, `docs/adr/0001-reply-outcome-accounting.md`): a reply stopped at the
+output limit (`finish_reason: length`, `max_tokens`, `MAX_TOKENS`) is a truncation even when its content
+is empty, as with a reasoning model that spent the whole budget thinking, and is never charged to the
+model (skeptic, red team and judge truncations have their own `*_truncations` counters, which make the
+review incomplete); a reply that ended normally without the structured answer is an unparseable reply,
+invalid output counted under `*_unparseable_replies` too; a refusal stop or content filter is a refusal;
+an empty reply is an abstention for the reviewers and the context agent and invalid output for the
+ballots. A single ```` ```json ```` code fence around the answer is accepted from any family. Reports
+carry `exchange_version` in the bias audit, and the calibration trend compares only periods of one
+version. The OpenAI-compatible provider never uses the
 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` environment variables: its endpoints are on-prem, and a proxy
 would receive the source code (in cleartext for an `http://` loopback endpoint). `SSL_CERT_FILE` and
 `SSL_CERT_DIR` still apply, for an internal CA.
@@ -582,8 +590,10 @@ provider would put the key in the URL) and GLM with `SSL_CERT_FILE` set to the p
 CyberSecEval at the pinned ref has no Bedrock provider: `plan` lists that as skipped, `run` exits 1 and the
 anthropic family's two CyberSecEval metrics stay missing, so G-8 stays red for it until there is a route.
 `fixtures/model-eval/` holds synthetic outputs for the parser tests. The first live calibration ran on
-2026-10-08 (about four hours for the five samples); a canary echo is judged on complete answers only, because
-three of GLM's four echoes in that run were truncated calls quoting a canary report that never closed.
+2026-10-08 (about four hours for the five samples); a truncation is never a canary echo, because three of
+GLM's four echoes in that run were truncated calls quoting a canary report that never closed. A reply that
+ended normally in plain text is read as prose: the token with the planted file is a canary report, the
+token alone an echo (before v0.4.26 such a reply was filed as a truncation and an echo in it went unrecorded).
 See `docs/model-eval-runbook.md`.
 
 ## Policy, cold standby and rollout templates (governance items G-1, G-4, G-10)
