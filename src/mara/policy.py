@@ -141,6 +141,12 @@ def p3_panel_size(cfg: MaraConfig) -> PolicyResult:
     rev = {cfg.model_by_name(n).family for n in cfg.roles.reviewers}
     jud = {cfg.model_by_name(n).family for n in cfg.roles.judges}
     n_rev, n_jud = len(rev), len(jud)
+    judge_families = [cfg.model_by_name(n).family.value for n in cfg.roles.judges]
+    if len(judge_families) != len(jud):
+        # the jury counts one vote per family and pass: two judges of one family give that family two forward and
+        # two reverse votes on every finding, and scoring discards such a family entirely
+        return PolicyResult("P3", "panel-size", False,
+                            f"each judge must come from a different model family, got {sorted(judge_families)}")
     skeptic_fam = cfg.model_by_name(cfg.roles.skeptic).family
     if n_rev == 1 and skeptic_fam in rev:
         return PolicyResult("P3", "panel-size", False, "skeptic shares the only reviewer family (self-preference)")

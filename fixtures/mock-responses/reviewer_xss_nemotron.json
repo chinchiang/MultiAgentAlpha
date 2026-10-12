@@ -28,7 +28,7 @@
    "provenance": [
     {
      "file": "static/index.html",
-     "line": 11,
+     "line": 12,
      "quote": "document.getElementById(\"greeting\").innerHTML = \"Welcome \" + params.get(\"name\");"
     }
    ],

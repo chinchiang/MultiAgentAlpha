@@ -28,7 +28,7 @@
    "provenance": [
     {
      "file": "static/index.html",
-     "line": 5,
+     "line": 6,
      "quote": "<script src=\"https://cdn.example-cdn.com/lib/angular.min.js\"></script>"
     }
    ],

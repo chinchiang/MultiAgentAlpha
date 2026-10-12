@@ -617,6 +617,7 @@ on push to `main` with `issues: write` only and stays in dry-run until the repos
 mara cvss "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
 mara review <target> --provider mock --mock-fixtures <dir>   # replay another set of mock responses
 python scripts/gen_mock_fixtures.py      # regenerate mock responses after editing the fixture app
+python scripts/gen_mock_fixtures.py --check   # the committed mock responses are current (also a test)
 python scripts/build_html.py             # rebuild the online edition of the report
 python scripts/count_words.py            # 字數統計（正體中文計字，不含附錄A）
 ```

@@ -346,7 +346,7 @@ def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path, monkeypatch)
                 source_family=ModelFamily.ANTHROPIC, source_model="m")
     good = SkepticVerdict(finding_id="F-0001", verdict="stands", reason="r", sanitizer_or_control="none",
                           source_family=ModelFamily.DEEPSEEK, source_model="m")
-    replies = iter([([], ["unexpected_verdict", "incomplete_or_duplicate_response"], 0), ([good], [], 0)])
+    replies = iter([([], ["unexpected_verdict", "incomplete_or_duplicate_response"], 0, 0), ([good], [], 0, 0)])
     monkeypatch.setattr(skeptic, "run_skeptic", lambda *a, **k: next(replies))
     verdicts, abstained = pipe.run_skeptics(RepoContext(root=tmp_path), [f], {"F-0001": {ModelFamily.ANTHROPIC}})
     assert verdicts == [good] and not abstained

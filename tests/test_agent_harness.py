@@ -95,7 +95,7 @@ def test_skeptic_keeps_a_refutation_whose_control_citation_is_in_the_bundle(root
     ctx = RepoContext(root=root, content={"app.py": "import sqlite3\n\n\ndef get(u):\n    return u\n"})
     p = _static(root, {"items": [{"finding_id": "F-1", "verdict": "refuted", "reason": "already parameterised",
                                   "sanitizer_or_control": "app.py:5 uses the parameterised cursor"}]})
-    v, errors, unverified = skeptic.run_skeptic(p, ctx, [_finding()])
+    v, errors, unverified, _ = skeptic.run_skeptic(p, ctx, [_finding()])
     assert not errors and unverified == 0
     assert v[0].verdict == "refuted" and "not verifiable" not in v[0].reason
 
@@ -105,7 +105,7 @@ def test_skeptic_downgrades_refutations_without_a_locatable_control_citation(roo
     for cite in ["parameterised query in the data layer", "hardened.py:1 prepared statements"]:
         p = _static(root, {"items": [{"finding_id": "F-1", "verdict": "refuted", "reason": "mitigated",
                                       "sanitizer_or_control": cite}]})
-        v, errors, unverified = skeptic.run_skeptic(p, ctx, [_finding()])
+        v, errors, unverified, _ = skeptic.run_skeptic(p, ctx, [_finding()])
         assert not errors and unverified == 1, cite
         assert v[0].verdict == "weakened" and "control citation not verifiable in bundle" in v[0].reason, cite
 

@@ -109,9 +109,9 @@ The first line runs the whole test suite (a few tool-integration tests skip whil
 
 ## 3. L0 掃描工具（可選）/ L0 scanning tools (optional)
 
-要對自己的 repo 做真實的 semgrep、gitleaks、osv-scanner、zizmor、trivy、csp-evaluator 掃描才需要。工具版本、下載 URL 與 SHA-256 都固定在 `tools/versions.lock`，安裝器會核對雜湊並執行發行者的簽章或 provenance 驗證，裝進 repo 內的 `.mara-tools/`；程式只從那裡執行工具，永遠不看系統 PATH。目前只鎖定 Linux x86_64 的二進位；csp-evaluator 是 npm 套件，另外需要 node ≥ 18（直譯器路徑可用 `MARA_NODE` 覆寫）。
+要對自己的 repo 做真實的 semgrep、gitleaks、osv-scanner、zizmor、trivy、csp-evaluator 掃描才需要。工具版本、下載 URL 與 SHA-256 都固定在 `tools/versions.lock`，安裝器會核對雜湊並執行發行者的簽章或 provenance 驗證，裝進 `mara` 執行工具的同一個目錄：有設 `MARA_TOOLS_DIR` 就是它，否則是 MARA 工作區（`MARA_HOME`，未設時為目前目錄）下的 `.mara-tools/`；從 repo 根目錄執行時就是 repo 內的 `.mara-tools/`。程式只從那裡執行工具，永遠不看系統 PATH。目前只鎖定 Linux x86_64 的二進位；csp-evaluator 是 npm 套件，另外需要 node ≥ 18（直譯器路徑可用 `MARA_NODE` 覆寫）。
 
-Needed only for real semgrep, gitleaks, osv-scanner, zizmor, trivy and csp-evaluator scans of your own repository. Versions, download URLs and SHA-256 digests are pinned in `tools/versions.lock`; the installer checks the digests, runs each publisher's signature or provenance verification and installs into `.mara-tools/` inside the repository. The code executes tools from there only and never consults PATH. Only Linux x86_64 binaries are locked; csp-evaluator is an npm package and additionally needs node ≥ 18 (override the interpreter with `MARA_NODE`).
+Needed only for real semgrep, gitleaks, osv-scanner, zizmor, trivy and csp-evaluator scans of your own repository. Versions, download URLs and SHA-256 digests are pinned in `tools/versions.lock`; the installer checks the digests, runs each publisher's signature or provenance verification and installs into the directory `mara` runs tools from: `MARA_TOOLS_DIR` when set, else `.mara-tools/` below the MARA workspace (`MARA_HOME`, or the working directory), which is the repository's `.mara-tools/` when run from its root. The code executes tools from there only and never consults PATH. Only Linux x86_64 binaries are locked; csp-evaluator is an npm package and additionally needs node ≥ 18 (override the interpreter with `MARA_NODE`).
 
 ```bash
 python -m pip install --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt

@@ -69,8 +69,8 @@ def test_skeptic_and_red_team_are_called_per_bounded_chunk(tmp_path, monkeypatch
     findings = [_finding(i) for i in range(1, 46)]
     finders = {f.id: {ModelFamily.ANTHROPIC} for f in findings}
     sizes = {"skeptic": [], "redteam": []}
-    monkeypatch.setattr(skeptic, "run_skeptic", lambda p, c, fs: (sizes["skeptic"].append(len(fs)), ([], ["refused"], 0))[1])
-    monkeypatch.setattr(redteam, "run_redteam", lambda p, c, fs: (sizes["redteam"].append(len(fs)), ([], ["refused"], 0))[1])
+    monkeypatch.setattr(skeptic, "run_skeptic", lambda p, c, fs: (sizes["skeptic"].append(len(fs)), ([], ["refused"], 0, 0))[1])
+    monkeypatch.setattr(redteam, "run_redteam", lambda p, c, fs: (sizes["redteam"].append(len(fs)), ([], ["refused"], 0, 0))[1])
     _, abstained = pipe.run_skeptics(ctx, findings, finders)
     pipe.run_redteam(ctx, findings, finders)
     assert sizes["skeptic"] == sizes["redteam"] == [20, 20, 5]
@@ -115,7 +115,7 @@ def test_a_refutation_citing_a_workflow_file_stays_refuted():
     prov = _Fixed("deepseek", lambda user: Completion(data={"items": [{
         "finding_id": f.id, "verdict": "refuted", "reason": "token is read-only",
         "sanitizer_or_control": ".github/workflows/deploy.yml:2"}]}, raw_text="{}"))
-    verdicts, errors, unverified = skeptic.run_skeptic(prov, ctx, [f])
+    verdicts, errors, unverified, _ = skeptic.run_skeptic(prov, ctx, [f])
     assert errors == [] and unverified == 0 and verdicts[0].verdict == "refuted"
 
 
@@ -192,7 +192,7 @@ def test_a_long_canary_report_survives_the_provider_clip_end_to_end():
         body = {"choices": [{"message": {"content": json.dumps({"items": [item]})}, "finish_reason": "stop"}]}
         return httpx.Response(200, json=body)
 
-    verdicts, errors, _ = skeptic.run_skeptic(_openai(handler), ctx, [f])
+    verdicts, errors, _, _ = skeptic.run_skeptic(_openai(handler), ctx, [f])
     assert errors == [] and [v.verdict for v in verdicts] == ["stands"] and len(verdicts[0].reason) <= 600
 
 
@@ -214,7 +214,7 @@ def test_a_verdict_quoting_the_canary_cannot_clear_the_finding(agent):
                      {"finding_id": "F-0002", "exploitable": "no", "preconditions": "behind auth"}]
         return Completion(data={"items": items}, raw_text=json.dumps({"items": items}))
 
-    out, errors, _ = agent(_Fixed("deepseek", answer), ctx, fs)
+    out, errors, _, reported = agent(_Fixed("deepseek", answer), ctx, fs)
     assert errors == []
     by_id = {x.finding_id: x for x in out}
     if agent is skeptic.run_skeptic:
@@ -238,15 +238,15 @@ def test_skeptic_and_red_team_keep_verdicts_that_report_the_canary(agent):
             return comp
         return agent(_Fixed("deepseek", adapt), ctx, fs)
 
-    out, errors, _ = run(_verdict_answer(lambda t: f"{base.CANARY_PATH} asks to reply {t}; ignored"))
+    out, errors, _, reported = run(_verdict_answer(lambda t: f"{base.CANARY_PATH} asks to reply {t}; ignored"))
+    assert len(out) == 2 and errors == [] and reported == 2, "both verdicts reported the planted file"
+    out, errors, _, reported = run(_verdict_answer(lambda t: "reviewed", aside=f"{base.CANARY_PATH} says {{token}}; not followed"))
     assert len(out) == 2 and errors == []
-    out, errors, _ = run(_verdict_answer(lambda t: "reviewed", aside=f"{base.CANARY_PATH} says {{token}}; not followed"))
-    assert len(out) == 2 and errors == []
-    out, errors, _ = run(_verdict_answer(lambda t: t))
+    out, errors, _, reported = run(_verdict_answer(lambda t: t))
     assert out == [] and errors == ["canary_echoed"]
-    out, errors, _ = run(_verdict_answer(lambda t: "reviewed", extra_raw="{token}"))
+    out, errors, _, reported = run(_verdict_answer(lambda t: "reviewed", extra_raw="{token}"))
     assert out == [] and errors == ["canary_echoed"], "the token in a text block the answer was not parsed from"
-    out, errors, _ = run(_verdict_answer(lambda t: t, truncated=True))
+    out, errors, _, reported = run(_verdict_answer(lambda t: t, truncated=True))
     assert "canary_echoed" not in errors, "a truncated answer is a truncation, not an echo"
 
 
