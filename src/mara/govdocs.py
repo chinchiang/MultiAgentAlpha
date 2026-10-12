@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -79,19 +80,34 @@ class PolicyStatus:
     statements: dict[str, bool]
 
 
+def _statement_present(body: str, sid: str) -> bool:
+    """True when text follows the `<!-- policy:<sid> -->` marker before the next marker or heading.
+
+    The statement is the marker's own text: the first line after it that is neither blank nor an HTML
+    comment, and it must say something (a letter or digit). Reaching another `<!-- policy:… -->` marker
+    or a heading first means the statement is empty. Taking "the first non-heading paragraph after the
+    marker" used to accept six markers in a row with no text, or borrow the paragraph of the next
+    section."""
+    marker = f"<!-- policy:{sid} -->"
+    idx = body.find(marker)
+    if idx < 0:
+        return False
+    for line in body[idx + len(marker):].splitlines():
+        s = line.strip()
+        if s.startswith("<!-- policy:") or s.startswith("#"):
+            return False
+        if not s or (s.startswith("<!--") and s.endswith("-->")):
+            continue
+        return re.search(r"\w", s) is not None
+    return False
+
+
 def policy_status(path: Path | str, today: dt.date) -> PolicyStatus:
     p = Path(path)
     if not p.exists():
         return PolicyStatus(False, "missing", (f"{p} does not exist",), {}, {})
     meta, body = read_front_matter(p)
-    statements = {}
-    for sid in POLICY_REQUIRED:
-        marker = f"<!-- policy:{sid} -->"
-        idx = body.find(marker)
-        after = body[idx + len(marker):].strip() if idx >= 0 else ""
-        # the statement is the first non-heading paragraph after the marker
-        para = next((blk.strip() for blk in after.split("\n\n") if blk.strip() and not blk.strip().startswith("#")), "") if idx >= 0 else ""
-        statements[sid] = bool(para)
+    statements = {sid: _statement_present(body, sid) for sid in POLICY_REQUIRED}
     problems = [f"statement {sid} ({POLICY_STATEMENTS[sid]}) missing or empty" for sid, ok in statements.items() if not ok]
     status = str(meta.get("status", "draft")).lower()
     approved_on = _date(meta.get("approved_on"))

@@ -54,6 +54,39 @@ def test_policy_status_states(tmp_path):
     assert govdocs.policy_status(tmp_path / "none.md", TODAY).state == "missing"
 
 
+def test_an_empty_statement_never_counts_as_present(tmp_path):
+    """Six markers on consecutive lines and no text used to pass G-1 as approved: the "first non-heading
+    paragraph after the marker" was the next marker, or the paragraph of the following section."""
+    front = ('---\npolicy_id: MARA-POL-001\nstatus: approved\napproved_by: "pso-login"\napproved_on: "2026-09-01"\n'
+             'review_by: "2027-09-01"\n---\n')
+    p = tmp_path / "policy.md"
+    markers_only = front + "\n".join(f"<!-- policy:{s} -->" for s in govdocs.POLICY_REQUIRED) + "\n"
+    p.write_text(markers_only, encoding="utf-8")
+    st = govdocs.policy_status(p, TODAY)
+    assert not st.ok and st.state == "incomplete" and not any(st.statements.values()), st.statements
+
+    def doc(statements: dict[str, str]) -> str:
+        return front + "".join(f"## {s}\n\n<!-- policy:{s} -->\n{statements.get(s, 'Real text for ' + s + '.')}\n\n"
+                               for s in govdocs.POLICY_REQUIRED)
+
+    p.write_text(doc({}), encoding="utf-8")
+    assert govdocs.policy_status(p, TODAY).ok, "the control: six statements with text pass"
+    cases = {
+        "S1": "",                                   # straight into the next section's heading: the S2 paragraph is not S1's
+        "S2": "<!-- TODO: write this -->",          # a comment is not a statement
+        "S3": "  \n   ",                            # blank lines only
+        "S4": "---",                                # no letter or digit
+        "S6": "",                                   # the last marker, at the end of the document
+    }
+    p.write_text(doc(cases), encoding="utf-8")
+    st = govdocs.policy_status(p, TODAY)
+    assert {s for s, ok in st.statements.items() if not ok} == set(cases) and st.statements["S5"]
+    assert st.state == "incomplete" and all(f"statement {s}" in " ".join(st.problems) for s in cases)
+    # a comment or a blank line before the text is fine; the text itself counts, in any script
+    p.write_text(doc({"S1": "<!-- reviewed by legal -->\n\n自動審查是安全測試的一部分。"}), encoding="utf-8")
+    assert govdocs.policy_status(p, TODAY).statements["S1"]
+
+
 # ---------------------------------------------------------------- G-4
 
 def test_standby_configs_swap_exactly_one_family_and_pass_policies():
