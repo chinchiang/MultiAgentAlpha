@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from collections import Counter
 from typing import Literal
@@ -80,11 +79,10 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     # the skeptic reads raw repository files like a reviewer, and its verdict can clear a finding: an
     # injection that drives refutations must be as detectable as one that silences a reviewer
     canary = base.Canary()
-    user = (
-        f"Repository summary: {ctx.summary()}\n\n{base.untrusted_block(ctx, canary, shown)}\n\n"
-        "Findings to refute.\nBEGIN_JSON_ARRAY\n" + json.dumps([_view(f) for f in findings], ensure_ascii=False)
-    )
-    outcome = exchange.call(provider, system_extra=base.load_prompt("skeptic"), user=user, schema=SKEPTIC_SCHEMA, role="skeptic")
+    # the findings carry verified, hence attacker-writable, repository quotes: derived data, fenced
+    outcome = exchange.ask(provider, role="skeptic", system_extra=base.load_prompt("skeptic"), schema=SKEPTIC_SCHEMA,
+                           lead="Findings to refute: every finding in the findings block below, by finding_id.",
+                           ctx=ctx, canary=canary, paths=shown, derived=(exchange.Derived("findings", [_view(f) for f in findings]),))
     # the token in a verdict that also names the planted file reports it (tainted: it cannot refute); anywhere
     # else the model followed it
     echoed, tainted = canary.screen_verdicts(outcome)

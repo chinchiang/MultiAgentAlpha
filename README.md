@@ -230,7 +230,12 @@ invalid output counted under `*_unparseable_replies` too; a refusal stop or cont
 an empty reply is an abstention for the reviewers and the context agent and invalid output for the
 ballots. A single ```` ```json ```` code fence around the answer is accepted from any family. Reports
 carry `exchange_version` in the bias audit, and the calibration trend compares only periods of one
-version. The OpenAI-compatible provider never uses the
+version. The same module lays every role's prompt out (`build_prompt`): only MARA's own instructions
+stand outside a fence; repository data - the files, and the repository summary, whose names and routes
+come from the repository - is inside `<untrusted_repository_data>`, and derived data - the context facts
+for the reviewers, the findings with their verbatim quotes for the skeptic, red team and judges - inside
+`<derived_data kind="...">` with `<`, `>` and `&` escaped (`tests/test_prompt_fences.py` plants a sentinel in
+every repository-derived field and checks every role's prompt). The OpenAI-compatible provider never uses the
 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` environment variables: its endpoints are on-prem, and a proxy
 would receive the source code (in cleartext for an `http://` loopback endpoint). `SSL_CERT_FILE` and
 `SSL_CERT_DIR` still apply, for an internal CA.
@@ -262,8 +267,8 @@ and any refused, echoed or unusable batch voids the view). Every fact must
 cite a bundle file:line with a verbatim quote and passes the same provenance check as findings;
 unverifiable items are dropped and counted, and a refusal, an echoed canary or a view with no
 verifiable fact leaves the reviewers without context facts and marks the run incomplete. The
-architecture and authn_authz reviewers receive the verified facts as a `<context_facts>` block that
-is labelled, like the bundle, as untrusted data: the quote check proves only that the quoted text
+architecture and authn_authz reviewers receive the verified facts as a `<derived_data kind="context_facts">`
+block that is labelled, like the bundle, as untrusted data: the quote check proves only that the quoted text
 exists, and that text is repository content (the seeded README's "already passed security review"
 note would pass it), so the block is never presented as trusted context or as an instruction.
 `<`, `>` and `&` are escaped inside it, so a quote cannot close it early.

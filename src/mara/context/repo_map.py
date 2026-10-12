@@ -69,11 +69,11 @@ def bundle_cost(rel: str, text: str) -> int:
     return len(text) + len(text.splitlines()) * 8 + len(rel) + 50
 
 
-# The tags that delimit untrusted data in a prompt. A repository file holding `</file>` or
-# `</untrusted_repository_data>` would otherwise close the fence early and make what follows read as
-# instructions; inside a bundled file their `<` is shown as `&lt;`. Only these tags change, so quotes from
-# every other line stay verbatim (verify_quote accepts a quote of an escaped line in either form).
-_FENCE_TAG = re.compile(r"<(?=/?\s*(?:file|untrusted_repository_data|context_facts)\b)", re.IGNORECASE)
+# The tags that delimit untrusted data in a prompt (mara.exchange.build_prompt). A repository file holding
+# `</file>`, `</untrusted_repository_data>` or `</derived_data>` would otherwise close the fence early and make
+# what follows read as instructions; inside a bundled file their `<` is shown as `&lt;`. Only these tags change, so
+# quotes from every other line stay verbatim (verify_quote accepts a quote of an escaped line in either form).
+_FENCE_TAG = re.compile(r"<(?=/?\s*(?:file|untrusted_repository_data|derived_data)\b)", re.IGNORECASE)
 
 
 def fence_safe(text: str) -> str:
@@ -149,10 +149,11 @@ class RepoContext:
         return "\n".join(parts)
 
     def summary(self) -> str:
-        """One line of repository facts. It precedes the <untrusted_repository_data> fence in every prompt,
-        yet the names and routes in it come from the repository: the fence tags in it are defused like in
-        the bundle, and the entry points are bounded (at most SUMMARY_ENTRY_POINTS, each a whitespace-free
-        route of at most MAX_ENTRY_POINT_CHARS, see build_context) so no file can grow it past a request."""
+        """One line of repository facts. The names and routes in it come from the repository, so it is
+        repository data: mara.exchange puts it inside the <untrusted_repository_data> fence, its fence tags
+        are defused like in the bundle, and the entry points are bounded (at most SUMMARY_ENTRY_POINTS, each a
+        whitespace-free route of at most MAX_ENTRY_POINT_CHARS, see build_context) so no file can grow it past
+        a request."""
         langs = ", ".join(f"{k}:{v}" for k, v in sorted(self.languages.items(), key=lambda kv: -kv[1]))
         shown = self.entry_points[:SUMMARY_ENTRY_POINTS]
         more = len(self.entry_points) - len(shown)

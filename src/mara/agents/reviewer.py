@@ -57,20 +57,14 @@ CONTEXT_DIMENSIONS = ("architecture", "authn_authz")
 def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canary: base.Canary,
                      context_view: ContextView | None = None) -> tuple[list[Finding], dict]:
     system_extra = base.load_prompt(f"reviewer_{dimension}")
-    facts = ""
+    derived: tuple[exchange.Derived, ...] = ()
     if context_view is not None and dimension in CONTEXT_DIMENSIONS:
         # the C4-lite view (assessment #19): boundaries a reviewer must reason about, derived
-        # by a separate context agent and quote-verified; JSON keeps the block structure-pure.
-        # It is data derived from the untrusted bundle, and labelled so (facts_block)
-        facts = context_view.facts_block() + "\n\n"
-    user = (
-        f"Dimension under review: {DIMENSION_LABELS[dimension]}\n"
-        f"Repository summary: {ctx.summary()}\n\n"
-        f"{facts}"
-        f"{base.untrusted_block(ctx, canary)}\n\n"
-        "Return {\"findings\": [...]} following the schema."
-    )
-    outcome = exchange.call(provider, system_extra=system_extra, user=user, schema=FINDING_SCHEMA, role=f"reviewer:{dimension}")
+        # by a separate context agent and quote-verified. It is derived data: fenced like the repository
+        derived = (context_view.derived(),)
+    outcome = exchange.ask(provider, role=f"reviewer:{dimension}", system_extra=system_extra, schema=FINDING_SCHEMA,
+                           lead=f"Dimension under review: {DIMENSION_LABELS[dimension]}", ctx=ctx, canary=canary, derived=derived,
+                           close="Return {\"findings\": [...]} following the schema.")
     # a finding that cites the planted file reports the injection attempt (resisting it); it is set aside, and
     # only the token anywhere else in the answer counts as an echo
     data, echoed, reported = canary.screen(outcome, ("findings",))

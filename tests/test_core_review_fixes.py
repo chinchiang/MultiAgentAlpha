@@ -125,7 +125,7 @@ def test_a_refutation_citing_a_workflow_file_stays_refuted():
 def _verdict_answer(reason_for_token, *, aside: str = "", extra_raw: str = "", truncated: bool = False):
     def answer(user):
         token = TOKEN_RE.search(user).group()
-        ids = re.findall(r'"finding_id": "([^"]+)"', user.split("BEGIN_JSON_ARRAY", 1)[1])
+        ids = [f["finding_id"] for f in exchange.read_derived(user, "findings")]
         items = [{"finding_id": i, "verdict": "stands", "reason": reason_for_token(token), "sanitizer_or_control": ""} for i in ids]
         data = {"items": items}
         # every text block besides the answer is aside (mara.exchange): the prose around a call and any other block

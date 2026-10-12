@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from collections import Counter
 from typing import Literal
@@ -110,12 +109,10 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         for f in findings
     ]
     canary = base.Canary()  # raw repository files again: an injection steering exploitability must show
-    user = (
-        f"Repository summary: {ctx.summary()}\n\n"
-        f"{base.untrusted_block(ctx, canary, sorted({p.file for f in findings for p in f.provenance}))}\n\nFindings.\nBEGIN_JSON_ARRAY\n"
-        + json.dumps(view, ensure_ascii=False)
-    )
-    outcome = exchange.call(provider, system_extra=base.load_prompt("redteam"), user=user, schema=REDTEAM_SCHEMA, role="redteam")
+    outcome = exchange.ask(provider, role="redteam", system_extra=base.load_prompt("redteam"), schema=REDTEAM_SCHEMA,
+                           lead="Findings to probe: every finding in the findings block below, by finding_id.",
+                           ctx=ctx, canary=canary, paths=sorted({p.file for f in findings for p in f.provenance}),
+                           derived=(exchange.Derived("findings", view),))
     echoed, tainted = canary.screen_verdicts(outcome)  # same rule as the skeptic's (exchange.Canary.screen_verdicts)
     if echoed:
         return [], ["canary_echoed"], 0, 0  # followed the planted instruction: none of its notes counts
