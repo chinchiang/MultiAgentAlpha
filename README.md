@@ -308,16 +308,17 @@ instead of falling back to the weaker default.
 
 ## Gap assessment (Appendix E, prompt 3)
 
-Four runs score this repository's review process against the 60-question questionnaire in
+Five runs score this repository's review process against the 60-question questionnaire in
 `docs/appendix-d-maturity.md`: `docs/assessment-2026-09-12.md` (134/240), `docs/assessment-2026-09-26.md`
 (152/240, L0 up from 13 to 23 now that the scanners run blocking from the lock), `docs/assessment-2026-10-01.md`
-(170/240, twelve questions up after v0.3.10–v0.3.12) and the current `docs/assessment-2026-10-03.md` (171/240,
+(170/240, twelve questions up after v0.3.10–v0.3.12), `docs/assessment-2026-10-03.md` (171/240,
 incremental review now runs in CI; the v0.3.13–v0.3.15 hardening — gate validation, the semgrep relock that
 removed thirteen expiring exceptions, corroboration dimension limits, content-ordered finding ids — strengthened
 evidence without crossing a scoring line; L5 lowest at 24, L0 next at 27 — the recorded blocker is the first
-real-family run, not code). A fifth run, `docs/assessment-2026-10-12.md`, is a **draft awaiting the owner's review**:
-its proposed total is 172/240 (question 59 up after the first live calibration), and until it is reviewed the
-2026-10-03 run stays the current one. Each run has a file-level
+real-family run, not code) and the current `docs/assessment-2026-10-12.md` (171/240, drafted by Claude Code and
+reviewed by the owner: the first live calibration and the v0.4.x fixes strengthen the evidence of fourteen questions
+without crossing a scoring line; question 59 stays at 1 because the suggested weights have not been applied; L5 still
+lowest at 24 — what is missing now is a second live calibration, human decisions and a live swap drill). Each run has a file-level
 evidence cell on every row, per-layer totals, the two lowest questions per layer mapped to governance
 items G-1 to G-13, and a separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <file>` checks the
 acceptance criteria (all 60 rows scored with evidence, layer sums consistent, CN rows present) and

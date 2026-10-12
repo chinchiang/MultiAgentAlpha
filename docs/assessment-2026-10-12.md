@@ -1,8 +1,6 @@
-# 六層差距評估（2026-10-12，草稿）
+# 六層差距評估（2026-10-12）
 
-> **草稿（DRAFT）。** 本檔由 Claude Code 依 repo 現況起草，**每題分數都是建議值，尚未經 owner 審閱**；與 2026-10-03 不同或需要判斷的題目在證據欄標有「審閱提示」或「建議維持」。審閱後請移除本段並把標題的「草稿」拿掉。
-
-依附錄 D 的 60 題問卷（`docs/appendix-d-maturity.md`），對本組織目前的程式碼審查流程做差距評估。本檔是 `docs/assessment-2026-10-03.md` 的重跑；基準為 main 的 `a64e78c`（v0.4.14），涵蓋 v0.3.16 到 v0.4.14：正式面板改為 Bedrock 上的 Claude Opus 5.5、Gemini 3.8 Flash 與自架 GLM（v0.4.2），第一次對真實端點的 live 審查與其揭露缺陷的修正（v0.4.4、v0.4.5），G-8 接上正式面板（v0.4.6，尚未執行），第一次 live 校準（v0.4.8，G-9 通過），以及 2026-10-12 程式碼審查後的修正（v0.4.10–v0.4.14）。
+依附錄 D 的 60 題問卷（`docs/appendix-d-maturity.md`），對本組織目前的程式碼審查流程做差距評估。本檔由 Claude Code 起草、owner 審閱定稿（2026-10-12；第 59 題由建議的 2 分改回 1 分）。本檔是 `docs/assessment-2026-10-03.md` 的重跑；基準為 main 的 `a64e78c`（v0.4.14），涵蓋 v0.3.16 到 v0.4.14：正式面板改為 Bedrock 上的 Claude Opus 5.5、Gemini 3.8 Flash 與自架 GLM（v0.4.2），第一次對真實端點的 live 審查與其揭露缺陷的修正（v0.4.4、v0.4.5），G-8 接上正式面板（v0.4.6，尚未執行），第一次 live 校準（v0.4.8，G-9 通過），以及 2026-10-12 程式碼審查後的修正（v0.4.10–v0.4.14）。
 
 ## 0. 評估範圍、證據與規則
 
@@ -37,7 +35,7 @@
 | 7 | 工具版本固定並有簽章或雜湊驗證 | 3 | `tools/versions.lock` 固定九個工具（含驗證器 cosign、slsa-verifier）與 semgrep-rules，`scripts/install_tools.py` 對每個資產驗 SHA-256，再驗發行者簽章／provenance（cosign keyless、SLSA、GitHub attestation、GPG commit 簽章；見 `docs/tools-provenance.md`）；`runner.py::tool_path` 只用工具目錄的 `bin`、不查 PATH；v0.4.14 起 `install_tools.py` 的預設安裝目錄與 runner 一致（`MARA_TOOLS_DIR`，否則 MARA 工作區下的 `.mara-tools`），先前設了 `MARA_TOOLS_DIR` 時工具會裝到 runner 不看的位置；Python 閉包全以 `--require-hashes` 安裝；全部 action 固定到完整 SHA（`docs/actions-inventory-2026-10-12.md`）。治理檢查 G-5 通過。缺口：gitleaks 與 semgrep 上游無簽章，只有雜湊；garak 閉包的 multidict 為手動套用的單條修補，待完整 relock |
 | 8 | 工具在隔離 runner 執行，與模型呼叫分屬不同 job | 3 | `deterministic-tools`、`code-scanning`、`tests-and-mock-review`、`human-queue` 四個 job 各自宣告最小權限、`persist-credentials: false`；有 `security-events: write` 的 job 不 checkout、不執行 repo 程式（F26，`tests/test_security_regressions.py::test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate`）。v0.3.14 起九個 job 全部設 `timeout-minutes`（45／30／20／10 分），卡住的步驟不會燒到 360 分鐘預設上限，`scripts/actions_inventory.py` 把缺 timeout 列為 Low finding、測試把關。備註同前次：模型 job 讀的是 repo 內預錄的 SARIF，不是 L0 job 的 artifact |
 | 9 | 工具結果上傳至集中式 code scanning 或等效系統 | 2 | `code-scanning` job 以 `scripts/code_scanning_prep.py` 在唯讀 job 中預處理後用 `github/codeql-action/upload-sarif` 上傳六個工具的 SARIF（含 `mara-l0/csp/` category；`tests/test_code_scanning_prep.py`；v0.3.15 起 action 為 v4.38.2，SHA 經 `git ls-remote` 驗證為 tag 的 peeled commit）；但私有期間以 `!github.event.repository.private` 跳過，目前 SARIF 只留在 `l0-sarif`／`code-scanning` artifact |
-| 10 | 工具結果作為模型審查的校準集使用 | 2 | `scripts/calibration_run.py` 在 review 迴圈後對每個 `calib/samples/*` 以鎖定工具跑 semgrep／osv-scanner／gitleaks，`scripts/calibrate.py::load_tool_labels` 讀取作為第二組參考標籤，報告 §1a 列每家族對工具 finding 的召回率；`tests/test_calibration.py` 涵蓋。2026-10-08 第一次 live 校準實際使用（`docs/calibration-2026-10-08.md`：`tool_labels: 40`）。建議維持 2 分：校準迴圈不是 CI 必要 check，只有一次 live 執行、沒有跨期紀錄 |
+| 10 | 工具結果作為模型審查的校準集使用 | 2 | `scripts/calibration_run.py` 在 review 迴圈後對每個 `calib/samples/*` 以鎖定工具跑 semgrep／osv-scanner／gitleaks，`scripts/calibrate.py::load_tool_labels` 讀取作為第二組參考標籤，報告 §1a 列每家族對工具 finding 的召回率；`tests/test_calibration.py` 涵蓋。2026-10-08 第一次 live 校準實際使用（`docs/calibration-2026-10-08.md`：`tool_labels: 40`）。維持 2 分：校準迴圈不是 CI 必要 check，只有一次 live 執行、沒有跨期紀錄 |
 
 ### L1 情境建構層
 
@@ -67,7 +65,7 @@
 | 27 | 標準條文 ID 對照 pinned 的機器可讀清單驗證 | 3 | `scoring/idcheck.py::check_finding_refs` 對照 `src/mara/groundtruth/*.json`；`docs/groundtruth-diff-2026-09-21.md` 為首次季度核對並已套用 ASVS 5.0.0 V17；`tests/test_bias_and_scoring.py::test_idcheck_strips_nonexistent_refs`。v0.3.15：回傳改為 `RefCheck(finding, stripped, unknown_cwe)`，`standard_refs_stripped` 只計真正被剝除的 refs，未知 CWE 另計（`bias_audit["unknown_cwe"]`），計數不再混淆。只有一次核對，未達跨期量測 |
 | 28 | 模型的自報信心不直接進入任何計算 | 3 | `schemas.py::Finding.model_confidence` 註解「never used directly」；`grep model_confidence src/mara` 只出現在 schema、reviewer 解析、mock 回覆與 `blinding.py` 的「deliberately absent」註解，`pipeline.py` 與 `scoring/` 皆未讀取 |
 | 29 | 審查者拒答被記錄為棄權而非零 finding | 3 | v0.3.10（PR #52）實作：`agents/base.py::parse_items` 把 `refused_or_empty` 拆成拒答與空輸出分開計數；skeptic／redteam／judge／context 的 calls、refusals、invalid items 各有總數與 per-family 版本進 `bias_audit` 與 `incomplete_reasons`。拒答視為棄權：skeptic 拒答的 finding 不再靠它升 B 級（`skeptic_abstained` 原因進人工佇列），judge 任一 pass 拒答計 `judge_refusals`；reviewer 層的 `reviewer_refusals[family]`、`reviewer_truncations[family]` 維持使審查未完成、gate 阻擋。v0.3.15 起空回應的雙層語義（reviewer/context 記拒答、skeptic/judge/redteam 記無效）在 `parse_items` 文件化為刻意設計，兩者皆 fail-closed |
-| 30 | 每個模型家族的無效輸出率被追蹤 | 3 | `judge_invalid_items[family]`、`skeptic_invalid_items[family]`、`redteam_invalid_items[family]` 與 reviewer 層計數一起進 `bias_audit`；`scripts/calibrate.py::audit_rates` 彙整全部角色的 per-family 拒答與無效率表，`suggest_weights` 對無效率超過 10% 的家族乘 0.8。2026-10-08 的 live 校準第一次產生真實數字（GLM 無效率 10.80%，建議權重因此折抵；`docs/calibration-2026-10-08.md` §2、§5），v0.4.5 依該次觀察加上 L3／L4 格式錯誤時重試一次（`<role>_retries`）。審閱提示：已有一次量測並據以改善，但尚無跨期紀錄，建議維持 3 分 |
+| 30 | 每個模型家族的無效輸出率被追蹤 | 3 | `judge_invalid_items[family]`、`skeptic_invalid_items[family]`、`redteam_invalid_items[family]` 與 reviewer 層計數一起進 `bias_audit`；`scripts/calibrate.py::audit_rates` 彙整全部角色的 per-family 拒答與無效率表，`suggest_weights` 對無效率超過 10% 的家族乘 0.8。2026-10-08 的 live 校準第一次產生真實數字（GLM 無效率 10.80%，建議權重因此折抵；`docs/calibration-2026-10-08.md` §2、§5），v0.4.5 依該次觀察加上 L3／L4 格式錯誤時重試一次（`<role>_retries`）。已有一次量測並據以改善，但尚無跨期紀錄，維持 3 分 |
 
 ### L3 對抗驗證層
 
@@ -96,7 +94,7 @@
 | 46 | judge 之間沒有通訊 | 3 | `run_jury` 每個 judge 各自收到盲化批次，投票獨立收集 |
 | 47 | judge 家族至少三個且來自不同供應商 | 3 | `config/mara.yaml` 的 `judges` 為 anthropic（Bedrock 上的 Claude Opus 5.5）、gemini（Gemini 3.8 Flash，付費 API）、glm（IEC 內網自架），三個不同供應商；`policy.py` P3 強制 ≥ 3 且各來自不同家族。v0.4.4 起真實三家族已對真實端點審查，2026-10-08 完成第一次 live 校準（`docs/calibration-2026-10-08.md`，治理檢查 G-9 通過）。三個家族各有冷備援設定（`config/examples/standby-for-*.yaml`，以閘道的 DeepSeek 替代）並各完成一次 mock 排練（`ops/model-swap-drills.yaml`）；live 換模演練仍缺（G-4 失敗） |
 | 48 | judge 家族的兩兩一致率被追蹤 | 3 | `bias/diversity.py::pairwise_family_agreement` 寫入 `bias_audit["judge_agreement[a~b]"]`；`scripts/calibrate.py::judge_agreement` 彙整 |
-| 49 | Krippendorff's α 或等效指標對每次審查計算 | 3 | `consensus.py::krippendorff_alpha_nominal` 算語料層級 α 寫入 `bias_audit["global_krippendorff_alpha"]`；單一 finding 記 `pipeline.py::_agreement_proxy`；跨期可比性機制（`calib/history.json` 僅 live 記錄、報告 §8 差值與紅字警告）。2026-10-08 的第一次 live 校準寫入第一期 baseline；尚無第二期可比較，建議維持 3 分 |
+| 49 | Krippendorff's α 或等效指標對每次審查計算 | 3 | `consensus.py::krippendorff_alpha_nominal` 算語料層級 α 寫入 `bias_audit["global_krippendorff_alpha"]`；單一 finding 記 `pipeline.py::_agreement_proxy`；跨期可比性機制（`calib/history.json` 僅 live 記錄、報告 §8 差值與紅字警告）。2026-10-08 的第一次 live 校準寫入第一期 baseline；尚無第二期可比較，維持 3 分 |
 | 50 | α 低於門檻的 finding 進入人工佇列而非投票決定 | 3 | `pipeline.py::score` 在 `agreement_proxy < human_alpha_threshold` 時加 `agreement_below_threshold`，該 finding 不被接受；`human_queue_out.py::build_queue` 產生 `ReviewReport.human_queue: list[HumanQueueItem]`，`sarif_out.py` 為其 result 設 `level: note` 與 `properties.humanQueue`。v0.3.14 修復收緊機制：`score()` 的 `tier_c_high` 原因改為尊重 `tighten_exclude_tier_c` 與 `queue_tier_c_min_severity`（先前無條件附加使收緊分支成為死碼、backlog 上限被架空），backlog 超量時 alpha 門檻提高、tier C 交由陪審共識決定且不再排入佇列，`tests/test_human_queue.py` 涵蓋收緊前後四種組合；`tightening` 只收緊不放寬（`test_tightening_only_when_backlog_is_over_the_limit`） |
 
 ### L5 評分與輸出層
@@ -111,8 +109,8 @@
 | 56 | 輸出為 SARIF 2.1 並上傳 code scanning | 2 | `report/sarif_out.py` 產出 SARIF 2.1（v0.3.13 起不再輸出永遠為 null 的 `krippendorffAlpha`，agreement proxy 照常）；MARA 報告的 SARIF 只存於 `mara-report` artifact，`mara-review.yml` 註明 mock review 報告描述種子材料、不上傳；L0 的 code scanning 上傳在私有期間也跳過 |
 | 57 | 每份報告含偏誤稽核區塊（拒答、canary、翻轉、折半票） | 3 | `markdown_out.py` 的「Bias and integrity audit」逐項列出 `bias_audit`：`reviewer_refusals`、`reviewer_truncations`、`canary_echoes`、`position_flips`、`self_family_fallback_votes`、`self_preference_exclusions`、`judge_agreement[*]`，發生時另有 `skeptic_same_family`／`redteam_same_family`；v0.3.10 起拒答與無效輸出按角色、按家族分列；`tests/test_pipeline_mock.py::test_reports_render` |
 | 58 | 人工佇列接工單系統且裁決回寫校準集 | 2 | `scripts/human_queue_issues.py` 以 v2 key 為每項建立或更新 issue，`--sync-decisions` 重播 label 事件寫回 `calib/decisions/`（F18、F19）；`scripts/calibrate.py::load_decisions`／`apply_decisions` 讀取；`mara-review.yml` 的 `human-queue` job 在 push main 時執行；`tests/test_human_queue.py::test_tickets_are_created_once_and_decisions_come_back`、`test_calibration_uses_true_positive_decisions_as_labels`；治理檢查 G-11 通過。但 repo 變數 `MARA_HUMAN_QUEUE_ISSUES` 未設定，job 一直是 `--dry-run`，沒有任何 `mara-human-queue` issue；`calib/decisions/` 只有 README；`training/records.yaml` 0 筆而 `require_trained_adjudicator: true`，任何裁決都不會進校準 |
-| 59 | 家族權重每季依校準更新 | 2 | `scripts/calibrate.py::suggest_weights` 產出建議權重且不改設定檔；2026-10-08 的 live 校準第一次以真實家族算出建議值（anthropic 1.37、gemini 1.34、glm 1.08；`docs/calibration-2026-10-08.md` §5），但 `config/mara.yaml` 三家族仍為 `weight: 1.0`，尚無依校準更新權重的紀錄，也沒有人工裁決參與。**審閱提示：建議由 1 升為 2**（有真實數據與文件化的更新程序，但未實際更新）；若以「權重從未更新」為準，維持 1 |
-| 60 | 校準通過統計檢定後才允許無監督的「不採納」 | 2 | `scripts/calibrate.py::alternative_annotator_test` 以 `calib/decisions/` 的人工裁決為對照跑 Alternative Annotator Test，結果進 front matter `aat` 與報告 §7；`GateConfig.unsupervised_reject_allowed` 預設 `false`，`policy.py` P8 只允許在 `calib/latest.json` 記錄 90 天內檢定通過時設為 `true`；為 `false` 時非 D 級的 `accepted=False` finding 一律進人工佇列。2026-10-08 的 live 校準在真實資料上跑了 AAT，結果「未通過」（沒有可對照的人工裁決），`calib/latest.json` 如實記錄；P8 目前不允許任何無監督不採納。建議維持 2 分 |
+| 59 | 家族權重每季依校準更新 | 1 | `scripts/calibrate.py::suggest_weights` 產出建議權重且不改設定檔；2026-10-08 的 live 校準第一次以真實家族算出建議值（anthropic 1.37、gemini 1.34、glm 1.08；`docs/calibration-2026-10-08.md` §5），但 `config/mara.yaml` 三家族仍為 `weight: 1.0`：權重從未依校準更新，也沒有人工裁決參與。owner 審閱維持 1 分——有真實數據，但「更新」本身尚未發生 |
+| 60 | 校準通過統計檢定後才允許無監督的「不採納」 | 2 | `scripts/calibrate.py::alternative_annotator_test` 以 `calib/decisions/` 的人工裁決為對照跑 Alternative Annotator Test，結果進 front matter `aat` 與報告 §7；`GateConfig.unsupervised_reject_allowed` 預設 `false`，`policy.py` P8 只允許在 `calib/latest.json` 記錄 90 天內檢定通過時設為 `true`；為 `false` 時非 D 級的 `accepted=False` finding 一律進人工佇列。2026-10-08 的 live 校準在真實資料上跑了 AAT，結果「未通過」（沒有可對照的人工裁決），`calib/latest.json` 如實記錄；P8 目前不允許任何無監督不採納。維持 2 分 |
 
 ## 2. 六層彙總
 
@@ -123,10 +121,10 @@
 | L2 專家審查層 | 30 | 40 | 75.0% | 否 |
 | L3 對抗驗證層 | 30 | 40 | 75.0% | 否 |
 | L4 陪審裁決層 | 30 | 40 | 75.0% | 否 |
-| L5 評分與輸出層 | 25 | 40 | 62.5% | 否 |
-| 合計 | 172 | 240 | 71.7% | |
+| L5 評分與輸出層 | 24 | 40 | 60.0% | 否 |
+| 合計 | 171 | 240 | 71.3% | |
 
-**附錄 D 的解讀（草稿）。** 建議合計 172，仍在 120 到 180 的「單模型階段」區間。相較 2026-10-03 的 171，只有第 59 題建議 1→2（live 校準第一次算出真實的建議權重，但未套用）；其餘各題的證據都因 live 執行與 v0.4.x 的修正而變強，但沒有跨過評分線：所有 3 分仍缺跨期量測，無題目達 4 分。
+**附錄 D 的解讀。** 合計 171，與 2026-10-03 相同，仍在 120 到 180 的「單模型階段」區間。各題的證據都因 live 執行與 v0.4.x 的修正而變強，但沒有跨過評分線：第 59 題雖有 live 校準算出的建議權重，權重本身從未更新，維持 1 分；所有 3 分仍缺跨期量測，無題目達 4 分。
 
 一句話結論：**真實三家族已跑過一次完整校準（G-9 通過），但只有一期、沒有人工裁決、權重未套用；升到 4 分的前提是第二期 live 校準、人工佇列離開 dry-run 與受訓裁決者（G-13）。**
 
@@ -164,7 +162,7 @@ L4 十題全為 3 分；升到 4 分都需要真實、跨期的量測，以下�
 
 ### L5
 
-**第 59 題（建議 2 分）權重每季更新。** 決定是否把 2026-10-08 的建議權重（1.37／1.34／1.08）以 PR 寫回 `config/mara.yaml`（附校準報告連結）；51 個標籤只能視為方向，因此也可以決定等第二期與人工裁決。人工裁決的前提：設定 `MARA_HUMAN_QUEUE_ISSUES=true` 讓 `human-queue` job 離開 dry-run，至少一位裁決者以 `scripts/training_register.py` 登錄 adjudicator 訓練。對應 **G-9**（已通過）、**G-13**（失敗；未受訓者的裁決不進校準）與 **G-11**（已通過，但目前只有結構、沒有任何工單）。
+**第 59 題（1 分）權重每季更新。** 決定是否把 2026-10-08 的建議權重（1.37／1.34／1.08）以 PR 寫回 `config/mara.yaml`（附校準報告連結）；51 個標籤只能視為方向，因此也可以決定等第二期與人工裁決。人工裁決的前提：設定 `MARA_HUMAN_QUEUE_ISSUES=true` 讓 `human-queue` job 離開 dry-run，至少一位裁決者以 `scripts/training_register.py` 登錄 adjudicator 訓練。對應 **G-9**（已通過）、**G-13**（失敗；未受訓者的裁決不進校準）與 **G-11**（已通過，但目前只有結構、沒有任何工單）。
 
 **第 58 題（2 分）工單與裁決回寫。** 程式與測試齊全，缺的正是上一段的兩個開關（repo 變數與訓練紀錄）。
 
@@ -183,19 +181,19 @@ L4 十題全為 3 分；升到 4 分都需要真實、跨期的量測，以下�
 
 ## 5. 與 2026-10-03 比較
 
-| 層 | 2026-10-03 | 2026-10-12（建議） | 差值 |
+| 層 | 2026-10-03 | 2026-10-12 | 差值 |
 |---|---:|---:|---:|
 | L0 確定性錨定層 | 27 | 27 | 0 |
 | L1 情境建構層 | 30 | 30 | 0 |
 | L2 專家審查層 | 30 | 30 | 0 |
 | L3 對抗驗證層 | 30 | 30 | 0 |
 | L4 陪審裁決層 | 30 | 30 | 0 |
-| L5 評分與輸出層 | 24 | 25 | +1 |
-| 合計 | 171 | 172 | +1 |
+| L5 評分與輸出層 | 24 | 24 | 0 |
+| 合計 | 171 | 171 | 0 |
 
 **主要原因。**
 
-- **L5（+1，待審）**：第 59 題建議 1→2，live 校準第一次以真實家族算出建議權重（未套用）。
+- **分數不變**：第 59 題起草時建議 1→2（live 校準第一次以真實家族算出建議權重），owner 審閱維持 1 分，因為權重尚未依校準更新。
 - **各層 0 分差的實質變化**（不跨評分線，但改變證據或風險面）：真實三家族的 live 審查與 live 校準（第 10、30、47、49、60 題有了真實數字）；Bedrock 與 Gemini provider、Bedrock 的 `submit_result` 工具路徑（第 24 題）；canary 的回報／回音區分延伸到 skeptic 與紅隊並計入稽核（第 17 題）；圍欄標籤跳脫（第 16 題）；增量審查的模組比對與 `--base` 注入修正（第 14 題）；審查時檢查 trivy 資料庫（第 3 題）；工具安裝目錄與 runner 一致（第 7 題）；評審批次平均分割（第 43 題）；一家族一評審納入 P3（第 45 題）；dotfile 控制點引用（第 33 題）。
 - **未變的根本限制**：CI 只跑 mock；model-eval、PSIRT 握手、live 換模演練、訓練紀錄、政策核定都沒有發生（G-1、G-4、G-7、G-8、G-10、G-12、G-13 失敗）；live 校準只有一期，因此沒有任何題目升到 4 分。
 
