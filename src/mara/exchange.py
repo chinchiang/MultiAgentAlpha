@@ -101,7 +101,7 @@ def _unfenced(text: str) -> str:
 def classify(raw: RawReply, schema: dict) -> Outcome:
     """The one reply classification (docs/adr/0001-reply-outcome-accounting.md)."""
     structured_text = json.dumps(raw.structured, ensure_ascii=False) if raw.structured is not None else ""
-    common = {"text": "\n".join(p for p in (raw.answer_text, structured_text, raw.aside) if p), "aside": raw.aside,
+    common: dict[str, Any] = {"text": "\n".join(p for p in (raw.answer_text, structured_text, raw.aside) if p), "aside": raw.aside,
               "input_tokens": raw.input_tokens, "output_tokens": raw.output_tokens, "served_model": raw.served_model}
     if raw.stop == STOP_REFUSAL:
         return Outcome(REFUSAL, **common)
@@ -230,8 +230,8 @@ class Canary:
         if outcome.truncated:
             return outcome.data, False, 0
         if outcome.unparseable:
-            echo, reported = self._prose(outcome)
-            return outcome.data, echo, int(reported)
+            echo, prose_report = self._prose(outcome)
+            return outcome.data, echo, int(prose_report)
         if not isinstance(outcome.data, dict):
             return outcome.data, bool(outcome.text and self.echoed(outcome.text)), 0
         rest, reported = dict(outcome.data), 0
