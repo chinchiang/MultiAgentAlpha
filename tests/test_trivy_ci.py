@@ -10,13 +10,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "trivy_ci.py"
 sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "tests"))
 
-from test_trivy_db import _fake_trivy, _now_iso  # noqa: E402
 from trivy_ci import summarize  # noqa: E402
 
 from mara.tools import runner  # noqa: E402
 from mara.tools import trivy_db as tdb  # noqa: E402
+from tests.test_trivy_db import _fake_trivy, _now_iso  # noqa: E402
 
 VULN = "Package: requests Installed Version: 2.19.0 Vulnerability CVE-2018-18074 Severity: HIGH Fixed Version: 2.20.0 Link: [CVE-2018-18074](https://x)"
 MISCONF = "Artifact: Dockerfile Type: dockerfile Vulnerability DS-0001 Severity: MEDIUM Message: Specify a tag in the 'FROM' statement"

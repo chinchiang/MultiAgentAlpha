@@ -7,6 +7,8 @@ import re
 from functools import cache
 from importlib import resources
 
+__all__ = ["cwe_known", "load", "validate_ref"]
+
 
 @cache
 def load(name: str) -> dict:
