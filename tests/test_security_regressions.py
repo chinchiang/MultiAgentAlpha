@@ -482,7 +482,12 @@ def test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_i
     from mara import cli
 
     def words(text):
-        return "".join(re.findall(r"\w+", text))  # the error panel frames the message and wraps it, even inside words
+        # The refusal is the precise WorkspaceInsideTarget text ("the config file … lies inside the review
+        # target", and the same for the output directory). Typer shows it in a rich panel, and on GitHub
+        # Actions that panel is a colour terminal: a wrap inserts the border's ANSI codes between words.
+        # Those codes contain letters and digits, so joining word characters on the raw panel hides the phrase.
+        plain = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+        return "".join(re.findall(r"\w+", plain))
 
     home =tmp_path / "mara-home"
     (home / "config").mkdir(parents=True)
