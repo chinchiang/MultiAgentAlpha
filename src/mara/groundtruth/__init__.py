@@ -30,8 +30,12 @@ def validate_ref(ref: str) -> tuple[bool, str]:
         ch = m.group(1)
         if ch not in chapters:
             return False, f"ASVS 5.0 has no chapter V{ch}"
-        if m.group(2) and m.group(2) not in chapters[ch]["sections"]:
-            return False, f"ASVS 5.0 V{ch} has no section V{ch}.{m.group(2)}"
+        sec, req = m.group(2), m.group(3)
+        if sec and sec not in chapters[ch]["sections"]:
+            return False, f"ASVS 5.0 V{ch} has no section V{ch}.{sec}"
+        # a requirement id must exist too: `ASVS 5.0 V1.2.99` used to pass on its chapter and section alone
+        if req and req not in chapters[ch]["requirements"][sec]:
+            return False, f"ASVS 5.0 V{ch}.{sec} has no requirement V{ch}.{sec}.{req}"
         return True, "ok"
     if m := _TOP10_RE.match(ref):
         cats = load("owasp_top10_2025")["categories"]

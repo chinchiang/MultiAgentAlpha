@@ -6,7 +6,8 @@ They follow the defect profile reported for vibe-coded applications: placeholder
 unfiltered input, secret leakage. 51 labels in total.
 
 `corpora/` (git-ignored) is where `scripts/fetch_calib_corpora.sh` places OWASP Juice Shop and
-WebGoat. Those repositories have no machine-readable file:line vulnerability labels; a human
+WebGoat, each checked out at the commit of a pinned release tag (`scripts/fetch_calib_corpora.py`; an existing
+checkout at another commit is refused). Moving a pin means re-checking that corpus's labels. Those repositories have no machine-readable file:line vulnerability labels; a human
 must author `labels.json` for them before they contribute to the metrics.
 
 Run:

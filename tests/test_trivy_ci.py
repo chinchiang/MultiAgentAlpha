@@ -36,7 +36,8 @@ def _setup(tmp_path: Path, sarif: str, hours_old: float = 2) -> tuple[Path, Path
     (tools / "canned.sarif").write_text(sarif)
     cache = tmp_path / "cache"
     env = {**os.environ, "MARA_TOOLS_DIR": str(tools), "MARA_TRIVY_CACHE_DIR": str(cache)}
-    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "trivy_db.py"), "download", "--repository", "example.invalid/x/db:2"],
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "trivy_db.py"), "download", "--repository", "example.invalid/x/db:2",
+                        "--allow-unknown-provenance"],
                        capture_output=True, text=True, env=env, cwd=ROOT)
     assert r.returncode == 0, r.stdout + r.stderr
     (tools / "argv.txt").unlink()

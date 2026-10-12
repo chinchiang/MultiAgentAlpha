@@ -143,6 +143,9 @@ def check(cache: Path, max_age_hours: float, now: dt.datetime | None = None) -> 
                      f"sha256 {digest[:16]}… matches the record")
     lines.append(f"source {rec.get('repository')} manifest {rec.get('manifest_digest')} layer {rec.get('layer_digest')} "
                  f"fetched {rec.get('downloaded_at')} with trivy {rec.get('trivy_version')}")
+    if rec.get("provenance") == "unverified" or not str(rec.get("manifest_digest", "")).startswith("sha256:"):
+        # the content is still checked against the record; only the registry artifact it came from is unknown
+        lines.append("source provenance unverified: the registry did not name the manifest digest at download time")
     return ok, lines
 
 

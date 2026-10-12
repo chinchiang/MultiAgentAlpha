@@ -269,7 +269,8 @@ python scripts/calibrate.py --mode mock
 
 For a live run point the same commands at `config/mara.yaml` (three reachable family endpoints,
 ZDR enabled) and pass `--mode live`. `scripts/fetch_calib_corpora.sh` fetches OWASP Juice Shop
-and WebGoat; they need human-authored `labels.json` files before they count. A sample's
+and WebGoat, each at the commit of a pinned release tag (`scripts/fetch_calib_corpora.py`: Juice Shop v20.3.0,
+WebGoat v2026.4; a checkout at another commit is refused), so labels stay tied to the code they describe; they need human-authored `labels.json` files before they count. A sample's
 `labels.json` is its answer key and never reaches a model: the bundle excludes it (coverage reason
 `calibration_answer_key`; recognised by its content, so an unrelated `labels.json` is still reviewed),
 the label-driven mocks read it from disk, and `calibrate.py --mode live` refuses any run whose bundle
@@ -433,7 +434,9 @@ SARIF and fails on any finding; zizmor-action is gone.
 
 trivy used to download its vulnerability database at scan time, which hangs on isolated hosts and
 turns every review into a network event. `python3 scripts/trivy_db.py download` fetches it once
-(from the repositories in `tools/trivy-db.yaml`, `--pin-digest sha256:…` for a reproducible fetch)
+(from the repositories in `tools/trivy-db.yaml`, by the manifest digest the registry names for the tag, so the record
+names exactly what was downloaded; a registry that names none is refused unless `--allow-unknown-provenance`;
+`--pin-digest sha256:…` fetches a given digest)
 into `.mara-tools/trivy-cache` and writes `mara-trivy-db.json`: OCI manifest and layer digests,
 trivy's `UpdatedAt`/`NextUpdate`, the SHA-256 of `trivy.db`, the trivy version. `status` refuses a
 missing, tampered or stale copy (default 48 h, `max_age_hours`); `export`/`import` carry the
