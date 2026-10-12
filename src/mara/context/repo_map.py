@@ -303,10 +303,16 @@ def git_changed_files(root: str | Path, base: str, diff_filter: str = "d") -> li
     'nothing changed'.
     """
     root = Path(root).resolve()
+    # `base` reaches git as an argument (from --base, which a CI job may fill from event data): a value
+    # such as `--output=/path` would be read as an option - git diff writes the diff to that file - so a
+    # ref that starts with '-' or holds control characters is refused, and `--end-of-options` keeps git
+    # from parsing the range as an option in any case
+    if not base or base.startswith("-") or any(ch.isspace() or ord(ch) < 32 for ch in base):
+        raise ValueError(f"cannot resolve base ref {base!r} for incremental review: not a git revision")
     top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False)
     prefix = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-prefix"], capture_output=True, text=True, check=False)
     diff = subprocess.run(["git", "-C", str(top.stdout.strip() if top.returncode == 0 else root), "diff", "--name-only", "-z",
-                           f"--diff-filter={diff_filter}", f"{base}...HEAD"],
+                           f"--diff-filter={diff_filter}", "--end-of-options", f"{base}...HEAD"],
                           capture_output=True, check=False)
     if top.returncode != 0 or prefix.returncode != 0 or diff.returncode != 0:
         raise ValueError(f"cannot resolve base ref {base!r} for incremental review")

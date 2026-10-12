@@ -204,13 +204,21 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                     continue
             elif tool == "trivy":
                 # Offline only: the database recorded by scripts/trivy_db.py (never downloaded during a review)
-                from .trivy_db import cache_dir, db_path, read_metadata
+                from . import trivy_db as tdb
+                from .trivy_db import read_metadata
                 from .trivy_db import scan_args as trivy_args
 
-                cache = cache_dir()
-                if not db_path(cache).is_file():
+                cache = tdb.cache_dir()
+                if not tdb.db_path(cache).is_file():
                     note = f"no offline database under {cache}; run scripts/trivy_db.py download (or import a bundle)"
                     runs.append(ToolRun(tool=tool, ran=False, note=note))
+                    continue
+                # the same check as `scripts/trivy_db.py status`: a database that no longer matches its record
+                # or is past the freshness bound must not count as dependency coverage
+                db_ok, db_lines = tdb.check(cache, tdb.max_age_hours())
+                if not db_ok:
+                    problems = [line for line in db_lines if not line.startswith("source ")]
+                    runs.append(ToolRun(tool=tool, ran=False, note="offline database not usable: " + "; ".join(problems)[:300]))
                     continue
                 cp = _run(trivy_args(exe, cache, sarif) + ["--ignorefile", str(neutral["trivyignore"]), "--config", str(neutral["trivy"]), "."],
                           target)

@@ -190,13 +190,35 @@ def hf_repo_from_url(url: str) -> str:
     return f"{parts[0]}/{parts[1]}"
 
 
+def _is_hf(url: str) -> bool:
+    """https://huggingface.co itself: the only place HF_TOKEN may be sent."""
+    u = urllib.parse.urlparse(url)
+    return u.scheme == "https" and (u.hostname or "").lower() == HF_HOST and u.port in (None, 443)
+
+
+class _HfOnlyAuthRedirect(urllib.request.HTTPRedirectHandler):
+    """Carries the token across a redirect only when the new location is huggingface.co again.
+
+    urllib copies ordinary request headers onto the redirected request whatever its host, and Hugging
+    Face answers /resolve/ with a redirect to its CDN (another host): a token set as a normal header went
+    along. It travels as an unredirected header instead, re-added here for a huggingface.co target only."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        auth = req.unredirected_hdrs.get("Authorization")
+        if new is not None and auth and _is_hf(newurl):
+            new.add_unredirected_header("Authorization", auth)
+        return new
+
+
 def _http_fetch(url: str, timeout: int = 60) -> tuple[bytes, dict]:
-    headers = {"User-Agent": "mara-ml-bom/1"}
+    req = urllib.request.Request(url, headers={"User-Agent": "mara-ml-bom/1"})
     token = os.environ.get(HF_TOKEN_ENV)
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    if token and _is_hf(url):
+        req.add_unredirected_header("Authorization", f"Bearer {token}")
+    opener = urllib.request.build_opener(_HfOnlyAuthRedirect)
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as r:
+        with opener.open(req, timeout=timeout) as r:
             return r.read(), {k.lower(): v for k, v in r.headers.items()}
     except urllib.error.HTTPError as e:
         raise ValueError(f"{url}: HTTP {e.code} ({'set ' + HF_TOKEN_ENV + ' for a gated repository' if e.code in (401, 403) else e.reason})") from e
@@ -205,9 +227,13 @@ def _http_fetch(url: str, timeout: int = 60) -> tuple[bytes, dict]:
 
 
 def _next_link(headers: dict) -> str | None:
+    """The rel="next" page of a paginated listing; only on huggingface.co, since the next request carries the token."""
     for part in str(headers.get("link", "")).split(","):
         if 'rel="next"' in part:
-            return part.split(";")[0].strip().strip("<>")
+            url = part.split(";")[0].strip().strip("<>")
+            if not _is_hf(url):
+                raise ValueError(f"pagination link {url!r} leaves https://{HF_HOST}; refusing to follow it")
+            return url
     return None
 
 
