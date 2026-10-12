@@ -11,12 +11,25 @@ labelled `live` (the scripts refuse), so the governance checks cannot be satisfi
 - A host inside the network of the self-hosted endpoints (`config/mara.yaml` `base_url`s), with
   AWS credentials for Bedrock (`AWS_PROFILE`, e.g. after `aws sso login`) and the Gemini key. Keys
   only in environment variables (`GLM_LOCAL_KEY`, `GEMINI_API_KEY`; `DEEPSEEK_LOCAL_KEY` for the
-  standbys); no script prints or stores them. The GLM endpoint is signed by the IEC internal CA:
-  garak and CyberSecEval do not read `ca_bundle`, so export `SSL_CERT_FILE` pointing at a bundle
-  that holds both the public roots and the IEC chain for their runs.
-- G-8 gap: `scripts/model_eval.py` has no garak or CyberSecEval wrapper for Claude on Bedrock or the
-  Gemini API yet. `plan` lists both families as skipped, `run` evaluates the rest and exits 1, and
-  the live report refuses to cover the missing families, so G-8 stays red until a wrapper exists.
+  standbys); no script prints or stores them. The GLM endpoint is signed by an internal CA: garak and
+  CyberSecEval do not read `ca_bundle`, so `run` writes a bundle of the public roots plus that chain
+  under the run directory and points `SSL_CERT_FILE` at it for that family (the CyberSecEval judge,
+  another endpoint in the same process, keeps verifying against the public roots).
+- Routes: Claude through garak's `bedrock` generator (no key; `temperature` and `top_p` are suppressed,
+  Opus 5.5 refuses both); Gemini through its OpenAI-compatible endpoint in both tools, so the key is
+  sent in a header (CyberSecEval's GOOGLEGENAI provider would put it in the URL); GLM through the
+  gateway's OpenAI-compatible endpoint.
+- Empty outputs are not passes: garak records a failed call or an answer cut short as an empty output,
+  and its detectors score it as a pass. The request is tuned so every family answers (Gemini without
+  `frequency_penalty` / `presence_penalty`, no `stop` sequences for the OpenAI-compatible targets,
+  `max_tokens` 4096 for the reasoning models), and a garak run with more than 20 % empty evaluated
+  outputs is reported as `missing`.
+- Scale and cost: the configured probes send 7,210 prompts × 5 generations to each family (about
+  36,000 calls; Bedrock takes one generation per call). Budget it before the quarterly run; a trial
+  with `garak_probes: [test.Test]` (8 prompts) checks the wiring for a few cents.
+- G-8 gap: CyberSecEval at the pinned ref has no Bedrock provider. `plan` lists it as skipped for the
+  anthropic family, `run` exits 1, and that family's two CyberSecEval metrics stay missing, so G-8
+  stays red for it until there is a route (e.g. the same model through the Anthropic API).
 - `mara check-config config/mara.yaml` passes (P1–P8).
 - Python 3.11 on Linux x86_64, this package installed from the hash-pinned closure
   (`pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt && pip install --require-hashes --only-binary=:all: -r tools/build-requirements.txt && pip install --no-deps --no-build-isolation -e .`).

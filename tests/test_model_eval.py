@@ -28,7 +28,7 @@ TODAY = dt.date(2026, 9, 12)
 SCRIPT = ROOT / "scripts" / "model_eval.py"
 
 
-def test_targets_and_commands_never_carry_keys(monkeypatch):
+def test_targets_and_commands_never_carry_keys(monkeypatch, tmp_path):
     cfg = load_config(ROOT / "config" / "mara.yaml")
     targets = me.targets_from_config(cfg)
     assert [t.family for t in targets] == ["anthropic", "gemini", "glm"]
@@ -38,14 +38,37 @@ def test_targets_and_commands_never_carry_keys(monkeypatch):
     assert argv[:5] == ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible"] and "--target_name" in argv
     assert "probes.promptinject,probes.encoding" in argv and "sk-secret-glm" not in " ".join(argv)
     assert env == {"OPENAICOMPATIBLE_API_KEY": "$GLM_LOCAL_KEY"}
-    assert me.garak_generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://llm.iec.inventec/v1/"}}}
-    # Claude on Bedrock and the Gemini API have no wrapper yet: named as a G-8 gap, never a command
-    for fam in ("anthropic", "gemini"):
-        t = next(t for t in targets if t.family == fam)
-        assert "G-8 gap" in me.unsupported(t) and t.provider in me.unsupported(t)
-        with pytest.raises(ValueError, match="no garak generator"):
-            me.garak_command(t, ["dan"], "/tmp/out")
-    assert me.unsupported(ds) is None
+    # reasoning models need room, and garak's default stop sequences end a chat answer at its first "#"
+    assert me.garak_generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://llm.iec.inventec/v1/", "max_tokens": 4096,
+                                                                               "suppressed_params": ["stop"]}}}
+    assert me.unsupported(ds) is None and me.unsupported(ds, "cyberseceval") is None
+    # Claude on Bedrock: garak's bedrock generator on the AWS credential chain, no key; CyberSecEval has no
+    # Bedrock provider, so that family's two CyberSecEval metrics stay missing (named, never a command)
+    br = next(t for t in targets if t.family == "anthropic")
+    argv, env = me.garak_command(br, ["dan"], "/tmp/out")
+    assert argv[3:7] == ["--target_type", "bedrock", "--target_name", "global.anthropic.claude-opus-5-5"] and env == {}
+    assert me.garak_generator_options(br) == {"bedrock": {"BedrockGenerator": {"suppressed_params": ["temperature", "top_p"],
+                                                                                 "region": "ap-southeast-1"}}}
+    assert me.unsupported(br) is None and me.unsupported(br, "garak") is None
+    assert "no Bedrock provider" in me.unsupported(br, "cyberseceval")
+    with pytest.raises(ValueError, match="no CyberSecEval provider"):
+        me.cse_spec(br)
+    # Gemini: its OpenAI-compatible endpoint in both tools, so the key travels in a header and never in a URL
+    # (CyberSecEval's GOOGLEGENAI provider would put it in the query string)
+    gm = next(t for t in targets if t.family == "gemini")
+    argv, env = me.garak_command(gm, ["dan"], "/tmp/out")
+    assert argv[3:5] == ["--target_type", "openai.OpenAICompatible"] and env == {"OPENAICOMPATIBLE_API_KEY": "$GEMINI_API_KEY"}
+    assert me.garak_generator_options(gm) == {"openai": {"OpenAICompatible": {
+        "uri": me.GEMINI_OPENAI_BASE, "max_tokens": 4096, "suppressed_params": ["stop", "frequency_penalty", "presence_penalty"]}}}
+    assert me.cse_spec(gm) == f"OPENAI::gemini-3.8-flash::{me.MASK}::{me.GEMINI_OPENAI_BASE}"
+    other = me.EvalTarget("x", "x-reviewer", "x", "mock", "", "")
+    assert "G-8 gap" in me.unsupported(other)
+    # an endpoint behind an internal CA runs with the public roots plus its chain, so the judge still verifies
+    pem = tmp_path / "internal.pem"
+    pem.write_text("-----BEGIN CERTIFICATE-----\nINTERNAL\n-----END CERTIFICATE-----\n", encoding="utf-8")
+    bundle = me.ca_bundle_pem(me.EvalTarget("glm", "glm-reviewer", "glm", "openai_compatible", ds.base_url, "GLM_LOCAL_KEY", "", str(pem)))
+    assert bundle is not None and bundle.count("BEGIN CERTIFICATE") > 100 and bundle.endswith(pem.read_text(encoding="utf-8"))
+    assert me.ca_bundle_pem(br) is None and ds.ca_bundle == "~/.mara/inventec-ca.pem"
     an = me.EvalTarget("anthropic", "claude-reviewer", "claude-opus-5-5", "anthropic", "", "")  # the direct Anthropic API
     argv, env = me.garak_command(an, ["dan"], "/tmp/out")
     assert argv[3:6] == ["--target_type", "anthropic", "--target_name"] and env == {"ANTHROPIC_API_KEY": "$ANTHROPIC_API_KEY"}
@@ -138,12 +161,28 @@ def test_report_cli_renders_front_matter_and_refuses_live_from_fixtures(tmp_path
     assert r.returncode == 1 and "mode is not live" in r.stdout
 
 
+def test_report_on_the_production_panel_names_the_bedrock_cyberseceval_gap(tmp_path):
+    """The Bedrock target has no CyberSecEval commands: the report says so instead of iterating a command
+    dict that is not there, and the family's two CyberSecEval metrics stay missing, never pass."""
+    r = subprocess.run([sys.executable, str(SCRIPT), "report", "--run-dir", str(FIX), "--date", "2026-09-12", "--mode", "dry-run",
+                        "--docs-dir", str(tmp_path / "docs"), "--summary-root", str(tmp_path)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    cse_md = (tmp_path / "docs" / "cyberseceval-2026-09-12.md").read_text(encoding="utf-8")
+    assert "# anthropic: skipped: claude-reviewer: CyberSecEval at the pinned ref has no Bedrock provider" in cse_md
+    assert f"--llm-under-test=OPENAI::gemini-3.8-flash::${{KEY}}::{me.GEMINI_OPENAI_BASE}" in cse_md
+    summary = json.loads((tmp_path / "calib" / "model-eval-2026-09-12.json").read_text(encoding="utf-8"))
+    assert summary["families"]["anthropic"]["verdict"]["prompt_injection_success"]["status"] == "missing"
+
+
 def test_plan_masks_keys(monkeypatch):
     monkeypatch.setenv("GLM_LOCAL_KEY", "glm-secret-value")
     r = subprocess.run([sys.executable, str(SCRIPT), "plan"], capture_output=True, text=True)
     assert r.returncode == 0 and "glm-secret-value" not in r.stdout
     assert "OPENAICOMPATIBLE_API_KEY=$GLM_LOCAL_KEY" in r.stdout and "${KEY}" in r.stdout
-    assert "# anthropic: SKIPPED" in r.stdout and "provider bedrock" in r.stdout and "# gemini: SKIPPED" in r.stdout
+    assert "--target_type bedrock --target_name global.anthropic.claude-opus-5-5" in r.stdout
+    assert "# anthropic: CyberSecEval SKIPPED" in r.stdout and "no Bedrock provider" in r.stdout
+    assert "OPENAICOMPATIBLE_API_KEY=$GEMINI_API_KEY" in r.stdout and "# gemini: SKIPPED" not in r.stdout
+    assert "OPENAICOMPATIBLE_API_KEY=$GLM_LOCAL_KEY SSL_CERT_FILE=" in r.stdout
     # the direct Anthropic API path is still planned (the PSIRT example config keeps it)
     r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(FIXTURE_PANEL), "plan"],
                        capture_output=True, text=True)
@@ -228,3 +267,25 @@ def test_pipeline_records_model_eval_status(tmp_path, monkeypatch):
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
     assert report.bias_audit["model_eval"] == {} and "## Model red-team evaluation" in render_markdown(report)
     assert me.family_eval_status(ROOT, ["deepseek"]) == {"deepseek": {"date": None, "mode": None, "status": "none"}}
+
+
+def test_a_garak_run_of_mostly_empty_outputs_is_not_a_measurement(tmp_path):
+    """garak records a failed call (Gemini's 400 on frequency_penalty) or an answer cut by a stop sequence as an empty
+    output, and every detector scores it as a pass: the 2026-10-08 smoke run read 1.000 for Gemini with 0/80 answers."""
+    def report(outputs_per_attempt):
+        rows = [{"entry_type": "init", "garak_version": "0.17.0"}]
+        for outs in outputs_per_attempt:
+            rows.append({"entry_type": "attempt", "status": 1, "outputs": [None] * len(outs)})
+            rows.append({"entry_type": "attempt", "status": 2, "outputs": [{"text": t} if t is not None else None for t in outs]})
+        rows.append({"entry_type": "eval", "probe": "test.Test", "detector": "always.Pass", "passed": 10, "total_evaluated": 10})
+        p = tmp_path / f"r{len(list(tmp_path.iterdir()))}.report.jsonl"
+        p.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+        return me.parse_garak_report(p)
+
+    th = me.Thresholds()
+    empty = report([[None, None, "", "  ", None], [None] * 5])
+    assert (empty["outputs"], empty["empty_outputs"]) == (10, 10), "only the evaluated (status 2) copy of each attempt counts"
+    v = me.evaluate_family(empty, None, None, th)["garak_pass_rate"]
+    assert v["status"] == "missing" and v["empty_rate"] == 1.0 and v["value"] == 1.0
+    ok = report([["a", "b", "c", "d", "e"], ["f", "g", "h", "i", ""]])
+    assert me.evaluate_family(ok, None, None, th)["garak_pass_rate"]["status"] == "pass", "one blank answer in ten is fine"
