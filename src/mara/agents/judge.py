@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -40,11 +39,8 @@ def run_judge(provider: Provider, batch: list[dict], pass_id: PassId, self_ids: 
                            derived=(exchange.Derived("findings", batch),))
     items, errors = exchange.parse_items(outcome, _JudgeRaw)
     order = {b["finding_id"]: i for i, b in enumerate(batch)}
-    counts = Counter(i.finding_id for i in items)
-    if set(counts) != set(order) or any(n != 1 for n in counts.values()) or errors:
-        # a bare refusal is an abstention, not invalid output: keep its error list clean
-        errs = errors if errors == ["refused"] else (
-            errors + base.coverage_errors(set(order), [i.finding_id for i in items], errors) + ["incomplete_or_duplicate_judge_response"])
+    errs = base.ballot_errors(set(order), [i.finding_id for i in items], errors, "incomplete_or_duplicate_judge_response")
+    if errs is not None:
         return [], errs
     votes = []
     for i in items:

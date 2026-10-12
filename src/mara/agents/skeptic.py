@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
 from typing import Literal
 
 from .. import exchange
@@ -89,11 +88,8 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     if echoed:
         return [], ["canary_echoed"], 0, 0  # followed the planted instruction: none of its verdicts counts
     items, errors = exchange.parse_items(outcome, _SkepticRaw)
-    counts = Counter(i.finding_id for i in items)
-    if set(counts) != {f.id for f in findings} or any(n != 1 for n in counts.values()) or errors:
-        # a bare refusal is an abstention, not invalid output: keep its error list clean
-        errs = errors if errors == ["refused"] else (
-            errors + base.coverage_errors({f.id for f in findings}, [i.finding_id for i in items], errors) + ["incomplete_or_duplicate_response"])
+    errs = base.ballot_errors({f.id for f in findings}, [i.finding_id for i in items], errors, "incomplete_or_duplicate_response")
+    if errs is not None:
         return [], errs, 0, len(tainted)
     unverified = 0
     out = []
