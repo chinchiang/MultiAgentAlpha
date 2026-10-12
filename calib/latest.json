@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-08",
+  "mode": "live",
+  "aat": {
+    "method": "chance-corrected-agreement+rejection-miss-bound/v2",
+    "excluded": 0,
+    "min_items": 10,
+    "min_agreement": 0.8,
+    "rejection": {
+      "n": 0,
+      "misses": 0,
+      "miss_rate_upper": null,
+      "max_miss_rate": 0.05,
+      "confidence": 0.95,
+      "passed": false
+    },
+    "n": 0,
+    "agreement": null,
+    "chance_agreement": null,
+    "kappa": null,
+    "p_value": null,
+    "agreement_passed": false,
+    "passed": false,
+    "why": "沒有可對照的人工裁決（calib/decisions/ 為空，或沒有裁決綁定到本次樣本）"
+  },
+  "global_alpha": 0.7073499999999999
+}

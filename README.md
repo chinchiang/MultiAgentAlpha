@@ -486,8 +486,11 @@ and is machine-decidable: G-11 passes; G-12 requires a successful endpoint hands
 G-7 once the platform team has hashed and signed the weights (`docs/ml-bom.md`); G-13 once one
 person per role holds a valid training record (`docs/ai-literacy-training.md`); G-1, G-4 and G-10
 once the policy is approved, live swap drills are recorded and the rollout has started
-(`docs/governance-templates.md`); G-8 and G-9 once the quarterly red-team evaluation and live
-calibration have run on a host with the endpoints (`docs/model-eval-runbook.md`). Nothing is
+(`docs/governance-templates.md`); G-8 once the quarterly red-team evaluation has run on a host with the
+endpoints (`docs/model-eval-runbook.md`). G-9 passes since the first live calibration (2026-10-08,
+`docs/calibration-2026-10-08.md`: Claude Opus 5.5 on Bedrock, Gemini 3.8 Flash and GLM on the five labelled
+samples, 51 labels; its Alternative Annotator Test has no human decisions to compare yet, so P8 keeps every
+rejected non-D finding in the human queue). Nothing is
 marked passed before the fact. `docs/governance-check-2026-09-12.md` was regenerated in place as those
 mechanisms landed (last on 2026-09-17), so it shows the later state rather than the first run;
 `docs/governance-check-2026-09-26.md` (regenerated in place on 2026-10-03, as its heading shows) is the current record: G-2, G-3, G-5, G-6 and G-11 pass, the
@@ -550,7 +553,9 @@ Gemini through its OpenAI-compatible endpoint; CyberSecEval reaches Gemini the s
 provider would put the key in the URL) and GLM with `SSL_CERT_FILE` set to the public roots plus `ca_bundle`.
 CyberSecEval at the pinned ref has no Bedrock provider: `plan` lists that as skipped, `run` exits 1 and the
 anthropic family's two CyberSecEval metrics stay missing, so G-8 stays red for it until there is a route.
-`fixtures/model-eval/` holds synthetic outputs for the parser tests.
+`fixtures/model-eval/` holds synthetic outputs for the parser tests. The first live calibration ran on
+2026-10-08 (about four hours for the five samples); a canary echo is judged on complete answers only, because
+three of GLM's four echoes in that run were truncated calls quoting a canary report that never closed.
 See `docs/model-eval-runbook.md`.
 
 ## Policy, cold standby and rollout templates (governance items G-1, G-4, G-10)
