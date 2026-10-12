@@ -30,6 +30,9 @@ from .openai_compatible import MAX_ATTEMPTS, RETRY_STATUSES, retry_delay
 
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_KEY_ENV = "GEMINI_API_KEY"
+# Thinking counts against maxOutputTokens (thoughtsTokenCount): 16000 left a reviewer over a 400k-character
+# batch, or a judge pass, too little room to answer - the other providers raised their caps for the same reason.
+MAX_TOKENS = 32768
 REFUSAL_FINISHES = frozenset({"SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFETY"})
 
 
@@ -43,7 +46,7 @@ class GeminiProvider(Provider):
         # `client` is for tests (httpx.MockTransport)
         self.client = client or httpx.Client(base_url=API_BASE, headers=headers, timeout=timeout)
 
-    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> Completion:
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> Completion:
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -92,4 +95,4 @@ class GeminiProvider(Provider):
             data = json.loads(text)
         except json.JSONDecodeError:
             return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        return Completion(data=clip_strings(data, schema), raw_text=text, **tokens)
+        return Completion(data=clip_strings(data, schema), full_data=data, raw_text=text, **tokens)

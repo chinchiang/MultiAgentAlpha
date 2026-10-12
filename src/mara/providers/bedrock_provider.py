@@ -73,7 +73,7 @@ class BedrockProvider(AnthropicProvider):
         if call is not None:
             if not isinstance(call.input, dict):
                 return Completion(data=None, raw_text=raw, truncated=True, **tokens)
-            return Completion(data=clip_strings(call.input, schema), raw_text=raw, aside="\n".join(texts), **tokens)
+            return Completion(data=clip_strings(call.input, schema), full_data=call.input, raw_text=raw, aside="\n".join(texts), **tokens)
         # no tool call: a bare JSON answer is accepted, anything else is unusable output (not a refusal)
         if not texts:
             return Completion(data=None, raw_text="", **tokens)
@@ -81,4 +81,4 @@ class BedrockProvider(AnthropicProvider):
             data = json.loads(texts[0])
         except json.JSONDecodeError:
             return Completion(data=None, raw_text=raw, truncated=True, **tokens)
-        return Completion(data=clip_strings(data, schema), raw_text=raw, **tokens)
+        return Completion(data=clip_strings(data, schema), full_data=data, raw_text=raw, **tokens)

@@ -17,7 +17,7 @@ from pathlib import Path
 import httpx
 
 from ..config import MaraConfig
-from ..psirt_ledger import already_sent, dedupe_key, load_ledger, now_utc, record_attempt, save_ledger
+from ..psirt_ledger import already_sent, dedupe_key, load_ledger, migrate_key, now_utc, record_attempt, save_ledger
 from ..schemas import ReviewReport
 
 SCHEMA = "mara-psirt/2"
@@ -100,7 +100,9 @@ def build_notifications(report: ReviewReport, cfg: MaraConfig, now: dt.datetime 
             "target": report.target,
             "detected_at": detected.isoformat(timespec="seconds"),
             "deadlines": deadlines,
-            "dedupe_key": dedupe_key(ps.product, report.target, p.file, p.line, f.cwe),
+            # target_id (repository + path below its top level), not the checkout path: every CI runner and
+            # clone of one repository must produce the same key, or the ledger and the receiver re-notify
+            "dedupe_key": dedupe_key(ps.product, report.target_id or report.target, p.file, p.line, f.cwe),
             "finding_id": f.id,
             "title": f.title,
             "dimension": f.dimension,
@@ -138,6 +140,15 @@ def send_psirt(payloads: list[dict], cfg: MaraConfig, *, client: httpx.Client | 
     if not token:
         raise RuntimeError(f"PSIRT token environment variable {ps.token_env} is not set; refusing to send")
     ledger = load_ledger(ledger_path) if ledger_path else None
+    if ledger is not None:
+        # v0.4.10 moved the key from the checkout path to the target identity: an item the ledger still holds
+        # under the old key moves to the new one (history, stages and the delivered hand-off with it), so the
+        # finding is neither sent again nor split into two lifecycles
+        for payload in payloads:
+            loc = payload.get("location") or {}
+            legacy = dedupe_key(payload.get("product", ""), payload.get("target", ""), loc.get("file", ""), loc.get("line", 0),
+                                payload.get("cwe", ""))
+            migrate_key(ledger, legacy, payload.get("dedupe_key", ""))
     own = client is None
     client = client or httpx.Client(timeout=timeout)
     results = []

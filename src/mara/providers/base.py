@@ -21,6 +21,9 @@ class Completion:
     error: str = ""  # sanitised provider failure code (provider_http_error:429, ...): no model answer, not a refusal
     served_model: str = ""  # model the response names as its producer; can differ from the configured id
     aside: str = ""  # prose the model wrote outside the structured answer (Bedrock tool call); part of raw_text too
+    # the parsed answer before clip_strings cut it to the schema's maxLength (None: same as data). Integrity checks
+    # that must see everything the model wrote - the canary screen - read this, the agents' results use `data`
+    full_data: Any = None
 
 
 class Provider(abc.ABC):

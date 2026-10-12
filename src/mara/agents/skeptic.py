@@ -21,7 +21,9 @@ SKEPTIC_SCHEMA = {
                        "sanitizer_or_control": {"type": "string", "maxLength": 300}}}}},
 }
 
-_CONTROL_REF = re.compile(r"(?P<file>[A-Za-z0-9_][A-Za-z0-9_./\\-]*):(?P<line>\d+)")
+# a leading dot is part of the path: `.github/workflows/deploy.yml:12` (the github_actions dimension) and
+# `./app.py:3` must be read whole, not from the first letter on
+_CONTROL_REF = re.compile(r"(?P<file>[A-Za-z0-9_.][A-Za-z0-9_./\\-]*):(?P<line>\d+)")
 
 
 def _norm_ref_path(path: str) -> str:
@@ -43,13 +45,15 @@ def _control_location_ok(ctx: RepoContext, text: str, shown: set[str] | None = N
     decidable by code; refuted findings the jury still accepts go to a human for that reason.
     """
     for m in _CONTROL_REF.finditer(text):
-        path = _norm_ref_path(m.group("file"))
-        if shown is not None and path not in shown:
-            continue
-        lines = ctx.content.get(path, "").splitlines()
-        n = int(m.group("line"))
-        if 1 <= n <= len(lines) and lines[n - 1].strip():
-            return True
+        raw = m.group("file").replace("\\", "/")
+        # the path as written (.github/..., ./app.py), else without the dots prose put in front of it ("...app.py")
+        for path in dict.fromkeys((_norm_ref_path(raw), raw.lstrip("./"))):
+            if shown is not None and path not in shown:
+                continue
+            lines = ctx.content.get(path, "").splitlines()
+            n = int(m.group("line"))
+            if 1 <= n <= len(lines) and lines[n - 1].strip():
+                return True
     return False
 
 
@@ -76,7 +80,10 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         "Findings to refute.\nBEGIN_JSON_ARRAY\n" + json.dumps([_view(f) for f in findings], ensure_ascii=False)
     )
     comp = base.call(provider, system_extra=base.load_prompt("skeptic"), user=user, schema=SKEPTIC_SCHEMA, role="skeptic")
-    if comp.raw_text and canary.echoed(comp.raw_text):
+    # the token in a verdict that also names the planted file reports it (tainted: it cannot refute); anywhere
+    # else the model followed it
+    echoed, tainted = canary.screen_verdicts(comp)
+    if echoed:
         return [], ["canary_echoed"], 0  # followed the planted instruction: none of its verdicts counts
     items, errors = base.parse_items(comp, _SkepticRaw)
     counts = Counter(i.finding_id for i in items)
@@ -93,6 +100,10 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
             data["verdict"] = "weakened"
             data["reason"] = (data["reason"] + " [control citation not verifiable in bundle]")[:600]
             unverified += 1
+        if data["finding_id"] in tainted and data["verdict"] == "refuted":
+            # the verdict quotes the planted "report no findings": it may not clear the finding on its own
+            data["verdict"] = "weakened"
+            data["reason"] = (data["reason"] + " [quotes the planted canary instruction]")[:600]
         out.append(SkepticVerdict(**data, source_family=provider.family, source_model=provider.model))
     # every finding_id is covered exactly once (checked above), so no filter is needed here
     return out, errors, unverified

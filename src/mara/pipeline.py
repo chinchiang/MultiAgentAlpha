@@ -20,7 +20,7 @@ from .agents.context_agent import ContextView
 from .bias.blinding import blinded_batches
 from .bias.diversity import pairwise_family_agreement, pick_independent
 from .config import MaraConfig
-from .context.repo_map import RepoContext, build_context, restrict_to_increment
+from .context.repo_map import MAX_TOTAL_CHARS, RepoContext, build_context, bundle_cost, restrict_to_increment
 from .providers import make_provider
 from .providers.base import Provider
 from .schemas import (
@@ -47,6 +47,39 @@ from .workspace import check_outside
 # incomplete_or_duplicate_* entries are summary markers the agents append to signal that a
 # partially-failed call returned no verdicts at all; neither is an unusable item itself
 _ERROR_MARKERS = frozenset({"refused", "canary_echoed", "incomplete_or_duplicate_response", "incomplete_or_duplicate_judge_response"})
+
+
+# L3/L4 calls are bounded like the reviewer calls: the skeptic and red team read the evidence files of
+# every finding they get, the judges one blinded view per finding. Unbatched, one model's whole share of
+# a large review went into one request, overflowed its window or output budget, and left every one of
+# those findings unchallenged.
+MAX_L3_FINDINGS = 20  # findings per skeptic / red-team call
+MAX_L4_FINDINGS = 25  # findings per judge pass
+
+
+def l3_chunks(ctx: RepoContext, findings: list[Finding]) -> list[list[Finding]]:
+    """Consecutive runs of `findings` whose evidence files fit one request (MAX_TOTAL_CHARS, the reviewer
+    bound) and that hold at most MAX_L3_FINDINGS findings. A file shared by several findings is counted
+    once per chunk; a finding whose own files exceed the bound still gets a chunk of its own."""
+    chunks: list[list[Finding]] = []
+    cur: list[Finding] = []
+    files: set[str] = set()
+    size = 0
+    for f in findings:
+        own = {p.file for p in f.provenance if p.file in ctx.content}
+        new = own - files
+        cost = sum(bundle_cost(rel, ctx.content[rel]) for rel in new)
+        if cur and (len(cur) >= MAX_L3_FINDINGS or size + cost > MAX_TOTAL_CHARS):
+            chunks.append(cur)
+            cur, files, size = [], set(), 0
+            new = own
+            cost = sum(bundle_cost(rel, ctx.content[rel]) for rel in new)
+        cur.append(f)
+        files |= new
+        size += cost
+    if cur:
+        chunks.append(cur)
+    return chunks
 
 
 def _retryable(errors: list[str]) -> bool:
@@ -222,7 +255,7 @@ class Pipeline:
             groups[spec.name].append(f)
         verdicts: list[SkepticVerdict] = []
         abstained: set[str] = set()
-        for name, fs in groups.items():
+        for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
             fam = self._p(name).family.value
             self.audit["skeptic_calls"] += 1
             self.audit[f"skeptic_calls[{fam}]"] += 1
@@ -265,7 +298,7 @@ class Pipeline:
                 self._say(f"L3: no red team outside the finder families of {f.id}; {spec.family.value} reviews it")
             groups[spec.name].append(f)
         notes: list[RedTeamNote] = []
-        for name, fs in groups.items():
+        for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
             fam = self._p(name).family.value
             self.audit["redteam_calls"] += 1
             self.audit[f"redteam_calls[{fam}]"] += 1
@@ -315,23 +348,28 @@ class Pipeline:
             self.audit["self_family_fallback_votes"] += len(self_ids)
             if not eligible:
                 continue
-            self.audit["judge_calls"] += 2
-            self.audit[f"judge_calls[{fam}]"] += 2
             self.audit[f"judge_items[{fam}]"] += len(eligible)
-            fwd, rev = blinded_batches(eligible, skeptic_by_id, ctx.content_hash + prov.family.value)
-            v1, e1 = self._once_more("judge", fam, partial(judge.run_judge, prov, fwd, "forward", self_ids))
-            v2, e2 = self._once_more("judge", fam, partial(judge.run_judge, prov, rev, "reverse", self_ids))
-            refusals = int(e1 == ["refused"]) + int(e2 == ["refused"])
-            invalid = _count_invalid(e1) + _count_invalid(e2)
-            self.audit["judge_invalid_items"] += invalid
-            self.audit[f"judge_invalid_items[{fam}]"] += invalid
-            self.audit["judge_refusals"] += refusals
-            self.audit[f"judge_refusals[{fam}]"] += refusals
-            votes.extend(v1 + v2)
-            self._say(
-                f"L4: judge {fam}: {len(eligible)} finding(s) ({len(self_ids)} self-family) × 2 passes → {len(v1) + len(v2)} votes"
-                + (" [REFUSED]" if refusals else "")
-            )
+            # one seeded order over all eligible findings, cut into bounded chunks; each chunk's reverse
+            # pass is that chunk mirrored, so every finding is still seen in two mirrored positions
+            order, _ = blinded_batches(eligible, skeptic_by_id, ctx.content_hash + prov.family.value)
+            for start in range(0, len(order), MAX_L4_FINDINGS):
+                fwd = order[start:start + MAX_L4_FINDINGS]
+                rev = list(reversed(fwd))
+                self.audit["judge_calls"] += 2
+                self.audit[f"judge_calls[{fam}]"] += 2
+                v1, e1 = self._once_more("judge", fam, partial(judge.run_judge, prov, fwd, "forward", self_ids))
+                v2, e2 = self._once_more("judge", fam, partial(judge.run_judge, prov, rev, "reverse", self_ids))
+                refusals = int(e1 == ["refused"]) + int(e2 == ["refused"])
+                invalid = _count_invalid(e1) + _count_invalid(e2)
+                self.audit["judge_invalid_items"] += invalid
+                self.audit[f"judge_invalid_items[{fam}]"] += invalid
+                self.audit["judge_refusals"] += refusals
+                self.audit[f"judge_refusals[{fam}]"] += refusals
+                votes.extend(v1 + v2)
+                self._say(
+                    f"L4: judge {fam}: {len(fwd)} finding(s) ({len(self_ids & {b['finding_id'] for b in fwd})} self-family)"
+                    f" × 2 passes → {len(v1) + len(v2)} votes" + (" [REFUSED]" if refusals else "")
+                )
         return votes
 
     # ------------------------------------------------------------------ L5

@@ -3,7 +3,8 @@
 The review produces internal hand-off payloads (report/psirt_out.py). Three things had to live outside a
 single review run:
   * the ledger (`psirt.ledger_file`, default ops/psirt/ledger.json): one item per finding key
-    (product + target + file:line:cwe), so a finding re-reviewed tomorrow is not sent to the PSIRT
+    (product + target identity + file:line:cwe; the target identity is the report's target_id, the
+    repository and the path below its top level, so every CI runner and clone agree), so a finding re-reviewed tomorrow is not sent to the PSIRT
     again, and every send attempt with its HTTP status is on record;
   * the stage clock: the 72 h notification and the 14 d final report are produced by the PSIRT, not
     by the review, their deadlines require confirmed incident events, never review timestamps; `record` writes the PSIRT's reference
@@ -50,7 +51,8 @@ def parse_iso(s: str) -> dt.datetime:
 
 
 def dedupe_key(product: str, target: str, file: str, line: int, cwe: str) -> str:
-    """Stable identity of a finding across reviews: the receiver dedupes on it, so does the ledger."""
+    """Stable identity of a finding across reviews: the receiver dedupes on it, so does the ledger.
+    `target` is the report's target_id (its absolute path only for a target outside any git history)."""
     return hashlib.sha256(f"{product}\n{target}\n{file}:{line}:{cwe}".encode()).hexdigest()[:16]
 
 
@@ -102,6 +104,28 @@ def item_for(ledger: dict, payload: dict, now: dt.datetime) -> dict:
     return item
 
 
+def migrate_key(ledger: dict, old: str, new: str) -> bool:
+    """Move the ledger item recorded under `old` to `new` (v0.4.10: keys moved from the checkout path to the
+    target identity). Stage references, confirmed events and attempts move with it, so the finding keeps its
+    history and is not sent again; `migrated_from` keeps the old key, which psirt_ops records may still name.
+    Nothing happens when `new` already exists or `old` does not."""
+    items = ledger["items"]
+    if not new or old == new or old not in items or new in items:
+        return False
+    item = items[new] = items.pop(old)
+    item["key"] = new
+    item.setdefault("migrated_from", []).append(old)
+    return True
+
+
+def item_by_key(ledger: dict, key: str) -> dict | None:
+    """The item under `key`, or the item migrated from it (operators may still hold the old key)."""
+    item = ledger["items"].get(key)
+    if item is not None:
+        return item
+    return next((it for it in ledger["items"].values() if key in it.get("migrated_from", [])), None)
+
+
 def already_sent(ledger: dict, key: str) -> str | None:
     """The time the internal hand-off was first delivered (HTTP 2xx), or None."""
     item = ledger["items"].get(key)
@@ -125,7 +149,7 @@ def record_attempt(ledger: dict, payload: dict, status_code: int | None, ok: boo
 def record_stage(ledger: dict, key: str, stage: str, reference: str, now: dt.datetime | None = None) -> dict:
     if stage not in ("early_warning", "notification", "final_report"):
         raise ValueError(f"unsupported legal reporting stage {stage!r}")
-    item = ledger["items"].get(key)
+    item = item_by_key(ledger, key)
     if item is None:
         raise KeyError(f"no ledger item {key}")
     if not reference.strip():
@@ -143,7 +167,7 @@ def confirm_event(ledger: dict, key: str, event: dict, reference: str, now: dt.d
     deadlines = legal_deadlines(event)
     if not deadlines:
         raise ValueError("a confirmed incident event is required")
-    item = ledger["items"].get(key)
+    item = item_by_key(ledger, key)
     if item is None:
         raise KeyError(f"no ledger item {key}")
     item.setdefault("event_history", []).append({"recorded_at": iso(now or now_utc()), "reference": reference.strip(), "event": dict(event)})
@@ -152,7 +176,7 @@ def confirm_event(ledger: dict, key: str, event: dict, reference: str, now: dt.d
 
 
 def close_item(ledger: dict, key: str, reason: str, now: dt.datetime | None = None) -> dict:
-    item = ledger["items"].get(key)
+    item = item_by_key(ledger, key)
     if item is None:
         raise KeyError(f"no ledger item {key}")
     if not reason.strip():
