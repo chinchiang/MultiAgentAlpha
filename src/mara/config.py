@@ -191,8 +191,9 @@ class TrainingConfig(BaseModel):
 
 class RolloutConfig(BaseModel):
     """G-10: three-phase rollout (report section 15.4). shadow: the pipeline runs and records, the
-    gate never blocks; advisory: blocking findings are marked, not enforced; blocking: `mara review`
-    exits 2 when the gate blocks. Governance check G-10 checks the phase against its dates and the
+    gate is not enforced; advisory: blocking findings are marked, not enforced; blocking: `mara review`
+    exits 2 when the gate blocks. In any phase an explicit `--fail-on-gate` enforces the gate for that
+    run (the CLI says so). Governance check G-10 checks the phase against its dates and the
     shadow-phase baseline report."""
 
     model_config = ConfigDict(extra="forbid")
