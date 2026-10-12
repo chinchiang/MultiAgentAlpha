@@ -160,7 +160,9 @@ refused. An endpoint signed by an internal CA names its PEM chain in `ca_bundle`
 workspace-relative paths): it is added to the default trust store and never replaces or disables
 verification. A gateway that expects the key in another header (`apikey`) sets `api_key_header`.
 The cold standbys in `config/examples/standby-for-{anthropic,gemini,glm}.yaml` each replace one
-family with the on-prem DeepSeek endpoint and leave everything else unchanged (G-4).
+family with the on-prem DeepSeek endpoint and leave everything else unchanged (G-4). A family may have
+further standbys as `standby-for-<family>.<name>.yaml`; every one of them must load and swap exactly that
+family, and a passing live drill on any one of them counts for the family.
 
 What the first live reviews against these endpoints showed (2026-10-07), each fixed with a regression test:
 

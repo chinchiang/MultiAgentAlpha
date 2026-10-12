@@ -38,6 +38,14 @@ not started, so all three fail today with precise reasons.
   model ids are to be confirmed against the deployment, and the weights behind `deepseek` need an ML-BOM entry with
   a confirmed source before a swap makes them a production model (`docs/ml-bom.md`, section 5).
   `llama`, `mistral` and `qwen` remain available families for other standbys.
+- A family may have more than one standby: further ones are `standby-for-<family>.<name>.yaml`
+  (e.g. `standby-for-glm.lmstudio.yaml`), the file without a name being the primary. The family in
+  the file name must equal the file's `standby_for`. Every standby of a family must load and swap
+  exactly that family, or G-4 fails for the family and names the broken file: a spare that only turns
+  out broken in the outage it exists for is no spare. A recent passing live drill on any one of the
+  family's standbys satisfies the drill requirement. A standby on a single workstation (a local model
+  server on loopback) cannot serve the CI runners, so it complements an on-prem standby rather than
+  replacing it.
 - `ops/model-swap-drills.yaml`: the drill register.
 - `scripts/model_swap_drill.py`:
   - `rehearse --standby <config>`: loads the standby config through the policies, confirms it swaps

@@ -32,7 +32,8 @@ def cmd_check(a: argparse.Namespace) -> int:
     cfg = load_config(a.config)
     ok = True
     for st in govdocs.drill_status(cfg, ROOT, a.today, a.drills):
-        cfg_line = f"standby {st.standby_config} → {st.standby_family}" if st.config_ok else f"standby: {st.config_problem}"
+        cfg_line = ("standby " + ", ".join(f"{x.config} → {x.standby_family}" for x in st.standbys) if st.config_ok
+                    else f"standby: {st.config_problem}")
         drill_line = (f"live drill {st.drill.date} {st.drill.duration_hours:g} h {st.drill.outcome}" if st.drill_ok and st.drill else st.drill_problem)
         print(f"{st.family}: {'OK' if st.ok else 'MISSING'} — {cfg_line}; {drill_line}")
         ok &= st.ok
