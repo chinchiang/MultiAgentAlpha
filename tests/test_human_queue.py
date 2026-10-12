@@ -236,17 +236,17 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
     state["events"]["8"][1].update(id=100, created_at="2026-09-12T08:00:00Z")
     (tmp_path / "state.json").write_text(json.dumps(state))
     (tmp_path / "hq.json").write_text(json.dumps(queue))
+    # F-0001 has an open ticket (#7) and F-0003's key was already decided on the closed #8: nothing is filed
+    # (this used to file a second ticket for the decided key; see test_a_decided_key_is_never_filed_again)
     created, skipped = hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False)
-    assert (created, skipped) == (1, 1)
+    assert (created, skipped) == (0, 2)
     st = json.loads((tmp_path / "state.json").read_text())
-    new = st["open"][-1]
-    assert hq.MARKER.format(key=queue["items"][1]["key"]) in new["body"] and "Skeptic (nemotron)" in new["body"] and "anthropic [forward]" in new["body"]
-    assert not list(tmp_path.glob(".mara-hq-*.md"))
+    assert [t["number"] for t in st["open"]] == [7] and not list(tmp_path.glob(".mara-hq-*.md"))
     register = tmp_path / "records.yaml"
     register.write_text("curriculum_version: '2026-09'\nvalidity_days: 365\npass_mark: 0.8\nrecords: []\n", encoding="utf-8")
     written, open_count, unrecorded = hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "decisions", tmp_path / "decisions" / "backlog.json",
                                                         dry_run=False, register=register)
-    assert (written, open_count) == (1, 2)
+    assert (written, open_count) == (1, 1)
     assert unrecorded == ["#9: closed with 0 decision labels, need exactly one"]
     rec = json.loads((tmp_path / "decisions" / (queue["items"][1]["key"] + ".json")).read_text())
     checked_on = rec.pop("training_checked_on")
@@ -264,7 +264,7 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
     assert dt.date.fromisoformat(checked_on)
     hq.sync_decisions("o/r", "mara-human-queue", tmp_path / "decisions", tmp_path / "decisions" / "backlog.json", dry_run=False, register=register)
     assert json.loads((tmp_path / "decisions" / (queue["items"][1]["key"] + ".json")).read_text())["adjudicator_trained"] is True
-    assert json.loads((tmp_path / "decisions" / "backlog.json").read_text())["open"] == 2
+    assert json.loads((tmp_path / "decisions" / "backlog.json").read_text())["open"] == 1
     # a closed ticket without a decision label writes nothing
     assert not (tmp_path / "decisions" / "cccccccccccc.json").exists()
 
@@ -328,6 +328,89 @@ def test_a_decision_that_cannot_be_recorded_is_reported_and_fails_the_run(tmp_pa
                                       "--backlog-file", str(tmp_path / "d" / "backlog.json")])
     assert hq.main() == 2
     assert "4 closed ticket(s) carry a decision that was not recorded" in capsys.readouterr().err
+
+
+def test_a_decided_key_is_never_filed_again(tmp_path, monkeypatch):
+    """Every push to main reviews the unchanged fixture: a key a human had already decided on a closed ticket
+    used to get a fresh ticket each time."""
+    import human_queue_issues as hq
+
+    items = [_queue_item(n) for n in range(1, 7)]
+    items[5].update(skeptic={"family": "nemotron", "verdict": "weakened", "reason": "x", "sanitizer_or_control": ""},
+                    judge_votes=[{"family": "anthropic", "pass": "forward", "verdict": "true_positive", "severity_band": "High", "reason": "y",
+                                  "self_family": False}])
+    tp, fp = {"name": "decision:true-positive"}, {"name": "decision:false-positive"}
+    q = {"name": "mara-human-queue"}
+    state = {"open": [], "closed": [
+        {"number": 1, "body": hq.ticket_body(items[0], "/t/x"), "labels": [q, tp], "stateReason": "completed"},     # decided
+        {"number": 2, "body": hq.ticket_body(items[1], "/t/x"), "labels": [q, fp], "stateReason": "completed"},     # decided
+        {"number": 3, "body": hq.ticket_body(items[2], "/t/x"), "labels": [q], "stateReason": "completed"},         # awaits its label
+        {"number": 4, "body": hq.ticket_body(items[3], "/t/x"), "labels": [q], "stateReason": "not_planned"},       # withdrawn
+    ]}
+    _fake_gh(tmp_path, state)
+    monkeypatch.setenv("PATH", str(tmp_path / "bin") + os.pathsep + os.environ["PATH"])
+    monkeypatch.chdir(tmp_path)
+    decisions = tmp_path / "d"
+    decisions.mkdir()
+    (decisions / f"{items[4]['key']}.json").write_text("{}")  # recorded, though its ticket is gone (transferred, deleted)
+    (tmp_path / "hq.json").write_text(json.dumps({"target": "/t/x", "items": items}))
+    assert hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False, decisions_dir=decisions) == (2, 4)
+    # the next push: the two new tickets are open now, nothing is filed
+    assert hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False, decisions_dir=decisions) == (0, 6)
+    st = json.loads((tmp_path / "state.json").read_text())
+    filed = [t["body"] for t in st["open"]]
+    assert len(filed) == 2, "only the withdrawn key and the new one are filed, once"
+    assert hq.MARKER.format(key=items[3]["key"]) in filed[0] and hq.MARKER.format(key=items[5]["key"]) in filed[1]
+    assert "Skeptic (nemotron)" in filed[1] and "anthropic [forward]" in filed[1] and not list(tmp_path.glob(".mara-hq-*.md"))
+
+
+def test_closed_tickets_for_one_key_never_overwrite_each_other(tmp_path, monkeypatch, capsys):
+    """Several closed tickets for one key used to write calib/decisions/<key>.json in list order, so the last
+    one listed won, an untrained or contradicting decision included."""
+    import human_queue_issues as hq
+
+    agree, clash = _queue_item(1), _queue_item(2)
+    tp, fp, q = {"name": "decision:true-positive"}, {"name": "decision:false-positive"}, {"name": "mara-human-queue"}
+
+    def ev(n, who, label, at):
+        return [{"id": n, "event": "labeled", "label": {"name": label}, "actor": {"login": who}, "created_at": at}]
+
+    state = {"open": [], "closed": [
+        # listed newest first, as the API does: an untrained bob after the trained alice, both true positive
+        {"number": 12, "body": hq.ticket_body(agree, "/t/x"), "labels": [q, tp], "stateReason": "completed"},
+        {"number": 11, "body": hq.ticket_body(agree, "/t/x"), "labels": [q, tp], "stateReason": "completed"},
+        # one key, two different answers
+        {"number": 22, "body": hq.ticket_body(clash, "/t/x"), "labels": [q, fp], "stateReason": "completed"},
+        {"number": 21, "body": hq.ticket_body(clash, "/t/x"), "labels": [q, tp], "stateReason": "completed"},
+    ], "events": {"12": ev(120, "bob", "decision:true-positive", "2026-10-02T08:00:00Z"),
+                  "11": ev(110, "alice", "decision:true-positive", "2026-10-05T08:00:00Z"),
+                  "22": ev(220, "bob", "decision:false-positive", "2026-10-03T08:00:00Z"),
+                  "21": ev(210, "alice", "decision:true-positive", "2026-10-01T08:00:00Z")}}
+    _fake_gh(tmp_path, state)
+    monkeypatch.setenv("PATH", str(tmp_path / "bin") + os.pathsep + os.environ["PATH"])
+    monkeypatch.chdir(tmp_path)
+    register = tmp_path / "records.yaml"
+    register.write_text("curriculum_version: '2026-09'\nvalidity_days: 365\npass_mark: 0.8\nrecords:\n"
+                        "  - {person: alice, role: adjudicator, curriculum_version: '2026-09', date: 2026-09-20, assessor: quiz, evidence: quiz}\n",
+                        encoding="utf-8")
+    decisions = tmp_path / "d"
+    decisions.mkdir()
+    earlier = decisions / f"{clash['key']}.json"
+    earlier.write_text('{"decision": "true_positive", "issue": 21}\n')  # a previous sync, before #22 was closed
+    written, _, unrecorded = hq.sync_decisions("o/r", "mara-human-queue", decisions, decisions / "backlog.json", dry_run=False, register=register)
+    assert written == 1
+    rec = json.loads((decisions / f"{agree['key']}.json").read_text())
+    assert (rec["issue"], rec["decided_by"], rec["adjudicator_trained"]) == (11, "alice", True), "the trained adjudicator's decision, not the last one listed"
+    out = capsys.readouterr().out
+    assert "2 closed tickets agree (true_positive); recording #11, also decided in #12" in out
+    assert "#11 by alice" not in out and "WARNING" not in out, "the recorded decision is a trained one"
+    clash_lines = [u for u in unrecorded if clash["key"] in u]
+    assert [u.split(":")[0] for u in clash_lines] == ["#21", "#22"]
+    assert "contradicting decisions (#21 true_positive, #22 false_positive)" in clash_lines[0]
+    assert earlier.read_text() == '{"decision": "true_positive", "issue": 21}\n', "a contradiction neither overwrites nor deletes"
+    # neither key is filed again
+    (tmp_path / "hq.json").write_text(json.dumps({"target": "/t/x", "items": [agree, clash]}))
+    assert hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False, decisions_dir=decisions) == (0, 2)
 
 
 def test_an_api_failure_while_reading_a_decision_aborts_instead_of_dropping_it(monkeypatch):

@@ -21,7 +21,9 @@ python3 scripts/human_queue_issues.py --repo owner/repo --sync-decisions --dry-r
 
 人工裁決者只能留下其中一個 `decision:true-positive` 或 `decision:false-positive` label，再關閉工單。同步會分頁讀取 label 事件、重播加入與移除，將目前唯一仍存在的 label 綁定其 event ID、actor 與時間。兩種裁決同時存在、事件缺漏、舊 metadata 或身分不符都不匯入。資格依加上該存續 label 當日的訓練紀錄判定。
 
-不匯入的工單不會默默消失：沒有或同時有兩個裁決 label、label 事件無法解析、`mara-meta` 缺漏或損壞、身分不符，每張都以 `UNRECORDED #編號: 原因` 列出，同步仍寫完其餘裁決與 backlog，但以 exit code 2 結束，CI job 因此失敗。處理方式是修正 label 後重新關閉，或重新開啟工單。刻意撤回（例如程式已改、finding 不再出現）請以「not planned」關閉且不加裁決 label，這只記錄在 log。GitHub API 讀取失敗時整個同步中止（exit 1），不會當成「沒有裁決」。
+不匯入的工單不會默默消失：沒有或同時有兩個裁決 label、label 事件無法解析、`mara-meta` 缺漏或損壞、身分不符，每張都以 `UNRECORDED #編號: 原因` 列出，同步仍寫完其餘裁決與 backlog，但以 exit code 2 結束，CI job 因此失敗。處理方式是修正 label 後重新關閉，或重新開啟工單。刻意撤回（例如程式已改、finding 不再出現）請以「not planned」關閉且不加裁決 label，這只記錄在 log。
+
+同一個 key 只開一張工單：已有開啟中的工單、已關閉且不是撤回的工單（已裁決，或裁決 label 待修正），或 `calib/decisions/` 已有該 key 的裁決時，都不會再開單；只有先前每一張工單都以「not planned」撤回的 key 才會重新開單。過去只比對開啟中的工單，所以 main 每次 push 都會替已裁決的 key 重新開單。同一個 key 有多張已關閉工單時只寫入一份裁決：各張的裁決一致時，優先寫入受訓裁決者的那一張，否則寫入最早的那一張；裁決互相矛盾時一份都不寫，既有檔案也不修改或刪除，每一張都以 `UNRECORDED` 列出、同步以 exit code 2 結束，須重新開啟這些工單，或只保留其中一張的裁決 label。過去會依清單順序逐一寫入，最後讀到的那一張蓋掉先前的裁決，即使它出自未受訓的裁決者，或是相反的裁決。GitHub API 讀取失敗時整個同步中止（exit 1），不會當成「沒有裁決」。
 
 工單清單經 REST API 讀取並跟隨每一頁，沒有筆數上限；過去 `gh issue list --limit 500` 會在超過 500 張時重複建立工單、低估 backlog、漏讀已關閉工單的裁決。dry-run 也會讀取既有的開啟工單，顯示的就是實際會建立的工單。
 
