@@ -22,6 +22,9 @@ not started, so all three fail today with precise reasons.
   | `<!-- policy:S5 -->` | data residency and model-use limits (P1, P2, P5) |
   | `<!-- policy:S6 -->` | exceptions and risk acceptance |
 
+- A statement is the marker's own text: the first line after it, before the next marker or heading,
+  that is neither blank nor an HTML comment and holds a letter or digit. A marker followed directly
+  by another marker or by a heading counts as empty.
 - `check_g1` passes when all six statements have text, `status: approved`, `approved_by` and
   `approved_on` are filled, `approved_on` is not in the future, `review_by` has not passed, and the
   approval is under a year old or has a future `review_by`. Otherwise it fails and lists what is
