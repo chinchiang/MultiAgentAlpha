@@ -41,6 +41,7 @@ def test_every_tool_is_handed_neutral_config_instead_of_the_targets(tmp_path, mo
     fake_db = tmp_path / "trivy.db"
     fake_db.write_bytes(b"")
     monkeypatch.setattr(trivy_db, "db_path", lambda cache: fake_db)  # "the offline database is there"
+    monkeypatch.setattr(trivy_db, "check", lambda cache, max_age: (True, []))  # "...and matches its record"
     target = tmp_path / "target"
     target.mkdir()
     for name, text in {".semgrepignore": "*\n", ".trivyignore": "CVE-2018-18074\n", "trivy.yaml": "severity: [LOW]\n",

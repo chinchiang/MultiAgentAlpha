@@ -20,6 +20,9 @@ from pathlib import Path
 from .runner import tools_dir
 
 RECORD_NAME = "mara-trivy-db.json"
+DEFAULT_MAX_AGE_HOURS = 48.0  # tools/trivy-db.yaml max_age_hours when the workspace has none
+CONFIG_FILE = "tools/trivy-db.yaml"  # below the MARA workspace root
+MAX_CLOCK_SKEW_HOURS = 1.0  # an UpdatedAt further in the future than this is not a real database
 OFFLINE_FLAGS = ["--skip-db-update", "--skip-java-db-update", "--skip-check-update", "--offline-scan"]
 
 
@@ -86,8 +89,26 @@ def age_hours(metadata: dict, now: dt.datetime | None = None) -> float | None:
     return ((now or dt.datetime.now(dt.UTC)) - updated).total_seconds() / 3600
 
 
+def max_age_hours() -> float:
+    """The freshness bound from the workspace's tools/trivy-db.yaml (the one scripts/trivy_db.py status uses)."""
+    import yaml
+
+    from ..workspace import resolve
+
+    path = resolve(CONFIG_FILE)
+    try:
+        value = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("max_age_hours", DEFAULT_MAX_AGE_HOURS)
+        return float(value)
+    except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError):
+        return DEFAULT_MAX_AGE_HOURS
+
+
 def check(cache: Path, max_age_hours: float, now: dt.datetime | None = None) -> tuple[bool, list[str]]:
-    """(ok, lines): the database exists, matches its record, and is younger than max_age_hours."""
+    """(ok, lines): the database exists, matches its record, and is younger than max_age_hours.
+
+    metadata.json is not hashed, so its UpdatedAt - the freshness evidence - must equal the one the record
+    took at download time: an edited UpdatedAt would otherwise pass a months-old database as fresh. An
+    UpdatedAt in the future is refused for the same reason."""
     lines = []
     db = db_path(cache)
     if not db.is_file():
@@ -104,8 +125,15 @@ def check(cache: Path, max_age_hours: float, now: dt.datetime | None = None) -> 
         lines.append(f"trivy.db sha256 {digest[:16]}… does not match the record {str(rec.get('trivy_db_sha256'))[:16]}… (tampered or replaced)")
         ok = False
     age = age_hours(meta, now)
+    recorded = (rec.get("metadata") or {}).get("UpdatedAt") if isinstance(rec.get("metadata"), dict) else None
     if age is None:
         lines.append("metadata.json has no readable UpdatedAt")
+        ok = False
+    elif str(meta.get("UpdatedAt")) != str(recorded):
+        lines.append(f"metadata.json UpdatedAt {meta.get('UpdatedAt')} does not match the record's {recorded} (tampered or replaced)")
+        ok = False
+    elif age < -MAX_CLOCK_SKEW_HOURS:
+        lines.append(f"metadata.json UpdatedAt {meta.get('UpdatedAt')} lies {-age:.1f} h in the future")
         ok = False
     elif age > max_age_hours:
         lines.append(f"database is {age:.1f} h old (UpdatedAt {meta.get('UpdatedAt')}), older than the {max_age_hours:g} h limit: re-download")
