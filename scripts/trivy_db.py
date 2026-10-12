@@ -4,7 +4,9 @@
       `trivy image --download-db-only` from the first repository in tools/trivy-db.yaml that answers (or
       REF), then write <cache>/mara-trivy-db.json: repository, OCI manifest + layer digest (read from the
       registry before the download), trivy's metadata.json (UpdatedAt, NextUpdate), the SHA-256 of
-      trivy.db and the trivy version. --pin-digest fetches REPO@sha256:... for a reproducible fetch.
+      trivy.db and the trivy version. --pin-digest fetches REPO@sha256:... for a reproducible fetch, and only
+      when the registry names exactly that manifest digest: a repository that answers with another one is
+      refused (the next repository is tried), so the pin never rests on the registry's word.
   python3 scripts/trivy_db.py status [--max-age-hours N] [--cache-dir DIR]
       exit 1 when the database is missing, its trivy.db no longer matches the record, or UpdatedAt is
       older than N hours (default tools/trivy-db.yaml max_age_hours). What CI runs before any scan.
@@ -25,6 +27,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -112,17 +115,23 @@ def cmd_download(a: argparse.Namespace) -> int:
     cache = a.cache_dir.resolve()
     cache.mkdir(parents=True, exist_ok=True)
     repos = [a.repository] if a.repository else cfg["repositories"]
+    pin = (a.pin_digest or "").strip().lower()
     if a.pin_digest:
-        if not a.pin_digest.startswith("sha256:"):
-            print("ERROR: --pin-digest must be sha256:<hex>", file=sys.stderr)
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", pin):
+            print("ERROR: --pin-digest must be sha256: followed by 64 hex digits", file=sys.stderr)
             return 2
-        repos = [f"{split_ref(r)[0]}/{split_ref(r)[1]}@{a.pin_digest}" for r in repos]
+        repos = [f"{split_ref(r)[0]}/{split_ref(r)[1]}@{pin}" for r in repos]
     last = ""
     for ref in repos:
         info = head_manifest(ref)
         print(f"registry {ref}: manifest {info['manifest_digest']} layer {info['layer_digest']} created {info['created']}"
               + (f" (registry query failed: {info['error']})" if "error" in info else ""))
         digest = info["manifest_digest"]
+        if pin and digest.startswith("sha256:") and digest.lower() != pin:
+            # the download below would fetch the digest the registry named, not the pin: refuse it
+            last = f"{ref}: the registry answered with manifest {digest}, not the pinned {pin}; refusing it"
+            print(f"  {last}; trying the next repository" if ref != repos[-1] else f"  {last}")
+            continue
         if not digest.startswith("sha256:"):
             if not a.allow_unknown_provenance:
                 last = (f"{ref}: the registry did not name the manifest digest, so the record could not say what was "
@@ -144,6 +153,7 @@ def cmd_download(a: argparse.Namespace) -> int:
             ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True).stdout
             trivy_version = next((line.split()[-1] for line in ver.splitlines() if line.startswith("Version:")), installed_version("trivy"))
             rec = {"repository": ref, "downloaded_ref": fetch_ref, "provenance": "digest" if digest.startswith("sha256:") else "unverified",
+                   **({"pinned_digest": pin} if pin else {}),
                    "manifest_digest": info["manifest_digest"], "layer_digest": info["layer_digest"], "created": info["created"],
                    "metadata": meta, "trivy_db_sha256": tdb.sha256_file(tdb.db_path(cache)), "trivy_db_bytes": tdb.db_path(cache).stat().st_size,
                    "trivy_version": trivy_version, "downloaded_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}

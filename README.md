@@ -444,7 +444,7 @@ trivy used to download its vulnerability database at scan time, which hangs on i
 turns every review into a network event. `python3 scripts/trivy_db.py download` fetches it once
 (from the repositories in `tools/trivy-db.yaml`, by the manifest digest the registry names for the tag, so the record
 names exactly what was downloaded; a registry that names none is refused unless `--allow-unknown-provenance`;
-`--pin-digest sha256:…` fetches a given digest)
+`--pin-digest sha256:…` fetches a given digest, and only from a repository whose registry names exactly that digest)
 into `.mara-tools/trivy-cache` and writes `mara-trivy-db.json`: OCI manifest and layer digests,
 trivy's `UpdatedAt`/`NextUpdate`, the SHA-256 of `trivy.db`, the trivy version. `status` refuses a
 missing, tampered or stale copy (default 48 h, `max_age_hours`); `export`/`import` carry the
