@@ -15,6 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
+from .. import exchange
 from ..context.repo_map import RepoContext
 from ..providers.base import Provider
 from . import base
@@ -96,7 +97,8 @@ class ContextView(BaseModel):
 
 MAX_ITEMS_PER_KIND = 12  # the schema's per-call limit, kept for the merged view: the reviewer prompt stays bounded
 
-_AUDIT_KEYS = ("refused", "truncated", "errored", "canary_echoed", "canary_reported", "input_tokens", "output_tokens", "invalid", "unverified")
+_AUDIT_KEYS = ("refused", "truncated", "errored", "unparseable", "canary_echoed", "canary_reported", "input_tokens", "output_tokens",
+               "invalid", "unverified")
 
 
 def run_context_agent(provider: Provider, ctx: RepoContext) -> tuple[ContextView | None, dict]:
@@ -137,12 +139,13 @@ def _context_call(provider: Provider, ctx: RepoContext) -> tuple[list[ContextIte
         'Return {"containers": [...], "external_systems": [...], "trust_boundaries": [...], '
         '"data_stores": [...]} following the schema.'
     )
-    comp = base.call(provider, system_extra=base.load_prompt("context"), user=user, schema=CONTEXT_SCHEMA, role="context")
-    data, echoed, reported = canary.screen(comp, tuple(key for _, key in _KIND_BY_KEY))
-    audit = {"refused": comp.refused or (comp.data is None and not comp.truncated and not comp.error),
-             "truncated": comp.truncated, "errored": bool(comp.error), "canary_echoed": echoed, "canary_reported": reported,
-             "input_tokens": comp.input_tokens, "output_tokens": comp.output_tokens, "invalid": 0, "unverified": 0}
-    if comp.refused or comp.data is None or audit["canary_echoed"]:
+    outcome = exchange.call(provider, system_extra=base.load_prompt("context"), user=user, schema=CONTEXT_SCHEMA, role="context")
+    data, echoed, reported = canary.screen(outcome, tuple(key for _, key in _KIND_BY_KEY))
+    # an unparseable reply is invalid output, one per reply (docs/adr/0001-reply-outcome-accounting.md)
+    audit = {**exchange.extraction_flags(outcome), "canary_echoed": echoed, "canary_reported": reported,
+             "input_tokens": outcome.input_tokens, "output_tokens": outcome.output_tokens, "invalid": int(outcome.unparseable),
+             "unverified": 0}
+    if outcome.data is None or audit["canary_echoed"]:
         return None, audit
     if not isinstance(data, dict):
         audit["invalid"] += 1

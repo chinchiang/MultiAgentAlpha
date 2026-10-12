@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mara.config import load_config  # noqa: E402
+from mara.exchange import classify  # noqa: E402
 from mara.providers import make_provider  # noqa: E402
 
 SCHEMA = {"type": "object", "additionalProperties": False, "required": ["answer", "note"],
@@ -32,14 +33,13 @@ def smoke(spec) -> tuple[bool, str]:
     """(ok, one-line outcome) for one model."""
     t = time.monotonic()
     try:
-        c = make_provider(spec).complete(system=SYSTEM, user=USER, schema=SCHEMA, role="smoke")
+        c = classify(make_provider(spec).complete(system=SYSTEM, user=USER, schema=SCHEMA, role="smoke"), SCHEMA)
     except RuntimeError as e:  # the providers' sanitised codes
         return False, f"{e} ({time.monotonic() - t:.1f} s)"
     took = f"{c.input_tokens}/{c.output_tokens} tokens, {time.monotonic() - t:.1f} s"
     served = f", served {c.served_model}" if c.served_model and c.served_model != spec.model else ""
-    if c.refused or c.truncated or c.error or not isinstance(c.data, dict):
-        outcome = "refused" if c.refused else "truncated" if c.truncated else c.error or "no JSON object"
-        return False, f"{outcome} ({took})"
+    if c.kind != "ok" or not isinstance(c.data, dict):
+        return False, f"{c.kind if c.kind != 'ok' else 'no JSON object'} ({took})"
     if c.data.get("answer") != 5:
         return False, f"wrong answer {c.data.get('answer')!r} ({took})"
     return True, f"ok{served} ({took})"

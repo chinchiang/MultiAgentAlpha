@@ -390,14 +390,30 @@ def load_history(path: Path) -> list[dict]:
         return []
 
 
-def append_history(path: Path, date: str, mode: str, alpha, pair: dict) -> None:
+def exchange_version(runs) -> int:
+    """The reply accounting the runs were made with (mara.exchange.EXCHANGE_VERSION; reports without it are
+    version 1). Refusal, invalid and truncation counts of different versions are not comparable
+    (docs/adr/0001-reply-outcome-accounting.md), so one calibration never mixes them."""
+    versions = {int(rep.get("bias_audit", {}).get("exchange_version", 1)) for _, rep, _ in runs}
+    if len(versions) > 1:
+        raise SystemExit(f"the reviews were made with different exchange versions {sorted(versions)}: re-run them with one MARA version")
+    return versions.pop() if versions else 1
+
+
+def comparable_history(history: list[dict], version: int) -> list[dict]:
+    """The earlier periods recorded with the same exchange version (rows without one are version 1)."""
+    return [h for h in history if int(h.get("exchange_version", 1)) == version]
+
+
+def append_history(path: Path, date: str, mode: str, alpha, pair: dict, version: int = 1) -> None:
     """Assessment #49: keep alpha and judge agreement comparable across quarters. Live runs only —
-    mock numbers verify the method, they are not a quality time series."""
+    mock numbers verify the method, they are not a quality time series. Each row records its exchange
+    version; the trend compares only rows of one version."""
     if mode != "live" or alpha is None:
         return
     hist = load_history(path)
     hist = [h for h in hist if not (h.get("date") == date and h.get("mode") == mode)]
-    hist.append({"date": date, "mode": mode, "global_alpha": round(alpha, 4),
+    hist.append({"date": date, "mode": mode, "exchange_version": version, "global_alpha": round(alpha, 4),
                  "judge_agreement": {k: round(v, 4) for k, v in sorted(pair.items())}})
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(hist, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -520,7 +536,7 @@ def front_matter(mode: str, date: str, families, runs, model_eval: dict | None, 
 
 def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mode: str, date: str | None = None,
            model_eval: dict | None = None, aat: dict | None = None, history: list[dict] | None = None,
-           tool_recall_rows: dict | None = None, tool_labels: int = 0) -> str:
+           tool_recall_rows: dict | None = None, tool_labels: int = 0, version: int = 1) -> str:
     today = date or dt.date.today().isoformat()
     L = [front_matter(mode, today, families, runs, model_eval, tool_labels),
          f"# 校準報告（{today}）", "",
@@ -634,9 +650,14 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
     L += ["## 8. α 跨期追蹤（assessment #49）", ""]
     if mode != "live":
         L += ["僅 live 校準寫入 `calib/history.json`；本次為 mock，數字只驗證方法，不追加、不比較。", ""]
-    elif not history or alpha is None:
-        L += ["尚無跨期紀錄：這是第一次 live 校準（或本次缺 α），`calib/history.json` 從下次起可比較。", ""]
+    elif not comparable_history(history or [], version) or alpha is None:
+        other = len(history or []) - len(comparable_history(history or [], version))
+        L += ["尚無跨期紀錄：這是第一次 live 校準（或本次缺 α），`calib/history.json` 從下次起可比較。"
+              if not other else
+              f"沒有同一 exchange 版本（v{version}）的前期紀錄：`calib/history.json` 的 {other} 筆前期紀錄以另一版的回覆計數方式產生"
+              "（docs/adr/0001-reply-outcome-accounting.md），拒答、無效與截斷的數字不可比較，本次為此版本的第一期。", ""]
     else:
+        history = comparable_history(history or [], version)
         prev = history[-1]
         delta = round(alpha - prev["global_alpha"], 4)
         L += ["| 日期 | 全域 α |", "|---|---:|"]
@@ -709,12 +730,14 @@ def main() -> int:
     recall_rows = tool_recall(runs, tool_labels)
     history_path = ROOT / "calib" / "history.json"
     history = load_history(history_path)
+    version = exchange_version(runs)
     n_tool_labels = sum(len(rs) for per in tool_labels.values() for rs in per.values())
     text = render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, args.mode, date, model_eval,
-                  aat=aat, history=history, tool_recall_rows=recall_rows, tool_labels=n_tool_labels)
+                  aat=aat, history=history, tool_recall_rows=recall_rows, tool_labels=n_tool_labels,
+                  version=version)
     out = Path(args.report) if args.report else ROOT / "docs" / f"calibration-{date}.md"
     out.write_text(text, encoding="utf-8")
-    append_history(history_path, date, args.mode, alpha, pair)
+    append_history(history_path, date, args.mode, alpha, pair, version)
     if args.mode == "live":
         latest = ROOT / "calib" / "latest.json"
         latest.write_text(

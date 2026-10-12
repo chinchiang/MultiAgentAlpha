@@ -5,6 +5,7 @@ import re
 from collections import Counter
 from typing import Literal
 
+from .. import exchange
 from ..context.repo_map import RepoContext
 from ..providers.base import Provider
 from ..schemas import Finding, SkepticVerdict
@@ -83,13 +84,13 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         f"Repository summary: {ctx.summary()}\n\n{base.untrusted_block(ctx, canary, shown)}\n\n"
         "Findings to refute.\nBEGIN_JSON_ARRAY\n" + json.dumps([_view(f) for f in findings], ensure_ascii=False)
     )
-    comp = base.call(provider, system_extra=base.load_prompt("skeptic"), user=user, schema=SKEPTIC_SCHEMA, role="skeptic")
+    outcome = exchange.call(provider, system_extra=base.load_prompt("skeptic"), user=user, schema=SKEPTIC_SCHEMA, role="skeptic")
     # the token in a verdict that also names the planted file reports it (tainted: it cannot refute); anywhere
     # else the model followed it
-    echoed, tainted = canary.screen_verdicts(comp)
+    echoed, tainted = canary.screen_verdicts(outcome)
     if echoed:
         return [], ["canary_echoed"], 0, 0  # followed the planted instruction: none of its verdicts counts
-    items, errors = base.parse_items(comp, _SkepticRaw)
+    items, errors = exchange.parse_items(outcome, _SkepticRaw)
     counts = Counter(i.finding_id for i in items)
     if set(counts) != {f.id for f in findings} or any(n != 1 for n in counts.values()) or errors:
         # a bare refusal is an abstention, not invalid output: keep its error list clean

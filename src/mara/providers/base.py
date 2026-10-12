@@ -1,4 +1,4 @@
-"""Provider interface: one structured completion, validated against a JSON schema."""
+"""Provider interface: one structured completion, returned as the vendor gave it (RawReply)."""
 
 from __future__ import annotations
 
@@ -9,21 +9,29 @@ from typing import Any
 
 from ..config import ModelSpec
 
+STOP_END = "end"  # the model finished its answer
+STOP_MAX_TOKENS = "max_tokens"  # the vendor stopped it at the output limit
+STOP_REFUSAL = "refusal"  # the vendor or the model declined (refusal stop, content filter, blocked prompt)
+STOPS = (STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL)
+
 
 @dataclass
-class Completion:
-    data: Any
-    raw_text: str
+class RawReply:
+    """What a provider adapter saw, before anyone judged it: the adapter maps its vendor's stop reason to one of
+    STOPS and hands over the text, and mara.exchange classifies the reply (docs/adr/0001-reply-outcome-accounting.md).
+    An adapter never parses JSON, clips strings or decides whether a reply was truncated or unusable."""
+
+    stop: str
+    answer_text: str = ""  # the text that should hold the structured answer (parsed by mara.exchange)
+    structured: Any = None  # an answer the vendor already delivered as structured data (Bedrock tool call)
+    aside: str = ""  # everything else the model wrote around the answer (other text blocks, prose around a tool call)
     input_tokens: int = 0
     output_tokens: int = 0
-    refused: bool = False
-    truncated: bool = False  # output hit max_tokens (or was not valid JSON): not a refusal, data is None
-    error: str = ""  # sanitised provider failure code (provider_http_error:429, ...): no model answer, not a refusal
     served_model: str = ""  # model the response names as its producer; can differ from the configured id
-    aside: str = ""  # prose the model wrote outside the structured answer (Bedrock tool call); part of raw_text too
-    # the parsed answer before clip_strings cut it to the schema's maxLength (None: same as data). Integrity checks
-    # that must see everything the model wrote - the canary screen - read this, the agents' results use `data`
-    full_data: Any = None
+
+    def __post_init__(self) -> None:
+        if self.stop not in STOPS:
+            raise ValueError(f"unknown stop {self.stop!r}; one of {STOPS}")
 
 
 class Provider(abc.ABC):
@@ -43,8 +51,9 @@ class Provider(abc.ABC):
         """Called by the pipeline before a review; lets a provider know which repo is under review."""
 
     @abc.abstractmethod
-    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> Completion:
-        """Return JSON matching `schema`. `role` is a hint ('reviewer:xss', 'judge', ...) for mocks/logging."""
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> RawReply:
+        """Ask for JSON matching `schema`; return the reply as the vendor gave it. `role` is a hint ('reviewer:xss',
+        'judge', ...) for mocks/logging. A failed call raises RuntimeError with a sanitised provider_* code."""
 
 
 def wire_schema(schema: dict) -> dict:

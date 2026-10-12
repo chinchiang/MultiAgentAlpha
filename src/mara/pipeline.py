@@ -15,6 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from . import exchange
 from .agents import base, context_agent, judge, redteam, reviewer, skeptic
 from .agents.context_agent import ContextView
 from .bias.blinding import blinded_batches
@@ -46,7 +47,10 @@ from .workspace import check_outside
 # error vocabulary of the agent layer: "refused" marks an abstention (model said no), the
 # incomplete_or_duplicate_* entries are summary markers the agents append to signal that a
 # partially-failed call returned no verdicts at all; neither is an unusable item itself
-_ERROR_MARKERS = frozenset({"refused", "canary_echoed", "incomplete_or_duplicate_response", "incomplete_or_duplicate_judge_response"})
+# response-level codes that are not invalid output: an abstention, an echo, the budget (a truncation is never charged
+# to the model, docs/adr/0001-reply-outcome-accounting.md) and the summary markers
+_ERROR_MARKERS = frozenset({"refused", "canary_echoed", "truncated", "incomplete_or_duplicate_response",
+                            "incomplete_or_duplicate_judge_response"})
 
 
 # L3/L4 calls are bounded like the reviewer calls: the skeptic and red team read the evidence files of
@@ -103,6 +107,16 @@ def _retryable(errors: list[str]) -> bool:
     more call (GLM as skeptic answered four verdicts for three findings on one call and exactly three on the
     next, 2026-10-08). Refusals and canary echoes are signals, never retried; providers retry their own failures."""
     return bool(errors) and not any(e in ("refused", "canary_echoed") or base.PROVIDER_ERROR_RE.fullmatch(e) for e in errors)
+
+
+def _reply_counts(audit: defaultdict[str, Any], role: str, fam: str, errors: list[str]) -> None:
+    """A ballot reply's truncations and unparseable replies, total and per family. A truncation makes the run
+    incomplete without counting as invalid output; an unparseable reply is invalid output, counted here too so the
+    two causes of invalid output (no structured answer, schema-invalid items) can be told apart."""
+    for code, counter in (("truncated", f"{role}_truncations"), ("unparseable", f"{role}_unparseable_replies")):
+        n = errors.count(code)
+        audit[counter] += n
+        audit[f"{counter}[{fam}]"] += n
 
 
 def _count_invalid(errors: list[str]) -> int:
@@ -162,6 +176,7 @@ class Pipeline:
         self.audit["context_calls"] += audit["calls"]
         self.audit[f"context_calls[{fam}]"] += audit["calls"]
         for key, counter in (("refused", "context_refusals"), ("truncated", "context_truncations"),
+                             ("unparseable", "context_unparseable_replies"),
                              ("errored", "context_errors"), ("canary_echoed", "canary_echoes"), ("canary_reported", "canary_reports"),
                              ("invalid", "context_invalid_items"), ("unverified", "context_unverified_items")):
             self.audit[counter] += int(audit[key])
@@ -186,6 +201,7 @@ class Pipeline:
                     self.audit["reviewer_calls"] += 1
                     self.audit["reviewer_refusals"] += int(audit["refused"])
                     self.audit["reviewer_truncations"] += int(audit["truncated"])
+                    self.audit["reviewer_unparseable_replies"] += int(audit["unparseable"])
                     self.audit["reviewer_errors"] += int(audit["errored"])
                     self.audit["canary_echoes"] += int(audit["canary_echoed"])
                     self.audit["canary_reports"] += audit["canary_reported"]
@@ -193,6 +209,7 @@ class Pipeline:
                     self.audit[f"reviewer_calls[{fam}]"] += 1
                     self.audit[f"reviewer_refusals[{fam}]"] += int(audit["refused"])
                     self.audit[f"reviewer_truncations[{fam}]"] += int(audit["truncated"])
+                    self.audit[f"reviewer_unparseable_replies[{fam}]"] += int(audit["unparseable"])
                     self.audit[f"reviewer_errors[{fam}]"] += int(audit["errored"])
                     self.audit[f"canary_echoes[{fam}]"] += int(audit["canary_echoed"])
                     self.audit[f"canary_reports[{fam}]"] += audit["canary_reported"]
@@ -282,6 +299,7 @@ class Pipeline:
             invalid = _count_invalid(errors)
             self.audit["skeptic_invalid_items"] += invalid
             self.audit[f"skeptic_invalid_items[{fam}]"] += invalid
+            _reply_counts(self.audit, "skeptic", fam, errors)
             self.audit["skeptic_refusals"] += refusals
             self.audit[f"skeptic_refusals[{fam}]"] += refusals
             self.audit["skeptic_unverified_controls"] += unverified
@@ -327,6 +345,7 @@ class Pipeline:
             invalid = _count_invalid(errors)
             self.audit["redteam_invalid_items"] += invalid
             self.audit[f"redteam_invalid_items[{fam}]"] += invalid
+            _reply_counts(self.audit, "redteam", fam, errors)
             self.audit["redteam_refusals"] += refusals
             self.audit[f"redteam_refusals[{fam}]"] += refusals
             self.audit["redteam_exploit_code_stripped"] += stripped
@@ -383,6 +402,7 @@ class Pipeline:
                 invalid = _count_invalid(e1) + _count_invalid(e2)
                 self.audit["judge_invalid_items"] += invalid
                 self.audit[f"judge_invalid_items[{fam}]"] += invalid
+                _reply_counts(self.audit, "judge", fam, e1 + e2)
                 self.audit["judge_refusals"] += refusals
                 self.audit[f"judge_refusals[{fam}]"] += refusals
                 votes.extend(v1 + v2)
@@ -608,10 +628,13 @@ class Pipeline:
             "redteam_canary_echoes",
             "judge_invalid_items",
             "judge_refusals",
+            "judge_truncations",
             "skeptic_invalid_items",
             "skeptic_refusals",
+            "skeptic_truncations",
             "redteam_invalid_items",
             "redteam_refusals",
+            "redteam_truncations",
             "redteam_exploit_code_stripped",
             "context_refusals",
             "context_truncations",
@@ -672,7 +695,8 @@ class Pipeline:
             dimensions=dims,
             overall_score=overall,
             gate_passed=gate,
-            bias_audit=dict(self.audit),
+            # the accounting the counts above follow (docs/adr/0001-reply-outcome-accounting.md)
+            bias_audit={**self.audit, "exchange_version": exchange.EXCHANGE_VERSION},
         )
         # G-11: the human queue as an object with full context; decisions come back through calib/decisions
         from .report.human_queue_out import build_queue

@@ -12,7 +12,7 @@ schema is therefore the input_schema of the one tool the model is told to call, 
 auto; `effort` and adaptive thinking are accepted as on the Anthropic API, except by the models that
 have neither (Haiku 4.5, Sonnet 4.5: anthropic_provider.thinking_for sends a thinking budget). That JSON is not
 grammar-constrained: the agents' pydantic models enforce it, exactly as for the OpenAI-compatible
-endpoints. Text blocks around the call are kept in `raw_text` and `aside`, so the canary check sees them.
+endpoints. Text blocks around the call are kept as the reply's `aside`, so the canary check sees them.
 
 A credential failure - no credentials, an expired SSO session - is raised as the sanitised code
 `provider_auth_failed`, so the agent layer records a provider error, never a refusal.
@@ -20,13 +20,11 @@ A credential failure - no credentials, an expired SSO session - is raised as the
 
 from __future__ import annotations
 
-import json
-
 import anthropic
 
 from ..config import ModelSpec
 from .anthropic_provider import MAX_TOKENS, AnthropicProvider, thinking_for
-from .base import Completion, clip_strings
+from .base import STOP_END, STOP_MAX_TOKENS, RawReply
 
 SUBMIT_TOOL = "submit_result"
 TOOL_INSTRUCTION = (f"Deliver your answer by calling the {SUBMIT_TOOL} tool exactly once. Its input is the complete JSON "
@@ -50,7 +48,7 @@ class BedrockProvider(AnthropicProvider):
             req.pop("output_config")
         return req
 
-    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> Completion:
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> RawReply:
         try:
             return super().complete(system=system, user=user, schema=schema, role=role, max_tokens=max_tokens)
         except RuntimeError:
@@ -63,22 +61,13 @@ class BedrockProvider(AnthropicProvider):
                 raise RuntimeError("provider_auth_failed") from None
             raise
 
-    def _answer(self, msg, schema: dict, tokens: dict) -> Completion:
+    def _answer(self, msg, schema: dict, tokens: dict) -> RawReply:
         texts = [b.text for b in msg.content if b.type == "text" and b.text]
         call = next((b for b in msg.content if b.type == "tool_use" and b.name == SUBMIT_TOOL), None)
-        # raw_text carries everything the model said, so the canary check also sees prose around the call
-        raw = "\n".join(texts + ([json.dumps(call.input, ensure_ascii=False)] if call is not None else []))
-        if msg.stop_reason == "max_tokens":
-            return Completion(data=None, raw_text=raw, truncated=True, **tokens)
+        stop = STOP_MAX_TOKENS if msg.stop_reason == "max_tokens" else STOP_END
         if call is not None:
-            if not isinstance(call.input, dict):
-                return Completion(data=None, raw_text=raw, truncated=True, **tokens)
-            return Completion(data=clip_strings(call.input, schema), full_data=call.input, raw_text=raw, aside="\n".join(texts), **tokens)
-        # no tool call: a bare JSON answer is accepted, anything else is unusable output (not a refusal)
-        if not texts:
-            return Completion(data=None, raw_text="", **tokens)
-        try:
-            data = json.loads(texts[0])
-        except json.JSONDecodeError:
-            return Completion(data=None, raw_text=raw, truncated=True, **tokens)
-        return Completion(data=clip_strings(data, schema), full_data=data, raw_text=raw, **tokens)
+            # the tool input is the structured answer; one that is not a JSON object is an unparseable reply
+            # (mara.exchange), and every text block around the call is aside
+            return RawReply(stop, structured=call.input if call.input is not None else "", aside="\n".join(texts), **tokens)
+        # no tool call: the first text block may still be a bare JSON answer, any other block is aside
+        return RawReply(stop, answer_text=texts[0] if texts else "", aside="\n".join(texts[1:]), **tokens)

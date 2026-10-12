@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
+from mara import exchange
 from mara.config import ModelSpec
 from mara.providers import make_provider
 from mara.providers.bedrock_provider import BedrockProvider
@@ -21,7 +22,8 @@ GOOD = {"findings": [{"title": "x"}]}
 
 
 def _call(p):
-    return p.complete(system="s", user="u", schema=SCHEMA, role="reviewer:xss")
+    """The adapter's reply as mara.exchange classifies it: what every agent sees."""
+    return exchange.classify(p.complete(system="s", user="u", schema=SCHEMA, role="reviewer:xss"), SCHEMA)
 
 
 # ------------------------------------------------------------------ Bedrock
@@ -86,11 +88,12 @@ def test_bedrock_tool_answers_keep_the_prose_for_the_canary_and_are_clipped():
 
     client, _ = _fake_client(stop_reason="tool_use", content=[_text("Looking at the code…"), _tool({"findings": [{"title": "CANARY-1"}]})])
     c = _call(BedrockProvider(_bedrock_spec(), client=client))
-    assert c.aside == "Looking at the code…" and c.raw_text.startswith("Looking at the code…\n") and "CANARY-1" in c.raw_text
+    assert c.aside == "Looking at the code…" and "Looking at the code…" in c.text and "CANARY-1" in c.text
     # Claude as skeptic wrote a 671-character reason (bound 600) and pydantic discarded the whole batch
     item = {"finding_id": "F-1", "verdict": "stands", "reason": "r" * 671, "sanitizer_or_control": "app.py:3 " + "c" * 400}
     client, _ = _fake_client(stop_reason="tool_use", content=[_tool({"items": [item]})])
-    got = BedrockProvider(_bedrock_spec(), client=client).complete(system="s", user="u", schema=SKEPTIC_SCHEMA, role="skeptic").data["items"][0]
+    raw = BedrockProvider(_bedrock_spec(), client=client).complete(system="s", user="u", schema=SKEPTIC_SCHEMA, role="skeptic")
+    got = exchange.classify(raw, SKEPTIC_SCHEMA).data["items"][0]
     assert (len(got["reason"]), len(got["sanitizer_or_control"])) == (600, 300) and got["sanitizer_or_control"].startswith("app.py:3 ")
 
 
@@ -101,10 +104,13 @@ def test_bedrock_without_the_tool_call_is_unusable_not_a_refusal():
 
     assert call(stop_reason="end_turn", content=[_text(json.dumps(GOOD))]).data == GOOD  # a bare JSON answer still counts
     c = call(stop_reason="end_turn", content=[_text("I reviewed the files and found nothing.")])
-    assert c.truncated and not c.refused and c.data is None
+    assert c.unparseable and not c.truncated and not c.refused and c.data is None
     assert call(stop_reason="tool_use", content=[_tool(GOOD, name="other")]).data is None
-    assert call(stop_reason="tool_use", content=[_tool(["x"])]).truncated
+    assert call(stop_reason="tool_use", content=[_tool(["x"])]).unparseable, "a tool input that is not an object"
     assert call(stop_reason="max_tokens", content=[_tool({})]).truncated
+    # a bare JSON answer followed by another text block: that block is aside, so the canary check sees it
+    c = call(stop_reason="end_turn", content=[_text(json.dumps(GOOD)), _text("Also: CANARY-2")])
+    assert c.data == GOOD and c.aside == "Also: CANARY-2"
 
 
 def test_bedrock_refusal_and_truncation_keep_their_meaning():
@@ -187,12 +193,18 @@ def test_gemini_max_tokens_is_truncation_even_with_no_text():
 
 
 @pytest.mark.parametrize("response", [
-    _answer("", finish="SAFETY"), _answer(None, finish="PROHIBITED_CONTENT"), _answer("   "),
+    _answer("", finish="SAFETY"), _answer(None, finish="PROHIBITED_CONTENT"),
     httpx.Response(200, json={"promptFeedback": {"blockReason": "SAFETY"}}),
 ])
-def test_gemini_blocks_and_empty_answers_are_refusals(response):
+def test_gemini_blocks_are_refusals(response):
     c = _call(_gemini(lambda req: response))
     assert c.refused and not c.truncated and c.data is None
+
+
+def test_gemini_empty_answer_is_an_empty_reply_not_a_refusal():
+    """It used to be a refusal here and nothing on the Anthropic adapter (docs/adr/0001-reply-outcome-accounting.md)."""
+    c = _call(_gemini(lambda req: _answer("   ")))
+    assert c.empty and not c.refused and c.data is None
 
 
 def test_gemini_failures_are_sanitised_codes_and_transient_ones_are_retried():
@@ -295,15 +307,15 @@ def test_live_smoke_reports_each_model_and_fails_on_any(monkeypatch, capsys):
     import sys
     from pathlib import Path
 
-    from mara.providers.base import Completion
+    from mara.providers.base import STOP_END, STOP_REFUSAL, RawReply
 
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root / "scripts"))
     import live_smoke
 
-    answers = {"claude-reviewer": Completion(data={"answer": 5, "note": "ok"}, raw_text="{}", served_model="anthropic.claude-haiku-4-5"),
-               "gemini-reviewer": Completion(data={"answer": 5, "note": "ok"}, raw_text="{}"),
-               "glm-reviewer": Completion(data=None, raw_text="", refused=True)}
+    answers = {"claude-reviewer": RawReply(STOP_END, structured={"answer": 5, "note": "ok"}, served_model="anthropic.claude-haiku-4-5"),
+               "gemini-reviewer": RawReply(STOP_END, answer_text='{"answer": 5, "note": "ok"}'),
+               "glm-reviewer": RawReply(STOP_REFUSAL)}
 
     class Fake:
         def __init__(self, spec):
@@ -318,7 +330,7 @@ def test_live_smoke_reports_each_model_and_fails_on_any(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["live_smoke.py"])
     assert live_smoke.main() == 1
     out = capsys.readouterr().out
-    assert "PASS  claude-reviewer" in out and HAIKU in out and "FAIL  glm-reviewer" in out and "refused" in out
+    assert "PASS  claude-reviewer" in out and HAIKU in out and "FAIL  glm-reviewer" in out and "refusal" in out
     assert "2/3 models answered" in out and "mara.test.yaml" in out
-    answers["glm-reviewer"] = Completion(data={"answer": 5, "note": "ok"}, raw_text="{}")
+    answers["glm-reviewer"] = RawReply(STOP_END, answer_text='{"answer": 5, "note": "ok"}')
     assert live_smoke.main() == 0

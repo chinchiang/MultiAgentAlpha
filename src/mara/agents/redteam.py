@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .. import exchange
 from ..context.repo_map import RepoContext
 from ..providers.base import Provider
 from ..schemas import Finding, RedTeamNote
@@ -114,11 +115,11 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         f"{base.untrusted_block(ctx, canary, sorted({p.file for f in findings for p in f.provenance}))}\n\nFindings.\nBEGIN_JSON_ARRAY\n"
         + json.dumps(view, ensure_ascii=False)
     )
-    comp = base.call(provider, system_extra=base.load_prompt("redteam"), user=user, schema=REDTEAM_SCHEMA, role="redteam")
-    echoed, tainted = canary.screen_verdicts(comp)  # same rule as the skeptic's (base.Canary.screen_verdicts)
+    outcome = exchange.call(provider, system_extra=base.load_prompt("redteam"), user=user, schema=REDTEAM_SCHEMA, role="redteam")
+    echoed, tainted = canary.screen_verdicts(outcome)  # same rule as the skeptic's (exchange.Canary.screen_verdicts)
     if echoed:
         return [], ["canary_echoed"], 0, 0  # followed the planted instruction: none of its notes counts
-    items, errors = base.parse_items(comp, _RedRaw)
+    items, errors = exchange.parse_items(outcome, _RedRaw)
     counts = Counter(i.finding_id for i in items)
     if set(counts) != {f.id for f in findings} or any(n != 1 for n in counts.values()) or errors:
         # a bare refusal is an abstention, not invalid output: keep its error list clean

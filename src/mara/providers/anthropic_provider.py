@@ -13,19 +13,18 @@ from a type (output_format=...), never a raw dict passed in output_config. The a
 schemas carry those bounds (the OpenAI-compatible endpoints enforce them), so they are
 passed through anthropic.transform_schema, which moves each unsupported keyword into
 the field's description; the answer's strings are clipped to their maxLength afterwards
-(providers.base.clip_strings) and the agents' pydantic models enforce every other bound.
+(mara.exchange, which classifies every reply) and the agents' pydantic models enforce every other bound.
 """
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any
 
 import anthropic
 
 from ..config import ModelSpec
-from .base import Completion, Provider, clip_strings
+from .base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 
 # Adaptive thinking counts against max_tokens, and a review batch is up to 400k characters of
 # source: 16k leaves too little room after thinking at effort high. Streaming keeps a large cap
@@ -66,7 +65,7 @@ class AnthropicProvider(Provider):
             "output_config": {**effort, "format": {"type": "json_schema", "schema": anthropic.transform_schema(schema)}},
         }
 
-    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> Completion:
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> RawReply:
         try:
             with self.client.messages.stream(**self._request(system=system, user=user, schema=schema, max_tokens=max_tokens)) as stream:
                 msg = stream.get_final_message()
@@ -80,19 +79,12 @@ class AnthropicProvider(Provider):
                   # Top-level `model` names the model that produced the message (a vendor-side fallback changes it).
                   "served_model": getattr(msg, "model", "") or ""}
         if msg.stop_reason == "refusal":
-            return Completion(data=None, raw_text="", refused=True, **tokens)
+            return RawReply(STOP_REFUSAL, **tokens)
         return self._answer(msg, schema, tokens)
 
-    def _answer(self, msg, schema: dict, tokens: dict) -> Completion:
-        text = next((b.text for b in msg.content if b.type == "text"), "")
-        if msg.stop_reason == "max_tokens":
-            # Output budget exhausted: the JSON text block is cut off. Distinguished from a refusal so
-            # the bias audit does not attribute a too-small max_tokens to the model.
-            return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        if not text:
-            return Completion(data=None, raw_text="", **tokens)
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            return Completion(data=None, raw_text=text, truncated=True, **tokens)
-        return Completion(data=clip_strings(data, schema), full_data=data, raw_text=text, **tokens)
+    def _answer(self, msg, schema: dict, tokens: dict) -> RawReply:
+        texts = [b.text for b in msg.content if b.type == "text" and b.text]
+        # Output budget exhausted: the JSON text block is cut off (mara.exchange: a truncation, never charged
+        # to the model). Otherwise the first text block is the structured answer and any other is aside.
+        stop = STOP_MAX_TOKENS if msg.stop_reason == "max_tokens" else STOP_END
+        return RawReply(stop, answer_text=texts[0] if texts else "", aside="\n".join(texts[1:]), **tokens)
