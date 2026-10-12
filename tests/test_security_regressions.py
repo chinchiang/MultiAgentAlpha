@@ -196,7 +196,7 @@ def _skeptic_errors(data, n=3, **completion):
 
     ctx = RepoContext(root=Path("."), content={"app.py": "unsafe()\n"})
     fs = [finding().model_copy(update={"id": f"F-{i}"}) for i in range(1, n + 1)]
-    verdicts, errors, _ = skeptic.run_skeptic(One(load_config(ROOT / "config/mara.mock.yaml").models[0]), ctx, fs)
+    verdicts, errors, _, _ = skeptic.run_skeptic(One(load_config(ROOT / "config/mara.mock.yaml").models[0]), ctx, fs)
     assert verdicts == []
     return errors, _count_invalid(errors)
 
@@ -351,8 +351,8 @@ def test_truncated_reviewer_replies_block_the_gate(tmp_path, monkeypatch):
 def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_path, monkeypatch):
     pipe, f = pipeline(tmp_path), finding()
     seen = []
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: (seen.append(("skeptic", p.family)), ([], [], 0))[1])
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: (seen.append(("redteam", p.family)), ([], [], 0))[1])
+    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: (seen.append(("skeptic", p.family)), ([], [], 0, 0))[1])
+    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: (seen.append(("redteam", p.family)), ([], [], 0, 0))[1])
     # the configured skeptic (nemotron) and red team (deepseek) both found it: only anthropic is independent
     two = {f.id: {ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
     pipe.run_skeptics(RepoContext(root=tmp_path), [f], two)
@@ -382,7 +382,7 @@ def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path, monkeypat
     pipe = pipeline(tmp_path)
     (tmp_path / "app.py").write_text("unsafe()")
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([], ["refused"], 0))
+    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([], ["refused"], 0, 0))
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["skeptic_refusals"] == report.bias_audit["skeptic_calls"] >= 1
     assert report.bias_audit["skeptic_invalid_items"] == 0

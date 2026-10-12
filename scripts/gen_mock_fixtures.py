@@ -1,12 +1,14 @@
 """Generate fixtures/mock-responses/*.json from the seeded defects in fixtures/vuln-sample.
 
 Line numbers are looked up from the fixture files so the provenance check passes for real
-and fails for the one deliberately fabricated quote. Re-run after editing the fixture app.
+and fails for the one deliberately fabricated quote. Re-run after editing the fixture app; `--check`
+writes nothing and fails when the committed fixtures are stale (tests/test_mock_fixtures.py runs it).
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -189,20 +191,52 @@ def judge_rules(family: str) -> dict:
     return data
 
 
-def main() -> None:
+def build() -> dict[str, str]:
+    """file name -> content of every fixture, generated from the seeded defects (nothing is written)."""
+    out: dict[str, str] = {}
+    for dim, fams in SEED.items():
+        for fam, findings in fams.items():
+            out[f"reviewer_{dim}_{fam}.json"] = json.dumps({"findings": findings}, indent=1, ensure_ascii=False)
+    out[f"reviewer_error_handling_{N}.json"] = json.dumps({"_refuse": True})
+    for fam in (A, D, N):
+        out[f"skeptic_{fam}.json"] = json.dumps(SKEPTIC, indent=1)
+        out[f"redteam_{fam}.json"] = json.dumps(REDTEAM, indent=1)
+        out[f"judge_{fam}.json"] = json.dumps(judge_rules(fam), indent=1)
+    return out
+
+
+def stale(out_dir: Path | None = None) -> list[str]:
+    """Fixture files that differ from what build() generates, are missing, or are left over."""
+    out_dir = OUT if out_dir is None else out_dir
+    want = build()
+    have = {p.name for p in out_dir.glob("*.json")}
+    diff = [n for n, text in want.items() if n not in have or (out_dir / n).read_text(encoding="utf-8") != text]
+    return sorted(diff + [n for n in have - set(want)])
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--check", action="store_true",
+                    help="write nothing; exit 1 if the committed fixtures differ from what this script generates")
+    args = ap.parse_args(argv)
+    if args.check:
+        bad = stale()
+        if bad:
+            print(f"stale mock fixtures in {OUT} (re-run scripts/gen_mock_fixtures.py): {', '.join(bad)}", file=sys.stderr)
+            return 1
+        print(f"mock fixtures in {OUT} are current")
+        return 0
     OUT.mkdir(parents=True, exist_ok=True)
     for old in OUT.glob("*.json"):
         old.unlink()
-    for dim, fams in SEED.items():
-        for fam, findings in fams.items():
-            (OUT / f"reviewer_{dim}_{fam}.json").write_text(json.dumps({"findings": findings}, indent=1, ensure_ascii=False), encoding="utf-8")
-    (OUT / f"reviewer_error_handling_{N}.json").write_text(json.dumps({"_refuse": True}), encoding="utf-8")
-    for fam in (A, D, N):
-        (OUT / f"skeptic_{fam}.json").write_text(json.dumps(SKEPTIC, indent=1), encoding="utf-8")
-        (OUT / f"redteam_{fam}.json").write_text(json.dumps(REDTEAM, indent=1), encoding="utf-8")
-        (OUT / f"judge_{fam}.json").write_text(json.dumps(judge_rules(fam), indent=1), encoding="utf-8")
-    print(f"wrote {len(list(OUT.glob('*.json')))} fixture files to {OUT}")
+    files = build()
+    for name, text in files.items():
+        (OUT / name).write_text(text, encoding="utf-8")
+    print(f"wrote {len(files)} fixture files to {OUT}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

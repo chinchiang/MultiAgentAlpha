@@ -82,6 +82,22 @@ def l3_chunks(ctx: RepoContext, findings: list[Finding]) -> list[list[Finding]]:
     return chunks
 
 
+def l4_chunks(order: list) -> list[list]:
+    """`order` cut into the fewest judge chunks of at most MAX_L4_FINDINGS, of near-equal size. Fixed slices of
+    25 left 26 findings as 25 + 1, and a one-finding chunk's reverse pass is its forward pass: that finding was
+    judged twice in the same position, so position bias could never show for it."""
+    if not order:
+        return []
+    n = -(-len(order) // MAX_L4_FINDINGS)
+    size, extra = divmod(len(order), n)
+    out, start = [], 0
+    for i in range(n):
+        end = start + size + (1 if i < extra else 0)
+        out.append(order[start:end])
+        start = end
+    return out
+
+
 def _retryable(errors: list[str]) -> bool:
     """A reply the agent rejected as malformed, cut off or not covering every finding exactly once: worth one
     more call (GLM as skeptic answered four verdicts for three findings on one call and exactly three on the
@@ -261,7 +277,7 @@ class Pipeline:
             self.audit["skeptic_calls"] += 1
             self.audit[f"skeptic_calls[{fam}]"] += 1
             self.audit[f"skeptic_items[{fam}]"] += len(fs)
-            v, errors, unverified = self._once_more("skeptic", fam, partial(skeptic.run_skeptic, self._p(name), ctx, fs))
+            v, errors, unverified, reported = self._once_more("skeptic", fam, partial(skeptic.run_skeptic, self._p(name), ctx, fs))
             refusals = errors.count("refused")
             invalid = _count_invalid(errors)
             self.audit["skeptic_invalid_items"] += invalid
@@ -271,6 +287,8 @@ class Pipeline:
             self.audit["skeptic_unverified_controls"] += unverified
             self.audit[f"skeptic_unverified_controls[{fam}]"] += unverified
             self.audit["skeptic_canary_echoes"] += errors.count("canary_echoed")
+            self.audit["skeptic_canary_reports"] += reported
+            self.audit[f"skeptic_canary_reports[{fam}]"] += reported
             self.audit[f"skeptic_canary_echoes[{fam}]"] += errors.count("canary_echoed")
             for x in v:
                 if x.verdict == "refuted":
@@ -304,7 +322,7 @@ class Pipeline:
             self.audit["redteam_calls"] += 1
             self.audit[f"redteam_calls[{fam}]"] += 1
             self.audit[f"redteam_items[{fam}]"] += len(fs)
-            n, errors, stripped = self._once_more("redteam", fam, partial(redteam.run_redteam, self._p(name), ctx, fs))
+            n, errors, stripped, reported = self._once_more("redteam", fam, partial(redteam.run_redteam, self._p(name), ctx, fs))
             refusals = errors.count("refused")
             invalid = _count_invalid(errors)
             self.audit["redteam_invalid_items"] += invalid
@@ -314,6 +332,8 @@ class Pipeline:
             self.audit["redteam_exploit_code_stripped"] += stripped
             self.audit[f"redteam_exploit_code_stripped[{fam}]"] += stripped
             self.audit["redteam_canary_echoes"] += errors.count("canary_echoed")
+            self.audit["redteam_canary_reports"] += reported
+            self.audit[f"redteam_canary_reports[{fam}]"] += reported
             self.audit[f"redteam_canary_echoes[{fam}]"] += errors.count("canary_echoed")
             notes.extend(n)
             self._say(f"L3: red team {fam} probed {len(fs)} → {sum(x.exploitable == 'yes' for x in n)} exploitable"
@@ -353,8 +373,7 @@ class Pipeline:
             # one seeded order over all eligible findings, cut into bounded chunks; each chunk's reverse
             # pass is that chunk mirrored, so every finding is still seen in two mirrored positions
             order, _ = blinded_batches(eligible, skeptic_by_id, ctx.content_hash + prov.family.value)
-            for start in range(0, len(order), MAX_L4_FINDINGS):
-                fwd = order[start:start + MAX_L4_FINDINGS]
+            for fwd in l4_chunks(order):
                 rev = list(reversed(fwd))
                 self.audit["judge_calls"] += 2
                 self.audit[f"judge_calls[{fam}]"] += 2

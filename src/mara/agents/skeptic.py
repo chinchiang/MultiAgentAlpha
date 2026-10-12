@@ -46,8 +46,12 @@ def _control_location_ok(ctx: RepoContext, text: str, shown: set[str] | None = N
     """
     for m in _CONTROL_REF.finditer(text):
         raw = m.group("file").replace("\\", "/")
-        # the path as written (.github/..., ./app.py), else without the dots prose put in front of it ("...app.py")
-        for path in dict.fromkeys((_norm_ref_path(raw), raw.lstrip("./"))):
+        # the path as written (.github/..., ./app.py), else without an ellipsis prose put in front of it ("...app.py").
+        # Only a run of three or more dots directly before a name is dropped: '../app.py' (outside the target) and
+        # '.env' stay what they say, never another shown file
+        ellipsis = re.match(r"\.{3,}(?=[^./])", raw)
+        candidates = (_norm_ref_path(raw),) + ((raw[ellipsis.end():],) if ellipsis else ())
+        for path in dict.fromkeys(candidates):
             if shown is not None and path not in shown:
                 continue
             lines = ctx.content.get(path, "").splitlines()
@@ -63,14 +67,14 @@ def _view(f: Finding) -> dict:
             "reachability_argument": f.reachability_argument}
 
 
-def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -> tuple[list[SkepticVerdict], list[str], int]:
-    """Returns (verdicts, errors, unverified_controls).
+def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -> tuple[list[SkepticVerdict], list[str], int, int]:
+    """Returns (verdicts, errors, unverified_controls, canary_reports).
 
     A 'refuted' verdict whose control citation cannot be located in the bundle is downgraded
     to 'weakened' and counted: an unverifiable negative must not clear a finding.
     """
     if not findings:
-        return [], [], 0
+        return [], [], 0, 0
     shown = sorted({p.file for f in findings for p in f.provenance})
     # the skeptic reads raw repository files like a reviewer, and its verdict can clear a finding: an
     # injection that drives refutations must be as detectable as one that silences a reviewer
@@ -84,14 +88,14 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     # else the model followed it
     echoed, tainted = canary.screen_verdicts(comp)
     if echoed:
-        return [], ["canary_echoed"], 0  # followed the planted instruction: none of its verdicts counts
+        return [], ["canary_echoed"], 0, 0  # followed the planted instruction: none of its verdicts counts
     items, errors = base.parse_items(comp, _SkepticRaw)
     counts = Counter(i.finding_id for i in items)
     if set(counts) != {f.id for f in findings} or any(n != 1 for n in counts.values()) or errors:
         # a bare refusal is an abstention, not invalid output: keep its error list clean
         errs = errors if errors == ["refused"] else (
             errors + base.coverage_errors({f.id for f in findings}, [i.finding_id for i in items], errors) + ["incomplete_or_duplicate_response"])
-        return [], errs, 0
+        return [], errs, 0, len(tainted)
     unverified = 0
     out = []
     for i in items:
@@ -106,7 +110,8 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
             data["reason"] = (data["reason"] + " [quotes the planted canary instruction]")[:600]
         out.append(SkepticVerdict(**data, source_family=provider.family, source_model=provider.model))
     # every finding_id is covered exactly once (checked above), so no filter is needed here
-    return out, errors, unverified
+    # canary_reports: verdicts that reported the planted file (the bias audit's L3 injection-resistance count)
+    return out, errors, unverified, len(tainted)
 
 
 from pydantic import BaseModel, Field  # noqa: E402

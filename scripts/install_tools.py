@@ -579,10 +579,22 @@ def relock_semgrep(wheel_dir: Path, req_path: Path, version: str) -> int:
     return len(rows)
 
 
+
+def default_install_dir(lock: dict) -> Path:
+    """The directory `mara` runs tools from (mara.tools.runner.tools_dir): MARA_TOOLS_DIR when set, else the lock's
+    install_dir resolved like every other workspace path - below MARA_HOME, else the working directory. It used to be
+    the repository root, so with MARA_TOOLS_DIR (or a review run from another directory) the tools went where the
+    runner never looks, and every tool reported "not installed". Kept import-free: this script bootstraps the tools
+    before the package is installed."""
+    explicit = os.environ.get("MARA_TOOLS_DIR")
+    rel = Path(explicit or str(lock.get("install_dir", ".mara-tools")))
+    return rel if rel.is_absolute() else Path(os.environ.get("MARA_HOME") or ".").resolve() / rel
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
-    ap.add_argument("--dest", type=Path, help="install dir (default: lock's install_dir, relative to the repo root)")
+    ap.add_argument("--dest", type=Path, help="install dir (default: where `mara` looks: MARA_TOOLS_DIR, else the lock's "
+                    "install_dir below the MARA workspace, MARA_HOME or the working directory)")
     ap.add_argument("--only", nargs="+", metavar="TOOL")
     ap.add_argument("--no-signature-check", action="store_true", help="skip publisher signature/provenance checks (SHA-256 still enforced); never in CI")
     ap.add_argument("--relock-semgrep", type=Path, metavar="WHEEL_DIR", help="rewrite tools/semgrep-requirements.txt from a directory of wheels")
@@ -603,7 +615,7 @@ def main() -> int:
             head = run(["git", "-C", str(checkout), "rev-parse", "HEAD"]).stdout.strip()
             print(f"{tool}:\n    commit: {head}\n    sha256: {git_paths_digest(checkout, list(spec['paths']))}   # over {spec['paths']}")
             return 0
-        install_dir = (args.dest or (ROOT / lock.get("install_dir", ".mara-tools"))).resolve()
+        install_dir = (args.dest or default_install_dir(lock)).resolve()
         manifest = install(lock, install_dir=install_dir, only=args.only, no_signature_check=args.no_signature_check)
         unsigned = [n for n, e in manifest["tools"].items() if not e["signature_verified"]]
         print(f"\ninstalled {len(manifest['tools'])} tool(s) into {install_dir}/bin; manifest: {install_dir / 'manifest.json'}")

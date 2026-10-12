@@ -94,9 +94,10 @@ def strip_exploit_code(text: str) -> tuple[str, bool]:
     return clean, stripped
 
 
-def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -> tuple[list[RedTeamNote], list[str], int]:
+def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -> tuple[list[RedTeamNote], list[str], int, int]:
+    """Returns (notes, errors, exploit_code_stripped, canary_reports)."""
     if not findings:
-        return [], [], 0
+        return [], [], 0, 0
     view = [
         {
             "finding_id": f.id,
@@ -116,14 +117,14 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     comp = base.call(provider, system_extra=base.load_prompt("redteam"), user=user, schema=REDTEAM_SCHEMA, role="redteam")
     echoed, tainted = canary.screen_verdicts(comp)  # same rule as the skeptic's (base.Canary.screen_verdicts)
     if echoed:
-        return [], ["canary_echoed"], 0  # followed the planted instruction: none of its notes counts
+        return [], ["canary_echoed"], 0, 0  # followed the planted instruction: none of its notes counts
     items, errors = base.parse_items(comp, _RedRaw)
     counts = Counter(i.finding_id for i in items)
     if set(counts) != {f.id for f in findings} or any(n != 1 for n in counts.values()) or errors:
         # a bare refusal is an abstention, not invalid output: keep its error list clean
         errs = errors if errors == ["refused"] else (
             errors + base.coverage_errors({f.id for f in findings}, [i.finding_id for i in items], errors) + ["incomplete_or_duplicate_response"])
-        return [], errs, 0
+        return [], errs, 0, len(tainted)
     stripped = 0
     out = []
     for i in items:
@@ -135,4 +136,4 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         out.append(RedTeamNote(finding_id=i.finding_id, exploitable=exploitable, preconditions=clean,
                                source_family=provider.family, source_model=provider.model))
     # every finding_id is covered exactly once (checked above), so no filter is needed here
-    return out, errors, stripped
+    return out, errors, stripped, len(tainted)
