@@ -235,3 +235,90 @@ def test_the_gateway_models_use_its_current_names_and_one_endpoint():
         assert (ds.model, ds.base_url, ds.api_key_header, ds.strict_schema) == ("deepseek", prod["glm-reviewer"].base_url, None, True), sb.name
         if "glm-reviewer" in models:
             assert models["glm-reviewer"] == prod["glm-reviewer"], sb.name
+
+
+# ------------------------------------------------------------------ Haiku 4.5 for tests (config/mara.test.yaml, AWS_MODEL)
+
+HAIKU = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+
+
+def test_models_without_adaptive_thinking_get_a_budget_and_no_effort():
+    """Haiku 4.5 and Sonnet 4.5 on Bedrock: "adaptive thinking is not supported on this model" and "does not support
+    the effort parameter" (2026-10-08). Opus 5.x keeps adaptive thinking at effort high."""
+    from mara.providers.anthropic_provider import THINKING_BUDGET, AnthropicProvider, thinking_for
+
+    assert thinking_for(HAIKU) == ({"type": "enabled", "budget_tokens": THINKING_BUDGET}, {})
+    assert thinking_for("global.anthropic.claude-sonnet-4-5-20250929-v1:0")[1] == {}
+    assert thinking_for("global.anthropic.claude-opus-5-5") == ({"type": "adaptive"}, {"effort": "high"})
+    client, stream = _fake_client(stop_reason="tool_use", content=[_tool(GOOD)])
+    assert _call(BedrockProvider(_bedrock_spec(model=HAIKU), client=client)).data == GOOD
+    assert stream.kwargs["thinking"] == {"type": "enabled", "budget_tokens": THINKING_BUDGET} and "output_config" not in stream.kwargs
+    assert stream.kwargs["tools"][0]["name"] == "submit_result" and stream.kwargs["tool_choice"] == {"type": "auto"}
+    spec = ModelSpec(name="claude-reviewer", family="anthropic", provider="anthropic", model="claude-haiku-4-5", data_residency="vendor_api_zdr")
+    client, stream = _fake_client()
+    _call(AnthropicProvider(spec, client=client))
+    assert set(stream.kwargs["output_config"]) == {"format"}, "the direct API path keeps structured output, without effort"
+
+
+def test_model_env_replaces_the_model_before_the_policies_judge_it(monkeypatch):
+    from pathlib import Path
+
+    import yaml
+
+    from mara.config import MaraConfig, load_config
+
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.delenv("AWS_MODEL", raising=False)
+    test_cfg = load_config(root / "config" / "mara.test.yaml")
+    assert (test_cfg.models[0].model, test_cfg.models[0].model_env) == (HAIKU, "AWS_MODEL"), "the test default is Haiku 4.5"
+    monkeypatch.setenv("AWS_MODEL", "global.anthropic.claude-opus-5-5")
+    overridden = load_config(root / "config" / "mara.test.yaml").models[0]
+    # replaced before validation: the policies and the provider see the model that is actually called
+    assert overridden.model == "global.anthropic.claude-opus-5-5" and make_provider(overridden).model == "global.anthropic.claude-opus-5-5"
+    monkeypatch.setenv("AWS_MODEL", "  ")
+    assert load_config(root / "config" / "mara.test.yaml").models[0].model == HAIKU, "a blank variable is no override"
+    monkeypatch.delenv("AWS_MODEL")
+    with pytest.raises(ValueError, match="not an environment variable name"):
+        _bedrock_spec(model_env="aws-model")
+    # production never reads AWS_MODEL: only the test config names it
+    assert load_config(root / "config" / "mara.yaml").models[0].model == "global.anthropic.claude-opus-5-5"
+    # apart from Claude's seat the test config is the production one
+    prod = yaml.safe_load((root / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    test = yaml.safe_load((root / "config" / "mara.test.yaml").read_text(encoding="utf-8"))
+    claude_p, claude_t = prod["models"][0], test["models"][0]
+    assert {k: v for k, v in claude_t.items() if k not in ("model", "model_env")} == {k: v for k, v in claude_p.items() if k != "model"}
+    assert test["models"][1:] == prod["models"][1:] and {k: v for k, v in test.items() if k != "models"} == {k: v for k, v in prod.items() if k != "models"}
+    assert MaraConfig.model_validate(test).roles == MaraConfig.model_validate(prod).roles
+
+
+def test_live_smoke_reports_each_model_and_fails_on_any(monkeypatch, capsys):
+    import sys
+    from pathlib import Path
+
+    from mara.providers.base import Completion
+
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root / "scripts"))
+    import live_smoke
+
+    answers = {"claude-reviewer": Completion(data={"answer": 5, "note": "ok"}, raw_text="{}", served_model="anthropic.claude-haiku-4-5"),
+               "gemini-reviewer": Completion(data={"answer": 5, "note": "ok"}, raw_text="{}"),
+               "glm-reviewer": Completion(data=None, raw_text="", refused=True)}
+
+    class Fake:
+        def __init__(self, spec):
+            self.spec = spec
+
+        def complete(self, **kw):
+            assert kw["schema"] == live_smoke.SCHEMA and kw["role"] == "smoke"
+            return answers[self.spec.name]
+
+    monkeypatch.setattr(live_smoke, "make_provider", Fake)
+    monkeypatch.delenv("AWS_MODEL", raising=False)
+    monkeypatch.setattr(sys, "argv", ["live_smoke.py"])
+    assert live_smoke.main() == 1
+    out = capsys.readouterr().out
+    assert "PASS  claude-reviewer" in out and HAIKU in out and "FAIL  glm-reviewer" in out and "refused" in out
+    assert "2/3 models answered" in out and "mara.test.yaml" in out
+    answers["glm-reviewer"] = Completion(data={"answer": 5, "note": "ok"}, raw_text="{}")
+    assert live_smoke.main() == 0

@@ -31,6 +31,18 @@ from .base import Completion, Provider, clip_strings
 # source: 16k leaves too little room after thinking at effort high. Streaming keeps a large cap
 # clear of HTTP timeouts.
 MAX_TOKENS = 64000
+# Claude models without adaptive thinking or the effort parameter (Bedrock ValidationException "adaptive thinking is not
+# supported on this model" / "does not support the effort parameter", Haiku 4.5 and Sonnet 4.5, 2026-10-08): extended
+# thinking with an explicit budget, and no effort.
+BUDGET_THINKING_MODELS = ("haiku-4-5", "sonnet-4-5")
+THINKING_BUDGET = 8192
+
+
+def thinking_for(model: str) -> tuple[dict, dict]:
+    """(thinking, the effort part of output_config) the model accepts."""
+    if any(m in model.lower() for m in BUDGET_THINKING_MODELS):
+        return {"type": "enabled", "budget_tokens": THINKING_BUDGET}, {}
+    return {"type": "adaptive"}, {"effort": "high"}
 
 
 class AnthropicProvider(Provider):
@@ -44,13 +56,14 @@ class AnthropicProvider(Provider):
         self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 
     def _request(self, *, system: str, user: str, schema: dict, max_tokens: int) -> dict:
+        thinking, effort = thinking_for(self.spec.model)
         return {
             "model": self.spec.model,
             "max_tokens": max_tokens,
             "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             "messages": [{"role": "user", "content": user}],
-            "thinking": {"type": "adaptive"},
-            "output_config": {"effort": "high", "format": {"type": "json_schema", "schema": anthropic.transform_schema(schema)}},
+            "thinking": thinking,
+            "output_config": {**effort, "format": {"type": "json_schema", "schema": anthropic.transform_schema(schema)}},
         }
 
     def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> Completion:

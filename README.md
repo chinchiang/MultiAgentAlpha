@@ -123,7 +123,17 @@ export AWS_PROFILE=...              # Bedrock: the AWS default credential chain,
 export GEMINI_API_KEY=... GLM_LOCAL_KEY=...
 mara check-config config/mara.yaml
 mara review path/to/repo --config config/mara.yaml --out out
+python3 scripts/live_smoke.py       # tests: one call per model of config/mara.test.yaml (Claude Haiku 4.5)
 ```
+
+Tests against the real endpoints use `config/mara.test.yaml`: the production panel with Claude Haiku 4.5
+(`global.anthropic.claude-haiku-4-5-20251001-v1:0`) in Claude's seat, cheaper and faster than Opus 5.5.
+`AWS_MODEL`, when set, replaces that model (`model_env: AWS_MODEL`); the value is applied before validation,
+so the policies judge the model actually called, and the production config never reads it.
+`scripts/live_smoke.py` calls every model of a config once through MARA's own providers and exits 1 if any
+fails to answer. Haiku 4.5 and Sonnet 4.5 accept neither adaptive thinking nor `effort` on Bedrock, so the
+provider sends them extended thinking with a fixed budget instead; Opus 5.x keeps adaptive thinking at effort
+high. Production reviews and calibration (G-9) keep `config/mara.yaml`.
 
 `config/mara.yaml` is the production panel since 2026-10-06: Claude Opus 5.5 on Amazon Bedrock
 (`provider: bedrock`, the `global.` cross-region inference profile, `region` required, SigV4 through
