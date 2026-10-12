@@ -58,7 +58,6 @@ gate:
   human_threshold_alpha: 0.4
 
 allow_source_code_to_non_on_prem: false
-require_family_diversity: true
 
 # Policies enforced at load time (see src/mara/policy.py; `mara check-config` lists them):
 #   P1 covered-models   Fable/Mythos-class Anthropic models need an explicit authorization record

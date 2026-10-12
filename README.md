@@ -440,7 +440,8 @@ names exactly what was downloaded; a registry that names none is refused unless 
 into `.mara-tools/trivy-cache` and writes `mara-trivy-db.json`: OCI manifest and layer digests,
 trivy's `UpdatedAt`/`NextUpdate`, the SHA-256 of `trivy.db`, the trivy version. `status` refuses a
 missing, tampered or stale copy (default 48 h, `max_age_hours`); `export`/`import` carry the
-database as a checked bundle to runners without egress. Both `mara review` and
+database as a checked bundle to runners without egress (`import` requires the bundle's SHA-256 as `export`
+printed it, sent separately from the bundle; `--trust-bundle` skips that). Both `mara review` and
 `scripts/trivy_ci.py` then run trivy with `--skip-db-update --skip-java-db-update
 --skip-check-update --offline-scan` and never download anything; without a database the runner
 reports "no offline database" instead of reaching out. In CI the L0 job downloads and checks the

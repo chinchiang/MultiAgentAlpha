@@ -7,7 +7,9 @@ from .escaping import code, literal
 from .sarif_out import tier_counts
 
 
-def render_markdown(r: ReviewReport) -> str:
+def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
+    """`fail_on_gate`: `mara review --fail-on-gate` enforces a blocked gate for this run in any rollout phase, so the
+    header must not call it "recorded, not enforced" (G-10; docs/governance-templates.md)."""
     cons = {c.finding_id: c for c in r.consensus}
     overall = f"{r.overall_score}/100" if r.overall_score is not None else "unavailable (review incomplete)"
     lines = [
@@ -17,7 +19,8 @@ def render_markdown(r: ReviewReport) -> str:
         "",
         f"**Overall score {overall} · gate {'PASSED' if r.gate_passed else 'BLOCKED'}**"
         + (f" · rollout phase `{r.bias_audit['rollout_phase']}`" if r.bias_audit.get("rollout_phase") else "")
-        + (" (recorded, not enforced)" if r.bias_audit.get("rollout_phase") not in (None, "blocking") and not r.gate_passed else ""),
+        + ((" (enforced for this run by --fail-on-gate)" if fail_on_gate else " (recorded, not enforced)")
+           if r.bias_audit.get("rollout_phase") not in (None, "blocking") and not r.gate_passed else ""),
         "",
         f"Review status: **{r.review_status}**; incomplete reasons: {literal(', '.join(r.incomplete_reasons)) or 'none'}",
         "",
@@ -121,5 +124,5 @@ def render_markdown(r: ReviewReport) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_markdown(r: ReviewReport, path: Path) -> None:
-    path.write_text(render_markdown(r), encoding="utf-8")
+def write_markdown(r: ReviewReport, path: Path, *, fail_on_gate: bool = False) -> None:
+    path.write_text(render_markdown(r, fail_on_gate=fail_on_gate), encoding="utf-8")
