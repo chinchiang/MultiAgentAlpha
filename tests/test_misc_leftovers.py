@@ -88,8 +88,9 @@ def test_report_header_says_when_fail_on_gate_enforced_the_gate(tmp_path):
 
 # ------------------------------------------------------------------ in-country example
 
-def test_prc_site_example_uses_the_gateway_deepseek_alias_and_passes_the_policies():
+def test_prc_site_example_uses_the_gateway_aliases_and_passes_the_policies():
     cfg = load_config(ROOT / "config" / "examples" / "prc-site.yaml")
-    ds = cfg.model_by_name("deepseek-local")
-    assert ds.model == "deepseek" and ds.data_residency == "on_prem" and ds.base_url.startswith("https://10.")
-    assert {m.family.value for m in cfg.models} == {"deepseek", "nemotron"} and cfg.reduced_panel_reason
+    ds, glm = cfg.model_by_name("deepseek-local"), cfg.model_by_name("glm-local")
+    assert ds.model == "deepseek" and glm.model == "glm" and not glm.strict_schema
+    assert all(m.data_residency == "on_prem" and m.base_url.startswith("https://10.") for m in (ds, glm))
+    assert {m.family.value for m in cfg.models} == {"deepseek", "glm"} and cfg.reduced_panel_reason
