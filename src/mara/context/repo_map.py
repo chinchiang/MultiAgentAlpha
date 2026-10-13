@@ -276,11 +276,11 @@ def _run_git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedP
     """git in `root`, or None when it does not finish in GIT_TIMEOUT or cannot start. Text output is
     UTF-8 (what git writes), not the locale code page: on a cp950 host a non-ASCII path came back
     garbled or failed to decode."""
-    cmd = ["git", "-C", str(root), *args]
     try:
         if text:
-            return subprocess.run(cmd, capture_output=True, check=False, timeout=GIT_TIMEOUT, encoding="utf-8", errors="replace")
-        return subprocess.run(cmd, capture_output=True, check=False, timeout=GIT_TIMEOUT)
+            return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT,
+                                  encoding="utf-8", errors="replace")
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT)
     except (subprocess.TimeoutExpired, OSError):
         return None
 
