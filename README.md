@@ -69,7 +69,8 @@ backlog and decisions, the training register, the ML-BOM and its signature bundl
 handshake resolve against `MARA_HOME` when set, the working directory otherwise - in `src/` and in the
 `scripts/` that write them alike (`tests/test_workspace_anchors.py`); so do the defaults of `mara review --config` (`config/mara.yaml`, `config/mara.mock.yaml`
 with `--provider mock`), `--out` (`out`) and `mara check-config`. `mara review` refuses a target that
-contains the workspace, the tool directory, the trivy database, the config file or the output directory
+contains the workspace, the tool directory, the trivy database, the config file, the output directory
+or an evidence input (`--sarif-dir`, `--mock-fixtures`, `--psirt-event`)
 (`cd target && mara review .` would let the reviewed repository supply the binaries the runner
 executes, the evidence the policies trust and the config itself, and the reports of one run would be
 bundled into the next); run it from the workspace (`mara review path/to/target`) or set `MARA_HOME`
@@ -247,7 +248,9 @@ On a git repository, `--base <ref>` narrows the bundle to the files changed sinc
 files they import or that import them (Python and relative JS/TS specifiers; `from app import models`
 and `from . import models` count as importing `app.models`), plus the manifests and GitHub workflows.
 Everything else is excluded with the reason `out_of_increment` in the report's coverage section —
-never silently kept; a changed file the bundle cannot show fails the run, files the increment deletes
+never silently kept, and a file outside the increment that the full bundle could not show no longer
+makes the run incomplete; a changed file the full bundle left out only for the repository size budget
+is read again for the narrowed bundle; a changed file the bundle still cannot show fails the run, files the increment deletes
 are listed under `deleted` (there is nothing left to show, so they do not make the run incomplete), and
 an unresolvable ref is a usage error, not an empty "nothing changed":
 

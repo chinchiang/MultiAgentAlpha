@@ -49,7 +49,11 @@ def review(
     out = out if out is not None else resolve("out")
     try:
         # before the config is even read; the pipeline repeats the workspace, tool and trivy checks
-        check_outside(target, {f"the config file {cfg_path}": cfg_path, f"the output directory {out}": out})
+        # pre-recorded SARIF is tool evidence, mock fixtures are the models' answers and a PSIRT event
+        # starts legal clocks: from inside the target, the reviewed repository would supply its own verdict
+        inputs = {"--sarif-dir": sarif_dir, "--mock-fixtures": mock_fixtures, "--psirt-event": psirt_event}
+        check_outside(target, {f"the config file {cfg_path}": cfg_path, f"the output directory {out}": out,
+                               **{f"{flag} {p}": p for flag, p in inputs.items() if p is not None}})
     except WorkspaceInsideTarget as e:
         raise typer.BadParameter(str(e), param_hint="TARGET") from e
     if not cfg_path.is_file():

@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-from ..context.repo_map import RepoContext, fence_safe
+from ..context.repo_map import RepoContext, fence_safe, source_lines
 from ..exchange import CANARY_PATH, COMMON_SYSTEM, PROVIDER_ERROR_RE, Canary, cites_canary, load_prompt
 
 __all__ = ["CANARY_PATH", "COMMON_SYSTEM", "PROVIDER_ERROR_RE", "Canary", "ballot_errors", "cites_canary", "coverage_errors", "load_prompt",
@@ -29,7 +29,7 @@ def verify_quote(ctx: RepoContext, file: str, line: int, quote: str) -> bool:
     """
     if not quote.strip() or file not in ctx.content or ".." in Path(file).parts or Path(file).is_absolute():
         return False
-    lines = ctx.content[file].splitlines()
+    lines = source_lines(ctx.content[file])
     if not 1 <= line <= len(lines):
         return False
     norm = " ".join(quote.split())
