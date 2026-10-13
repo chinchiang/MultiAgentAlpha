@@ -1,4 +1,4 @@
-"""Exchange: one prompt sent to one model, and its reply classified and screened (CONTEXT.md).
+"""Exchange: one prompt sent to one model, and its reply classified and screened (GLOSSARY.md).
 
 The provider adapters only report what the vendor returned (`RawReply`: a stop reason and the text). Everything
 that judges a reply happens here, once, for every family:
@@ -310,7 +310,7 @@ class Canary:
 # build_prompt): written by MARA, never derived from the repository. Everything else is untrusted and fenced:
 # repository data - file contents, file names, routes, the repository summary - inside
 # <untrusted_repository_data>, and derived data - context facts, findings - inside <derived_data kind=...>, with
-# `<`, `>` and `&` escaped so a quote cannot close its block (CONTEXT.md).
+# `<`, `>` and `&` escaped so a quote cannot close its block (GLOSSARY.md).
 
 DERIVED_NOTES = {
     "context_facts": ("Architecture facts a separate context agent extracted from the repository data. Each quote was "
