@@ -12,7 +12,7 @@ from pathlib import Path
 from ..context.repo_map import RepoContext, fence_safe
 from ..exchange import CANARY_PATH, COMMON_SYSTEM, PROVIDER_ERROR_RE, Canary, cites_canary, load_prompt
 
-__all__ = ["CANARY_PATH", "COMMON_SYSTEM", "PROVIDER_ERROR_RE", "Canary", "cites_canary", "coverage_errors", "load_prompt",
+__all__ = ["CANARY_PATH", "COMMON_SYSTEM", "PROVIDER_ERROR_RE", "Canary", "ballot_errors", "cites_canary", "coverage_errors", "load_prompt",
            "verify_quote"]
 
 
@@ -62,3 +62,17 @@ def coverage_errors(expected: set[str], ids: list[str], errors: list[str]) -> li
     duplicated = sum(n - 1 for i, n in seen.items() if i in expected)
     unexpected = sum(n for i, n in seen.items() if i not in expected)
     return ["missing_verdict"] * missing + ["duplicate_verdict"] * duplicated + ["unexpected_verdict"] * unexpected
+
+
+def ballot_errors(expected: set[str], ids: list[str], errors: list[str], marker: str) -> list[str] | None:
+    """The one rule every ballot role (skeptic, red team, judge) applies to a validated reply: None when it rules on
+    every expected finding exactly once and has no error; otherwise the errors that void it.
+
+    A bare refusal stays exactly ["refused"] - an abstention, not invalid output - and anything else gets the
+    coverage errors plus `marker`, the summary that the whole reply was discarded."""
+    counts = Counter(ids)
+    if set(counts) == expected and all(n == 1 for n in counts.values()) and not errors:
+        return None
+    if errors == ["refused"]:
+        return errors
+    return errors + coverage_errors(expected, ids, errors) + [marker]

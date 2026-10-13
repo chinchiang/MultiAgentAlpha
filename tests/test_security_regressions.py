@@ -222,7 +222,9 @@ def test_incomplete_ballots_count_one_invalid_item_per_uncovered_finding():
     assert invalid == 2 and errors.count("missing_verdict") == 1
     # response-level outcomes are not multiplied by the batch size
     assert _skeptic_errors(None, refused=True)[0] == ["refused"]
-    assert _skeptic_errors(None, error="provider_http_error:503")[1] == 1
+    # a failed call is a provider error (skeptic_errors), never invalid output charged to the model
+    errors, invalid = _skeptic_errors(None, error="provider_http_error:503")
+    assert invalid == 0 and "provider_http_error:503" in errors
     assert _skeptic_errors(None)[1] == 1  # empty body
 
 

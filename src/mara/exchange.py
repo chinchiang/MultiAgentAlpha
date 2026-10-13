@@ -37,13 +37,22 @@ from .providers.base import STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply, c
 # 1: the adapters' own rules (unparseable replies filed as truncations, an empty reply a refusal in two families)
 # 2: one classification for every family (docs/adr/0001-reply-outcome-accounting.md)
 # 3: the repository summary inside the repository fence, derived data (context facts, findings) in <derived_data>
-EXCHANGE_VERSION = 3
+# 4: a ballot's failed call is a provider error (<role>_errors), no longer invalid output, and never retried
+EXCHANGE_VERSION = 4
 
 OK, TRUNCATION, UNPARSEABLE, EMPTY, REFUSAL, ERROR = "ok", "truncation", "unparseable", "empty", "refusal", "error"
 KINDS = (OK, TRUNCATION, UNPARSEABLE, EMPTY, REFUSAL, ERROR)
 
 PROVIDER_ERROR_RE = re.compile(r"provider_[a-z_]+(?::\d{3})?")  # the codes the providers raise, nothing else
+_CALL_FAILED_RE = re.compile(r"provider_call_failed:[A-Za-z_][A-Za-z0-9_]*")  # call()'s code for any other exception
 _log = logging.getLogger("mara.providers")
+
+
+def is_provider_error(code: str) -> bool:
+    """A failed call, not a model answer: one of the providers' own codes, or the code `call` gives any other exception.
+    Never retried by the pipeline (the providers retry their own transient failures) and never charged to the model.
+    PROVIDER_ERROR_RE alone decides which exception messages may pass through as codes; this only reads codes."""
+    return bool(PROVIDER_ERROR_RE.fullmatch(code) or _CALL_FAILED_RE.fullmatch(code))
 
 
 def load_prompt(name: str) -> str:

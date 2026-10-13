@@ -117,4 +117,4 @@ def test_a_quote_cannot_close_the_derived_data_fence(repo):
 
 
 def test_the_exchange_version_names_the_new_layout():
-    assert exchange.EXCHANGE_VERSION == 3
+    assert exchange.EXCHANGE_VERSION >= 3

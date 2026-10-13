@@ -8,6 +8,8 @@ An **unparseable reply** ended normally but is not the structured answer. It is 
 
 An **empty reply** is read by role. It is an abstention for extraction roles (reviewer, context) and invalid output for ballot roles (skeptic, red team, judge). Before, two adapters counted it as a refusal and two did not, so refusal rates were not comparable across families.
 
+An **error** - no reply at all, the call failed - is never charged to the model: it is counted as `<role>_errors` for every role, ballots included (from exchange version 4; before, a ballot's failed call counted as invalid items and an unexpected exception was retried), and makes the review incomplete.
+
 ## Consequences
 
 Refusal, invalid and truncation counts change meaning at this decision. Calibration records therefore carry an exchange version, and cross-period trends compare only records of the same version.

@@ -13,11 +13,11 @@ from collections.abc import Callable
 from dataclasses import asdict
 from functools import partial
 from pathlib import Path
-from typing import Any
 
 from . import exchange
 from .agents import base, context_agent, judge, redteam, reviewer, skeptic
 from .agents.context_agent import ContextView
+from .audit import Audit
 from .bias.blinding import blinded_batches
 from .bias.diversity import pairwise_family_agreement, pick_independent
 from .config import MaraConfig
@@ -44,11 +44,10 @@ from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
 from .tools.sarif import ToolResult
 from .workspace import check_outside
 
-# error vocabulary of the agent layer: "refused" marks an abstention (model said no), the
-# incomplete_or_duplicate_* entries are summary markers the agents append to signal that a
-# partially-failed call returned no verdicts at all; neither is an unusable item itself
-# response-level codes that are not invalid output: an abstention, an echo, the budget (a truncation is never charged
-# to the model, docs/adr/0001-reply-outcome-accounting.md) and the summary markers
+# error vocabulary of the agent layer, response-level codes that are not invalid output: "refused" (an abstention),
+# an echo, the budget (a truncation is never charged to the model, docs/adr/0001-reply-outcome-accounting.md) and the
+# summary markers the agents append when a reply was discarded as a whole. Provider failures are not invalid output
+# either (exchange.is_provider_error); they are counted as <role>_errors.
 _ERROR_MARKERS = frozenset({"refused", "canary_echoed", "truncated", "incomplete_or_duplicate_response",
                             "incomplete_or_duplicate_judge_response"})
 
@@ -105,23 +104,14 @@ def l4_chunks(order: list) -> list[list]:
 def _retryable(errors: list[str]) -> bool:
     """A reply the agent rejected as malformed, cut off or not covering every finding exactly once: worth one
     more call (GLM as skeptic answered four verdicts for three findings on one call and exactly three on the
-    next, 2026-10-08). Refusals and canary echoes are signals, never retried; providers retry their own failures."""
-    return bool(errors) and not any(e in ("refused", "canary_echoed") or base.PROVIDER_ERROR_RE.fullmatch(e) for e in errors)
-
-
-def _reply_counts(audit: defaultdict[str, Any], role: str, fam: str, errors: list[str]) -> None:
-    """A ballot reply's truncations and unparseable replies, total and per family. A truncation makes the run
-    incomplete without counting as invalid output; an unparseable reply is invalid output, counted here too so the
-    two causes of invalid output (no structured answer, schema-invalid items) can be told apart."""
-    for code, counter in (("truncated", f"{role}_truncations"), ("unparseable", f"{role}_unparseable_replies")):
-        n = errors.count(code)
-        audit[counter] += n
-        audit[f"{counter}[{fam}]"] += n
+    next, 2026-10-08). Refusals and canary echoes are signals, never retried; providers retry their own failures, and
+    any other exception in a provider (provider_call_failed:<type>) is a bug a second call would only repeat."""
+    return bool(errors) and not any(e in ("refused", "canary_echoed") or exchange.is_provider_error(e) for e in errors)
 
 
 def _count_invalid(errors: list[str]) -> int:
-    """Unusable items only: empty responses, bad shapes, per-item schema failures."""
-    return sum(1 for x in errors if x not in _ERROR_MARKERS)
+    """Unusable items only: empty responses, bad shapes, per-item schema failures - never a failed call."""
+    return sum(1 for x in errors if x not in _ERROR_MARKERS and not exchange.is_provider_error(x))
 
 
 class Pipeline:
@@ -130,7 +120,7 @@ class Pipeline:
         self.out_dir = out_dir or Path("out")
         self.providers: dict[str, Provider] = {m.name: make_provider(m, mock_fixtures) for m in cfg.models}
         # Counters (default 0) plus a few labels and nested tables; becomes the report's bias_audit
-        self.audit: defaultdict[str, Any] = defaultdict(int)
+        self.audit = Audit()
         self.log: list[str] = []
         # G-11: the human queue tightens when its ticket backlog is over the limit (never loosens)
         from .report.human_queue_out import read_backlog, tightening
@@ -173,14 +163,12 @@ class Pipeline:
         prov = self._p(name)
         fam = prov.family.value
         view, audit = context_agent.run_context_agent(prov, ctx)
-        self.audit["context_calls"] += audit["calls"]
-        self.audit[f"context_calls[{fam}]"] += audit["calls"]
+        self.audit.add("context_calls", fam, audit["calls"])
         for key, counter in (("refused", "context_refusals"), ("truncated", "context_truncations"),
                              ("unparseable", "context_unparseable_replies"),
                              ("errored", "context_errors"), ("canary_echoed", "canary_echoes"), ("canary_reported", "canary_reports"),
                              ("invalid", "context_invalid_items"), ("unverified", "context_unverified_items")):
-            self.audit[counter] += int(audit[key])
-            self.audit[f"{counter}[{fam}]"] += int(audit[key])
+            self.audit.add(counter, fam, int(audit[key]))
         self.audit["input_tokens"] += audit["input_tokens"]
         self.audit["output_tokens"] += audit["output_tokens"]
         flags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "errored": " [PROVIDER ERROR]",
@@ -198,25 +186,13 @@ class Pipeline:
                 for name in self.cfg.roles.reviewers:
                     prov = self._p(name)
                     findings, audit = reviewer.review_dimension(prov, batch, dim, canary, context_view)
-                    self.audit["reviewer_calls"] += 1
-                    self.audit["reviewer_refusals"] += int(audit["refused"])
-                    self.audit["reviewer_truncations"] += int(audit["truncated"])
-                    self.audit["reviewer_unparseable_replies"] += int(audit["unparseable"])
-                    self.audit["reviewer_errors"] += int(audit["errored"])
-                    self.audit["canary_echoes"] += int(audit["canary_echoed"])
-                    self.audit["canary_reports"] += audit["canary_reported"]
                     fam = prov.family.value
-                    self.audit[f"reviewer_calls[{fam}]"] += 1
-                    self.audit[f"reviewer_refusals[{fam}]"] += int(audit["refused"])
-                    self.audit[f"reviewer_truncations[{fam}]"] += int(audit["truncated"])
-                    self.audit[f"reviewer_unparseable_replies[{fam}]"] += int(audit["unparseable"])
-                    self.audit[f"reviewer_errors[{fam}]"] += int(audit["errored"])
-                    self.audit[f"canary_echoes[{fam}]"] += int(audit["canary_echoed"])
-                    self.audit[f"canary_reports[{fam}]"] += audit["canary_reported"]
-                    self.audit[f"findings_with_unverified_quotes[{fam}]"] += audit["unverified_quotes"]
-                    self.audit[f"invalid_findings_dropped[{fam}]"] += audit["invalid"]
-                    self.audit["invalid_findings_dropped"] += audit["invalid"]
-                    self.audit["findings_with_unverified_quotes"] += audit["unverified_quotes"]
+                    for key, counter in (("refused", "reviewer_refusals"), ("truncated", "reviewer_truncations"),
+                                         ("unparseable", "reviewer_unparseable_replies"), ("errored", "reviewer_errors"),
+                                         ("canary_echoed", "canary_echoes"), ("canary_reported", "canary_reports"),
+                                         ("unverified_quotes", "findings_with_unverified_quotes"), ("invalid", "invalid_findings_dropped")):
+                        self.audit.add(counter, fam, int(audit[key]))
+                    self.audit.add("reviewer_calls", fam)
                     self.audit["input_tokens"] += audit["input_tokens"]
                     self.audit["output_tokens"] += audit["output_tokens"]
                     raw.extend(findings)
@@ -269,11 +245,25 @@ class Pipeline:
         retry depends on whether the reply was well-formed, never on what it concluded."""
         out = call()
         if not out[0] and _retryable(out[1]):
-            self.audit[f"{role}_retries"] += 1
-            self.audit[f"{role}_retries[{fam}]"] += 1
+            self.audit.add(f"{role}_retries", fam)
             self._say(f"L3/L4: {role} {fam} reply rejected ({', '.join(sorted(set(out[1])))}); asked once more")
             out = call()
         return out
+
+    def _count_ballot(self, role: str, fam: str, errors: list[str], canary_reports: int | None = None) -> int:
+        """The audit of one ballot round (skeptic, red team, judge) from the error codes of the answer used: refusals
+        (abstentions), provider failures, invalid items, truncations, unparseable replies and - for the roles that
+        read the repository and carry a canary - canary echoes and reports. Returns the refusals."""
+        refusals = errors.count("refused")
+        self.audit.add(f"{role}_refusals", fam, refusals)
+        self.audit.add(f"{role}_errors", fam, sum(exchange.is_provider_error(e) for e in errors))
+        self.audit.add(f"{role}_invalid_items", fam, _count_invalid(errors))
+        self.audit.add(f"{role}_truncations", fam, errors.count("truncated"))
+        self.audit.add(f"{role}_unparseable_replies", fam, errors.count("unparseable"))
+        if canary_reports is not None:
+            self.audit.add(f"{role}_canary_echoes", fam, errors.count("canary_echoed"))
+            self.audit.add(f"{role}_canary_reports", fam, canary_reports)
+        return refusals
 
     # ------------------------------------------------------------------ L3
     def run_skeptics(
@@ -291,27 +281,12 @@ class Pipeline:
         abstained: set[str] = set()
         for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
             fam = self._p(name).family.value
-            self.audit["skeptic_calls"] += 1
-            self.audit[f"skeptic_calls[{fam}]"] += 1
+            self.audit.add("skeptic_calls", fam)
             self.audit[f"skeptic_items[{fam}]"] += len(fs)
             v, errors, unverified, reported = self._once_more("skeptic", fam, partial(skeptic.run_skeptic, self._p(name), ctx, fs))
-            refusals = errors.count("refused")
-            invalid = _count_invalid(errors)
-            self.audit["skeptic_invalid_items"] += invalid
-            self.audit[f"skeptic_invalid_items[{fam}]"] += invalid
-            _reply_counts(self.audit, "skeptic", fam, errors)
-            self.audit["skeptic_refusals"] += refusals
-            self.audit[f"skeptic_refusals[{fam}]"] += refusals
-            self.audit["skeptic_unverified_controls"] += unverified
-            self.audit[f"skeptic_unverified_controls[{fam}]"] += unverified
-            self.audit["skeptic_canary_echoes"] += errors.count("canary_echoed")
-            self.audit["skeptic_canary_reports"] += reported
-            self.audit[f"skeptic_canary_reports[{fam}]"] += reported
-            self.audit[f"skeptic_canary_echoes[{fam}]"] += errors.count("canary_echoed")
-            for x in v:
-                if x.verdict == "refuted":
-                    self.audit["skeptic_refuted"] += 1
-                    self.audit[f"skeptic_refuted[{fam}]"] += 1
+            refusals = self._count_ballot("skeptic", fam, errors, reported)
+            self.audit.add("skeptic_unverified_controls", fam, unverified)
+            self.audit.add("skeptic_refuted", fam, sum(x.verdict == "refuted" for x in v))
             if not v:
                 # no usable verdict for this group - a refusal, a provider failure, or a reply the
                 # agent rejected (unparseable, schema-invalid, or not covering every finding exactly
@@ -337,23 +312,11 @@ class Pipeline:
         notes: list[RedTeamNote] = []
         for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
             fam = self._p(name).family.value
-            self.audit["redteam_calls"] += 1
-            self.audit[f"redteam_calls[{fam}]"] += 1
+            self.audit.add("redteam_calls", fam)
             self.audit[f"redteam_items[{fam}]"] += len(fs)
             n, errors, stripped, reported = self._once_more("redteam", fam, partial(redteam.run_redteam, self._p(name), ctx, fs))
-            refusals = errors.count("refused")
-            invalid = _count_invalid(errors)
-            self.audit["redteam_invalid_items"] += invalid
-            self.audit[f"redteam_invalid_items[{fam}]"] += invalid
-            _reply_counts(self.audit, "redteam", fam, errors)
-            self.audit["redteam_refusals"] += refusals
-            self.audit[f"redteam_refusals[{fam}]"] += refusals
-            self.audit["redteam_exploit_code_stripped"] += stripped
-            self.audit[f"redteam_exploit_code_stripped[{fam}]"] += stripped
-            self.audit["redteam_canary_echoes"] += errors.count("canary_echoed")
-            self.audit["redteam_canary_reports"] += reported
-            self.audit[f"redteam_canary_reports[{fam}]"] += reported
-            self.audit[f"redteam_canary_echoes[{fam}]"] += errors.count("canary_echoed")
+            refusals = self._count_ballot("redteam", fam, errors, reported)
+            self.audit.add("redteam_exploit_code_stripped", fam, stripped)
             notes.extend(n)
             self._say(f"L3: red team {fam} probed {len(fs)} → {sum(x.exploitable == 'yes' for x in n)} exploitable"
                       + (f", {stripped} preconditions had exploit code removed" if stripped else "")
@@ -394,17 +357,10 @@ class Pipeline:
             order, _ = blinded_batches(eligible, skeptic_by_id, ctx.content_hash + prov.family.value)
             for fwd in l4_chunks(order):
                 rev = list(reversed(fwd))
-                self.audit["judge_calls"] += 2
-                self.audit[f"judge_calls[{fam}]"] += 2
+                self.audit.add("judge_calls", fam, 2)
                 v1, e1 = self._once_more("judge", fam, partial(judge.run_judge, prov, fwd, "forward", self_ids))
                 v2, e2 = self._once_more("judge", fam, partial(judge.run_judge, prov, rev, "reverse", self_ids))
-                refusals = int(e1 == ["refused"]) + int(e2 == ["refused"])
-                invalid = _count_invalid(e1) + _count_invalid(e2)
-                self.audit["judge_invalid_items"] += invalid
-                self.audit[f"judge_invalid_items[{fam}]"] += invalid
-                _reply_counts(self.audit, "judge", fam, e1 + e2)
-                self.audit["judge_refusals"] += refusals
-                self.audit[f"judge_refusals[{fam}]"] += refusals
+                refusals = self._count_ballot("judge", fam, e1 + e2)
                 votes.extend(v1 + v2)
                 self._say(
                     f"L4: judge {fam}: {len(fwd)} finding(s) ({len(self_ids & {b['finding_id'] for b in fwd})} self-family)"
@@ -618,32 +574,7 @@ class Pipeline:
         required_tools = {t for t, ds in TOOL_DIMENSIONS.items() if set(ds) & set(self.cfg.dimensions)}
         if not required_tools <= tools_ran or any(not r.ran for r in tool_runs):
             incomplete.append("required_tool_incomplete")
-        for key in (
-            "reviewer_refusals",
-            "reviewer_truncations",
-            "reviewer_errors",
-            "invalid_findings_dropped",
-            "canary_echoes",
-            "skeptic_canary_echoes",
-            "redteam_canary_echoes",
-            "judge_invalid_items",
-            "judge_refusals",
-            "judge_truncations",
-            "skeptic_invalid_items",
-            "skeptic_refusals",
-            "skeptic_truncations",
-            "redteam_invalid_items",
-            "redteam_refusals",
-            "redteam_truncations",
-            "redteam_exploit_code_stripped",
-            "context_refusals",
-            "context_truncations",
-            "context_errors",
-            "context_invalid_items",
-            "context_unverified_items",
-        ):
-            if self.audit[key]:
-                incomplete.append(key)
+        incomplete.extend(self.audit.incomplete_reasons())  # audit.INCOMPLETE_COUNTERS: the one list
         if self.cfg.roles.context and context_view is None and not egress_blocked:
             incomplete.append("context_view_incomplete")
         if any(c.needs_human for c in consensus):
