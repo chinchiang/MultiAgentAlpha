@@ -216,6 +216,7 @@ def main() -> int:
         if a.checks:
             argv.append(f"--checks={a.checks}")
         print("+ " + " ".join(argv))
+        a.json.unlink(missing_ok=True)  # a crash that writes nothing must not leave an earlier run's JSON to be read
         r = subprocess.run(argv, capture_output=True, text=True)
     for line in (r.stdout + r.stderr).strip().splitlines()[-8:]:
         print("  " + line)

@@ -23,6 +23,25 @@ def isolate_mara_tools_dir(tmp_path_factory):
         os.environ["MARA_TOOLS_DIR"] = old
 
 
+@pytest.fixture(scope="session", autouse=True)
+def windows_shell_for_fake_tools():
+    # Several tests fake a tool with a shell script. Windows cannot execute one directly (WinError 193), and the
+    # runner never looks for a shell on PATH: it runs only the interpreter MARA_WINDOWS_SH names. The test suite
+    # names Git for Windows' sh, found here (test-only) next to git.
+    if sys.platform != "win32" or os.environ.get("MARA_WINDOWS_SH"):
+        yield
+        return
+    import shutil
+
+    git = shutil.which("git")
+    candidates = [Path(git).parent.parent / sub / "sh.exe" for sub in ("bin", "usr/bin")] if git else []
+    sh = next((str(c) for c in candidates if c.is_file()), shutil.which("sh") or "")
+    if sh:
+        os.environ["MARA_WINDOWS_SH"] = sh
+    yield
+    os.environ.pop("MARA_WINDOWS_SH", None)
+
+
 @pytest.fixture(scope="session")
 def root() -> Path:
     return ROOT

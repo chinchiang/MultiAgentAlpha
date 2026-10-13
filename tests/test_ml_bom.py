@@ -204,10 +204,23 @@ def test_policy_p7_three_states(tmp_path):
         _cfg_with(tmp_path, complete, "someone/else", required=True)
     with pytest.raises(ValueError, match="bundle"):
         _cfg_with(tmp_path, complete, "example/model-7b", required=True, require_signature=True, bundle=str(tmp_path / "missing.json"))
+    import base64
+    import hashlib
+
     bundle = tmp_path / "b.sigstore.json"
-    bundle.write_text("{}", encoding="utf-8")
+    digest = base64.b64encode(hashlib.sha256(complete.read_bytes()).digest()).decode()
+    bundle.write_text(json.dumps({"messageSignature": {"messageDigest": {"algorithm": "SHA2_256", "digest": digest}, "signature": "x"}}),
+                      encoding="utf-8")
     r = p7_ml_bom(_cfg_with(tmp_path, complete, "example/model-7b", required=True, require_signature=True, bundle=str(bundle)))
     assert r.passed and "signature bundle" in r.reason
+    # a bundle made for another file, or not a message-signature bundle, fails offline (the signature itself is
+    # cosign's job when a review runs: mlbom.verify_signature)
+    other = base64.b64encode(hashlib.sha256(b"another bom").digest()).decode()
+    for content, why in (({"messageSignature": {"messageDigest": {"algorithm": "SHA2_256", "digest": other}}}, "made for another file"),
+                         ({}, "does not sign a SHA-256 digest")):
+        bundle.write_text(json.dumps(content), encoding="utf-8")
+        with pytest.raises(ValueError, match=why):
+            _cfg_with(tmp_path, complete, "example/model-7b", required=True, require_signature=True, bundle=str(bundle))
     # the repository configs
     assert [x.passed for x in __import__("mara.policy", fromlist=["evaluate_policies"]).evaluate_policies(load_config(ROOT / "config" / "mara.yaml"))].count(False) == 0
     assert load_config(ROOT / "config" / "examples" / "ml-bom-required.yaml").ml_bom.required

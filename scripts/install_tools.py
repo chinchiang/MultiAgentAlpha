@@ -297,11 +297,15 @@ def git_paths_digest(checkout: Path, paths: list[str]) -> str:
 
 
 def verify_commit_gpg(name: str, spec: dict, checkout: Path, cache: Path) -> str:
-    """The pinned commit must carry a good GPG signature by the key the lock names (key id = last 16 hex of
-    the fingerprint), imported from gpg_key_url into a throwaway keyring. For semgrep-rules that is GitHub's
-    web-flow key: it proves the commit object (and so its tree) was produced by GitHub's merge flow."""
+    """The pinned commit must carry a good, valid GPG signature by the key the lock names by its full fingerprint,
+    imported from gpg_key_url into a throwaway keyring. For semgrep-rules that is GitHub's web-flow key: it proves the
+    commit object (and so its tree) was produced by GitHub's merge flow. A 64-bit key id alone can be collided, and
+    the VALIDSIG line must name that fingerprint, not just appear."""
     v = spec["verify"]
-    key_id = str(v["gpg_key_id"]).upper()
+    fingerprint = str(v.get("gpg_fingerprint", "")).upper().replace(" ", "")
+    if len(fingerprint) != 40 or any(c not in "0123456789ABCDEF" for c in fingerprint):
+        raise InstallError(f"{name}: verify.gpg_fingerprint must be the key's 40-hex fingerprint, got {fingerprint!r}")
+    key_id = fingerprint[-16:]
     key = download(v["gpg_key_url"], cache / f"{name}.gpg-key.asc")
     home = cache / f"{name}.gnupg"
     shutil.rmtree(home, ignore_errors=True)
@@ -312,15 +316,17 @@ def verify_commit_gpg(name: str, spec: dict, checkout: Path, cache: Path) -> str
         raise InstallError(f"{name}: could not import the GPG key from {v['gpg_key_url']}\n{cp.stderr.strip()[-800:]}")
     cp = run(["gpg", "--batch", "--with-colons", "--fingerprint"], env=env)
     fprs = [line.split(":")[9] for line in cp.stdout.splitlines() if line.startswith("fpr:")]
-    if not any(f.upper().endswith(key_id) for f in fprs):
-        raise InstallError(f"{name}: the key at {v['gpg_key_url']} is not {key_id} (fingerprints: {fprs})")
+    if fingerprint not in {f.upper() for f in fprs}:
+        raise InstallError(f"{name}: the key at {v['gpg_key_url']} is not {fingerprint} (fingerprints: {fprs})")
     cp = run(["git", "-C", str(checkout), "verify-commit", "--raw", str(spec["commit"])], env=env)
     status = cp.stderr
     good = any(line.startswith("[GNUPG:] GOODSIG ") and line.split()[2].upper().endswith(key_id) for line in status.splitlines())
-    valid = "[GNUPG:] VALIDSIG " in status
+    # VALIDSIG <signing key fpr> ... [<primary key fpr>]: the signature must be by the pinned key itself
+    valid = any(line.startswith("[GNUPG:] VALIDSIG ") and fingerprint in (p.upper() for p in line.split()[2:])
+                for line in status.splitlines())
     if cp.returncode != 0 or not (good and valid):
         raise InstallError(f"{name}: commit {spec['commit'][:12]} is not validly signed by {key_id}\n{status.strip()[-1200:]}")
-    return f"git-commit-gpg key={key_id} ({v['gpg_key_url']})"
+    return f"git-commit-gpg key={fingerprint} ({v['gpg_key_url']})"
 
 
 def check_npm_integrity(name: str, tarball: Path, spec: dict, cache: Path) -> str:

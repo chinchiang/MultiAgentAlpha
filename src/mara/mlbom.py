@@ -518,6 +518,57 @@ def cosign_verify_blob_cmd(bom_path: Path | str, bundle: Path | str, identity: s
             "--certificate-oidc-issuer", issuer, str(bom_path)]
 
 
+def bundle_digest_matches(bom_path: Path | str, bundle_path: Path | str) -> tuple[bool, str]:
+    """Offline binding check for policy P7: the Sigstore bundle's message digest must be the SHA-256 of the BOM. It
+    proves the bundle was made for this BOM and not another one; it does not verify the signature or the signer,
+    which needs cosign and the Sigstore trust root (verify_signature)."""
+    import base64
+    import hashlib
+
+    try:
+        bundle = json.loads(Path(bundle_path).read_text(encoding="utf-8"))
+        md = (bundle.get("messageSignature") or {}).get("messageDigest") or {}
+        claimed = base64.b64decode(str(md.get("digest", "")), validate=True).hex()
+        actual = hashlib.sha256(Path(bom_path).read_bytes()).hexdigest()
+    except (OSError, ValueError, AttributeError) as e:
+        return False, f"signature bundle {bundle_path} unreadable or not a Sigstore message-signature bundle ({type(e).__name__})"
+    if str(md.get("algorithm", "")).upper() not in ("SHA2_256", "SHA256", "SHA-256"):
+        return False, f"signature bundle {bundle_path} does not sign a SHA-256 digest"
+    if claimed != actual:
+        return False, f"signature bundle {bundle_path} was made for another file (digest {claimed[:12]}…, the BOM is {actual[:12]}…)"
+    return True, "bundle digest matches the BOM"
+
+
+def verify_signature(cfg: MaraConfig, root: Path | str | None = None, runner=None) -> tuple[bool, str]:
+    """The BOM's keyless signature verified by the locked cosign (certificate identity and OIDC issuer from the config).
+    (ok, reason); a missing cosign, bundle or identity is a failure, never a pass."""
+    import subprocess
+
+    from .tools.runner import tool_env
+    from .workspace import resolve
+    from .workspace import root as workspace_root
+
+    mb = cfg.ml_bom
+    base = Path(root) if root else workspace_root()
+    bom = Path(mb.path) if Path(mb.path).is_absolute() else base / mb.path
+    bundle = Path(mb.bundle) if Path(mb.bundle).is_absolute() else (base / mb.bundle if root else resolve(mb.bundle))
+    if not mb.bundle.strip() or not bundle.is_file():
+        return False, f"signature bundle {mb.bundle or '(none)'} not found"
+    try:
+        cmd = cosign_verify_blob_cmd(bom, bundle, mb.certificate_identity, mb.certificate_oidc_issuer)
+    except (FileNotFoundError, ValueError) as e:
+        return False, str(e)
+    run = runner or subprocess.run
+    try:
+        cp = run(cmd, capture_output=True, text=True, timeout=180, check=False, env=tool_env())
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, f"cosign verify-blob failed to run ({type(e).__name__})"
+    if cp.returncode != 0:
+        tail = " ".join((cp.stderr or cp.stdout or "").strip().splitlines()[-2:])[:300]
+        return False, f"cosign verify-blob exit {cp.returncode}: {tail}"
+    return True, f"verified by cosign: {mb.certificate_identity} ({mb.certificate_oidc_issuer})"
+
+
 def cosign_sign_blob_cmd(bom_path: Path | str, bundle: Path | str, tools_dir: Path | str | None = None) -> list[str]:
     exe = tools_bin(tools_dir) / "cosign"
     return [str(exe), "sign-blob", "--bundle", str(bundle), str(bom_path)]

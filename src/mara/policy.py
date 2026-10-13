@@ -276,6 +276,14 @@ def p7_ml_bom(cfg: MaraConfig) -> PolicyResult:
             problems.append("require_signature is set but ml_bom.bundle is empty")
         elif not resolve(mb.bundle).exists():  # the workspace, like the BOM itself (mlbom.status_for_config)
             problems.append(f"signature bundle {mb.bundle} not found")
+        else:
+            # offline: the bundle must be for this BOM. The signature itself is verified by cosign when a review
+            # runs (mlbom.verify_signature); P7 runs on every config load and never reaches the network
+            from .mlbom import bundle_digest_matches
+
+            ok, why = bundle_digest_matches(resolve(mb.path), resolve(mb.bundle))
+            if not ok:
+                problems.append(why)
         if not mb.certificate_identity.strip() or not mb.certificate_oidc_issuer.strip():
             problems.append("require_signature needs certificate_identity and certificate_oidc_issuer for keyless verification")
     if problems:

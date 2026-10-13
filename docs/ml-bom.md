@@ -16,7 +16,7 @@ the prototype does it and why every entry is still pending in this repository.
 | `src/mara/mlbom.py` | the library behind the script, policy P7, the pipeline's audit entry and governance check G-7 |
 | `sbom/ml-bom.cdx.json` | the ML-BOM built from the manifest (committed; CI rebuilds it and fails on drift) |
 | `src/mara/groundtruth/cyclonedx/` | vendored CycloneDX 1.6 JSON schema (`bom-1.6.schema.json`, `spdx.schema.json`, `jsf-0.82.schema.json`) used by `validate` and the tests |
-| policy P7 `ml-bom` | with `ml_bom.required: true`, every `openai_compatible` model must have a complete component; with `require_signature: true`, the Sigstore bundle must exist |
+| policy P7 `ml-bom` | with `ml_bom.required: true`, every `openai_compatible` model must have a complete component; with `require_signature: true`, the Sigstore bundle must exist and its message digest must be the BOM's SHA-256 (offline, on every config load); a review then verifies the signature and its signer with the locked cosign and is incomplete (`ml_bom_signature_unverified`) when that fails |
 | `sbom/examples/ml-bom.example.cdx.json` | a complete component built from two synthetic stand-in files (labelled `mara:example`), used by `config/examples/ml-bom-required.yaml` and the tests; not real weights |
 
 ## 2. What a complete component looks like
