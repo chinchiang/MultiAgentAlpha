@@ -3,6 +3,7 @@ review report for a team outside the country, and every report records its revie
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -65,8 +66,9 @@ def export(report: Path, out: Path, *extra: str):
 
 
 def plain(output: str) -> str:
-    """The CLI output without the error panel's box drawing and line wrapping."""
-    return " ".join(output.translate({ord(c): " " for c in "│╭╮╰╯─"}).split())
+    """The CLI output without colour codes (rich colours it on CI), the error panel's box drawing and line wrapping."""
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", output)
+    return " ".join(text.translate({ord(c): " " for c in "│╭╮╰╯─"}).split())
 
 
 def test_the_summary_holds_exactly_the_allowlisted_fields(mock_review, tmp_path):
@@ -93,7 +95,7 @@ def test_the_summary_carries_no_finding_detail_and_no_target_path(mock_review, t
 
 def test_a_mock_report_is_refused_without_allow_mock(mock_review, tmp_path):
     res = export(mock_review / "report.json", tmp_path / "summary.json")
-    assert res.exit_code != 0 and "--allow-mock" in res.output
+    assert res.exit_code != 0 and "--allow-mock" in plain(res.output)
     assert not (tmp_path / "summary.json").exists()
 
 
@@ -117,7 +119,7 @@ def test_a_report_that_does_not_validate_is_refused(mock_review, tmp_path):
         res = export(bad, tmp_path / "summary.json")
         assert res.exit_code != 0, res.output
         assert isinstance(res.exception, SystemExit), res.exception  # a usage error, not a traceback
-        assert "not a valid MARA review report" in res.output
+        assert "not a valid MARA review report" in plain(res.output)
         assert not (tmp_path / "summary.json").exists()
 
 
@@ -131,7 +133,7 @@ def test_a_label_is_exported_as_given(mock_review, tmp_path, label):
 @pytest.mark.parametrize("label", ["", "x" * 81, "MES\nlogin.py", "MES\x1b[31m"])
 def test_a_label_that_is_not_one_short_line_is_refused(mock_review, tmp_path, label):
     res = export(live_copy(mock_review, tmp_path), tmp_path / "summary.json", "--label", label)
-    assert res.exit_code != 0 and "--label" in res.output
+    assert res.exit_code != 0 and "--label" in plain(res.output)
     assert not (tmp_path / "summary.json").exists()
 
 
@@ -164,7 +166,7 @@ def test_the_summary_is_not_written_into_the_reviewed_target(mock_review, tmp_pa
     target.mkdir()
     source = live_copy(mock_review, tmp_path, target=str(target))
     res = export(source, target / "score-summary.json")
-    assert res.exit_code != 0 and "--out" in res.output
+    assert res.exit_code != 0 and "--out" in plain(res.output)
     assert "may not be written inside the reviewed target" in plain(res.output) and "refusing to review" not in plain(res.output)
     assert not (target / "score-summary.json").exists()
 
@@ -186,7 +188,7 @@ def test_the_summary_never_overwrites_the_report_it_came_from(mock_review, tmp_p
     before = source.read_bytes()
     for out in (source, tmp_path / "sub" / ".." / "report.json"):
         res = export(source, out)
-        assert res.exit_code != 0 and "--out" in res.output
+        assert res.exit_code != 0 and "--out" in plain(res.output)
         assert source.read_bytes() == before  # the retained report source_report_sha256 names stays intact
 
 
