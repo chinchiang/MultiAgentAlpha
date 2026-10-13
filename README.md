@@ -340,10 +340,12 @@ Five runs score this repository's review process against the 60-question questio
 incremental review now runs in CI; the v0.3.13–v0.3.15 hardening — gate validation, the semgrep relock that
 removed thirteen expiring exceptions, corroboration dimension limits, content-ordered finding ids — strengthened
 evidence without crossing a scoring line; L5 lowest at 24, L0 next at 27 — the recorded blocker is the first
-real-family run, not code) and the current `docs/assessment-2026-10-12.md` (171/240, drafted by Claude Code and
+real-family run, not code) and the current `docs/assessment-2026-10-12.md` (173/240, drafted by Claude Code and
 reviewed by the owner: the first live calibration and the v0.4.x fixes strengthen the evidence of fourteen questions
-without crossing a scoring line; question 59 stays at 1 because the suggested weights have not been applied; L5 still
-lowest at 24 — what is missing now is a second live calibration, human decisions and a live swap drill). Each run has a file-level
+without crossing a scoring line; question 59 stays at 1 because the suggested weights have not been applied; revised
+2026-10-13: questions 5 and 9 rise from 2 to 3 because Scorecard and the code scanning upload run again since the
+repository became public on 2026-10-12, L0 now 29; L5 still lowest at 24 — what is missing now is a second live
+calibration, human decisions and a live swap drill). Each run has a file-level
 evidence cell on every row, per-layer totals, the two lowest questions per layer mapped to governance
 items G-1 to G-13, and a separate CN-1 to CN-4 table for the PRC sites. `scripts/score_assessment.py <file>` checks the
 acceptance criteria (all 60 rows scored with evidence, layer sums consistent, CN rows present) and
