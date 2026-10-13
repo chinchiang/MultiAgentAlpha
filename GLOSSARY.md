@@ -102,5 +102,9 @@ Anything that singles out one finding: its file, line, quote, title, claim, CWE 
 _Avoid_: details, raw findings
 
 **Score summary**:
-The export of one review report that carries only its dimension scores, overall score, review status and the identity of what was reviewed, and no finding detail; the only part of an in-country review that may go to a team outside the country (分數彙總).
+The export of one review report that carries only its dimension scores, overall score, review status and pseudonyms of what was reviewed, and no finding detail; the only part of an in-country review that may go to a team outside the country (分數彙總).
 _Avoid_: aggregate report, redacted report (nothing is masked; the summary is built from an allowlist)
+
+**Summary pseudonym**:
+A keyed hash that stands in for the reviewed target or its revision in a score summary: the same under the same key from one export to the next, so the receiving team can follow a target over time, and not reversible without the key, which stays in the country.
+_Avoid_: anonymised ID (the in-country team can map it back), hashed ID (an unkeyed hash can be confirmed from a list of candidates)

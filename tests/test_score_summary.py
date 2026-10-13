@@ -55,14 +55,19 @@ def test_an_incremental_review_records_its_scope_in_the_report(tmp_path):
     assert json.loads((out / "report.json").read_text(encoding="utf-8"))["review_scope"] == "incremental"
 
 
-SUMMARY_KEYS = {"schema", "source_report_sha256", "exported_at", "label", "target_id", "revision", "review_scope",
-                "generated_at", "provider_mode", "families_used", "config_hash", "review_status", "incomplete_reasons",
-                "gate_passed", "overall_score", "dimensions"}
-DIMENSION_KEYS = {"dimension", "score", "accepted_findings", "rejected_findings", "human_queue", "tool_ran", "notes"}
+SUMMARY_KEYS = {"schema", "source_report_sha256", "exported_at", "label", "target_pseudonym", "revision_pseudonym",
+                "pseudonym_key_id", "review_scope", "generated_at", "provider_mode", "families_used", "config_hash",
+                "review_status", "incomplete_reasons", "gate_passed", "overall_score", "dimensions"}
+DIMENSION_KEYS = {"dimension", "score", "accepted_findings", "rejected_findings", "human_queue", "tool_ran"}
+KEY = "0123456789abcdef0123456789abcdef"  # 32 characters, the shortest key MARA_SUMMARY_KEY may hold
 
 
-def export(report: Path, out: Path, *extra: str):
-    return CliRunner().invoke(app, ["export-summary", str(report), "--out", str(out), *extra])
+def export(report: Path, out: Path, *extra: str, key: str | None = KEY):
+    env = {"MARA_SUMMARY_KEY": key} if key is not None else {}
+    runner = CliRunner(env=env)
+    if key is None:
+        runner.env["MARA_SUMMARY_KEY"] = None  # CliRunner unsets a variable mapped to None
+    return runner.invoke(app, ["export-summary", str(report), "--out", str(out), *extra])
 
 
 def plain(output: str) -> str:
@@ -123,14 +128,15 @@ def test_a_report_that_does_not_validate_is_refused(mock_review, tmp_path):
         assert not (tmp_path / "summary.json").exists()
 
 
-@pytest.mark.parametrize("label", ["重慶廠 MES", "x" * 80])
+@pytest.mark.parametrize("label", ["重慶廠 MES", "x" * 80, "重慶廠\u3000MES", "Cafe\u0301 MES"])
 def test_a_label_is_exported_as_given(mock_review, tmp_path, label):
     res = export(live_copy(mock_review, tmp_path), tmp_path / "summary.json", "--label", label)
     assert res.exit_code == 0, res.output
     assert json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))["label"] == label
 
 
-@pytest.mark.parametrize("label", ["", "x" * 81, "MES\nlogin.py", "MES\x1b[31m"])
+@pytest.mark.parametrize("label", ["", "x" * 81, "MES\nlogin.py", "MES\x1b[31m", "   ", " MES", "MES\u3000",
+                                   "MES\u202egnp.nigol", "MES \U0001f468\u200d\U0001f4bb"])
 def test_a_label_that_is_not_one_short_line_is_refused(mock_review, tmp_path, label):
     res = export(live_copy(mock_review, tmp_path), tmp_path / "summary.json", "--label", label)
     assert res.exit_code != 0 and "--label" in plain(res.output)
@@ -206,3 +212,97 @@ def test_an_unreadable_report_is_a_usage_error_not_a_traceback(mock_review, tmp_
     assert res.exit_code != 0 and isinstance(res.exception, SystemExit), res.exception
     assert "report.json" in plain(res.output) and "readable" in plain(res.output)
     assert not (tmp_path / "summary.json").exists()
+
+
+TARGET_ID = "1" * 64
+REVISION = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c"
+
+
+def test_the_pseudonyms_are_hmac_sha256_under_the_key(mock_review, tmp_path):
+    # expected values computed outside Python:
+    #   printf 'target\0%s' "$TARGET_ID" | openssl dgst -sha256 -hmac "$KEY"
+    #   printf 'revision\0%s\0%s' "$TARGET_ID" "$REVISION" | openssl dgst -sha256 -hmac "$KEY"
+    #   printf '%s' "$KEY" | sha256sum | cut -c1-16
+    source = live_copy(mock_review, tmp_path, target_id=TARGET_ID, revision=REVISION)
+    assert export(source, tmp_path / "summary.json").exit_code == 0
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert summary["target_pseudonym"] == "875a753f62a861f44d15d4dc0e98d6130cd212cd2b07215148fa14fe1add4823"
+    assert summary["revision_pseudonym"] == "9b3a5969a052ed5ca7ca6cf955201ebe77205fe7685fb7c93a013c7af326c567"
+    assert summary["pseudonym_key_id"] == "3eb1bd439947eb76"
+
+
+def summary_of(mock_review: Path, tmp_path: Path, name: str, key: str = KEY, **changes) -> dict:
+    sub = tmp_path / name
+    sub.mkdir()
+    res = export(live_copy(mock_review, sub, **changes), sub / "summary.json", key=key)
+    assert res.exit_code == 0, plain(res.output)
+    return json.loads((sub / "summary.json").read_text(encoding="utf-8"))
+
+
+def test_the_pseudonyms_follow_a_target_under_one_key_and_reveal_nothing_without_it(mock_review, tmp_path):
+    first = summary_of(mock_review, tmp_path, "a", target_id=TARGET_ID, revision=REVISION)
+    again = summary_of(mock_review, tmp_path, "b", target_id=TARGET_ID, revision=REVISION)
+    rekeyed = summary_of(mock_review, tmp_path, "c", key="f" * 32, target_id=TARGET_ID, revision=REVISION)
+    fork = summary_of(mock_review, tmp_path, "d", target_id="2" * 64, revision=REVISION)
+    assert (first["target_pseudonym"], first["revision_pseudonym"]) == (again["target_pseudonym"], again["revision_pseudonym"])
+    assert rekeyed["target_pseudonym"] != first["target_pseudonym"] and rekeyed["pseudonym_key_id"] != first["pseudonym_key_id"]
+    # the same commit under another target (a fork) gets another pseudonym: printf 'revision\0%s\0%s' 222…2 "$REVISION" | openssl …
+    assert fork["revision_pseudonym"] == "a49283bfa26abdad88df1d3ce1bd058b3d63de3c04017d6e68ae17f2e0fd5699"
+    text = (tmp_path / "a" / "summary.json").read_text(encoding="utf-8")
+    assert TARGET_ID not in text and REVISION not in text
+
+
+def test_a_report_without_a_revision_has_no_revision_pseudonym(mock_review, tmp_path):
+    summary = summary_of(mock_review, tmp_path, "a", target_id=TARGET_ID, revision="")
+    assert summary["revision_pseudonym"] is None and summary["target_pseudonym"]
+
+
+@pytest.mark.parametrize("key", [None, "", "x" * 31, KEY + "\n", " " + KEY])
+def test_no_summary_without_a_usable_key_even_for_a_mock_report(mock_review, tmp_path, key):
+    res = export(mock_review / "report.json", tmp_path / "summary.json", "--allow-mock", key=key)
+    assert res.exit_code != 0 and "MARA_SUMMARY_KEY" in plain(res.output)
+    assert not (tmp_path / "summary.json").exists()
+
+
+@pytest.mark.parametrize(("change", "says"), [({"target_id": ""}, "target_id"), ({"target": "fixtures/vuln-sample"}, "relative")])
+def test_a_report_that_cannot_name_or_place_its_target_is_refused(mock_review, tmp_path, change, says):
+    res = export(live_copy(mock_review, tmp_path, **change), tmp_path / "summary.json")
+    assert res.exit_code != 0 and says in plain(res.output)
+    assert not (tmp_path / "summary.json").exists()
+
+
+def with_dimension_named(mock_review: Path, name: str) -> list[dict]:
+    dims = json.loads((mock_review / "report.json").read_text(encoding="utf-8"))["dimensions"]
+    return [dict(dims[0], dimension=name), *dims[1:]]
+
+
+@pytest.mark.parametrize("field", ["incomplete_reasons", "families_used", "provider_mode", "generated_at", "config_hash", "dimension"])
+def test_an_allowlisted_field_carrying_free_text_is_refused(mock_review, tmp_path, field):
+    text = "login.py:42 SQL injection in build_query"  # finding detail smuggled into a field that never holds text
+    change = {"incomplete_reasons": {"incomplete_reasons": ["reviewer_refusals", text]},
+              "families_used": {"families_used": ["anthropic", text]},
+              "provider_mode": {"provider_mode": text},
+              "generated_at": {"generated_at": text},
+              "config_hash": {"config_hash": text},
+              "dimension": {"dimensions": with_dimension_named(mock_review, text)}}[field]
+    source = live_copy(mock_review, tmp_path, **change)
+    if field == "provider_mode":  # live_copy sets live; put the free text back
+        report = json.loads(source.read_text(encoding="utf-8"))
+        report["provider_mode"] = text
+        source.write_text(json.dumps(report), encoding="utf-8")
+    res = export(source, tmp_path / "summary.json")
+    assert res.exit_code != 0 and field in plain(res.output), plain(res.output)
+    assert not (tmp_path / "summary.json").exists()
+
+
+def test_every_incomplete_reason_the_pipeline_writes_can_be_exported(mock_review, tmp_path):
+    import re as _re
+
+    from mara.audit import INCOMPLETE_COUNTERS
+
+    pipeline = (ROOT / "src" / "mara" / "pipeline.py").read_text(encoding="utf-8")
+    written = set(_re.findall(r'incomplete\.append\("([a-z_]+)"\)', pipeline)) | set(INCOMPLETE_COUNTERS)
+    assert len(written) > len(INCOMPLETE_COUNTERS)  # the pattern still finds the pipeline's own codes
+    summary = summary_of(mock_review, tmp_path, "a", review_status="incomplete", overall_score=None,
+                         incomplete_reasons=sorted(written))
+    assert summary["incomplete_reasons"] == sorted(written)

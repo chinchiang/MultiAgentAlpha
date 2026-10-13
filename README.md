@@ -679,19 +679,36 @@ in-country team; `mara export-summary` derives the summary from a report already
 explicit step (`docs/adr/0004-score-summary.md`):
 
 ```bash
+export MARA_SUMMARY_KEY="$(cat /secure/in-country/summary.key)"   # once per site: openssl rand -hex 32
 mara export-summary out/report.json --label "Chongqing MES" --out out/score-summary.json
 ```
 
 The summary is built from an allowlist: `schema` (`mara-score-summary/1`), `source_report_sha256` (the
-SHA-256 of the report.json it came from), `exported_at`, `label`, `target_id`, `revision`,
-`review_scope`, `generated_at`, `provider_mode`, `families_used`, `config_hash`, `review_status`,
-`incomplete_reasons`, `gate_passed`, `overall_score` and `dimensions` (score and per-dimension counts).
-No file, line, quote, title, claim, CWE or finding id, no counts by tier or severity, and not the
-report's local `target` path. A report that does not validate is refused, a mock-mode report needs
-`--allow-mock`, a label must be one line of 1 to 80 printable characters (what it says is the operator's
-responsibility), and the output may neither replace the report it is made from nor lie inside the reviewed target. An incomplete review is exported
-with `overall_score: null` and its reasons. Detail that must cross the border goes through the DSL and
-PIPL export assessment, outside MARA.
+SHA-256 of the report.json it came from), `exported_at`, `label`, `target_pseudonym`,
+`revision_pseudonym`, `pseudonym_key_id`, `review_scope`, `generated_at`, `provider_mode`,
+`families_used`, `config_hash`, `review_status`, `incomplete_reasons`, `gate_passed`, `overall_score`
+and `dimensions` (name, score, per-dimension counts, whether a tool ran). No file, line, quote, title,
+claim, CWE or finding id, no counts by tier or severity, no free-text note, and not the report's local
+`target` path, `target_id` or `revision`.
+
+Who was reviewed crosses only as summary pseudonyms: HMAC-SHA256 under the key in `MARA_SUMMARY_KEY`
+(at least 32 characters, no surrounding whitespace) of the target and of its revision, bound to the
+target (`revision_pseudonym` is null when the report has none). The report's own ids are unkeyed and
+could be confirmed from a list of candidate repositories. The same key gives the same pseudonyms on
+every export, so the receiving team can follow a target over time; `pseudonym_key_id` (16 hex digits of
+the key's SHA-256) shows when the key changed. Keep the key in the country and never send it with a
+summary; to map a pseudonym back, export the retained report again under the same key.
+
+Refused, with nothing written: no usable key (also with `--allow-mock`); a report that does not
+validate, has no `target_id`, names its target by a relative path, or holds anything but the usual
+values in its allowlisted strings (known incomplete-review codes, model families, dimensions and
+provider modes, an ISO timestamp, a SHA-256 config hash), so that apart from the label no free text
+crosses; a mock-mode report without `--allow-mock`; a label that is not 1 to 80 letters, marks, numbers,
+punctuation, symbols or spaces (the full-width space too) with no space at either end and no control
+or format character (what it says is the operator's responsibility); and an output that would replace
+the report it is made from or lie inside the reviewed target. An incomplete review is exported with
+`overall_score: null` and its reasons. Detail that must cross the border goes through the DSL and PIPL
+export assessment, outside MARA.
 
 ## Other commands
 

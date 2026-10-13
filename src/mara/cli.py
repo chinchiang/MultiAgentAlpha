@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import typer
@@ -138,7 +139,8 @@ def export_summary(
     label: str | None = typer.Option(None, "--label", help="Target name for the receiving team, chosen by the operator (one line, 1-80 chars)"),
     allow_mock: bool = typer.Option(False, "--allow-mock", help="Export a mock-mode report (tests and demonstrations only)"),
 ):
-    """Write the score summary of a review report: dimension scores and overall score, no finding detail (CN-3)."""
+    """Write the score summary of a review report: dimension scores and overall score, no finding detail (CN-3).
+    The target and revision cross only as pseudonyms keyed by MARA_SUMMARY_KEY, which stays in the country."""
     from .report.summary_out import SummaryRefused, build_summary, check_destination, load_report, write_summary
     from .workspace import resolve
 
@@ -150,7 +152,7 @@ def export_summary(
     try:
         parsed = load_report(source)
         check_destination(out, report, parsed)
-        summary = build_summary(parsed, source, label=label, allow_mock=allow_mock)
+        summary = build_summary(parsed, source, key=os.environ.get("MARA_SUMMARY_KEY", ""), label=label, allow_mock=allow_mock)
     except SummaryRefused as e:
         raise typer.BadParameter(str(e), param_hint=e.param_hint) from e
     write_summary(summary, out)
