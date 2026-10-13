@@ -398,7 +398,10 @@ class Pipeline:
         skeptic_abstained_ids: frozenset[str] = frozenset(),
         tool_path_prefix: str = "",
     ) -> list[ConsensusResult]:
-        weights = {m.family: m.weight for m in self.cfg.models}
+        # a family's vote carries its judge's weight (P3: one judge per family), not that of whichever
+        # same-family model happens to be listed last - a reviewer-only model used to replace it
+        spec = {m.name: m for m in self.cfg.models}
+        weights = {spec[n].family: spec[n].weight for n in self.cfg.roles.judges}
         by_finding: dict[str, list[JudgeVote]] = defaultdict(list)
         for v in votes:
             by_finding[v.finding_id].append(v)

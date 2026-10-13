@@ -75,6 +75,8 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
         why = (
             "provenance unverified"
             if c.tier.value == "D" and not any(p.verified for p in f.provenance)
+            else f"awaiting human decision: {', '.join(c.human_reasons) or 'unresolved_human_review'}"
+            if c.needs_human
             else ("skeptic refuted" if c.skeptic_refuted else f"consensus {c.weighted_score} below threshold")
         )
         lines.append(f"- {f.id} · {literal(f.title)} · {f.source_family.value} · tier {c.tier.value} · {why}")

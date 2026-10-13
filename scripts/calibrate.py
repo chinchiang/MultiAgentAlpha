@@ -11,11 +11,12 @@ calib/samples/<sample>/labels.json and produces docs/calibration-<date>.md with:
     appended to calib/history.json on live runs with the delta to the previous period (assessment #49)
   - Dawid-Skene EM estimate of each judge family's reliability from the votes alone
   - the Alternative Annotator Test of the unsupervised label against human adjudications
-    (assessment #60); a passing live result is written to calib/latest.json and is what policy P8
-    checks before allowing gate.unsupervised_reject_allowed
+    (assessment #60); every live result is written to calib/latest.json, and policy P8 allows
+    gate.unsupervised_reject_allowed only while that result is a pass - a failing run withdraws an
+    earlier pass instead of leaving it in force
   - suggested family weights, clamped to [0.2, 2.0], with the sample sizes behind them
 
-It never edits config/mara.yaml: the suggested weights are for a human to adopt. Live runs append calib/history.json and, when the test passes, write calib/latest.json; commit both together with the report, since policy P8 verifies calib/latest.json from the repository.
+It never edits config/mara.yaml: the suggested weights are for a human to adopt. Live runs append calib/history.json and write calib/latest.json, passing or not; commit both together with the report, since policy P8 verifies calib/latest.json from the repository.
 """
 
 from __future__ import annotations
@@ -318,8 +319,8 @@ def alternative_annotator_test(runs, decisions, post, require_trained: bool | No
     leave-one-annotator-out procedure (several annotators per item) does not apply. Decisions bind
     to findings by their v2 queue key (primary location, CWE, target, revision, context hash), one
     decision per finding, never by line proximity; contradictory decisions on one key are excluded.
-    G-13's trained-adjudicator rule applies. A passing live result goes to calib/latest.json, and
-    policy P8 accepts only results tagged with this method (mara.policy.AAT_METHOD)."""
+    G-13's trained-adjudicator rule applies. Every live result goes to calib/latest.json; policy P8
+    accepts only a passing result tagged with this method (mara.policy.AAT_METHOD)."""
     from mara.policy import AAT_METHOD
     from mara.report.human_queue_out import queue_key
 
@@ -642,8 +643,8 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
           "人工判為真陽性者即為漏放；漏放率的 Clopper-Pearson 單尾 95% 上界須 ≤ 0.05，零漏放也至少要 59 筆裁決。",
           "",
           "裁決以 v2 key 一對一綁定 finding（不以行號鄰近比對）。每個 finding 只有一位裁決者，因此這是單一裁決者版本，"
-          "不是需要多位標註者的 leave-one-annotator-out 原版。通過的 live 校準會把結果（含方法標記）寫入 `calib/latest.json`，"
-          "政策 P8 據此才允許 `gate.unsupervised_reject_allowed: true`；在此之前，非 D 級的「不採納」一律進人工佇列。", ""]
+          "不是需要多位標註者的 leave-one-annotator-out 原版。每次 live 校準都把結果（含方法標記）寫入 `calib/latest.json`，未通過的結果會撤銷先前的通過；"
+          "只有通過的結果，政策 P8 才允許 `gate.unsupervised_reject_allowed: true`；在此之前，非 D 級的「不採納」一律進人工佇列。", ""]
     if aat is None or not aat.get("n"):
         why = (aat or {}).get("why") or "本次沒有可對照的人工裁決。"
         L += [f"本次結果：**未通過**（{why}）管線的所有「不採納」繼續由人工抽查。", ""]

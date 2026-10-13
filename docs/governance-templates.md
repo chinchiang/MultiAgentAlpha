@@ -26,9 +26,10 @@ not started, so all three fail today with precise reasons.
   that is neither blank nor an HTML comment and holds a letter or digit. A marker followed directly
   by another marker or by a heading counts as empty.
 - `check_g1` passes when all six statements have text, `status: approved`, `approved_by` and
-  `approved_on` are filled, `approved_on` is not in the future, `review_by` has not passed, and the
-  approval is under a year old or has a future `review_by`. Otherwise it fails and lists what is
-  wrong. The PSO approves by editing the front matter and the approval table.
+  `approved_on` are filled, `approved_on` is not in the future, `review_by` has not passed and is
+  at most 365 days after `approved_on`, and the approval is under a year old or has a future
+  `review_by`. A review date further out would keep one approval current indefinitely. Otherwise
+  it fails and lists what is wrong. The PSO approves by editing the front matter and the approval table.
 
 ## G-4: cold standby and model-swap drills
 
