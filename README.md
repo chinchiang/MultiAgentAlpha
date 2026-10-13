@@ -65,8 +65,9 @@ if git cannot answer (dubious ownership, a broken index) the review fails closed
 
 MARA's own trust anchors live in the MARA workspace, never in the code under review: the pinned
 tools (`.mara-tools`, or `MARA_TOOLS_DIR`), policy P8's evidence `calib/latest.json`, the human-queue
-backlog, the ML-BOM and the PSIRT ledger resolve against `MARA_HOME` when set, the working directory
-otherwise; so do the defaults of `mara review --config` (`config/mara.yaml`, `config/mara.mock.yaml`
+backlog and decisions, the training register, the ML-BOM and its signature bundle, the PSIRT ledger and
+handshake resolve against `MARA_HOME` when set, the working directory otherwise - in `src/` and in the
+`scripts/` that write them alike (`tests/test_workspace_anchors.py`); so do the defaults of `mara review --config` (`config/mara.yaml`, `config/mara.mock.yaml`
 with `--provider mock`), `--out` (`out`) and `mara check-config`. `mara review` refuses a target that
 contains the workspace, the tool directory, the trivy database, the config file or the output directory
 (`cd target && mara review .` would let the reviewed repository supply the binaries the runner

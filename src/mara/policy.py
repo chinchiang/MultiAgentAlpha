@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from .schemas import ModelFamily
+from .workspace import resolve
 
 if TYPE_CHECKING:
     from .config import MaraConfig
@@ -257,7 +258,6 @@ def p7_ml_bom(cfg: MaraConfig) -> PolicyResult:
     component in the CycloneDX ML-BOM (safetensors-only per-file SHA-256, licence, source, signature
     method), and the BOM must be signed when require_signature is set. Reads the BOM file, never
     the network. Until ml_bom.required is true the policy only reports."""
-    from pathlib import Path
 
     from .mlbom import STATUS_COMPLETE, status_for_config
 
@@ -274,7 +274,7 @@ def p7_ml_bom(cfg: MaraConfig) -> PolicyResult:
     if mb.require_signature:
         if not mb.bundle.strip():
             problems.append("require_signature is set but ml_bom.bundle is empty")
-        elif not Path(mb.bundle).exists():
+        elif not resolve(mb.bundle).exists():  # the workspace, like the BOM itself (mlbom.status_for_config)
             problems.append(f"signature bundle {mb.bundle} not found")
         if not mb.certificate_identity.strip() or not mb.certificate_oidc_issuer.strip():
             problems.append("require_signature needs certificate_identity and certificate_oidc_issuer for keyless verification")
@@ -298,9 +298,9 @@ def p8_unsupervised_reject(cfg: MaraConfig) -> PolicyResult:
             "unsupervised_reject_allowed is false: every rejected non-D finding goes to the human queue",
         )
     try:
-        from .workspace import resolve
-
         latest = json.loads(resolve(AAT_EVIDENCE).read_text(encoding="utf-8"))
+        if not isinstance(latest, dict):
+            raise ValueError("not a JSON object")
     except (OSError, ValueError):
         return PolicyResult(
             "P8", "unsupervised-reject", False,

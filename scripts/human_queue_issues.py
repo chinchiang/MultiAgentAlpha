@@ -39,6 +39,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from mara.report.escaping import code, literal  # noqa: E402
+from mara.workspace import resolve  # noqa: E402
 
 MARKER = "<!-- mara-hq:{key} -->"
 MARKER_RE = re.compile(r"<!-- mara-hq:(v2-[0-9a-f]{24}|[0-9a-f]{12}) -->")
@@ -335,10 +336,11 @@ def main() -> int:
     ap.add_argument("--queue", type=Path, help="out/human_queue.json from a review; omit with --sync-decisions only")
     ap.add_argument("--repo", required=True, help="owner/repo")
     ap.add_argument("--label", default="mara-human-queue")
-    ap.add_argument("--decisions-dir", type=Path, default=ROOT / "calib" / "decisions")
-    ap.add_argument("--backlog-file", type=Path, default=ROOT / "calib" / "decisions" / "backlog.json")
+    # MARA's own state, in the workspace the pipeline reads it from (MARA_HOME, else the working directory)
+    ap.add_argument("--decisions-dir", type=Path, default=resolve("calib/decisions"))
+    ap.add_argument("--backlog-file", type=Path, default=resolve("calib/decisions/backlog.json"))
     ap.add_argument("--sync-decisions", action="store_true")
-    ap.add_argument("--register", type=Path, default=ROOT / "training" / "records.yaml",
+    ap.add_argument("--register", type=Path, default=resolve("training/records.yaml"),
                     help="AI-literacy register (G-13); decisions by people without a valid adjudicator record are flagged")
     ap.add_argument("--dry-run", action="store_true", help="print the gh commands instead of running the mutating ones")
     args = ap.parse_args()
