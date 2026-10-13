@@ -59,7 +59,7 @@ jobs:
           GITHUB_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # read-only is enough for a public repository
           REPO: ${{ github.repository }}
         run: python3 scripts/scorecard_ci.py --repo "github.com/$REPO" --json scorecard.json --sarif scorecard.sarif --policy tools/scorecard-policy.yaml
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: scorecard
@@ -106,7 +106,7 @@ jobs:
         # scorecard_ci.py exports HEAD with git archive first, so .mara-tools/bin (installed above, inside the
         # workspace) is not scanned as a checked-in binary.
         run: python3 scripts/scorecard_ci.py --local . --json scorecard.json --sarif scorecard.sarif --policy tools/scorecard-policy.yaml
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: scorecard-local
