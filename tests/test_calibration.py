@@ -64,8 +64,11 @@ def test_calibration_run_never_takes_an_exit_2_without_a_report_for_a_review(tmp
 
 def test_calibration_answer_key_is_excluded_from_the_bundle(root, tmp_path):
     from mara.context.repo_map import build_context
+    from tests.tracked import tracked_files
 
-    for sample in sorted((root / "calib" / "samples").iterdir()):
+    samples = sorted({f.split("/")[2] for f in tracked_files(root) if f.startswith("calib/samples/") and f.count("/") >= 3})
+    assert samples
+    for sample in (root / "calib" / "samples" / name for name in samples):
         ctx = build_context(sample)
         assert "labels.json" not in ctx.content, sample.name
         assert ctx.excluded["labels.json"] == "calibration_answer_key" and ctx.complete, sample.name

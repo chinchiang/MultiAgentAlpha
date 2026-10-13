@@ -59,7 +59,10 @@ def test_public_docs_never_name_the_internal_endpoints():
         needles |= {z.lstrip(".") for z in cfg.private_dns_suffixes}
         needles |= {urlparse(m.base_url).hostname for m in cfg.models if m.base_url and m.data_residency == "on_prem"}
     assert "iec.inventec" in needles, "the production config declares its internal zone"
-    leaks = [(p.relative_to(ROOT).as_posix(), n) for p in sorted(DOCS.rglob("*"))
+    from tests.tracked import tracked_files
+
+    docs = [ROOT / f for f in tracked_files(ROOT) if f.startswith(DOCS.relative_to(ROOT).as_posix() + "/")]
+    leaks = [(p.relative_to(ROOT).as_posix(), n) for p in docs
              if p.is_file() and p.suffix in {".md", ".html", ".json", ".txt", ".yaml", ".yml"}
              for n in sorted(needles) if n in p.read_text(encoding="utf-8", errors="replace")]
     assert not leaks, leaks

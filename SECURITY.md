@@ -65,7 +65,7 @@ non-reachable condition, the advisory is closed with the reasoning written down.
 
 Every pull request runs the L0 tools pinned and verified in `tools/versions.lock` (semgrep with
 pinned rules, osv-scanner over the hash-locked Python closures, trivy with an offline database,
-gitleaks, zizmor). While the repository is public their SARIF goes to GitHub Code Scanning; while it is
+gitleaks, zizmor, csp-evaluator). While the repository is public their SARIF goes to GitHub Code Scanning; while it is
 private (since 2026-09-21) that upload job is skipped, because Code Scanning on a private repository needs
 GitHub Advanced Security, and the SARIF is kept as a workflow artifact instead. OpenSSF Scorecard runs on every
 push to `main` and weekly: through the GitHub API while public; while private as `scorecard --local` with the

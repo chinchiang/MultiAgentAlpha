@@ -139,5 +139,8 @@ def test_actions_inputs_are_found_where_zizmor_collects_them(tmp_path):
     outside = tmp_path / "outside" / ".github" / "workflows"
     outside.mkdir(parents=True)
     (outside / "ci.yml").write_text("on: push\n", encoding="utf-8")
-    (t / "linked").symlink_to(tmp_path / "outside", target_is_directory=True)
+    try:
+        (t / "linked").symlink_to(tmp_path / "outside", target_is_directory=True)
+    except OSError as e:  # Windows without Developer Mode or admin rights (WinError 1314)
+        pytest.skip(f"cannot create a symlink here: {e}")
     assert not runner.has_actions_inputs(t), "a symlink out of the target is not followed"

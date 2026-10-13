@@ -31,7 +31,7 @@ import yaml
 
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "out", "calib-out", "__pycache__", ".mara-tools"}   # .mara-tools: the semgrep-rules checkout carries its own workflows
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-USES_RE = re.compile(r"^\s*-?\s*uses:\s*([^\s#]+)\s*(#.*)?$")
+USES_RE = re.compile(r"^\s*-?\s*uses:\s*[\"']?([^\s#\"']+)[\"']?\s*(#.*)?$")  # a quoted reference is the same reference
 EXPR_RE = re.compile(r"\$\{\{\s*([^}]*?)\s*\}\}")
 REF_KEY_RE = re.compile(r"^\s*ref:\s*(.+?)\s*$")
 CACHE_KEY_RE = re.compile(r"^\s*key:\s*(.+?)\s*$")
@@ -76,6 +76,7 @@ class Interpolation:
     line: int
     expression: str
     untrusted: bool
+    where: str = "run"  # run (a shell step) or script (actions/github-script, which evaluates it as JavaScript)
 
 
 @dataclass
@@ -106,8 +107,18 @@ class WorkflowInventory:
 
 
 def find_workflows(root: Path) -> list[Path]:
+    """Every workflow file below `root`: the files git tracks when `root` is a repository (untracked checkouts such as
+    a `.claude/worktrees/` copy or the fetched calibration corpora are not this repository's workflows), else a walk."""
+    try:
+        listed = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, encoding="utf-8", check=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
+        listed = ""
+    if listed:
+        candidates = [root / f for f in sorted(listed.split("\0")) if f]
+    else:
+        candidates = sorted(root.rglob("*"))
     out = []
-    for p in sorted(root.rglob("*")):
+    for p in candidates:
         if any(part in SKIP_DIRS for part in p.parts):
             continue
         if p.is_file() and p.suffix in (".yml", ".yaml") and p.parent.name == "workflows" and p.parent.parent.name == ".github":
@@ -225,8 +236,10 @@ def inventory_workflow(path: Path, root: Path) -> WorkflowInventory:
     lines = text.splitlines()
     inv = WorkflowInventory(path=str(path.relative_to(root)).replace("\\", "/"))
     parsed: list[str] | None = None
+    doc: object = None
     try:
-        parsed = _parsed_triggers(yaml.safe_load(text))
+        doc = yaml.safe_load(text)
+        parsed = _parsed_triggers(doc)
     except yaml.YAMLError as e:
         where = next((ln.strip() for ln in str(e).splitlines() if "line" in ln and "column" in ln), "")
         inv.parse_error = str(e).splitlines()[0] + (f"，{where.rstrip(':')}" if where else "")
@@ -299,8 +312,54 @@ def inventory_workflow(path: Path, root: Path) -> WorkflowInventory:
             if "github.event" in expr or "github.head_ref" in expr or "github.ref" in expr:
                 inv.run_interpolations.append(Interpolation(line=line_no, expression=expr, untrusted=bool(UNTRUSTED_RE.search(expr))))
 
+    if isinstance(doc, dict):
+        _from_parsed(inv, doc, lines)
     _assess(inv)
     return inv
+
+
+def _line_of(lines: list[str], needle: str) -> int:
+    """The first line (1-based) holding `needle`, 0 when none does (a value the parser joined across lines)."""
+    return next((i for i, ln in enumerate(lines, 1) if needle in ln and not ln.lstrip().startswith("#")), 0)
+
+
+def _steps(doc: dict):
+    """(job, step) for every step of every job, and (job, job) for a job that calls a reusable workflow."""
+    for job, spec in (doc.get("jobs") or {}).items():
+        if not isinstance(spec, dict):
+            continue
+        if isinstance(spec.get("uses"), str):
+            yield job, spec
+        for step in spec.get("steps") or []:
+            if isinstance(step, dict):
+                yield job, step
+
+
+def _from_parsed(inv: WorkflowInventory, doc: dict, lines: list[str]) -> None:
+    """What the line patterns cannot see, read from the parsed workflow as GitHub reads it: references, PR-head
+    checkouts and expressions written in flow style (`- {uses: ..., with: {ref: ...}}`) or across lines, and the
+    `script:` of actions/github-script, which evaluates `${{ }}` as JavaScript exactly like a shell `run:`."""
+    seen_uses = {u.raw for u in inv.uses}
+    for _, step in _steps(doc):
+        raw = str(step["uses"]).strip() if isinstance(step.get("uses"), str) else ""
+        if raw and raw not in seen_uses:
+            action, _, ref = raw.partition("@")
+            inv.uses.append(Uses(line=_line_of(lines, raw), raw=raw, action=action, ref=ref, kind=classify_ref(action, ref),
+                                 note="read from the parsed workflow"))
+            seen_uses.add(raw)
+        with_ = step.get("with") if isinstance(step.get("with"), dict) else {}
+        ref_value = with_.get("ref")
+        if isinstance(ref_value, str) and ("github.event.pull_request.head" in ref_value or "github.head_ref" in ref_value):
+            line = _line_of(lines, ref_value.strip())
+            if line not in inv.head_checkout_lines:
+                inv.head_checkout_lines.append(line)
+        script = with_.get("script")
+        if raw.startswith("actions/github-script") and isinstance(script, str):
+            for m in EXPR_RE.finditer(script):
+                expr = m.group(1)
+                if "github.event" in expr or "github.head_ref" in expr or "github.ref" in expr:
+                    inv.run_interpolations.append(Interpolation(line=_line_of(lines, m.group(0)), expression=expr,
+                                                                untrusted=bool(UNTRUSTED_RE.search(expr)), where="script"))
 
 
 def _assess(inv: WorkflowInventory) -> None:
@@ -313,9 +372,9 @@ def _assess(inv: WorkflowInventory) -> None:
         f.append(("High", "`pull_request_target` 觸發：在基底分支的權限與 secrets 下執行，任何後續 checkout 或執行 PR 內容都會成為 pwn request"))
     for it in inv.run_interpolations:
         if it.untrusted:
-            f.append(("Critical", f"攻擊者可控的 context 直接內插到 `run:`（第 {it.line} 行：`${{{{ {it.expression} }}}}`）"))
+            f.append(("Critical", f"攻擊者可控的 context 直接內插到 `{it.where}:`（第 {it.line} 行：`${{{{ {it.expression} }}}}`）"))
         else:
-            f.append(("Low", f"`run:` 內插了 context `${{{{ {it.expression} }}}}`（第 {it.line} 行）；非標準攻擊者可控欄位，仍建議改走 env"))
+            f.append(("Low", f"`{it.where}:` 內插了 context `${{{{ {it.expression} }}}}`（第 {it.line} 行）；非標準攻擊者可控欄位，仍建議改走 env"))
     for u in inv.non_sha_uses:
         f.append(("High", f"第 {u.line} 行 `{u.raw}` 以 {('tag' if u.kind == 'tag' else '分支')} 而非 40 字元 SHA 引用（conditional：需上游 tag/分支被改指）"))
     if inv.top_permissions.strip() in ("write-all",) or any(v.strip() == "write-all" for v in inv.job_permissions.values()):

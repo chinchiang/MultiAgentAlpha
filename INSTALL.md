@@ -105,6 +105,10 @@ mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sampl
 
 第一行跑完整測試（沒裝 L0 工具時有幾個工具整合測試會 skip，屬正常）。第二行對內建的漏洞範例做一次離線審查，三個 mock 模型家族不需要網路，結果在 `out/report.md`、`out/report.sarif`、`out/human_queue.md` 與 `out/context.json`（context agent 產生、逐字引文驗證過的架構視圖）。預期輸出是 `overall unavailable (review incomplete)` 與 `gate BLOCKED`：自 2026-09-18 的修正起，只要有必要的 L0 工具沒安裝、有 reviewer 拒答或有待人工裁決的 finding，報告就標示 incomplete 且不給總分，`report.md` 的「incomplete reasons」會列出原因。這不是安裝失敗；裝好第 3 節的工具後再跑，`required_tool_incomplete` 就會消失。
 
+型別檢查（`mypy`，設定在 `pyproject.toml`）不在 `dev` 依賴裡：CI 的 CPython 3.12 job 以 `tools/typecheck-requirements.txt` 的 hash 鎖定閉包安裝並執行。那份閉包是為 Linux runner 解析的，Windows 上雜湊不符；要在本機執行，在 Linux 或 WSL 以 `pip install --require-hashes -r tools/typecheck-requirements.txt` 後跑 `python3 -m mypy`。
+
+Type checking (`mypy`, configured in `pyproject.toml`) is not in the `dev` dependencies: CI's CPython 3.12 job installs it from the hash-locked closure `tools/typecheck-requirements.txt` and runs it. That closure is resolved for the Linux runner and its hashes do not match on Windows; to run it locally, use Linux or WSL: `pip install --require-hashes -r tools/typecheck-requirements.txt`, then `python3 -m mypy`.
+
 The first line runs the whole test suite (a few tool-integration tests skip while the L0 tools are not installed; that is normal). The second line reviews the built-in vulnerable sample offline; the three mock model families need no network, and the results are `out/report.md`, `out/report.sarif`, `out/human_queue.md` and `out/context.json` (the architecture view the context agent builds, every fact verified against a verbatim quote). Expect `overall unavailable (review incomplete)` and `gate BLOCKED`: since the 2026-09-18 remediation, a missing required L0 tool, a reviewer refusal or a finding awaiting human adjudication marks the review incomplete and withholds the overall score; "incomplete reasons" in `report.md` lists why. This is not a broken install. Once the tools from section 3 are installed, `required_tool_incomplete` disappears.
 
 ## 3. L0 掃描工具（可選）/ L0 scanning tools (optional)

@@ -104,8 +104,9 @@ def test_dockerfiles_live_only_in_seeded_material():
     tools/scorecard-policy.yaml enforces; a real Dockerfile added elsewhere would have to pin its image by
     digest and install with hashes, or the floor drops. Catch that on the pull request, not on main."""
     seeded = ("fixtures/", "calib/samples/")
-    found = sorted(p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*Dockerfile*")
-                   if not p.relative_to(ROOT).parts[0].startswith(".") and p.is_file())
+    from tests.tracked import tracked_files
+
+    found = [f for f in tracked_files(ROOT) if "Dockerfile" in f.rsplit("/", 1)[-1] and not f.startswith(".")]
     assert found, "the seeded Dockerfiles are expected (fixtures/vuln-sample, calib/samples/s1-fastapi-inventory)"
     strays = [f for f in found if not f.startswith(seeded)]
     assert not strays, ("Dockerfile outside the seeded directories; pin FROM by digest and install with --require-hashes "
