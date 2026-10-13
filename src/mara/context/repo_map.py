@@ -267,9 +267,27 @@ def _content_hash(content: dict[str, str]) -> str:
     return h.hexdigest()
 
 
+# A hung git (a held index lock, a stale fsmonitor) must not hang the review: every call is bounded
+# and a timeout reads as a failed call, which each caller already treats as "git cannot answer".
+GIT_TIMEOUT = 60
+
+
+def _run_git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess | None:
+    """git in `root`, or None when it does not finish in GIT_TIMEOUT or cannot start. Text output is
+    UTF-8 (what git writes), not the locale code page: on a cp950 host a non-ASCII path came back
+    garbled or failed to decode."""
+    try:
+        if text:
+            return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT,
+                                  encoding="utf-8", errors="replace")
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+
+
 def _git(root: Path, *args: str) -> str | None:
-    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=False)
-    return r.stdout.strip() if r.returncode == 0 else None
+    r = _run_git(root, *args)
+    return r.stdout.strip() if r is not None and r.returncode == 0 else None
 
 
 def normalise_remote(url: str) -> str:
@@ -338,14 +356,13 @@ def git_changed_files(root: str | Path, base: str, diff_filter: str = "d") -> li
     # from parsing the range as an option in any case
     if not base or base.startswith("-") or any(ch.isspace() or ord(ch) < 32 for ch in base):
         raise ValueError(f"cannot resolve base ref {base!r} for incremental review: not a git revision")
-    top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False)
-    prefix = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-prefix"], capture_output=True, text=True, check=False)
-    diff = subprocess.run(["git", "-C", str(top.stdout.strip() if top.returncode == 0 else root), "diff", "--name-only", "-z",
-                           f"--diff-filter={diff_filter}", "--end-of-options", f"{base}...HEAD"],
-                          capture_output=True, check=False)
-    if top.returncode != 0 or prefix.returncode != 0 or diff.returncode != 0:
+    top = _git(root, "rev-parse", "--show-toplevel")
+    prefix = _git(root, "rev-parse", "--show-prefix")
+    diff = _run_git(Path(top) if top is not None else root, "diff", "--name-only", "-z",
+                    f"--diff-filter={diff_filter}", "--end-of-options", f"{base}...HEAD", text=False)
+    if top is None or prefix is None or diff is None or diff.returncode != 0:
         raise ValueError(f"cannot resolve base ref {base!r} for incremental review")
-    pre = prefix.stdout.strip().replace("\\", "/")
+    pre = prefix.replace("\\", "/")
     out = []
     for raw in diff.stdout.split(b"\0"):
         p = os.fsdecode(raw).replace("\\", "/")
@@ -510,18 +527,16 @@ def build_context(root: str | Path) -> RepoContext:
     # directory that merely sits inside some parent repository without being part of its history (a
     # home-directory dotfiles repo) is not a git target and is walked. When git should answer but
     # cannot (dubious ownership, a broken index), the review fails closed instead of silently walking
-    # the tree and sending what git would have excluded.
-    use_git = (root / ".git").exists() or _git_tree(root) is not None
-    tracked = (
-        subprocess.run(["git", "-C", str(root), "ls-files", "--cached", "-z", "--", "."], capture_output=True, check=False)
-        if use_git
-        else None
-    )
-    if tracked is not None and tracked.returncode != 0:
+    # the tree and sending what git would have excluded. A git that does not answer at all (timed out,
+    # cannot start) cannot tell a git target from a plain directory, so it fails closed as well.
+    probe = _run_git(root, "rev-parse", "--verify", "--quiet", "HEAD:./")
+    use_git = probe is None or probe.returncode == 0 or (root / ".git").exists()
+    tracked = _run_git(root, "ls-files", "--cached", "-z", "--", ".", text=False) if use_git and probe is not None else None
+    if use_git and (tracked is None or tracked.returncode != 0):
         ctx.omitted["."] = "git_ls_files_failed"
     paths = (
         [Path(os.fsdecode(x)) for x in tracked.stdout.split(b"\0") if x] if tracked is not None and tracked.returncode == 0
-        else [] if tracked is not None
+        else [] if use_git
         else [p.relative_to(root) for p in root.rglob("*") if not p.is_dir()]
     )
 
