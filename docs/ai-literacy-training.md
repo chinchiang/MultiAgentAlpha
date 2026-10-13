@@ -27,7 +27,9 @@ python3 scripts/training_register.py assess --person <github-login> --role adjud
 ```
 
 A score at or above `pass_mark` (0.8) appends a record dated today, expiring after `validity_days`
-(365). A failed attempt writes nothing. Instructor-led sessions are recorded with `add`, naming
+(365). A failed attempt writes nothing, and a record whose score is below the pass mark never counts, even when
+the register was edited by hand; an explicit `expires` may shorten a record's validity, never extend it past
+`validity_days`. Instructor-led sessions are recorded with `add`, naming
 the assessor and an evidence reference (ticket, attendance list). A new curriculum version
 invalidates every older record, so a material change to the pipeline means re-training.
 

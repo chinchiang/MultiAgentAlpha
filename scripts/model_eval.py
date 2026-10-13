@@ -125,7 +125,8 @@ def cmd_run(a: argparse.Namespace) -> int:
                 print(f"SKIP [{t.family}] {why}", file=sys.stderr)
                 rc = 1  # a metric left out is never a clean run
                 continue
-            key = me.resolve_key(t.api_key_env or (me.GEMINI_KEY_ENV if t.provider == "gemini" else me.ANTHROPIC_KEY_ENV))
+            env_name = me.target_key_env(t)
+            key = me.resolve_key(env_name) if env_name else me.NO_KEY
             tls = _tls_env(t, a.out)
             for bench, argv in me.cyberseceval_commands(t, a.datasets, a.out, judge, key).items():
                 shown = [x.replace(key, me.MASK).replace(judge, "$" + cfg.model_eval.judge_llm_env) for x in argv]

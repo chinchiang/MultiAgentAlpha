@@ -227,6 +227,18 @@ def argv_without_secrets(argv: list[str], secrets: dict[str, str]) -> tuple[list
     return [argv[0], "-c", shim, *args], env
 
 
+def target_key_env(target: EvalTarget) -> str:
+    """The environment variable holding the key for `target`: its own api_key_env, else the vendor default for the
+    vendor APIs. An openai_compatible endpoint without api_key_env gets none: falling back to ANTHROPIC_API_KEY sent
+    the Anthropic key to the self-hosted (or third-party) base_url inside the CyberSecEval spec."""
+    if target.api_key_env:
+        return target.api_key_env
+    return {"gemini": GEMINI_KEY_ENV, "anthropic": ANTHROPIC_KEY_ENV}.get(target.provider, "")
+
+
+NO_KEY = "no-key"  # what a keyless OpenAI-compatible endpoint gets in a CyberSecEval spec
+
+
 def resolve_key(env_name: str) -> str:
     v = os.environ.get(env_name, "") if env_name else ""
     if not v:
