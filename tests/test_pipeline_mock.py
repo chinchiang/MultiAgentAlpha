@@ -195,7 +195,7 @@ def test_sarif_uris_are_percent_encoded_references(mock_report):
 def test_tool_corroboration_matches_git_root_relative_paths(mock_report):
     """zizmor run from the repo root reports fixtures/vuln-sample/.github/workflows/deploy.yml while the
     finding says .github/workflows/deploy.yml; both must corroborate, and a leading dot must survive."""
-    from mara.pipeline import _norm_path
+    from mara.identity import norm_path as _norm_path
 
     assert _norm_path("./.github/workflows/deploy.yml") == ".github/workflows/deploy.yml"
     _, report = mock_report

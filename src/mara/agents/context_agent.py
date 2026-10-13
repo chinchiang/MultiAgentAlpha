@@ -12,10 +12,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from .. import exchange
 from ..context.repo_map import RepoContext
+from ..identity import norm_path
 from ..providers.base import Provider
 from . import base
 
@@ -63,6 +64,11 @@ class ContextItem(BaseModel):
     file: str
     line: int
     quote: str
+
+    @field_validator("file")
+    @classmethod
+    def _one_path_form(cls, v: str) -> str:
+        return norm_path(v)  # mara.identity, as for a finding's provenance
 
 
 class ContextView(BaseModel):

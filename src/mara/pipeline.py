@@ -22,6 +22,7 @@ from .bias.blinding import blinded_batches
 from .bias.diversity import pairwise_family_agreement, pick_independent
 from .config import MaraConfig
 from .context.repo_map import MAX_TOTAL_CHARS, RepoContext, build_context, bundle_cost, restrict_to_increment
+from .identity import NEAR_LINES, norm_cwe, norm_path
 from .providers import make_provider
 from .providers.base import Provider
 from .schemas import (
@@ -204,7 +205,7 @@ class Pipeline:
         # cwe, dimension, title) rather than call-ordered: consecutive ids no longer reveal which
         # findings shared a reviewer call, so the blinded view leaks no grouping (judge.md promises
         # no source identity; id clusters are a subtle channel back to it).
-        raw.sort(key=lambda f: (_norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))
+        raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))
         out: list[Finding] = []
         for i, f in enumerate(raw, 1):
             f = f.model_copy(update={"id": f"F-{i:04d}"})
@@ -228,7 +229,7 @@ class Pipeline:
                 k_ok = all(x.verified for x in k.provenance)
                 # never merge an unverified (possibly fabricated) finding into a verified one:
                 # it would inherit the verified finding's acceptance and hide the fabrication
-                same_file = _norm_path(q.file) == _norm_path(p.file)  # ./app.py and app.py are one file
+                same_file = norm_path(q.file) == norm_path(p.file)  # ./app.py and app.py are one file
                 if k.dimension == f.dimension and k.cwe == f.cwe and same_file and abs(q.line - p.line) <= 3 and k_ok == f_ok:
                     match = k
                     break
@@ -714,14 +715,6 @@ def _agreement_proxy(votes: list[JudgeVote]) -> float | None:
     return round((modal / len(per_family) - 1 / 3) / (1 - 1 / 3), 3)  # chance-corrected for 3 categories
 
 
-def _norm_path(path: str) -> str:
-    """Forward slashes, no leading './' (str.lstrip('./') would also eat the dot of '.github')."""
-    path = path.replace("\\", "/")
-    while path.startswith("./"):
-        path = path[2:]
-    return path
-
-
 def calibration_answer_key(target: Path) -> list[dict]:
     """The seeded-secret labels (CWE-798) of a calibration sample, for the secret-preflight exemption.
 
@@ -744,7 +737,7 @@ def calibration_answer_key(target: Path) -> list[dict]:
 
 
 def _declared_secret(res: ToolResult, answer_key: list[dict]) -> bool:
-    return any(_norm_path(str(lab["file"])) == _norm_path(res.file) and int(lab["line"]) == res.line for lab in answer_key)
+    return any(norm_path(str(lab["file"])) == norm_path(res.file) and int(lab["line"]) == res.line for lab in answer_key)
 
 
 def _alpha_units(findings: list[Finding], votes: list[JudgeVote]) -> dict[str, list[str]]:
@@ -784,12 +777,12 @@ def _tool_corroborates(f: Finding, tool_results: list[ToolResult], prefix: str =
         # corroborate any finding that happens to sit within +-3 lines
         if f.dimension not in TOOL_DIMENSIONS.get(t.tool, []) or t.level not in ("error", "warning"):
             continue
-        tf = _norm_path(t.file)
+        tf = norm_path(t.file)
         for p in f.provenance:
-            pf = _norm_path(p.file)
+            pf = norm_path(p.file)
             same_file = tf == pf or (bool(prefix) and tf == f"{prefix}/{pf}")
-            if same_file and abs(t.line - p.line) <= 3:
-                cwes = {c.upper() for c in (t.cwes or ([t.cwe] if t.cwe else []))}
-                if not cwes or f.cwe.upper() in cwes:
+            if same_file and abs(t.line - p.line) <= NEAR_LINES:
+                cwes = {norm_cwe(c) for c in (t.cwes or ([t.cwe] if t.cwe else []))}
+                if not cwes or norm_cwe(f.cwe) in cwes:
                     return True
     return False

@@ -17,12 +17,12 @@ from .escaping import code, literal
 
 
 def queue_key(file: str, line: int, cwe: str, *, target_id: str = "", revision: str = "", context_hash: str = "") -> str:
-    norm = file.replace("\\", "/")
-    while norm.startswith("./"):
-        norm = norm[2:]
+    from ..identity import norm_cwe, norm_path
+
+    norm = norm_path(file)
     if not (target_id and revision and context_hash):
-        return hashlib.sha256(f"{norm}:{line}:{cwe.upper()}".encode()).hexdigest()[:12]  # legacy: never auto-synced
-    identity = json.dumps([target_id, revision, context_hash, norm, line, cwe.upper()], separators=(",", ":"))
+        return hashlib.sha256(f"{norm}:{line}:{norm_cwe(cwe)}".encode()).hexdigest()[:12]  # legacy: never auto-synced
+    identity = json.dumps([target_id, revision, context_hash, norm, line, norm_cwe(cwe)], separators=(",", ":"))
     return "v2-" + hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 

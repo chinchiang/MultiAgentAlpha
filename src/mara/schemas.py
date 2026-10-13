@@ -78,6 +78,15 @@ class Provenance(BaseModel):
     quote: str = Field(min_length=3, max_length=400, description="Verbatim excerpt that must exist in the file")
     verified: bool = False
 
+    @field_validator("file")
+    @classmethod
+    def _one_path_form(cls, v: str) -> str:
+        # `./app.py` and `app.py` are one file (mara.identity): the provenance check, dedupe, the bundle and every
+        # key read this field, and `./app.py` used to fail the quote check and stay apart from `app.py` in dedupe
+        from .identity import norm_path
+
+        return norm_path(v)
+
 
 class Finding(BaseModel):
     """A single candidate finding emitted by a reviewer agent or a deterministic tool."""

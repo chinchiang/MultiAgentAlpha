@@ -29,6 +29,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+
+from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
+
 VERDICT_IDX = {"true_positive": 0, "false_positive": 1, "needs_human": 2}
 TOOL_LABEL_TOOLS = ("semgrep", "osv-scanner", "gitleaks")
 
@@ -118,7 +121,7 @@ def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = Non
 
 def _match(f: dict, lab: dict) -> bool:
     p = f["provenance"][0]
-    return p["file"].lstrip("./") == lab["file"].lstrip("./") and abs(int(p["line"]) - int(lab["line"])) <= 3 and f["cwe"] == lab["cwe"]
+    return same_place(p["file"], p["line"], f["cwe"], lab["file"], lab["line"], lab["cwe"])  # mara.identity, as the pipeline
 
 
 def family_metrics(runs):
@@ -460,13 +463,13 @@ def tool_recall(runs, tool_labels):
         for f in rep.get("findings", []):
             p = f["provenance"][0]
             for fam in f.get("finder_families", []):
-                by_fam[fam].append((p["file"].lstrip("./"), int(p["line"])))
+                by_fam[fam].append((norm_path(p["file"]), int(p["line"])))
         for fam in fams:
             locs = by_fam.get(fam, [])
             for tool, results in per_tool.items():
                 for r in results:
                     rows[fam][tool]["total"] += 1
-                    if any(x[0] == r.file.lstrip("./") and abs(x[1] - r.line) <= 3 for x in locs):
+                    if any(x[0] == norm_path(r.file) and abs(x[1] - r.line) <= NEAR_LINES for x in locs):
                         rows[fam][tool]["found"] += 1
     return rows
 

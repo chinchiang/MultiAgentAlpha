@@ -5,6 +5,7 @@ from typing import Literal
 
 from .. import exchange
 from ..context.repo_map import RepoContext
+from ..identity import norm_path
 from ..providers.base import Provider
 from ..schemas import Finding, SkepticVerdict
 from . import base
@@ -25,14 +26,6 @@ SKEPTIC_SCHEMA = {
 _CONTROL_REF = re.compile(r"(?P<file>[A-Za-z0-9_.][A-Za-z0-9_./\\-]*):(?P<line>\d+)")
 
 
-def _norm_ref_path(path: str) -> str:
-    """Forward slashes, no leading './' pairs (str.lstrip('./') would also eat the dot of '.github')."""
-    path = path.replace("\\", "/")
-    while path.startswith("./"):
-        path = path[2:]
-    return path
-
-
 def _control_location_ok(ctx: RepoContext, text: str, shown: set[str] | None = None) -> bool:
     """A refutation's cited control must point at a real, non-blank path:line the skeptic was shown.
 
@@ -49,7 +42,7 @@ def _control_location_ok(ctx: RepoContext, text: str, shown: set[str] | None = N
         # Only a run of three or more dots directly before a name is dropped: '../app.py' (outside the target) and
         # '.env' stay what they say, never another shown file
         ellipsis = re.match(r"\.{3,}(?=[^./])", raw)
-        candidates = (_norm_ref_path(raw),) + ((raw[ellipsis.end():],) if ellipsis else ())
+        candidates = (norm_path(raw),) + ((raw[ellipsis.end():],) if ellipsis else ())
         for path in dict.fromkeys(candidates):
             if shown is not None and path not in shown:
                 continue
@@ -95,7 +88,7 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     out = []
     for i in items:
         data = i.model_dump()
-        if data["verdict"] == "refuted" and not _control_location_ok(ctx, data["sanitizer_or_control"], {_norm_ref_path(p) for p in shown}):
+        if data["verdict"] == "refuted" and not _control_location_ok(ctx, data["sanitizer_or_control"], {norm_path(p) for p in shown}):
             data["verdict"] = "weakened"
             data["reason"] = (data["reason"] + " [control citation not verifiable in bundle]")[:600]
             unverified += 1
