@@ -17,7 +17,17 @@ from pathlib import Path
 import httpx
 
 from ..config import MaraConfig
-from ..psirt_ledger import already_sent, closed_at, dedupe_key, load_ledger, migrate_key, now_utc, record_attempt, save_ledger
+from ..psirt_ledger import (
+    already_sent,
+    closed_at,
+    dedupe_key,
+    line_dedupe_key,
+    load_ledger,
+    migrate_key,
+    now_utc,
+    record_attempt,
+    save_ledger,
+)
 from ..schemas import ReviewReport
 
 SCHEMA = "mara-psirt/2"
@@ -98,11 +108,12 @@ def build_notifications(report: ReviewReport, cfg: MaraConfig, now: dt.datetime 
             "internal_sla": internal_sla,
             "product": ps.product,
             "target": report.target,
+            "target_id": report.target_id or report.target,
             "detected_at": detected.isoformat(timespec="seconds"),
             "deadlines": deadlines,
             # target_id (repository + path below its top level), not the checkout path: every CI runner and
             # clone of one repository must produce the same key, or the ledger and the receiver re-notify
-            "dedupe_key": dedupe_key(ps.product, report.target_id or report.target, p.file, p.line, f.cwe),
+            "dedupe_key": dedupe_key(ps.product, report.target_id or report.target, p.file, f.cwe, p.quote),
             "finding_id": f.id,
             "title": f.title,
             "dimension": f.dimension,
@@ -141,14 +152,14 @@ def send_psirt(payloads: list[dict], cfg: MaraConfig, *, client: httpx.Client | 
         raise RuntimeError(f"PSIRT token environment variable {ps.token_env} is not set; refusing to send")
     ledger = load_ledger(ledger_path) if ledger_path else None
     if ledger is not None:
-        # v0.4.10 moved the key from the checkout path to the target identity: an item the ledger still holds
-        # under the old key moves to the new one (history, stages and the delivered hand-off with it), so the
-        # finding is neither sent again nor split into two lifecycles
+        # the key moved twice: v0.4.10 from the checkout path to the target identity, v0.5.3 from file:line to the
+        # file and evidence quote. An item the ledger still holds under an old key moves to the new one (history,
+        # stages and the delivered hand-off with it), so the finding is neither sent again nor split in two
         for payload in payloads:
             loc = payload.get("location") or {}
-            legacy = dedupe_key(payload.get("product", ""), payload.get("target", ""), loc.get("file", ""), loc.get("line", 0),
-                                payload.get("cwe", ""))
-            migrate_key(ledger, legacy, payload.get("dedupe_key", ""))
+            for target in (payload.get("target", ""), payload.get("target_id") or payload.get("target", "")):
+                legacy = line_dedupe_key(payload.get("product", ""), target, loc.get("file", ""), loc.get("line", 0), payload.get("cwe", ""))
+                migrate_key(ledger, legacy, payload.get("dedupe_key", ""))
     own = client is None
     client = client or httpx.Client(timeout=timeout)
     results = []

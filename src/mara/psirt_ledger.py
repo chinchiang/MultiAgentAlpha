@@ -50,9 +50,21 @@ def parse_iso(s: str) -> dt.datetime:
     return t if t.tzinfo else t.replace(tzinfo=dt.UTC)
 
 
-def dedupe_key(product: str, target: str, file: str, line: int, cwe: str) -> str:
+def dedupe_key(product: str, target: str, file: str, cwe: str, quote: str) -> str:
     """Stable identity of a finding across reviews: the receiver dedupes on it, so does the ledger.
-    `target` is the report's target_id (its absolute path only for a target outside any git history)."""
+    `target` is the report's target_id (its absolute path only for a target outside any git history).
+
+    The file (normalised: `./a.py` is `a.py`), the CWE and the evidence quote, not the line (mara.identity): a line
+    inserted above the vulnerable code used to make a new key, so the finding was notified again and started a
+    second lifecycle."""
+    from .identity import norm_cwe, norm_path, quote_digest
+
+    identity = f"v3\n{product}\n{target}\n{norm_path(file)}\n{norm_cwe(cwe)}\n{quote_digest(quote)}"
+    return hashlib.sha256(identity.encode()).hexdigest()[:16]
+
+
+def line_dedupe_key(product: str, target: str, file: str, line: int, cwe: str) -> str:
+    """The key before v0.5.3 (file and line as given). Only for moving ledger items to dedupe_key (send_psirt)."""
     return hashlib.sha256(f"{product}\n{target}\n{file}:{line}:{cwe}".encode()).hexdigest()[:16]
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from .. import __version__
+from ..identity import norm_cwe, norm_path
 from ..schemas import ConsensusResult, EvidenceTier, Finding, ReviewReport
 
 LEVEL = {"Critical": "error", "High": "error", "Medium": "warning", "Low": "note", "None": "none"}
@@ -24,8 +25,7 @@ def content_fingerprint(f: Finding, occurrence: int = 0) -> str:
     included) over to a different finding of the same rule. Not the line either: code moving up or
     down must not make a new alert."""
     p = f.provenance[0]
-    norm = p.file.replace("\\", "/").removeprefix("./")
-    identity = json.dumps([f.dimension, f.cwe.upper(), norm, " ".join(p.quote.split()), occurrence], ensure_ascii=False)
+    identity = json.dumps([f.dimension, norm_cwe(f.cwe), norm_path(p.file), " ".join(p.quote.split()), occurrence], ensure_ascii=False)
     return hashlib.sha256(identity.encode()).hexdigest()[:32]
 
 
@@ -34,8 +34,16 @@ def to_sarif(report: ReviewReport) -> dict:
     queued = {i.finding_id: i for i in report.human_queue}
     rules: dict[str, dict] = {}
     results = []
+    # the occurrence index among findings sharing dimension, CWE, file and quote is counted over every finding of the
+    # report, whatever its state: counted over the emitted ones only, an alert's index (and with it its dismissal)
+    # moved to another finding when an earlier one of the same group was accepted or rejected in a later run
+    occurrence_of: dict[str, int] = {}
     seen: Counter[tuple[str, str, str, str]] = Counter()
-    for f in sorted(report.findings, key=lambda x: (x.provenance[0].file, x.provenance[0].line, x.id)):
+    for f in sorted(report.findings, key=lambda x: (norm_path(x.provenance[0].file), x.provenance[0].line, x.id)):
+        group = (f.dimension, norm_cwe(f.cwe), norm_path(f.provenance[0].file), " ".join(f.provenance[0].quote.split()))
+        occurrence_of[f.id] = seen[group]
+        seen[group] += 1
+    for f in sorted(report.findings, key=lambda x: (norm_path(x.provenance[0].file), x.provenance[0].line, x.id)):
         c = cons.get(f.id)
         if c is None:
             continue
@@ -43,9 +51,7 @@ def to_sarif(report: ReviewReport) -> dict:
         if not c.accepted and q is None:
             continue
         rule_id = f"MARA/{f.dimension}/{f.cwe}"
-        same = (f.dimension, f.cwe.upper(), f.provenance[0].file, " ".join(f.provenance[0].quote.split()))
-        occurrence = seen[same]
-        seen[same] += 1
+        occurrence = occurrence_of[f.id]
         rules.setdefault(rule_id, {
             "id": rule_id, "name": f.cwe, "shortDescription": {"text": f"{f.dimension}: {f.cwe}"},
             "properties": {"tags": ["security", f.cwe, f.dimension]},

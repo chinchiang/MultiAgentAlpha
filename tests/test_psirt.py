@@ -151,8 +151,12 @@ def test_dedupe_key_is_stable_across_reviews_and_in_every_payload(shipped_report
     assert all(len(p["dedupe_key"]) == 16 for p in report.psirt)
     p = report.psirt[0]
     assert report.target_id
-    assert p["dedupe_key"] == pl.dedupe_key(cfg.psirt.product, report.target_id, p["location"]["file"], p["location"]["line"], p["cwe"])
-    assert pl.dedupe_key("a", "t", "f", 1, "CWE-1") != pl.dedupe_key("a", "t", "f", 2, "CWE-1")
+    f = next(x for x in report.findings if x.id == p["finding_id"])
+    assert p["dedupe_key"] == pl.dedupe_key(cfg.psirt.product, report.target_id, p["location"]["file"], p["cwe"], f.provenance[0].quote)
+    # the line is not part of it: code moving down by one line is the same finding (mara.identity)
+    assert pl.dedupe_key("a", "t", "f.py", "CWE-1", "q = 1") == pl.dedupe_key("a", "t", "./f.py", "cwe-1", "q  =  1")
+    assert pl.dedupe_key("a", "t", "f.py", "CWE-1", "q = 1") != pl.dedupe_key("a", "t", "f.py", "CWE-1", "q = 2")
+    assert pl.dedupe_key("a", "t", "f.py", "CWE-1", "q = 1") != pl.dedupe_key("a", "t", "g.py", "CWE-1", "q = 1")
 
 
 def test_dedupe_key_follows_the_target_identity_not_the_checkout_path(shipped_report):
@@ -184,7 +188,7 @@ def test_repositories_without_an_origin_do_not_share_an_identity(tmp_path):
             subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
         ids.append(json.loads(build_context(repo).identity))
     assert ids == [["path", str((tmp_path / "one").resolve())], ["path", str((tmp_path / "two").resolve())]]
-    assert pl.dedupe_key("p", "id-one", "app.py", 1, "CWE-89") != pl.dedupe_key("p", "id-two", "app.py", 1, "CWE-89")
+    assert pl.dedupe_key("p", "id-one", "app.py", "CWE-89", "q = 1") != pl.dedupe_key("p", "id-two", "app.py", "CWE-89", "q = 1")
 
 
 def test_ledger_items_under_the_path_based_key_migrate_instead_of_being_sent_again(shipped_report, monkeypatch, tmp_path):
@@ -197,7 +201,7 @@ def test_ledger_items_under_the_path_based_key_migrate_instead_of_being_sent_aga
     monkeypatch.setenv("PSIRT_WEBHOOK_TOKEN", "s3cret")
     first = report.psirt[0]
     loc = first["location"]
-    legacy = pl.dedupe_key(first["product"], first["target"], loc["file"], loc["line"], first["cwe"])
+    legacy = pl.line_dedupe_key(first["product"], first["target"], loc["file"], loc["line"], first["cwe"])
     assert legacy != first["dedupe_key"]
     old_payload = {**first, "dedupe_key": legacy}
     ledger_path = tmp_path / "ledger.json"
@@ -220,6 +224,29 @@ def test_ledger_items_under_the_path_based_key_migrate_instead_of_being_sent_aga
     pl.record_stage(led, legacy, "notification", "PSIRT-2", when)
     assert led["items"][first["dedupe_key"]]["stages"]["notification"]["reference"] == "PSIRT-2"
     assert not pl.migrate_key(led, legacy, first["dedupe_key"]), "migration runs once"
+
+
+def test_ledger_items_under_the_line_based_key_migrate_too(shipped_report, monkeypatch, tmp_path):
+    """v0.5.3 dropped the line from the key (a line inserted above the code re-notified the finding). An item the
+    ledger holds under the line-based target-identity key moves to the new key instead of being sent again."""
+    import datetime as dt
+
+    cfg, report = shipped_report
+    monkeypatch.setenv("PSIRT_WEBHOOK_TOKEN", "s3cret")
+    first = report.psirt[0]
+    loc = first["location"]
+    assert first["target_id"] == report.target_id
+    line_key = pl.line_dedupe_key(first["product"], first["target_id"], loc["file"], loc["line"], first["cwe"])
+    assert line_key != first["dedupe_key"]
+    ledger_path = tmp_path / "ledger.json"
+    led = pl.load_ledger(ledger_path)
+    pl.record_attempt(led, {**first, "dedupe_key": line_key}, 202, True, dt.datetime(2026, 10, 1, tzinfo=dt.UTC))
+    pl.save_ledger(led, ledger_path)
+    calls = []
+    with httpx.Client(transport=httpx.MockTransport(lambda r: (calls.append(json.loads(r.content)["dedupe_key"]), httpx.Response(202))[1])) as c:
+        results = send_psirt(report.psirt, cfg, client=c, ledger_path=ledger_path)
+    assert results[0]["skipped"] and first["dedupe_key"] not in calls
+    assert pl.load_ledger(ledger_path)["items"][first["dedupe_key"]]["migrated_from"] == [line_key]
 
 
 def test_ledger_skips_delivered_findings_records_attempts_and_sends_idempotency_key(shipped_report, monkeypatch, tmp_path):
