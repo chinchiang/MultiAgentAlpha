@@ -29,6 +29,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara import model_eval as me  # noqa: E402
 from mara.config import load_config  # noqa: E402
+from mara.workspace import resolve  # noqa: E402
+from mara.workspace import root as workspace_root  # noqa: E402
 
 
 def _thresholds(cfg) -> me.Thresholds:
@@ -200,7 +202,7 @@ def cmd_report(a: argparse.Namespace) -> int:
 
 
 def cmd_check(a: argparse.Namespace) -> int:
-    summary = json.loads(a.summary.read_text(encoding="utf-8")) if a.summary else me.latest_summary(ROOT)
+    summary = json.loads(a.summary.read_text(encoding="utf-8")) if a.summary else me.latest_summary(workspace_root())
     if not summary:
         print("no calib/model-eval-*.json summary found; G-8 has never been run")
         return 1
@@ -218,7 +220,7 @@ def cmd_check(a: argparse.Namespace) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--config", type=Path, default=ROOT / "config" / "mara.yaml")
+    ap.add_argument("--config", type=Path, default=resolve("config/mara.yaml"))
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("plan")
     s.add_argument("--out", type=Path, default=ROOT / "ops" / "model-eval" / dt.date.today().isoformat())
@@ -232,7 +234,8 @@ def main() -> int:
     s.add_argument("--date", type=dt.date.fromisoformat, default=dt.date.today())
     s.add_argument("--mode", choices=["live", "dry-run"], default="dry-run")
     s.add_argument("--docs-dir", type=Path, default=ROOT / "docs")
-    s.add_argument("--summary-root", type=Path, default=ROOT)
+    s.add_argument("--summary-root", type=Path, default=workspace_root(),
+                   help="where calib/model-eval-<date>.json goes (default: the MARA workspace, where the pipeline reads it)")
     s.add_argument("--datasets", default="$DATASETS")
     s = sub.add_parser("check")
     s.add_argument("--summary", type=Path)
