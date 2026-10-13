@@ -29,6 +29,8 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
         "",
         f"Review status: **{r.review_status}**; incomplete reasons: {literal(', '.join(r.incomplete_reasons)) or 'none'}",
         "",
+        f"Review scope: {r.review_scope}",
+        "",
         "Scores are heuristic deductions, not a security probability; incomplete reviews have no overall score.",
         "",
         "## Dimension scores",

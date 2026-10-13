@@ -659,6 +659,7 @@ class Pipeline:
             redteam=rt,
             review_status="incomplete" if incomplete else "complete",
             incomplete_reasons=incomplete,
+            review_scope="incremental" if base_ref else "full",
             coverage=ctx.coverage(),
             tool_results=[asdict(t) for t in tool_results],
             tool_health=[{"tool": t.tool, "ran": t.ran, "note": t.note} for t in tool_runs],

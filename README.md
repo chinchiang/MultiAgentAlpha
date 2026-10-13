@@ -258,6 +258,10 @@ an unresolvable ref is a usage error, not an empty "nothing changed":
 mara review path/to/repo --config config/mara.yaml --base origin/main --out out
 ```
 
+The report records its review scope (`review_scope: incremental`, `full` without `--base`; reports written
+before the field existed read as `unknown`) and `report.md` shows it in the header: an incremental review's
+scores cover only the increment and are not comparable with a full review's.
+
 CI exercises the mode on every pull request and push: the `tests + mock review` job runs the seeded
 fixture a second time with `--base` set to the pull request's base commit (`pull_request.base.sha`) or, on
 a push, the previous head (`github.event.before`); MARA diffs `<base>...HEAD`, i.e. from their merge base (the report lands in the
@@ -666,6 +670,45 @@ accepts blocks the gate like tier A/B (`tier_c_blocked_while_tightened` in the b
 passing on a single family's word: tightening cuts human work, it never loosens. The `human-queue` CI job runs
 on push to `main` with `issues: write` only and stays in dry-run until the repository variable
 `MARA_HUMAN_QUEUE_ISSUES` is `true`. See `docs/human-queue.md`.
+
+## Score summary for a team outside the country (CN-3)
+
+Report chapter 26 (CN-3) lets the global security team receive only the dimension scores of an
+in-country review, never finding detail. `mara review` keeps writing the full outputs for the
+in-country team; `mara export-summary` derives the summary from a report already written, as one
+explicit step (`docs/adr/0004-score-summary.md`):
+
+```bash
+export MARA_SUMMARY_KEY="$(cat /secure/in-country/summary.key)"   # once per site: openssl rand -hex 32
+mara export-summary out/report.json --label "Chongqing MES" --out out/score-summary.json
+```
+
+The summary is built from an allowlist: `schema` (`mara-score-summary/1`), `source_report_sha256` (the
+SHA-256 of the report.json it came from), `exported_at`, `label`, `target_pseudonym`,
+`revision_pseudonym`, `pseudonym_key_id`, `review_scope`, `generated_at`, `provider_mode`,
+`families_used`, `config_hash`, `review_status`, `incomplete_reasons`, `gate_passed`, `overall_score`
+and `dimensions` (name, score, per-dimension counts, whether a tool ran). No file, line, quote, title,
+claim, CWE or finding id, no counts by tier or severity, no free-text note, and not the report's local
+`target` path, `target_id` or `revision`.
+
+Who was reviewed crosses only as summary pseudonyms: HMAC-SHA256 under the key in `MARA_SUMMARY_KEY`
+(at least 32 characters, no surrounding whitespace) of the target and of its revision, bound to the
+target (`revision_pseudonym` is null when the report has none). The report's own ids are unkeyed and
+could be confirmed from a list of candidate repositories. The same key gives the same pseudonyms on
+every export, so the receiving team can follow a target over time; `pseudonym_key_id` (16 hex digits of
+the key's SHA-256) shows when the key changed. Keep the key in the country and never send it with a
+summary; to map a pseudonym back, export the retained report again under the same key.
+
+Refused, with nothing written: no usable key (also with `--allow-mock`); a report that does not
+validate, has no `target_id`, names its target by a relative path, or holds anything but the usual
+values in its allowlisted strings (known incomplete-review codes, model families, dimensions and
+provider modes, an ISO timestamp, a SHA-256 config hash), so that apart from the label no free text
+crosses; a mock-mode report without `--allow-mock`; a label that is not 1 to 80 letters, marks, numbers,
+punctuation, symbols or spaces (the full-width space too) with no space at either end and no control
+or format character (what it says is the operator's responsibility); and an output that would replace
+the report it is made from or lie inside the reviewed target. An incomplete review is exported with
+`overall_score: null` and its reasons. Detail that must cross the border goes through the DSL and PIPL
+export assessment, outside MARA.
 
 ## Other commands
 
