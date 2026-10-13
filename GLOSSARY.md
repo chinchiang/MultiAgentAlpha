@@ -88,3 +88,19 @@ _Avoid_: override result
 **Human-resolved finding**:
 A finding whose final outcome is the ruling of a usable decision rather than the jury outcome.
 _Avoid_: overridden finding (the jury outcome still exists beside it)
+
+## Reviews
+
+**Review scope**:
+What one review covered: the whole target (full) or the files changed against a base together with the modules related to them (incremental); unknown for a report written before reviews recorded their scope. Scores of reviews with different scopes cannot be compared.
+_Avoid_: mode (the provider mode is a different thing), diff review
+
+## Exports
+
+**Finding detail**:
+Anything that singles out one finding: its file, line, quote, title, claim, CWE or finding id (finding 明細). Counts of findings per dimension are not finding detail.
+_Avoid_: details, raw findings
+
+**Score summary**:
+The export of one review report that carries only its dimension scores, overall score, review status and the identity of what was reviewed, and no finding detail; the only part of an in-country review that may go to a team outside the country (分數彙總).
+_Avoid_: aggregate report, redacted report (nothing is masked; the summary is built from an allowlist)

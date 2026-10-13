@@ -258,6 +258,10 @@ an unresolvable ref is a usage error, not an empty "nothing changed":
 mara review path/to/repo --config config/mara.yaml --base origin/main --out out
 ```
 
+The report records its review scope (`review_scope: incremental`, `full` without `--base`; reports written
+before the field existed read as `unknown`) and `report.md` shows it in the header: an incremental review's
+scores cover only the increment and are not comparable with a full review's.
+
 CI exercises the mode on every pull request and push: the `tests + mock review` job runs the seeded
 fixture a second time with `--base` set to the pull request's base commit (`pull_request.base.sha`) or, on
 a push, the previous head (`github.event.before`); MARA diffs `<base>...HEAD`, i.e. from their merge base (the report lands in the
@@ -666,6 +670,28 @@ accepts blocks the gate like tier A/B (`tier_c_blocked_while_tightened` in the b
 passing on a single family's word: tightening cuts human work, it never loosens. The `human-queue` CI job runs
 on push to `main` with `issues: write` only and stays in dry-run until the repository variable
 `MARA_HUMAN_QUEUE_ISSUES` is `true`. See `docs/human-queue.md`.
+
+## Score summary for a team outside the country (CN-3)
+
+Report chapter 26 (CN-3) lets the global security team receive only the dimension scores of an
+in-country review, never finding detail. `mara review` keeps writing the full outputs for the
+in-country team; `mara export-summary` derives the summary from a report already written, as one
+explicit step (`docs/adr/0004-score-summary.md`):
+
+```bash
+mara export-summary out/report.json --label "Chongqing MES" --out out/score-summary.json
+```
+
+The summary is built from an allowlist: `schema` (`mara-score-summary/1`), `source_report_sha256` (the
+SHA-256 of the report.json it came from), `exported_at`, `label`, `target_id`, `revision`,
+`review_scope`, `generated_at`, `provider_mode`, `families_used`, `config_hash`, `review_status`,
+`incomplete_reasons`, `gate_passed`, `overall_score` and `dimensions` (score and per-dimension counts).
+No file, line, quote, title, claim, CWE or finding id, no counts by tier or severity, and not the
+report's local `target` path. A report that does not validate is refused, a mock-mode report needs
+`--allow-mock`, a label must be one line of 1 to 80 printable characters (what it says is the operator's
+responsibility), and the output may neither replace the report it is made from nor lie inside the reviewed target. An incomplete review is exported
+with `overall_score: null` and its reasons. Detail that must cross the border goes through the DSL and
+PIPL export assessment, outside MARA.
 
 ## Other commands
 

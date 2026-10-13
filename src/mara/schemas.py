@@ -256,6 +256,8 @@ class ReviewReport(BaseModel):
     dimensions: list[DimensionScore]
     overall_score: float | None
     review_status: Literal["complete", "incomplete", "error"] = "incomplete"
+    # full or incremental (--base); reports written before the field existed read as unknown (docs/adr/0004-score-summary.md)
+    review_scope: Literal["full", "incremental", "unknown"] = "unknown"
     incomplete_reasons: list[str] = Field(default_factory=list)
     coverage: dict = Field(default_factory=dict)
     tool_results: list[dict] = Field(default_factory=list)
