@@ -11,3 +11,5 @@ Training is judged when the decision is read, from the training register and the
 - **Untrained decisions are not decisions at all:** rejected. The GitHub ticket is closed, so every review would file the key again and the queue would fill with duplicates. G-13 and the sync warning list these decisions so that a trained adjudicator can rule again.
 - **Trust the training flag in the record:** rejected, because editing one boolean would make an untrained ruling ground truth.
 - **Count unbound decisions in the false-positive rate (the repository's whole history):** rejected. The baseline describes the reviews it is given, and decisions on old revisions speak about findings those reviews do not hold.
+
+How a usable decision settles its finding when the same content is reviewed again is recorded in docs/adr/0003-human-resolution.md.

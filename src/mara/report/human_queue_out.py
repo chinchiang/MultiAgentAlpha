@@ -73,7 +73,7 @@ def build_queue(
     items: list[HumanQueueItem] = []
     for f in findings:
         c = consensus.get(f.id)
-        if c is None:
+        if c is None or c.resolved_by_human:  # answered: the human ruling is the final outcome
             continue
         reasons = list(c.human_reasons)
         if c.needs_human and not reasons:

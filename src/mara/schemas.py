@@ -179,6 +179,23 @@ class ConsensusResult(BaseModel):
     independent_judges: int = 0
     agreement_proxy: float | None = None
     operational_severity: str | None = None
+    # accepted / needs_human / human_reasons above are the jury outcome and stay so; a usable human decision on
+    # the same content (docs/adr/0003-human-resolution.md) is recorded here and settles the final outcome
+    human_decision: dict | None = Field(default=None, description="The usable decision that settles this finding: "
+                                        "decision, key, issue, decided_by, decided_at")
+
+    @property
+    def resolved_by_human(self) -> bool:
+        return self.human_decision is not None
+
+    @property
+    def final_accepted(self) -> bool:
+        """The final outcome: the human ruling where there is one, the jury outcome otherwise."""
+        return self.human_decision["decision"] == "true_positive" if self.human_decision else self.accepted
+
+    @property
+    def final_needs_human(self) -> bool:
+        return False if self.human_decision else self.needs_human
 
 
 class DimensionScore(BaseModel):

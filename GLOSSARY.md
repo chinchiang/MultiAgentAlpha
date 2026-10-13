@@ -74,5 +74,17 @@ A decision on the same target, revision and context as a given review report, so
 _Avoid_: matching decision, applied decision
 
 **Usable decision**:
-A well-formed, bound decision with no contradicting decision on its key, made by a trained adjudicator whenever training is required; the only kind of decision that counts as ground truth (calibration labels, the Alternative Annotator Test, false-positive rates). A decision that is well-formed but not usable still answers its ticket: the key is not queued again.
+A well-formed, bound decision with no contradicting decision on its key, made by a trained adjudicator whenever training is required; the only kind of decision that counts as ground truth (calibration labels, the Alternative Annotator Test, false-positive rates). A decision that is well-formed but not usable still answers its ticket: no new ticket is filed for its key.
 _Avoid_: valid decision (ambiguous between well-formed and usable)
+
+**Jury outcome**:
+What the pipeline itself concluded about a finding from the judges, skeptic, tools and evidence tier: accepted, rejected, or needing a human.
+_Avoid_: consensus (the weighted score is one input to it), verdict
+
+**Final outcome**:
+A finding's outcome once human decisions are taken into account: the ruling of a usable decision where one exists, the jury outcome otherwise.
+_Avoid_: override result
+
+**Human-resolved finding**:
+A finding whose final outcome is the ruling of a usable decision rather than the jury outcome.
+_Avoid_: overridden finding (the jury outcome still exists beside it)

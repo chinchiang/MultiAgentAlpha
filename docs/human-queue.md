@@ -29,6 +29,8 @@ python3 scripts/human_queue_issues.py --repo owner/repo --sync-decisions --dry-r
 
 工單清單經 REST API 讀取並跟隨每一頁，沒有筆數上限；過去 `gh issue list --limit 500` 會在超過 500 張時重複建立工單、低估 backlog、漏讀已關閉工單的裁決。dry-run 也會讀取既有的開啟工單，顯示的就是實際會建立的工單。
 
+重新審查同一份內容（target、revision 與 context hash 都相同）時，pipeline 讀回可用的裁決，直接定案對應的 finding（human-resolved finding，見 `docs/adr/0003-human-resolution.md`）：人工判定在兩個方向都優先於評審團，判為真陽性即採納（證據層級不變，閘門的阻擋規則與 PSIRT 觸發照常適用），判為誤報即不採納，並在 SARIF 中以 `suppressions`（`kind: external`，理由為工單編號與裁決者）輸出，讓 code scanning 記錄關閉的原因。兩種情況下 finding 都離開佇列，也不再使審查不完整（`unresolved_human_review`）。評審團的結論原樣留在 `accepted`／`needs_human`，校準與影子期基準讀的仍是它；工具結果不受影響。格式完整但不可用的裁決（例如裁決者未受訓）不定案任何東西，finding 留在佇列並帶 `decision_not_usable:<原因>`。完整審查與增量審查的 context hash 不同，彼此的裁決不互相套用。偏誤稽核記錄 `human_decisions_applied` 與 `human_decisions_not_usable[<原因>]`。
+
 `calib/decisions/` 是工單的鏡像。一筆裁決何時算數只有一套規則（`mara.decisions`，見 `docs/adr/0002-usable-decisions.md`）：校準標籤、替代標註者測試與影子期的誤報率只採用「可用」（usable）的裁決，也就是格式完整、target、revision、context hash 都與該份報告相符、同一個 key 沒有矛盾的裁決，而且預設要求裁決者在裁決當天持有有效的訓練紀錄（使用時依登錄簿判定，不看紀錄裡的 `adjudicator_trained`）。某個有實際呼叫的模型完全沒產生 finding，仍會計入漏報與拒答。
 
 ## Backlog 與 CI

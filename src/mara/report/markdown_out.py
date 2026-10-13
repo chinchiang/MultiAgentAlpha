@@ -7,6 +7,11 @@ from .escaping import code, literal
 from .sarif_out import tier_counts
 
 
+def _decided(c) -> str:
+    d = c.human_decision
+    return f"decided by human (#{d.get('issue')} by {literal(d.get('decided_by'))}): {d['decision'].replace('_', ' ')}"
+
+
 def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
     """`fail_on_gate`: `mara review --fail-on-gate` enforces a blocked gate for this run in any rollout phase, so the
     header must not call it "recorded, not enforced" (G-10; docs/governance-templates.md)."""
@@ -36,7 +41,7 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
         lines.append(f"| {DIMENSION_LABELS[d.dimension]} | {d.score} | {d.accepted_findings} | {d.rejected_findings} | {d.human_queue} | {tool} |")
     tc = tier_counts(r)
     lines += ["", f"Evidence tiers: A={tc['A']} B={tc['B']} C={tc['C']} D={tc['D']}", "", "## Accepted findings", ""]
-    accepted = [f for f in r.findings if cons.get(f.id) and cons[f.id].accepted]
+    accepted = [f for f in r.findings if cons.get(f.id) and cons[f.id].final_accepted]
     accepted.sort(key=lambda f: -(cons[f.id].cvss4_score or 0.0))  # accepted implies a valid vector
     if not accepted:
         lines.append("_None._")
@@ -53,6 +58,7 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
             f"- Evidence: {code(f'{p.file}:{p.line}')} — {code(p.quote[:160])}",
             f"- Reachability ({f.reachability}): {literal(f.reachability_argument)}",
             f"- Attacker path: {literal(f.exploit_sketch)}",
+            *([f"- Human decision: {_decided(c)}"] if c.resolved_by_human else []),
             "",
         ]
     lines += [
@@ -66,14 +72,16 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
             f"- {literal(tr.get('tool'))} · {literal(tr.get('rule_id'))} · "
             f"{literal(tr.get('file'))}:{tr.get('line')} · {literal(tr.get('message'))}"
         )
-    rejected = [f for f in r.findings if cons.get(f.id) and not cons[f.id].accepted]
+    rejected = [f for f in r.findings if cons.get(f.id) and not cons[f.id].final_accepted]
     lines += ["## Rejected or unverified findings", ""]
     if not rejected:
         lines.append("_None._")
     for f in rejected:
         c = cons[f.id]
         why = (
-            "provenance unverified"
+            _decided(c)
+            if c.resolved_by_human
+            else "provenance unverified"
             if c.tier.value == "D" and not any(p.verified for p in f.provenance)
             else f"awaiting human decision: {', '.join(c.human_reasons) or 'unresolved_human_review'}"
             if c.needs_human

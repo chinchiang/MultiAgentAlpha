@@ -48,7 +48,10 @@ def to_sarif(report: ReviewReport) -> dict:
         if c is None:
             continue
         q = queued.get(f.id)
-        if not c.accepted and q is None:
+        # the final outcome (docs/adr/0003-human-resolution.md): a human false positive is still emitted, dismissed with
+        # the ruling as its justification, so code scanning records why the alert closed instead of reading it as fixed
+        dismissed = c.resolved_by_human and not c.final_accepted
+        if not c.final_accepted and q is None and not dismissed:
             continue
         rule_id = f"MARA/{f.dimension}/{f.cwe}"
         occurrence = occurrence_of[f.id]
@@ -57,7 +60,7 @@ def to_sarif(report: ReviewReport) -> dict:
             "properties": {"tags": ["security", f.cwe, f.dimension]},
             "defaultConfiguration": {"level": "warning"},
         })
-        results.append({
+        result = {
             "ruleId": rule_id,
             # a finding waiting for a human decision is emitted as a note, never as an error, so code
             # scanning does not show it as confirmed; the decision on the ticket settles it (G-11)
@@ -76,8 +79,15 @@ def to_sarif(report: ReviewReport) -> dict:
                 "standardRefs": f.standard_refs, "sourceFamily": f.source_family.value,
                 "humanQueue": q is not None, "humanQueueKey": None if q is None else q.key,
                 "humanQueueReasons": [] if q is None else q.reasons,
+                "humanDecision": c.human_decision,
             },
-        })
+        }
+        if dismissed and c.human_decision is not None:
+            d = c.human_decision
+            result["suppressions"] = [{"kind": "external", "status": "accepted",
+                                       "justification": f"human decision #{d.get('issue')} by {d.get('decided_by')}: "
+                                                        f"{d['decision'].replace('_', ' ')}"}]
+        results.append(result)
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
