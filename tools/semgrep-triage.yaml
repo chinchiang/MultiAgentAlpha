@@ -30,6 +30,14 @@ accepted:
       --skip-dirs straight through as separate arguments of the locked trivy. zizmor_ci.py passes --target
       and --persona (a fixed choice list) to the locked zizmor; scorecard_ci.py passes --repo (checked
       against github.com/<owner>/<repo>), --commit and --checks to the locked scorecard.
+  - rule: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
+    paths: [src/mara/tools/runner.py]
+    reason: >
+      runner._run on Windows, when a tool is a script (WinError 193): the interpreter is MARA_WINDOWS_SH, which the
+      operator sets explicitly (the test suite sets it for its shell-script fakes), and it runs only if it is an
+      existing file. This replaced a lookup of `sh` on PATH (v0.5.5): an environment variable the operator names is
+      the same trust as MARA_TOOLS_DIR, which already decides which binaries run; argv stays a list, no shell=True.
+      Reviewed 2026-10-13 with the scan that introduced it.
   - rule: generic.secrets.security.detected-stripe-api-key
     paths: [scripts/gen_calib_samples.py]
     reason: >

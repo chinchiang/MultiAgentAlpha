@@ -123,7 +123,7 @@ def test_shipped_lock_is_well_formed():
             assert t["url"].startswith("https://github.com/"), name
             assert t["verify"]["method"] in {"cosign-keyless", "slsa-provenance", "github-attestation", "checksums-file"}, name
     rules = lock["tools"]["semgrep-rules"]
-    assert rules["verify"]["gpg_key_url"] == "https://github.com/web-flow.gpg" and rules["verify"]["gpg_key_id"] == "B5690EEEBB952194"
+    assert rules["verify"]["gpg_key_url"] == "https://github.com/web-flow.gpg" and rules["verify"]["gpg_fingerprint"] == "968479A1AFF927E37D1A566BB5690EEEBB952194"
     req = (ROOT / lock["tools"]["semgrep"]["requirements"]).read_text()
     assert f"semgrep=={lock['tools']['semgrep']['version']}" in req and req.count("--hash=sha256:") >= 60
     boot = (ROOT / "tools" / "bootstrap-requirements.txt").read_text()
@@ -402,9 +402,9 @@ def test_git_kind_aborts_on_digest_or_commit_mismatch(rules_repo, tmp_path):
     assert not (tmp_path / "b" / "semgrep-rules").exists()
     # a signature method needs the key: without network there is no key, and skipping must be explicit
     with pytest.raises(InstallError, match="could not download|GPG"):
-        install(_git_lock(rules_repo, verify={"method": "git-commit-gpg", "gpg_key_url": "file:///nonexistent/key.asc", "gpg_key_id": "B5690EEEBB952194"}),
+        install(_git_lock(rules_repo, verify={"method": "git-commit-gpg", "gpg_key_url": "file:///nonexistent/key.asc", "gpg_fingerprint": "968479A1AFF927E37D1A566BB5690EEEBB952194"}),
                 install_dir=tmp_path / "c")
-    m = install(_git_lock(rules_repo, verify={"method": "git-commit-gpg", "gpg_key_url": "file:///nonexistent/key.asc", "gpg_key_id": "B5690EEEBB952194"}),
+    m = install(_git_lock(rules_repo, verify={"method": "git-commit-gpg", "gpg_key_url": "file:///nonexistent/key.asc", "gpg_fingerprint": "968479A1AFF927E37D1A566BB5690EEEBB952194"}),
                 install_dir=tmp_path / "c", no_signature_check=True)
     assert "SKIPPED" in m["tools"]["semgrep-rules"]["verified_by"]
 

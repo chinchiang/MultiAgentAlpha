@@ -77,17 +77,20 @@ def _line_of(text: str, pos: int) -> int:
 
 
 def _iter_source_files(root: Path):
+    # only the tool and VCS directories in SKIP_DIRS: every other dot-directory (.well-known, .config, ...) is part of
+    # the target, and skipping all of them silently left a CSP served from one unread
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith("."))
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
         for name in sorted(filenames):
             p = Path(dirpath) / name
             if name in SCAN_EXTS or p.suffix.lower() in SCAN_EXTS:
                 yield p
 
 
-def extract_policies(root: Path) -> tuple[list[CspPolicy], bool]:
+def extract_policies(root: Path, skipped: list[str] | None = None) -> tuple[list[CspPolicy], bool]:
     """Every CSP string in the target, in deterministic (file, line) order. `truncated` reports
-    that MAX_POLICIES was hit: the remaining files were not read, and the run note says so."""
+    that MAX_POLICIES was hit: the remaining files were not read, so the scan is incomplete. Files over
+    MAX_FILE_BYTES or unreadable are appended to `skipped` (relative path and why), never dropped silently."""
     policies: list[CspPolicy] = []
     truncated = False
     for path in _iter_source_files(root):
@@ -95,9 +98,13 @@ def extract_policies(root: Path) -> tuple[list[CspPolicy], bool]:
             break
         try:
             if path.stat().st_size > MAX_FILE_BYTES:
+                if skipped is not None:
+                    skipped.append(f"{path.relative_to(root).as_posix()}: over {MAX_FILE_BYTES // 1024} KiB, not read")
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
+            if skipped is not None:
+                skipped.append(f"{path.relative_to(root).as_posix()}: unreadable")
             continue
         rel = path.relative_to(root).as_posix()
         hits: list[tuple[int, str]] = []
@@ -185,9 +192,16 @@ def to_results(policies: list[CspPolicy], results: dict[int, dict]) -> list[Tool
 
 
 def build_sarif(policies: list[CspPolicy], results: list[ToolResult], *, version: str | None,
-                note: str = "", truncated: bool = False, parse_errors: list[str] | None = None) -> dict:
+                note: str = "", truncated: bool = False, parse_errors: list[str] | None = None,
+                skipped: list[str] | None = None) -> dict:
+    """A truncated extraction is a failed invocation (executionSuccessful false, an error notification): a target
+    could otherwise flood the cap with dummy policies and have its real ones go unread behind a complete-looking run."""
     notifications = [{"level": "note", "descriptor": {"id": "CSP_PARSE_ERROR"}, "message": {"text": m}}
                      for m in (parse_errors or [])]
+    notifications += [{"level": "note", "descriptor": {"id": "CSP_FILE_SKIPPED"}, "message": {"text": m}} for m in (skipped or [])]
+    if truncated:
+        notifications.append({"level": "error", "descriptor": {"id": "CSP_POLICY_CAP"},
+                              "message": {"text": f"policy extraction stopped at {MAX_POLICIES} policies; later files were not read"}})
     props: dict[str, str | int | bool] = {"policies": len(policies), "truncated": truncated}
     if note:
         props["note"] = note
@@ -202,7 +216,7 @@ def build_sarif(policies: list[CspPolicy], results: list[ToolResult], *, version
                 "rules": [],
             }},
             "invocations": [{
-                "executionSuccessful": True,
+                "executionSuccessful": not truncated,
                 "properties": props,
                 "toolExecutionNotifications": notifications,
             }],
@@ -231,16 +245,18 @@ def run_csp_eval(target: Path, sarif_path: Path, *, version: str | None = None,
     if not node:
         return subprocess.CompletedProcess([], 127, "", "node interpreter not found on PATH (node >= 18 required)")
 
+    skipped: list[str] = []
+
     def _done(rc: int, stderr: str = "", note: str = "", truncated: bool = False,
               parse_errors: list[str] | None = None, results: list[ToolResult] | None = None,
               policies: list[CspPolicy] | None = None) -> subprocess.CompletedProcess:
         sarif_path.parent.mkdir(parents=True, exist_ok=True)
         sarif_path.write_text(json.dumps(build_sarif(
             policies or [], results or [], version=version, note=note, truncated=truncated,
-            parse_errors=parse_errors), indent=2) + "\n", encoding="utf-8")
+            parse_errors=parse_errors, skipped=skipped), indent=2) + "\n", encoding="utf-8")
         return subprocess.CompletedProcess([], rc, "", stderr)
 
-    policies, truncated = extract_policies(target)
+    policies, truncated = extract_policies(target, skipped)
     if not policies:
         return _done(0, note="no Content-Security-Policy found in the target", truncated=truncated)
     evaluated, err = evaluate(policies, driver=driver, node=node)

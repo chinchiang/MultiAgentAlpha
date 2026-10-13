@@ -184,4 +184,4 @@ tools:
     verify:
       method: git-commit-gpg   # the release-branch merge commit is signed by GitHub's web-flow key
       gpg_key_url: https://github.com/web-flow.gpg
-      gpg_key_id: B5690EEEBB952194
+      gpg_fingerprint: 968479A1AFF927E37D1A566BB5690EEEBB952194  # GitHub web-flow key (gpg --fingerprint of gpg_key_url)

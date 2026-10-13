@@ -576,6 +576,14 @@ class Pipeline:
         if not required_tools <= tools_ran or any(not r.ran for r in tool_runs):
             incomplete.append("required_tool_incomplete")
         incomplete.extend(self.audit.incomplete_reasons())  # audit.INCOMPLETE_COUNTERS: the one list
+        if self.cfg.ml_bom.require_signature:
+            # P7 checked offline that the bundle belongs to the BOM; here cosign verifies the signature and its signer
+            from .mlbom import verify_signature
+
+            signed, why = verify_signature(self.cfg)
+            self.audit["ml_bom_signature"] = "verified" if signed else f"failed: {why}"
+            if not signed:
+                incomplete.append("ml_bom_signature_unverified")
         if self.cfg.roles.context and context_view is None and not egress_blocked:
             incomplete.append("context_view_incomplete")
         if any(c.needs_human for c in consensus):
