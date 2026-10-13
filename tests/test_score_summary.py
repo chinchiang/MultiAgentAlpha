@@ -59,7 +59,7 @@ SUMMARY_KEYS = {"schema", "source_report_sha256", "exported_at", "label", "targe
                 "pseudonym_key_id", "review_scope", "generated_at", "provider_mode", "families_used", "config_hash",
                 "review_status", "incomplete_reasons", "gate_passed", "overall_score", "dimensions"}
 DIMENSION_KEYS = {"dimension", "score", "accepted_findings", "rejected_findings", "human_queue", "tool_ran"}
-KEY = "0123456789abcdef0123456789abcdef"  # 32 characters, the shortest key MARA_SUMMARY_KEY may hold
+KEY = "k" * 32  # the shortest key MARA_SUMMARY_KEY may hold; plainly fake, so gitleaks does not take it for a secret
 
 
 def export(report: Path, out: Path, *extra: str, key: str | None = KEY):
@@ -226,9 +226,9 @@ def test_the_pseudonyms_are_hmac_sha256_under_the_key(mock_review, tmp_path):
     source = live_copy(mock_review, tmp_path, target_id=TARGET_ID, revision=REVISION)
     assert export(source, tmp_path / "summary.json").exit_code == 0
     summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
-    assert summary["target_pseudonym"] == "875a753f62a861f44d15d4dc0e98d6130cd212cd2b07215148fa14fe1add4823"
-    assert summary["revision_pseudonym"] == "9b3a5969a052ed5ca7ca6cf955201ebe77205fe7685fb7c93a013c7af326c567"
-    assert summary["pseudonym_key_id"] == "3eb1bd439947eb76"
+    assert summary["target_pseudonym"] == "e39ebb6b1cb4c2833d1829ff06b37194b96c1f04656b63f39d401929cdf48444"
+    assert summary["revision_pseudonym"] == "9db7a4dcfe194cca192a6190bfacff6ad6b82549fb865f5acbf1757bc442c4aa"
+    assert summary["pseudonym_key_id"] == "5e318f8cf9cbe249"
 
 
 def summary_of(mock_review: Path, tmp_path: Path, name: str, key: str = KEY, **changes) -> dict:
@@ -247,7 +247,7 @@ def test_the_pseudonyms_follow_a_target_under_one_key_and_reveal_nothing_without
     assert (first["target_pseudonym"], first["revision_pseudonym"]) == (again["target_pseudonym"], again["revision_pseudonym"])
     assert rekeyed["target_pseudonym"] != first["target_pseudonym"] and rekeyed["pseudonym_key_id"] != first["pseudonym_key_id"]
     # the same commit under another target (a fork) gets another pseudonym: printf 'revision\0%s\0%s' 222…2 "$REVISION" | openssl …
-    assert fork["revision_pseudonym"] == "a49283bfa26abdad88df1d3ce1bd058b3d63de3c04017d6e68ae17f2e0fd5699"
+    assert fork["revision_pseudonym"] == "a3eb7fe21af9be57370de1b533ce9f29c044836ba12dc64d9a6d92786758f613"
     text = (tmp_path / "a" / "summary.json").read_text(encoding="utf-8")
     assert TARGET_ID not in text and REVISION not in text
 
