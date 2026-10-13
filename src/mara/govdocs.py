@@ -24,6 +24,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .decisions import TrainingRequirement, select
+from .decisions import load as load_decisions
+
 if TYPE_CHECKING:
     from .config import MaraConfig
 
@@ -332,10 +335,13 @@ def rollout_status(cfg: MaraConfig, root: Path | str, today: dt.date) -> Rollout
     return RolloutStatus(not problems, r.phase, days, due, tuple(problems), tuple(notes))
 
 
-def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None = None) -> dict:
+def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None = None,
+                     training: TrainingRequirement | None = None) -> dict:
     """Aggregate review outputs (report.json files) into the shadow-phase baseline the report asks for:
     findings per review, tier mix, gate would-block rate, human-queue size, token cost, and the
-    false-positive rate from human decisions when any exist."""
+    false-positive rate from the usable human decisions on these reviews (mara.decisions; without a
+    `training` requirement, training is required and nobody is trained). `decisions_excluded` counts
+    the decisions left out, per reason."""
     reports = [json.loads(Path(p).read_text(encoding="utf-8")) for p in report_paths]
     n = len(reports)
     if not n:
@@ -354,16 +360,26 @@ def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None 
         tokens_in += int(audit.get("input_tokens", 0) or 0)
         tokens_out += int(audit.get("output_tokens", 0) or 0)
     decisions = {"true_positive": 0, "false_positive": 0}
-    if decisions_dir and Path(decisions_dir).is_dir():
-        for p in Path(decisions_dir).glob("*.json"):
-            if p.name == "backlog.json":
-                continue
-            try:
-                d = json.loads(p.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            if d.get("decision") in decisions:
-                decisions[d["decision"]] += 1
+    excluded: dict[str, set[str]] = {}
+    if decisions_dir:
+        loaded = load_decisions(decisions_dir)
+        if loaded.malformed:
+            excluded["malformed"] = {str(p) for p, _ in loaded.malformed}
+        usable: dict[str, str] = {}
+        seen: set[str] = set()
+        for r in reports:
+            sel = select(loaded.decisions, r, training or TrainingRequirement())
+            usable.update((d.key, d.decision) for d in sel.usable)
+            for d, why in sel.excluded:
+                if why != "unbound":
+                    excluded.setdefault(why, set()).add(d.key)
+            seen.update(d.key for d in sel.usable)
+            seen.update(d.key for d, why in sel.excluded if why != "unbound")
+        unbound = {d.key for d in loaded.decisions} - seen
+        if unbound:
+            excluded["unbound"] = unbound
+        for verdict in usable.values():
+            decisions[verdict] += 1
     decided = decisions["true_positive"] + decisions["false_positive"]
     return {
         "reviews": n,
@@ -375,6 +391,7 @@ def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None 
         "tokens_in": tokens_in, "tokens_out": tokens_out,
         "decisions": decisions,
         "false_positive_rate_from_decisions": None if not decided else round(decisions["false_positive"] / decided, 3),
+        "decisions_excluded": {why: len(keys) for why, keys in sorted(excluded.items())},
         "modes": sorted({r.get("provider_mode", "?") for r in reports}),
     }
 
@@ -393,6 +410,7 @@ def render_baseline(metrics: dict, *, date: dt.date, phase_started: str, sources
          f"| tokens in / out | {metrics['tokens_in']} / {metrics['tokens_out']} |",
          f"| human decisions (tp / fp) | {metrics['decisions']['true_positive']} / {metrics['decisions']['false_positive']} |",
          f"| false-positive rate from decisions | {'not available (no decisions yet)' if fp is None else fp} |",
+         f"| decisions not used (per reason) | {', '.join(f'{k} {v}' for k, v in metrics.get('decisions_excluded', {}).items()) or 'none'} |",
          "", "Sources:", ""] + [f"- `{s}`" for s in sources] + [""]
     if "mock" in metrics["modes"]:
         L += ["**Mock mode reports are included; a baseline for the rollout decision must come from live reviews of real pull requests.**", ""]

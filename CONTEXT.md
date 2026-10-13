@@ -1,6 +1,6 @@
 # MARA review
 
-MARA reviews a repository with several model families in six layers; this glossary fixes the words for what is sent to a model and what comes back.
+MARA reviews a repository with several model families in six layers; this glossary fixes the words for what is sent to a model, what comes back, and what humans decide about it.
 
 ## Untrusted data
 
@@ -58,3 +58,21 @@ A reply that ended normally with no text; read by role (abstention for extractio
 **Refusal**:
 A reply the vendor or model marked as declining to answer; counted as an abstention, separate from invalid output.
 _Avoid_: block, rejection
+
+## Human decisions
+
+**Decision**:
+One adjudicator's ruling, true positive or false positive, on one human-queue key (人工裁決). A well-formed decision is one whose record is internally consistent, whoever made it and whatever it is later compared with.
+_Avoid_: adjudication, label (a label is a calibration sample's answer key), verdict (a judge's vote)
+
+**Adjudicator**:
+The person who made a decision, named by the decision event on the ticket.
+_Avoid_: reviewer (a model role), annotator
+
+**Bound decision**:
+A decision on the same target, revision and context as a given review report, so it speaks about exactly the finding that report holds.
+_Avoid_: matching decision, applied decision
+
+**Usable decision**:
+A well-formed, bound decision with no contradicting decision on its key, made by a trained adjudicator whenever training is required; the only kind of decision that counts as ground truth (calibration labels, the Alternative Annotator Test, false-positive rates). A decision that is well-formed but not usable still answers its ticket: the key is not queued again.
+_Avoid_: valid decision (ambiguous between well-formed and usable)

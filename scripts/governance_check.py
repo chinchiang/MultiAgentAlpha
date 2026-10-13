@@ -545,7 +545,7 @@ def check_g12(root: Path, config_path: Path) -> CheckResult:
 
 
 def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> CheckResult:
-    from mara.training import ROLES, load_register
+    from mara.training import ROLES, is_trained, load_register
 
     need = ("需要：每個角色（developer、security、adjudicator）至少一人在一年內完成 `training/curriculum.md` 的訓練並以 "
             "`scripts/training_register.py assess`／`add` 寫入 `training/records.yaml`；人工裁決者必須有有效的 adjudicator 紀錄，否則其裁決不進校準")
@@ -574,6 +574,15 @@ def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> Ch
         ev.append("30 天內到期：" + ", ".join(f"{r.person}/{r.role} {r.expires}" for r in expiring))
     if (raw.get("training") or {}).get("require_trained_adjudicator", True):
         ev.append("`training.require_trained_adjudicator: true`（未受訓者的裁決不進校準）")
+    # well-formed decisions whose adjudicator held no valid record on the decision day: they answer their
+    # ticket but are not ground truth until a trained adjudicator rules again (docs/adr/0002-usable-decisions.md)
+    from mara.decisions import load as load_decisions
+
+    waiting = [d for d in load_decisions(root / "calib" / "decisions").decisions
+               if not is_trained(reg, d.decided_by, "adjudicator", d.day)]
+    if waiting:
+        ev.append(f"{len(waiting)} 筆裁決因裁決者在裁決當天沒有有效的 adjudicator 紀錄而不進校準，需由受訓者重新裁決："
+                  + ", ".join(f"#{d.issue} by {d.decided_by}" for d in waiting))
     if missing:
         return CheckResult("G-13", FAIL, f"以下角色沒有有效的訓練紀錄：{', '.join(missing)}。已有：{'；'.join(ev)}。{need}")
     return CheckResult("G-13", PASS, "；".join(ev))

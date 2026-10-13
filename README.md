@@ -628,9 +628,11 @@ proof of security", deciding tickets, prompt injection through code), `training/
 knowledge check, `training/records.yaml` the register written by `scripts/training_register.py`
 (`assess` grades the quiz and records a pass; `add` records an instructor-led session; `check`
 reports coverage per role and expiries). Records are keyed by GitHub login: the human-queue sync
-records who applied each decision label and whether they hold a valid adjudicator record, and
-calibration applies only trained adjudicators' decisions while
-`training.require_trained_adjudicator` is true. The register is empty in this repository, so
+records who applied each decision label, and calibration, the Alternative Annotator Test and the
+shadow-phase false-positive rate count a decision only while its adjudicator held a valid adjudicator
+record on the decision day (judged from the register when the decision is used, not from the
+record's own flag) whenever `training.require_trained_adjudicator` is true. One rule decides when a
+decision counts (`mara.decisions`, `docs/adr/0002-usable-decisions.md`). The register is empty in this repository, so
 governance check G-13 fails naming the three roles. See `docs/ai-literacy-training.md`.
 
 ## Human queue (governance item G-11)

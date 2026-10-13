@@ -330,12 +330,12 @@ def test_a_decision_that_cannot_be_recorded_is_reported_and_fails_the_run(tmp_pa
     assert "4 closed ticket(s) carry a decision that was not recorded" in capsys.readouterr().err
 
 
-def test_a_decided_key_is_never_filed_again(tmp_path, monkeypatch):
+def test_a_decided_key_is_never_filed_again(tmp_path, monkeypatch, capsys):
     """Every push to main reviews the unchanged fixture: a key a human had already decided on a closed ticket
     used to get a fresh ticket each time."""
     import human_queue_issues as hq
 
-    items = [_queue_item(n) for n in range(1, 7)]
+    items = [_queue_item(n) for n in range(1, 8)]
     items[5].update(skeptic={"family": "nemotron", "verdict": "weakened", "reason": "x", "sanitizer_or_control": ""},
                     judge_votes=[{"family": "anthropic", "pass": "forward", "verdict": "true_positive", "severity_band": "High", "reason": "y",
                                   "self_family": False}])
@@ -352,15 +352,22 @@ def test_a_decided_key_is_never_filed_again(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     decisions = tmp_path / "d"
     decisions.mkdir()
-    (decisions / f"{items[4]['key']}.json").write_text("{}")  # recorded, though its ticket is gone (transferred, deleted)
+    # recorded, though its ticket is gone (transferred, deleted); an untrained adjudicator's decision still
+    # answers the ticket (docs/adr/0002-usable-decisions.md)
+    recorded = {k: items[4][k] for k in ("key", "target_id", "revision", "context_hash", "file", "line", "cwe")}
+    recorded.update(decision="false_positive", decision_event_id=5, decided_by="mallory", decided_at="2026-10-01T08:00:00Z", issue=5)
+    (decisions / f"{items[4]['key']}.json").write_text(json.dumps(recorded))
+    (decisions / f"{items[6]['key']}.json").write_text("{}")  # damaged: answers nothing, so the key is filed again
     (tmp_path / "hq.json").write_text(json.dumps({"target": "/t/x", "items": items}))
-    assert hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False, decisions_dir=decisions) == (2, 4)
-    # the next push: the two new tickets are open now, nothing is filed
-    assert hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False, decisions_dir=decisions) == (0, 6)
+    assert hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False, decisions_dir=decisions) == (3, 4)
+    assert f"{items[6]['key']}.json is not a well-formed decision" in capsys.readouterr().out
+    # the next push: the three new tickets are open now, nothing is filed
+    assert hq.create_tickets(tmp_path / "hq.json", "o/r", "mara-human-queue", dry_run=False, decisions_dir=decisions) == (0, 7)
     st = json.loads((tmp_path / "state.json").read_text())
     filed = [t["body"] for t in st["open"]]
-    assert len(filed) == 2, "only the withdrawn key and the new one are filed, once"
+    assert len(filed) == 3, "only the withdrawn key, the new one and the damaged record's key are filed, once"
     assert hq.MARKER.format(key=items[3]["key"]) in filed[0] and hq.MARKER.format(key=items[5]["key"]) in filed[1]
+    assert hq.MARKER.format(key=items[6]["key"]) in filed[2]
     assert "Skeptic (nemotron)" in filed[1] and "anthropic [forward]" in filed[1] and not list(tmp_path.glob(".mara-hq-*.md"))
 
 
@@ -438,21 +445,29 @@ def test_calibration_uses_true_positive_decisions_as_labels(tmp_path):
                   "decided_by": "alice", "adjudicator_trained": True},
                  {"key": "k4", "decision": "true_positive", "target": "/x/calib/samples/s9", "file": "app.py", "line": 80, "cwe": "CWE-89", "issue": 6,
                   "decided_by": "mallory", "adjudicator_trained": False}]
-    calibrate.SKIPPED_UNTRAINED.clear()
+    import datetime as dt
+
+    from mara.decisions import Decision, TrainingRequirement, select
+    from mara.training import Record, Register
+
     report = {"target_id": "target-s9", "revision": "rev", "coverage": {"content_hash": "ctx"}}
     for d in decisions:
-        d.update(target_id="other" if d["issue"] == 5 else "target-s9", revision="rev", context_hash="ctx", decision_event_id=d["issue"])
+        d.update(target_id="other" if d["issue"] == 5 else "target-s9", revision="rev", context_hash="ctx", decision_event_id=d["issue"],
+                 decided_at="2026-10-01T08:00:00Z")
         d["key"] = queue_key(d["file"], d["line"], d["cwe"], target_id=d["target_id"], revision="rev", context_hash="ctx")
-    labels, applied = calibrate.apply_decisions("s9", report, [], decisions)
+    parsed = [Decision.parse(d) for d in decisions]
+    alice = Record("alice", "adjudicator", "2026-09", dt.date(2026, 9, 1), dt.date(2027, 9, 1), None, "quiz", "quiz")
+    sel = select(parsed, report, TrainingRequirement(required=True, register=Register("2026-09", 365, 0.8, [alice])))
+    labels, applied = calibrate.apply_decisions(sel.usable, [])
     assert applied == 2 and len(labels) == 1 and labels[0]["source"] == "human_decision" and labels[0]["cwe"] == "CWE-79"
-    assert calibrate.SKIPPED_UNTRAINED == ["s9: ticket #6 by mallory"]  # G-13: untrained adjudicator's decision not applied
-    labels, applied = calibrate.apply_decisions("s9", report, [], decisions, require_trained=False)
+    assert [(d.issue, why) for d, why in sel.excluded] == [(5, "unbound"), (6, "untrained")]  # G-13: mallory's decision not applied
+    labels, applied = calibrate.apply_decisions(select(parsed, report, TrainingRequirement(required=False)).usable, [])
     assert applied == 3 and len(labels) == 2
     d = tmp_path / "decisions"
     d.mkdir()
-    (d / "k.json").write_text(json.dumps(decisions[0]))
+    (d / f"{decisions[0]['key']}.json").write_text(json.dumps(decisions[0]))
     (d / "backlog.json").write_text(json.dumps({"open": 3}))
-    assert [x["key"] for x in calibrate.load_decisions(d)] == [decisions[0]["key"]]
+    assert [x.key for x in calibrate.load_decisions(d)] == [decisions[0]["key"]]
 
 
 def test_report_and_governance_g11(tmp_path):

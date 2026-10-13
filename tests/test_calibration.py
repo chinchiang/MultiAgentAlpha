@@ -87,7 +87,7 @@ def test_live_calibration_refuses_runs_that_bundled_the_answer_key(tmp_path, mon
     run = {"provider_mode": "live", "provider_manifest": [{"type": "anthropic", "family": "anthropic", "model": "claude-opus-5"}],
            "config_hash": "hash", "revision": "rev", "coverage": {"included": ["main.py", "labels.json"]}}
     monkeypatch.setattr(sys, "argv", ["calibrate", "--mode", "live", "--out-dir", str(tmp_path)])
-    monkeypatch.setattr(calibrate, "load_runs", lambda *_: [("s1", run, [])])
+    monkeypatch.setattr(calibrate, "load_runs", lambda *_, **__: [("s1", run, [])])
     import pytest
     with pytest.raises(SystemExit, match="answer key labels.json was in the reviewed bundle of \\['s1'\\]"):
         calibrate.main()
@@ -157,12 +157,24 @@ def _aat_run(sample, findings, consensus=()):
 
 
 def _dec(file, line, cwe, decision, trained=True):
+    from mara.decisions import Decision
     from mara.report.human_queue_out import queue_key
 
-    return {"key": queue_key(file, line, cwe, target_id="target-s9", revision="rev", context_hash="ctx"),
-            "decision": decision, "file": file, "line": line, "cwe": cwe, "issue": line, "decided_by": "alice",
-            "target_id": "target-s9", "revision": "rev", "context_hash": "ctx", "decision_event_id": line,
-            "adjudicator_trained": trained}
+    return Decision.parse({"key": queue_key(file, line, cwe, target_id="target-s9", revision="rev", context_hash="ctx"),
+                           "decision": decision, "file": file, "line": line, "cwe": cwe, "issue": line,
+                           "decided_by": "alice" if trained else "mallory", "decided_at": "2026-10-01T08:00:00Z",
+                           "target_id": "target-s9", "revision": "rev", "context_hash": "ctx", "decision_event_id": line})
+
+
+def _trained():
+    """G-13: alice holds a valid adjudicator record; mallory has none."""
+    import datetime as dt
+
+    from mara.decisions import TrainingRequirement
+    from mara.training import Record, Register
+
+    alice = Record("alice", "adjudicator", "2026-09", dt.date(2026, 9, 1), dt.date(2027, 9, 1), None, "quiz", "quiz")
+    return TrainingRequirement(required=True, register=Register("2026-09", 365, 0.8, [alice]))
 
 
 def _post(sample, fid, argmax):
@@ -192,14 +204,14 @@ def test_aat_agreement_is_tested_against_chance_and_needs_ten_items():
     post = dict([_post("s9", f"F-{i}", 0 if i % 2 else 1) for i in range(1, 11)])
     post[_post("s9", "F-11", 2)[0]] = _post("s9", "F-11", 2)[1]   # pipeline abstains: excluded, not tested
     post[_post("s9", "F-12", 1)[0]] = _post("s9", "F-12", 1)[1]   # no human decision: not tested
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post)
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post, _trained())
     assert aat["n"] == 10 and aat["agreement"] == 1.0 and aat["chance_agreement"] == 0.5 and aat["kappa"] == 1.0
     assert aat["p_value"] == 0.001 and aat["agreement_passed"] and aat["excluded"] == 1  # one-sided: 0.5 ** 10
     # agreement alone is not enough: none of these was a rejection the pipeline would make unsupervised
     assert aat["rejection"]["n"] == 0 and not aat["passed"] and "不採納安全性未達" in aat["why"]
     weak = calibrate.alternative_annotator_test([_aat_run("s9", findings[:2])], decisions[:2],
                                                 {_post("s9", "F-1", 0)[0]: _post("s9", "F-1", 0)[1],
-                                                 _post("s9", "F-2", 1)[0]: _post("s9", "F-2", 1)[1]})
+                                                 _post("s9", "F-2", 1)[0]: _post("s9", "F-2", 1)[1]}, _trained())
     assert weak["n"] == 2 and weak["agreement"] == 1.0 and not weak["agreement_passed"]  # significant needs n >= 10
 
 
@@ -211,7 +223,7 @@ def test_aat_constant_labeller_agrees_only_at_chance_and_fails():
     findings = [_finding(i) for i in range(1, 21)]
     decisions = [_dec("app.py", i * 10, "CWE-79", "true_positive" if i <= 2 else "false_positive") for i in range(1, 21)]
     post = dict(_post("s9", f"F-{i}", 1) for i in range(1, 21))
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post)
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post, _trained())
     assert aat["n"] == 20 and aat["agreement"] == 0.9 and aat["chance_agreement"] == 0.9 and aat["kappa"] == 0.0
     assert aat["p_value"] > 0.5 and not aat["agreement_passed"] and not aat["passed"]
 
@@ -227,7 +239,7 @@ def test_aat_rejection_safety_bounds_the_miss_rate_of_unsupervised_rejections():
                      + [_dec("app.py", i * 10, "CWE-79", "true_positive") for i in acc])
         post = dict([_post("s9", f"F-{i}", 1) for i in rej] + [_post("s9", f"F-{i}", 0) for i in acc])
         consensus = [_rejected(i) for i in rej] + [_accepted(i) for i in acc]
-        return calibrate.alternative_annotator_test([_aat_run("s9", findings, consensus)], decisions, post)
+        return calibrate.alternative_annotator_test([_aat_run("s9", findings, consensus)], decisions, post, _trained())
 
     ok = run(59)  # zero misses in 59: the 95% upper bound 1 - 0.05 ** (1/59) = 0.0495 <= 0.05
     from mara.policy import AAT_METHOD
@@ -248,10 +260,10 @@ def test_aat_binds_one_decision_to_one_finding_by_key():
     findings = [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 10}]},
                 {"id": "F-2", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 12}]}]
     post = dict([_post("s9", "F-1", 0), _post("s9", "F-2", 0)])
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [_dec("app.py", 10, "CWE-79", "true_positive")], post)
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [_dec("app.py", 10, "CWE-79", "true_positive")], post, _trained())
     assert aat["n"] == 1
     contradictory = [_dec("app.py", 10, "CWE-79", "true_positive"), _dec("app.py", 10, "CWE-79", "false_positive")]
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], contradictory, post)
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], contradictory, post, _trained())
     assert aat["n"] == 0 and aat["excluded"] == 1
 
 
@@ -261,9 +273,11 @@ def test_aat_ignores_untrained_adjudicators():
     findings = [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 26}]}]
     untrained = _dec("app.py", 26, "CWE-79", "true_positive", trained=False)
     post = {_post("s9", "F-1", 1)[0]: _post("s9", "F-1", 1)[1]}
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [untrained], post)
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [untrained], post, _trained())
     assert aat["n"] == 0 and not aat["passed"] and aat["why"]  # G-13: the decision is not bound at all
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [untrained], post, require_trained=False)
+    from mara.decisions import TrainingRequirement
+
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [untrained], post, TrainingRequirement(required=False))
     assert aat["n"] == 1 and aat["agreement"] == 0.0 and not aat["passed"]
 
 
@@ -273,9 +287,9 @@ def test_aat_disagreement_fails_and_empty_decisions_report_why():
     findings = [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 26}]}]
     decisions = [_dec("app.py", 26, "CWE-79", "true_positive")]
     post = {_post("s9", "F-1", 1)[0]: _post("s9", "F-1", 1)[1]}  # pipeline says false_positive, human said tp
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post)
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post, _trained())
     assert aat["n"] == 1 and aat["agreement"] == 0.0 and not aat["passed"]
-    empty = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [], post)
+    empty = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [], post, _trained())
     assert empty["n"] == 0 and not empty["passed"] and empty["why"]
 
 
