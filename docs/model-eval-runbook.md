@@ -80,7 +80,8 @@ What `report` produces:
 - `docs/garak-<date>.md` and `docs/cyberseceval-<date>.md` with YAML front matter (`mode`,
   `date`, `families`, tool version, thresholds); governance check G-8 requires both within 90 days,
   `mode: live`, and `families` covering every non-mock family in the config.
-- `calib/model-eval-<date>.json`: per family the metric values and verdicts. `scripts/calibrate.py`
+- `calib/model-eval-<date>.json`: per family the metric values and verdicts, in the MARA workspace
+  (`MARA_HOME`, else the working directory; `--summary-root` overrides it). `scripts/calibrate.py`
   reads the latest one and multiplies a failing family's suggested weight by
   `model_eval.weight_penalty_on_fail`; the review pipeline shows the latest verdict per family in
   the bias audit and under "Model red-team evaluation" in `report.md`.

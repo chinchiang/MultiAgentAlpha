@@ -104,3 +104,43 @@ def test_the_ml_bom_signature_bundle_is_found_in_the_workspace(home):
     (home / "sbom").mkdir()
     (home / "sbom" / "bom.sigstore.json").write_text(json.dumps({}), encoding="utf-8")
     assert "sbom/bom.sigstore.json not found" not in p7_ml_bom(cfg).reason
+
+
+# ---------------------------------------------------------------- G-8 model-eval summaries
+
+
+def _eval_summary(root, date="2026-09-12"):
+    (root / "calib").mkdir(parents=True, exist_ok=True)
+    (root / "calib" / f"model-eval-{date}.json").write_text(json.dumps(
+        {"date": date, "mode": "live", "garak_version": "0.17.0", "cyberseceval_ref": "ref",
+         "families": {"glm": {"verdict": {"overall": "pass"}}}}), encoding="utf-8")
+
+
+def test_calibration_reads_the_model_eval_summary_the_pipeline_reads(home):
+    """calibrate.load_model_eval read calib/model-eval-*.json from the script's checkout while the pipeline's
+    bias audit (family_eval_status) reads the workspace: with MARA_HOME set the suggested weights ignored G-8."""
+    import calibrate
+
+    _eval_summary(home)
+    assert (calibrate.load_model_eval() or {}).get("date") == "2026-09-12"
+
+
+def test_model_eval_report_and_check_use_the_workspace(home, monkeypatch, capsys):
+    import model_eval
+
+    monkeypatch.setattr(sys, "argv", ["model_eval.py", "--config", str(ROOT / "config" / "examples" / "psirt-enabled.yaml"), "report",
+                                      "--run-dir", str(ROOT / "fixtures" / "model-eval"), "--date", "2026-09-12",
+                                      "--docs-dir", str(home / "docs")])
+    assert model_eval.main() == 0
+    assert (home / "calib" / "model-eval-2026-09-12.json").is_file(), "written where family_eval_status reads"
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", ["model_eval.py", "check"])
+    model_eval.main()
+    assert "2026-09-12 mode dry-run" in capsys.readouterr().out
+
+
+def test_no_script_reads_or_writes_model_eval_summaries_in_its_checkout():
+    pattern = re.compile(r"latest_summary\(ROOT\)|\"--summary-root\".*default=ROOT\)")
+    offenders = [f"{p.name}:{n}" for p in sorted((ROOT / "scripts").glob("*.py"))
+                 for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1) if pattern.search(line)]
+    assert offenders == [], offenders
