@@ -371,14 +371,14 @@ class Pipeline:
 
     # ------------------------------------------------------------------ L5
     def blocking_reason(self, c: ConsensusResult) -> str | None:
-        """Why an accepted finding blocks the gate, or None.
+        """Why an accepted finding (final outcome: a human ruling outranks the jury) blocks the gate, or None.
 
         The configured conjunction (tier in block_on_tiers, severity in block_on_severity), plus one
         rule of G-11's tightening: over the backlog limit tier C at or above
         queue_tier_c_min_severity is no longer queued for a human (tighten_exclude_tier_c), so such
         a finding blocks instead of passing on one family's word plus the jury. Tightening may cut
         human work; it never lets more through. An unknown severity ranks above every band."""
-        if not c.accepted:
+        if not c.final_accepted:
             return None
         if c.tier.value in self.cfg.gate.block_on_tiers and c.cvss4_severity in self.cfg.gate.block_on_severity:
             return "blocking_tier_and_severity"
@@ -502,6 +502,39 @@ class Pipeline:
         self.audit["position_flips"] = flips
         return results
 
+    def apply_decisions(self, findings: list[Finding], consensus: list[ConsensusResult], *, target_id: str, revision: str,
+                        context_hash: str) -> None:
+        """Usable human decisions on this very content settle their findings (docs/adr/0003-human-resolution.md):
+        each one is recorded on its consensus row, whose jury outcome stays as it is."""
+        from .decisions import TrainingRequirement, select
+        from .decisions import load as load_decisions
+        from .report.human_queue_out import queue_key
+        from .workspace import resolve
+
+        loaded = load_decisions(resolve("calib/decisions"))
+        report = {"target_id": target_id, "revision": revision, "coverage": {"content_hash": context_hash}}
+        sel = select(loaded.decisions, report, TrainingRequirement.from_config(self.cfg.training))
+        usable = {d.key: d for d in sel.usable}
+        # a well-formed decision that is not usable settles nothing; the finding says why it still waits
+        not_usable = {d.key: why for d, why in sel.excluded if why != "unbound"}
+        by_id = {f.id: f for f in findings}
+        applied = 0
+        for c in consensus:
+            f = by_id[c.finding_id]
+            key = queue_key(f.provenance[0].file, f.provenance[0].line, f.cwe, target_id=target_id, revision=revision,
+                            context_hash=context_hash)
+            d = usable.get(key)
+            if d is not None:
+                c.human_decision = {"decision": d.decision, "key": d.key, "issue": d.issue, "decided_by": d.decided_by,
+                                    "decided_at": d.decided_at}
+                applied += 1
+            elif key in not_usable and c.needs_human:
+                c.human_reasons.append(f"decision_not_usable:{not_usable[key]}")
+        self.audit["human_decisions_applied"] = applied
+        for why, n in sel.by_reason().items():
+            if why != "unbound":
+                self.audit[f"human_decisions_not_usable[{why}]"] = n
+
     # ------------------------------------------------------------------ run
     def run(self, target: str | Path, *, sarif_dir: Path | None = None, mode: str = "live",
             base_ref: str | None = None, calibration_sample: bool = False, psirt_event: dict | None = None) -> ReviewReport:
@@ -564,6 +597,10 @@ class Pipeline:
         votes = self.run_jury(ctx, findings, sk_by_id, finders)
         consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=abstained_ids,
                                tool_path_prefix=ctx.repo_prefix)
+        # repository + path below its top level for a committed git target (repo_map.target_identity),
+        # so CI, every clone and every calibration run name the same target the same way
+        target_id = hashlib.sha256(ctx.identity.encode()).hexdigest()
+        self.apply_decisions(findings, consensus, target_id=target_id, revision=ctx.revision, context_hash=ctx.content_hash)
         cons_by_id = {c.finding_id: c for c in consensus}
         dims = []
         for d in self.cfg.dimensions:
@@ -589,7 +626,7 @@ class Pipeline:
                 incomplete.append("ml_bom_signature_unverified")
         if self.cfg.roles.context and context_view is None and not egress_blocked:
             incomplete.append("context_view_incomplete")
-        if any(c.needs_human for c in consensus):
+        if any(c.final_needs_human for c in consensus):
             incomplete.append("unresolved_human_review")
         # Tool evidence remains visible independently of model output. A model's silence or
         # rejection never clears an unsuppressed tool result.
@@ -612,9 +649,6 @@ class Pipeline:
             self.audit[f"judge_agreement[{k}]"] = v
         self.audit["tool_results_ingested"] = len(tool_results)
         self.audit["tools_ran"] = ",".join(sorted(tools_ran)) or "none"
-        # repository + path below its top level for a committed git target (repo_map.target_identity),
-        # so CI, every clone and every calibration run name the same target the same way
-        target_id = hashlib.sha256(ctx.identity.encode()).hexdigest()
         report = ReviewReport(
             target=str(target),
             generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),

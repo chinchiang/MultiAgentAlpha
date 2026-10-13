@@ -17,10 +17,10 @@ def score_dimension(dimension: str, findings: list[Finding], consensus: dict[str
         c = consensus.get(f.id)
         if c is None:
             continue
-        if c.accepted:
+        if c.final_accepted:  # the final outcome: a human ruling where there is one (docs/adr/0003-human-resolution.md)
             accepted += 1
             total -= PENALTY[c.cvss4_severity] * TIER_FACTOR[c.tier]
-        elif c.needs_human:
+        elif c.final_needs_human:
             human += 1  # awaiting a decision, not rejected
         else:
             rejected += 1

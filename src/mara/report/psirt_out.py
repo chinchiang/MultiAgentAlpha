@@ -42,7 +42,8 @@ def select_psirt_findings(report: ReviewReport, cfg: MaraConfig) -> list[tuple]:
     out = []
     for f in report.findings:
         c = cons.get(f.id)
-        if c and c.accepted and c.tier.value in ps.trigger_tiers and c.cvss4_severity in ps.trigger_severities:
+        # the final outcome: a human-confirmed finding starts the clock too (docs/adr/0003-human-resolution.md)
+        if c and c.final_accepted and c.tier.value in ps.trigger_tiers and c.cvss4_severity in ps.trigger_severities:
             out.append((f, c, red.get(f.id)))
     return out
 

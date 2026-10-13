@@ -19,9 +19,13 @@ import datetime as dt
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .report.human_queue_out import queue_key
 from .training import Register, is_trained
+
+if TYPE_CHECKING:
+    from .config import TrainingConfig
 
 VERDICTS = ("true_positive", "false_positive")
 BACKLOG_FILE = "backlog.json"
@@ -160,6 +164,19 @@ class TrainingRequirement:
             return cls(required=True, register=load_register(register_path), problem=why)
         except (OSError, ValueError, KeyError, TypeError) as e:
             return cls(required=True, problem=f"{why}; " * bool(why) + f"training register {cfg.register_file} unavailable ({e})")
+
+    @classmethod
+    def from_config(cls, cfg: TrainingConfig) -> TrainingRequirement:
+        """From an already loaded `training` block; the register resolves against the workspace."""
+        from .training import load_register
+        from .workspace import resolve
+
+        if not cfg.require_trained_adjudicator:
+            return cls(required=False)
+        try:
+            return cls(required=True, register=load_register(resolve(cfg.register_file)))
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            return cls(required=True, problem=f"training register {cfg.register_file} unavailable ({e})")
 
     def satisfied_by(self, d: Decision) -> bool:
         return not self.required or is_trained(self.register, d.decided_by, "adjudicator", d.day)
