@@ -223,7 +223,7 @@ fails. The OpenAI-compatible provider retries timeouts, transport errors and 408
 up to three calls in total, with exponential backoff and jitter or the server's `Retry-After`
 (at most 30 s); other statuses fail at once. The Anthropic SDK retries on its own. Every reply is
 classified once, for every family, by `mara/exchange.py` (the adapters only report the vendor's stop
-reason and text; `CONTEXT.md`, `docs/adr/0001-reply-outcome-accounting.md`): a reply stopped at the
+reason and text; `GLOSSARY.md`, `docs/adr/0001-reply-outcome-accounting.md`): a reply stopped at the
 output limit (`finish_reason: length`, `max_tokens`, `MAX_TOKENS`) is a truncation even when its content
 is empty, as with a reasoning model that spent the whole budget thinking, and is never charged to the
 model (skeptic, red team and judge truncations have their own `*_truncations` counters, which make the
