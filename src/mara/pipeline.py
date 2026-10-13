@@ -43,7 +43,7 @@ from .scoring.idcheck import check_finding_refs
 from .scoring.tiers import assign_tier, ssvc_decision
 from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
 from .tools.sarif import ToolResult
-from .workspace import check_outside
+from .workspace import check_outside, resolve
 
 # error vocabulary of the agent layer, response-level codes that are not invalid output: "refused" (an abstention),
 # an echo, the budget (a truncation is never charged to the model, docs/adr/0001-reply-outcome-accounting.md) and the
@@ -118,7 +118,7 @@ def _count_invalid(errors: list[str]) -> int:
 class Pipeline:
     def __init__(self, cfg: MaraConfig, *, mock_fixtures: str | None = None, out_dir: Path | None = None):
         self.cfg = cfg
-        self.out_dir = out_dir or Path("out")
+        self.out_dir = out_dir or resolve("out")  # the workspace, like `mara review --out`
         self.providers: dict[str, Provider] = {m.name: make_provider(m, mock_fixtures) for m in cfg.models}
         # Counters (default 0) plus a few labels and nested tables; becomes the report's bias_audit
         self.audit = Audit()

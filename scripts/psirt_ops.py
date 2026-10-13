@@ -27,9 +27,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-
 from mara import psirt_ledger as pl  # noqa: E402
 from mara.config import load_config  # noqa: E402
+from mara.workspace import resolve  # noqa: E402
 
 
 def cmd_handshake(a: argparse.Namespace) -> int:
@@ -43,15 +43,14 @@ def cmd_handshake(a: argparse.Namespace) -> int:
         print(f"# dry run: would POST to {ps.webhook_url} with the token from ${ps.token_env}; nothing sent, nothing recorded", file=sys.stderr)
         return 0
     rec = pl.run_handshake(cfg)
-    path = ROOT / ps.handshake_file if not Path(ps.handshake_file).is_absolute() else Path(ps.handshake_file)
+    path = resolve(ps.handshake_file)
     pl.write_handshake(rec, path)
     print(f"handshake to {rec['webhook_url']}: HTTP {rec['status_code']} {'ok' if rec['ok'] else 'FAILED'}; recorded in {path}")
     return 0 if rec["ok"] else 1
 
 
 def _ledger_path(cfg) -> Path:
-    p = Path(cfg.psirt.ledger_file)
-    return p if p.is_absolute() else ROOT / p
+    return resolve(cfg.psirt.ledger_file)  # the workspace, where `mara review --notify-psirt` writes it
 
 
 def cmd_status(a: argparse.Namespace) -> int:

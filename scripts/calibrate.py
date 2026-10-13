@@ -31,6 +31,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
+from mara.workspace import resolve  # noqa: E402
+
+
+def anchor_paths() -> dict[str, Path]:
+    """Where this script reads and writes MARA's own state: the workspace (MARA_HOME, else the working directory),
+    the same place policy P8 and the pipeline read it. ROOT, the checkout this script lives in, used to be written
+    instead, so with MARA_HOME set P8 never saw the calibration evidence written for it."""
+    return {"decisions": resolve("calib/decisions"), "history": resolve("calib/history.json"), "latest": resolve("calib/latest.json")}
 
 VERDICT_IDX = {"true_positive": 0, "false_positive": 1, "needs_human": 2}
 TOOL_LABEL_TOOLS = ("semgrep", "osv-scanner", "gitleaks")
@@ -97,7 +105,7 @@ def _require_trained() -> bool:
 
 def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = None, require_trained: bool | None = None) -> list[tuple[str, dict, list[dict]]]:
     runs = []
-    decisions = load_decisions(decisions_dir or (ROOT / "calib" / "decisions"))
+    decisions = load_decisions(decisions_dir or anchor_paths()["decisions"])
     require_trained = _require_trained() if require_trained is None else require_trained
     for rep in sorted(out_dir.glob("*/report.json")):
         sample = rep.parent.name
@@ -728,10 +736,11 @@ def main() -> int:
     rel, n_items, post = dawid_skene(runs)
     model_eval = load_model_eval()
     weights = suggest_weights(stats, rel, families, model_eval, rates=rates, refuted_rates=refuted)
-    aat = alternative_annotator_test(runs, load_decisions(ROOT / "calib" / "decisions"), post)
+    anchors = anchor_paths()
+    aat = alternative_annotator_test(runs, load_decisions(anchors["decisions"]), post)
     tool_labels = load_tool_labels(out_dir)
     recall_rows = tool_recall(runs, tool_labels)
-    history_path = ROOT / "calib" / "history.json"
+    history_path = anchors["history"]
     history = load_history(history_path)
     version = exchange_version(runs)
     n_tool_labels = sum(len(rs) for per in tool_labels.values() for rs in per.values())
@@ -742,7 +751,7 @@ def main() -> int:
     out.write_text(text, encoding="utf-8")
     append_history(history_path, date, args.mode, alpha, pair, version)
     if args.mode == "live":
-        latest = ROOT / "calib" / "latest.json"
+        latest = anchors["latest"]
         latest.write_text(
             json.dumps({"date": date, "mode": args.mode, "aat": aat, "global_alpha": alpha}, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",

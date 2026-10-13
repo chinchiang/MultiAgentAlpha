@@ -20,6 +20,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+from mara.workspace import resolve  # noqa: E402
+
 sys.path.insert(0, str(ROOT / "scripts"))  # governance_check: the G-9 rule that blocking reuses
 
 from mara import govdocs  # noqa: E402
@@ -110,7 +112,7 @@ def main() -> int:
     s = sub.add_parser("baseline")
     s.add_argument("--runs", nargs="+", required=True, help="directories containing report.json files")
     s.add_argument("--out", type=Path)
-    s.add_argument("--decisions", type=Path, default=ROOT / "calib" / "decisions")
+    s.add_argument("--decisions", type=Path, default=resolve("calib/decisions"))
     s = sub.add_parser("advance")
     s.add_argument("--to", required=True, choices=["shadow", "advisory", "blocking"])
     a = ap.parse_args()

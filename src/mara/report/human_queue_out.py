@@ -34,7 +34,9 @@ def read_backlog(cfg: MaraConfig, root: Path | None = None) -> int | None:
     if not path.is_file():
         return None
     try:
-        return int(json.loads(path.read_text(encoding="utf-8")).get("open", 0))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        # a damaged file (a list, a string) is an unknown backlog, never a crash in Pipeline.__init__
+        return int(data.get("open", 0)) if isinstance(data, dict) else None
     except (OSError, ValueError, TypeError):
         return None
 
