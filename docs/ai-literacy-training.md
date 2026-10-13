@@ -42,7 +42,13 @@ reads, from each closed ticket's timeline, who applied the `decision:*` label.
   `decided_by` and `adjudicator_trained` on every decision it writes to `calib/decisions/`, and
   warns about decisions by people without a valid adjudicator record.
 - **Calibration.** With `training.require_trained_adjudicator: true` (the default),
-  `scripts/calibrate.py` applies only decisions marked trained; the rest are listed as skipped.
+  `scripts/calibrate.py` (its `--config`), the Alternative Annotator Test and
+  `scripts/rollout_phase.py baseline` count only decisions whose adjudicator held a valid record on
+  the decision day. Training is judged from the register when the decision is used: the
+  `adjudicator_trained` flag in a record is only the sync's snapshot, and editing it changes
+  nothing. Without a readable register no decision counts as trained. The rest are listed as
+  skipped, and G-13 names them so that a trained adjudicator can rule again
+  (`docs/adr/0002-usable-decisions.md`).
   A wrong human decision moves per-family weights, which is why the control sits here rather than
   on ticket creation.
 - **Governance.** `check_g13` passes only when the curriculum and register exist and every role in

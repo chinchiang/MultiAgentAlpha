@@ -12,7 +12,11 @@ The ticket is the record; this directory mirrors decisions written by
 - the surviving unique decision label, its event ID and actor;
 - adjudicator training status checked on the decision date.
 
-Legacy 12-character keys, target-basename matches and decisions from another revision are not
+A record counts only as `mara.decisions` defines it (docs/adr/0002-usable-decisions.md): a
+well-formed record (its file name is its key, and the key is the v2 key of its own fields) answers its
+ticket; it is ground truth only when it is also bound to the report, uncontradicted on its key and, by
+default, made by an adjudicator trained on the decision day according to the register. Legacy
+12-character keys, target-basename matches and decisions from another revision are not
 applied automatically. Regenerate the review and ticket after migration. Do not fabricate or
 manually relabel old records as current evidence. See [human-queue.md](../../docs/human-queue.md).
 

@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "scripts"))  # governance_check: the G-9 rule that
 
 from mara import govdocs  # noqa: E402
 from mara.config import load_config  # noqa: E402
+from mara.decisions import TrainingRequirement  # noqa: E402
 
 
 def cmd_status(a: argparse.Namespace) -> int:
@@ -48,7 +49,7 @@ def cmd_baseline(a: argparse.Namespace) -> int:
         print("ERROR: no report.json under the given directories", file=sys.stderr)
         return 2
     cfg = load_config(a.config)
-    metrics = govdocs.baseline_metrics(paths, a.decisions)
+    metrics = govdocs.baseline_metrics(paths, a.decisions, TrainingRequirement.from_config_file(a.config))
     out = a.out or ROOT / "docs" / f"rollout-baseline-{a.today}.md"
     out.write_text(govdocs.render_baseline(metrics, date=a.today, phase_started=cfg.rollout.started_on,
                                           sources=[str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p) for p in paths]), encoding="utf-8")
@@ -105,7 +106,7 @@ def cmd_advance(a: argparse.Namespace) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--config", type=Path, default=ROOT / "config" / "mara.yaml")
+    ap.add_argument("--config", type=Path, default=resolve("config/mara.yaml"))
     ap.add_argument("--today", type=dt.date.fromisoformat, default=dt.date.today())
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status")

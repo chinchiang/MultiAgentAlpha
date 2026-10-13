@@ -99,7 +99,7 @@ def test_calibrate_refuses_a_future_or_malformed_date(tmp_path, monkeypatch):
     import calibrate
 
     run = ("s1", {"provider_mode": "mock", "findings": [], "bias_audit": {}}, [])
-    monkeypatch.setattr(calibrate, "load_runs", lambda *_: [run])
+    monkeypatch.setattr(calibrate, "load_runs", lambda *_, **__: [run])
     tomorrow = (dt.date.today() + dt.timedelta(days=1)).isoformat()
     for bad, match in ((tomorrow, "in the future"), ("2026-13-01", "YYYY-MM-DD")):
         monkeypatch.setattr(sys, "argv", ["calibrate", "--out-dir", str(tmp_path), "--date", bad, "--report", str(tmp_path / "r.md")])

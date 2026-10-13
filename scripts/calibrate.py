@@ -25,12 +25,14 @@ import argparse
 import datetime as dt
 import json
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from mara.decisions import Decision, TrainingRequirement, binding, select  # noqa: E402
+from mara.decisions import load as load_decision_dir  # noqa: E402
 from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
 from mara.workspace import resolve  # noqa: E402
 
@@ -45,69 +47,44 @@ VERDICT_IDX = {"true_positive": 0, "false_positive": 1, "needs_human": 2}
 TOOL_LABEL_TOOLS = ("semgrep", "osv-scanner", "gitleaks")
 
 
-def load_decisions(decisions_dir: Path) -> list[dict]:
-    """G-11: human decisions written back from closed queue tickets (calib/decisions/<key>.json)."""
-    out = []
-    if not decisions_dir.is_dir():
-        return out
-    for p in sorted(decisions_dir.glob("*.json")):
-        if p.name == "backlog.json":
-            continue
-        try:
-            d = json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if d.get("decision") in ("true_positive", "false_positive") and d.get("file") and d.get("cwe"):
-            out.append(d)
-    return out
+def load_decisions(decisions_dir: Path) -> list[Decision]:
+    """G-11: the well-formed human decisions in calib/decisions/; damaged records are named and left out."""
+    loaded = load_decision_dir(decisions_dir)
+    for path, why in loaded.malformed:
+        print(f"decision record {path.name} is not well-formed ({why}); not used", file=sys.stderr)
+    return loaded.decisions
 
 
-def apply_decisions(sample: str, report: dict, labels: list[dict], decisions: list[dict],
-                    require_trained: bool = True) -> tuple[list[dict], int]:
-    """true_positive decisions on this sample's target become extra labels; returns (labels, applied).
-    With require_trained (G-13), a decision whose adjudicator held no valid training record when it
-    was synced is skipped and counted in SKIPPED_UNTRAINED."""
-    target_id, revision = report.get("target_id"), report.get("revision")
+def apply_decisions(usable: list[Decision], labels: list[dict]) -> tuple[list[dict], int]:
+    """Usable decisions (mara.decisions.select) on one sample become extra labels: a true positive adds
+    the location as a label, a false positive keeps the finding counting as a false positive. Returns
+    (labels, applied)."""
     applied = 0
     labels = list(labels)
-    for d in decisions:
-        if not target_id or not revision or d.get("target_id") != target_id or d.get("revision") != revision:
-            continue
-        if not d.get("decision_event_id") or not d.get("context_hash"):
-            continue
-        from mara.report.human_queue_out import queue_key
-        if d.get("key") != queue_key(d["file"], int(d["line"]), d["cwe"], target_id=target_id,
-                                     revision=revision, context_hash=report.get("coverage", {}).get("content_hash", "")):
-            continue
-        if require_trained and not d.get("adjudicator_trained"):
-            SKIPPED_UNTRAINED.append(f"{sample}: ticket #{d.get('issue')} by {d.get('decided_by') or 'unknown'}")
-            continue
-        if d["decision"] == "true_positive" and not any(_match({"provenance": [{"file": d["file"], "line": d["line"]}], "cwe": d["cwe"]}, lab) for lab in labels):
-            labels.append({"dimension": "", "cwe": d["cwe"], "file": d["file"], "line": int(d["line"]), "quote": "",
-                           "title": f"human decision on ticket #{d.get('issue')}", "source": "human_decision"})
+    for d in usable:
+        if d.decision == "true_positive" and not any(_match({"provenance": [{"file": d.file, "line": d.line}], "cwe": d.cwe}, lab) for lab in labels):
+            labels.append({"dimension": "", "cwe": d.cwe, "file": d.file, "line": d.line, "quote": "",
+                           "title": f"human decision on ticket #{d.issue}", "source": "human_decision"})
             applied += 1
-        elif d["decision"] == "false_positive":
+        elif d.decision == "false_positive":
             applied += 1  # confirmed false positive: no label, the finding keeps counting as fp
     return labels, applied
 
 
-SKIPPED_UNTRAINED: list[str] = []
+def training_requirement(config: Path | None = None) -> TrainingRequirement:
+    """G-13 from the MARA config (`training`), the register resolved against the workspace."""
+    req = TrainingRequirement.from_config_file(config or resolve("config/mara.yaml"))
+    if req.problem:
+        print(f"G-13: {req.problem}; no decision counts as trained", file=sys.stderr)
+    return req
 
 
-def _require_trained() -> bool:
-    try:
-        import yaml
-
-        raw = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8")) or {}
-        return bool((raw.get("training") or {}).get("require_trained_adjudicator", True))
-    except (OSError, ValueError):
-        return True
-
-
-def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = None, require_trained: bool | None = None) -> list[tuple[str, dict, list[dict]]]:
+def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = None,
+              training: TrainingRequirement | None = None) -> list[tuple[str, dict, list[dict]]]:
     runs = []
     decisions = load_decisions(decisions_dir or anchor_paths()["decisions"])
-    require_trained = _require_trained() if require_trained is None else require_trained
+    training = training or training_requirement()
+    untrained: list[str] = []
     for rep in sorted(out_dir.glob("*/report.json")):
         sample = rep.parent.name
         labels_path = samples_dir / sample / "labels.json"
@@ -119,12 +96,17 @@ def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = Non
             continue
         labels = json.loads(labels_path.read_text(encoding="utf-8"))["labels"]
         report = json.loads(rep.read_text(encoding="utf-8"))
-        labels, applied = apply_decisions(sample, report, labels, decisions, require_trained)
+        sel = select(decisions, report, training)
+        labels, applied = apply_decisions(sel.usable, labels)
         if applied:
             print(f"{sample}: {applied} human decision(s) applied")
+        untrained += [f"{sample}: ticket #{d.issue} by {d.decided_by}" for d, why in sel.excluded if why == "untrained"]
+        contradicted = sel.by_reason().get("contradictory")
+        if contradicted:
+            print(f"{sample}: {contradicted} key(s) with contradicting decisions not applied")
         runs.append((sample, report, labels))
-    if SKIPPED_UNTRAINED:
-        print(f"G-13: {len(SKIPPED_UNTRAINED)} decision(s) by untrained adjudicators not applied: {'; '.join(SKIPPED_UNTRAINED)}")
+    if untrained:
+        print(f"G-13: {len(untrained)} decision(s) by untrained adjudicators not applied: {'; '.join(untrained)}")
     return runs
 
 
@@ -296,7 +278,7 @@ def clopper_pearson_upper(k: int, n: int, confidence: float = 0.95) -> float:
     return hi
 
 
-def alternative_annotator_test(runs, decisions, post, require_trained: bool | None = None, *,
+def alternative_annotator_test(runs, decisions: list[Decision], post, training: TrainingRequirement, *,
                                min_items: int = 10, min_agreement: float = 0.8,
                                max_miss_rate: float = 0.05, confidence: float = 0.95) -> dict:
     """Assessment #60: the evidence policy P8 needs before the pipeline may reject a non-D finding
@@ -318,43 +300,32 @@ def alternative_annotator_test(runs, decisions, post, require_trained: bool | No
     A single-adjudicator variant: each finding carries one human decision, so the published
     leave-one-annotator-out procedure (several annotators per item) does not apply. Decisions bind
     to findings by their v2 queue key (primary location, CWE, target, revision, context hash), one
-    decision per finding, never by line proximity; contradictory decisions on one key are excluded.
-    G-13's trained-adjudicator rule applies. Every live result goes to calib/latest.json; policy P8
+    decision per finding, never by line proximity; only usable decisions count (mara.decisions:
+    contradicted keys and, under G-13, untrained adjudicators are excluded, with the reason in
+    `excluded_by_reason`). Every live result goes to calib/latest.json; policy P8
     accepts only a passing result tagged with this method (mara.policy.AAT_METHOD)."""
     from mara.policy import AAT_METHOD
     from mara.report.human_queue_out import queue_key
 
-    require_trained = _require_trained() if require_trained is None else require_trained
     pairs: list[tuple[bool, bool]] = []  # (pipeline says true_positive, human says true_positive)
-    rejected = misses = excluded = 0
+    rejected = misses = 0
+    left_out: Counter[str] = Counter()
     for sample, rep, _labels in runs:
-        target_id, revision = rep.get("target_id"), rep.get("revision")
-        ctx = rep.get("coverage", {}).get("content_hash", "")
-        if not target_id or not revision or not ctx:
+        ident = binding(rep)
+        if ident is None:
             continue
-        verdicts_by_key: dict[str, set[str]] = defaultdict(set)
-        for d in decisions:
-            if d.get("target_id") != target_id or d.get("revision") != revision:
-                continue
-            if not d.get("decision_event_id") or not d.get("context_hash"):
-                continue
-            if d.get("key") != queue_key(d["file"], int(d["line"]), d["cwe"], target_id=target_id,
-                                         revision=revision, context_hash=ctx):
-                continue
-            if require_trained and not d.get("adjudicator_trained"):
-                continue
-            verdicts_by_key[d["key"]].add(d["decision"])
+        target_id, revision, ctx = ident
+        sel = select(decisions, rep, training)
+        left_out.update({why: n for why, n in sel.by_reason().items() if why != "unbound"})
+        verdict_by_key = {d.key: d.decision for d in sel.usable}
         consensus = {c.get("finding_id"): c for c in rep.get("consensus", [])}
         for f in rep.get("findings", []):
             p = f["provenance"][0]
-            verdicts = verdicts_by_key.get(queue_key(p["file"], int(p["line"]), f["cwe"], target_id=target_id,
-                                                     revision=revision, context_hash=ctx))
-            if not verdicts:
+            verdict = verdict_by_key.get(queue_key(p["file"], int(p["line"]), f["cwe"], target_id=target_id,
+                                                   revision=revision, context_hash=ctx))
+            if verdict is None:
                 continue
-            if len(verdicts) != 1:
-                excluded += 1  # contradictory human decisions on one finding: no ground truth to test against
-                continue
-            human_tp = next(iter(verdicts)) == "true_positive"
+            human_tp = verdict == "true_positive"
             c = consensus.get(f["id"])
             if c and not c.get("accepted") and not c.get("needs_human") and c.get("tier") != "D":
                 rejected += 1
@@ -362,14 +333,15 @@ def alternative_annotator_test(runs, decisions, post, require_trained: bool | No
             posterior = post.get((sample, f["id"]))
             argmax = max(range(3), key=lambda t: posterior[t]) if posterior else None
             if argmax is None or argmax == VERDICT_IDX["needs_human"]:
-                excluded += 1  # the pipeline abstained; there is no unsupervised label to test
+                left_out["pipeline_abstained"] += 1  # there is no unsupervised label to test
                 continue
             pairs.append((argmax == VERDICT_IDX["true_positive"], human_tp))
     upper = clopper_pearson_upper(misses, rejected, confidence) if rejected else None
     rejection = {"n": rejected, "misses": misses, "miss_rate_upper": round(upper, 4) if upper is not None else None,
                  "max_miss_rate": max_miss_rate, "confidence": confidence,
                  "passed": bool(upper is not None and upper <= max_miss_rate)}
-    out = {"method": AAT_METHOD, "excluded": excluded, "min_items": min_items, "min_agreement": min_agreement,
+    out = {"method": AAT_METHOD, "excluded": sum(left_out.values()), "excluded_by_reason": dict(sorted(left_out.items())),
+           "min_items": min_items, "min_agreement": min_agreement,
            "rejection": rejection}
     n = len(pairs)
     if n == 0:
@@ -485,7 +457,6 @@ def tool_recall(runs, tool_labels):
 
 def load_model_eval() -> dict | None:
     """G-8: latest calib/model-eval-<date>.json (garak / CyberSecEval verdicts per family)."""
-    sys.path.insert(0, str(ROOT / "src"))
     from mara.model_eval import latest_summary
 
     return latest_summary(ROOT)
@@ -544,6 +515,15 @@ def front_matter(mode: str, date: str, families, runs, model_eval: dict | None, 
             "provider_modes": sorted({rep.get("provider_mode", "?") for _, rep, _ in runs}),
             "model_eval": (model_eval or {}).get("date"), "governance": "G-9"}
     return "---\n" + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True) + "---\n"
+
+
+_EXCLUDED_REASONS = {"pipeline_abstained": "無監督標籤為 needs_human", "contradictory": "人工裁決互相矛盾",
+                     "untrained": "裁決者未受訓（G-13）"}
+
+
+def _excluded_reasons(aat: dict) -> str:
+    by = aat.get("excluded_by_reason") or {}
+    return "：" + "、".join(f"{_EXCLUDED_REASONS.get(k, k)} {n}" for k, n in by.items()) if by else ""
 
 
 def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mode: str, date: str | None = None,
@@ -655,7 +635,7 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
               f"- 一致性{'通過' if aat.get('agreement_passed') else '未通過'}：n={aat['n']}、一致率 {aat['agreement']}、"
               f"機遇一致率 {aat.get('chance_agreement')}、kappa {aat.get('kappa')}、單尾 p 值 {aat['p_value']}"
               f"（門檻：n ≥ {aat.get('min_items', 10)}、一致率 ≥ {aat.get('min_agreement', 0.8)}、p < 0.05；"
-              f"{aat.get('excluded', 0)} 個項目因無監督標籤為 needs_human 或人工裁決互相矛盾而未納入）。",
+              f"{aat.get('excluded', 0)} 個項目未納入{_excluded_reasons(aat)}）。",
               f"- 不採納安全性{'通過' if rej.get('passed') else '未通過'}：{rej.get('n', 0)} 筆無監督不採納經人工裁決，"
               f"其中 {rej.get('misses', 0)} 筆為真陽性；漏放率上界 {rej.get('miss_rate_upper')}"
               f"（門檻 ≤ {rej.get('max_miss_rate', 0.05)}，信賴水準 {rej.get('confidence', 0.95)}）。", ""]
@@ -700,6 +680,7 @@ def main() -> int:
     ap.add_argument("--mode", default="mock", choices=["mock", "live"])
     ap.add_argument("--report", default=None)
     ap.add_argument("--date", default=None, help="YYYY-MM-DD (default: today)")
+    ap.add_argument("--config", default=None, help="MARA config whose `training` block applies G-13 (default: <workspace>/config/mara.yaml)")
     args = ap.parse_args()
     try:
         when = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
@@ -712,7 +693,8 @@ def main() -> int:
     date = when.isoformat()
     out_dir = Path(args.out_dir) if Path(args.out_dir).is_absolute() else ROOT / args.out_dir
     samples_dir = Path(args.samples_dir) if Path(args.samples_dir).is_absolute() else ROOT / args.samples_dir
-    runs = load_runs(out_dir, samples_dir)
+    training = training_requirement(Path(args.config) if args.config else None)
+    runs = load_runs(out_dir, samples_dir, training=training)
     if not runs:
         raise SystemExit("no calib-out/*/report.json found; run `mara review` on the samples first")
     modes = sorted({rep.get("provider_mode", "?") for _, rep, _ in runs})
@@ -738,7 +720,7 @@ def main() -> int:
     model_eval = load_model_eval()
     weights = suggest_weights(stats, rel, families, model_eval, rates=rates, refuted_rates=refuted)
     anchors = anchor_paths()
-    aat = alternative_annotator_test(runs, load_decisions(anchors["decisions"]), post)
+    aat = alternative_annotator_test(runs, load_decisions(anchors["decisions"]), post, training)
     tool_labels = load_tool_labels(out_dir)
     recall_rows = tool_recall(runs, tool_labels)
     history_path = anchors["history"]

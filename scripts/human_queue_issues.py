@@ -38,7 +38,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+from mara.decisions import Decision  # noqa: E402
+from mara.decisions import read as read_decision  # noqa: E402
 from mara.report.escaping import code, literal  # noqa: E402
+from mara.report.human_queue_out import queue_key  # noqa: E402
+from mara.training import is_trained, load_register  # noqa: E402
 from mara.workspace import resolve  # noqa: E402
 
 MARKER = "<!-- mara-hq:{key} -->"
@@ -165,10 +169,16 @@ def create_tickets(queue_path: Path, repo: str, label: str, dry_run: bool, decis
             print(f"  {it['finding_id']} key {it['key']}: closed ticket #{closed[it['key']]} holds its decision, skipping")
             skipped += 1
             continue
-        if decisions_dir is not None and (decisions_dir / f"{it['key']}.json").is_file():
-            print(f"  {it['finding_id']} key {it['key']}: decision already recorded in {decisions_dir}, skipping")
-            skipped += 1
-            continue
+        recorded = decisions_dir / f"{it['key']}.json" if decisions_dir is not None else None
+        if recorded is not None and recorded.is_file():
+            # any well-formed decision answers the ticket, a usable one or not (docs/adr/0002-usable-decisions.md);
+            # a damaged record answers nothing, so a human decides again
+            parsed = read_decision(recorded)
+            if isinstance(parsed, Decision):
+                print(f"  {it['finding_id']} key {it['key']}: decision already recorded in {decisions_dir}, skipping")
+                skipped += 1
+                continue
+            print(f"  WARNING {it['finding_id']}: {recorded.name} is not a well-formed decision ({parsed}); filing the key again")
         body_file = Path(f".mara-hq-{it['key']}.md")
         body_file.write_text(ticket_body(it, target), encoding="utf-8")
         try:
@@ -181,8 +191,6 @@ def create_tickets(queue_path: Path, repo: str, label: str, dry_run: bool, decis
 
 
 def valid_identity(item: dict) -> bool:
-    sys.path.insert(0, str(ROOT / "src"))
-    from mara.report.human_queue_out import queue_key
     if not all(item.get(k) for k in ("target_id", "revision", "context_hash", "file", "line", "cwe")):
         return False
     return item.get("key") == queue_key(item["file"], int(item["line"]), item["cwe"], target_id=item["target_id"],
@@ -225,9 +233,6 @@ def decision_actor(repo: str, number: int, label: str = "decision:true-positive"
 def _load_register(register: Path | None):
     if register is None or not register.exists():
         return None
-    sys.path.insert(0, str(ROOT / "src"))
-    from mara.training import load_register
-
     try:
         return load_register(register)
     except (OSError, ValueError):
@@ -243,9 +248,6 @@ def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Pat
     Returns (written, open backlog, unrecorded): one "#<number>: <reason>" per closed MARA ticket
     whose decision could not be recorded. Closed tickets without the MARA marker are not ours and
     are only counted in the log."""
-    sys.path.insert(0, str(ROOT / "src"))
-    from mara.training import is_trained
-
     closed = list_tickets(repo, label, "closed")
     decisions_dir.mkdir(parents=True, exist_ok=True)
     reg = _load_register(register)
@@ -287,11 +289,16 @@ def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Pat
         key = meta["key"]
         decision = DECISION_LABELS[decision_label]
         actor = event["actor"]["login"]
+        # a snapshot for the log and the record's reader; whoever uses the decision judges training again (mara.decisions)
         trained = is_trained(reg, actor, "adjudicator", decision_day)
         record = {**meta, "decision": decision, "issue": issue["number"], "url": issue.get("url"),
                   "decided_at": event["created_at"], "decision_event_id": event["id"], "decision_label": decision_label,
                   "decided_by": actor, "adjudicator_trained": trained, "training_checked_on": decision_day.isoformat()}
-        candidates.setdefault(key, []).append(record)
+        parsed = Decision.parse(record)
+        if not isinstance(parsed, Decision):
+            unrecorded.append(f"#{issue['number']}: the decision record would not be well-formed ({parsed})")
+            continue
+        candidates.setdefault(key, []).append(parsed.to_record())
     # one file per key: the tickets used to be written in list order, so the last one listed replaced any
     # earlier decision for the same key, an untrained or contradicting one included
     for key, records in sorted(candidates.items()):

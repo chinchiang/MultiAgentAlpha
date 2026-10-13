@@ -895,7 +895,7 @@ def test_osv_partial_scan_with_only_suppressions_cannot_pass(tmp_path, monkeypat
 def test_live_calibration_rejects_a_forged_mock_mode_label(tmp_path, monkeypatch):
     import calibrate
     monkeypatch.setattr(sys, "argv", ["calibrate", "--mode", "live", "--out-dir", str(tmp_path)])
-    monkeypatch.setattr(calibrate, "load_runs", lambda *_: [("s1", {"provider_mode": "live", "provider_manifest": [
+    monkeypatch.setattr(calibrate, "load_runs", lambda *_, **__: [("s1", {"provider_mode": "live", "provider_manifest": [
         {"type": "mock", "family": "anthropic", "model": "mock"}], "config_hash": "hash", "revision": "rev"}, [])])
     with pytest.raises(SystemExit, match="provenance"):
         calibrate.main()
@@ -906,8 +906,15 @@ def test_cross_target_and_legacy_decisions_never_apply():
     decision = {"decision": "true_positive", "target": "/a/s9", "target_id": "target-a", "revision": "rev",
                 "file": "app.py", "line": 1, "cwe": "CWE-89", "adjudicator_trained": True, "decision_event_id": 1, "context_hash": "ctx"}
     report = {"target": "/b/s9", "target_id": "target-b", "revision": "rev", "coverage": {"content_hash": "ctx"}}
-    assert calibrate.apply_decisions("s9", report, [], [decision]) == ([], 0)
-    assert calibrate.apply_decisions("s9", {"target": "/a/s9"}, [], [decision]) == ([], 0)
+    from mara.decisions import Decision, TrainingRequirement, select
+
+    assert isinstance(Decision.parse(decision), str), "a record without a key is not a decision"
+    decision.update(key=queue_key("app.py", 1, "CWE-89", target_id="target-a", revision="rev", context_hash="ctx"),
+                    decided_by="alice", decided_at="2026-10-01T08:00:00Z")
+    parsed = Decision.parse(decision)
+    anyone = TrainingRequirement(required=False)
+    assert select([parsed], report, anyone).usable == [] and select([parsed], {"target": "/a/s9"}, anyone).usable == []
+    assert calibrate.apply_decisions(select([parsed], report, anyone).usable, []) == ([], 0)
 
 
 def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():
