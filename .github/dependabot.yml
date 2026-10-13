@@ -1,6 +1,6 @@
 # Dependabot version updates for the GitHub Actions this repository pins by commit SHA: Dependabot bumps
-# the SHA and the "# vX.Y.Z" comment together, and the pull request runs the same L0 checks (zizmor,
-# scripts/actions_inventory.py) as any other. The Python closures under tools/*-requirements.txt and the
+# the SHA and the "# vX.Y.Z" comment together, and the pull request runs the same checks as any other: zizmor in
+# the L0 job, and scripts/actions_inventory.py through its tests (tests/test_actions_inventory.py). The Python closures under tools/*-requirements.txt and the
 # tool binaries in tools/versions.lock are outside Dependabot's scope on purpose: they are relocked by hand
 # with hashes, signatures and provenance re-verified (docs/tools-provenance.md, section 4).
 #

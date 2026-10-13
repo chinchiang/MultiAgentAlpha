@@ -682,6 +682,10 @@ training/          AI-literacy curriculum, quiz and register (G-13)
 ## Status
 
 Prototype. The CVSS 4.0 calculator is verified against FIRST's reference implementation; the
-consensus, tiering and blinding logic are unit-tested; the live providers are implemented but have
-not been exercised against production models from this repository. Calibration weights in the
-config are placeholders until a seeded-vulnerability benchmark run populates them (report, Part V).
+consensus, tiering and blinding logic are unit-tested. The live providers have been exercised against
+the production panel (Claude on Bedrock, Gemini, self-hosted GLM): the first live review and live
+calibration ran on 2026-10-07 and 2026-10-08 (`docs/calibration-2026-10-08.md`, G-9). The vote weights in
+`config/mara.yaml` are still 1.0: that calibration suggested weights from 51 labels, too few to adopt, and
+a decision to adopt them waits for a second live period and human adjudications (`docs/assessment-2026-10-12.md`,
+question 59). Since exchange version 2 the refusal, invalid and truncation counts are not comparable with
+that first period, so the next live calibration sets a new baseline.

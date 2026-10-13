@@ -91,6 +91,48 @@ def test_pull_request_target_is_read_from_the_parsed_triggers(tmp_path, on):
     assert r.status == FAIL and "使用 pull_request_target" in r.evidence
 
 
+SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+def _wf(tmp_path, body: str):
+    wf = tmp_path / ".github" / "workflows" / "x.yml"
+    wf.parent.mkdir(parents=True, exist_ok=True)
+    wf.write_text(body, encoding="utf-8")
+    return inventory_workflow(wf, tmp_path)
+
+
+def test_a_quoted_sha_pin_is_a_sha_pin(tmp_path):
+    """The quote stayed in the reference, so a correctly pinned `uses: "owner/action@<sha>"` read as a tag and G-6 failed."""
+    from governance_check import check_g6
+
+    inv = _wf(tmp_path, "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n"
+                        f"      - uses: \"actions/checkout@{SHA}\" # v4\n        with:\n          persist-credentials: false\n"
+                        "      - uses: 'actions/setup-python@v5'\n")
+    assert [(u.raw, u.kind) for u in inv.uses] == [(f"actions/checkout@{SHA}", "sha"), ("actions/setup-python@v5", "tag")]
+    evidence = check_g6(tmp_path).evidence
+    assert "`actions/setup-python@v5`" in evidence and f"`actions/checkout@{SHA}`" not in evidence, "only the tag is a problem"
+
+
+def test_a_flow_style_head_checkout_is_a_pwn_request(tmp_path):
+    """`- {uses: ..., with: {ref: <PR head>}}` was invisible to the line patterns: neither the action nor the checkout."""
+    inv = _wf(tmp_path, "on: pull_request_target\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n"
+                        "      - {uses: actions/checkout@v4, with: {ref: \"${{ github.event.pull_request.head.sha }}\"}}\n")
+    assert [(u.raw, u.kind, u.line) for u in inv.uses] == [("actions/checkout@v4", "tag", 7)]
+    assert inv.head_checkout_lines == [7] and inv.severity == "Critical"
+    assert any(sev == "Critical" and "pwn request" in t for sev, t in inv.findings)
+
+
+def test_github_script_interpolation_is_checked_like_run(tmp_path):
+    """actions/github-script evaluates its `script:` as JavaScript; ${{ github.event.pull_request.title }} in it is the
+    same injection as in a shell `run:`, and only `run:` bodies used to be scanned."""
+    inv = _wf(tmp_path, "on: pull_request\npermissions: {}\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n"
+                        f"      - uses: actions/github-script@{SHA}\n        with:\n          script: |\n"
+                        "            const t = '${{ github.event.pull_request.title }}';\n"
+                        "            core.info(`${{ github.ref }}`);\n")
+    assert [(i.line, i.where, i.untrusted) for i in inv.run_interpolations] == [(10, "script", True), (11, "script", False)]
+    assert inv.severity == "Critical" and any("`script:`" in t and "pull_request.title" in t for sev, t in inv.findings if sev == "Critical")
+
+
 def test_parsed_triggers_ignore_what_github_ignores(tmp_path):
     wf = tmp_path / ".github" / "workflows" / "x.yml"
     wf.parent.mkdir(parents=True)
