@@ -163,13 +163,13 @@ jobs:
       - name: Prepare Code Scanning data with a read-only token
         if: always()
         run: python3 scripts/code_scanning_prep.py --out code-scanning semgrep=semgrep.sarif osv=osv.sarif osv-model-eval=osv-model-eval.sarif osv-semgrep=osv-semgrep.sarif trivy=trivy.sarif gitleaks=gitleaks.sarif zizmor=zizmor.sarif csp=csp-evaluator.sarif
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: code-scanning
           path: code-scanning/
           if-no-files-found: error
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: l0-sarif
@@ -271,7 +271,7 @@ jobs:
           test -s out-incremental/report.sarif
       - name: ML-BOM validates against CycloneDX 1.6 and matches its manifest (G-7)
         run: python3 scripts/ml_bom.py validate --bom sbom/ml-bom.cdx.json --manifest sbom/models.yaml
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mara-report
           path: |
@@ -347,7 +347,7 @@ jobs:
           flag=--dry-run
           if [ "$LIVE" = "true" ]; then flag=""; fi
           python3 scripts/human_queue_issues.py --queue out/human_queue.json --repo "$REPO" --sync-decisions $flag
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mara-human-queue
           path: |
