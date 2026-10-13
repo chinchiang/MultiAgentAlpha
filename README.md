@@ -521,7 +521,8 @@ makes the script exit non-zero. `.github/workflows/governance.yml` runs it every
 the table to a `governance-check` tracking issue. The first run (2026-09-12) had G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
 calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) failed
 on that first run; G-1, G-4 and G-10 needed human evidence. Since then every item has a mechanism
-and is machine-decidable: G-11 passes; G-12 requires a successful endpoint handshake and no overdue confirmed stage;
+and is machine-decidable: G-11 requires the config to file GitHub issues, a workflow step running the ticket sync and evidence
+that it ran for real (a backlog it wrote or a decision it recorded; it fails while the job stays in dry-run); G-12 requires a successful endpoint handshake and no overdue confirmed stage;
 G-7 once the platform team has hashed and signed the weights (`docs/ml-bom.md`); G-13 once one
 person per role holds a valid training record (`docs/ai-literacy-training.md`); G-1, G-4 and G-10
 once the policy is approved, live swap drills are recorded and the rollout has started

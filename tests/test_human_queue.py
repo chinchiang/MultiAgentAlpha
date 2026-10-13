@@ -456,9 +456,25 @@ def test_calibration_uses_true_positive_decisions_as_labels(tmp_path):
 
 
 def test_report_and_governance_g11(tmp_path):
-    from governance_check import PASS, check_g11
+    import shutil
 
-    assert check_g11(ROOT, ROOT / "config" / "mara.yaml").status == PASS
+    from governance_check import FAIL, PASS, check_g11
+
+    # this repository: the config files issues and the workflow runs the sync, but it never ran for real (dry-run)
+    r = check_g11(ROOT, ROOT / "config" / "mara.yaml")
+    assert r.status == FAIL and "human_queue_issues.py --sync-decisions" not in r.evidence.split("需要")[-1] and "dry-run" in r.evidence
+    # the same repository after a live sync wrote its backlog: G-11 passes
+    repo = tmp_path / "repo"
+    shutil.copytree(ROOT / ".github", repo / ".github")
+    shutil.copytree(ROOT / "config", repo / "config")
+    (repo / "calib" / "decisions").mkdir(parents=True)
+    assert check_g11(repo, repo / "config" / "mara.yaml").status == FAIL
+    (repo / "calib" / "decisions" / "backlog.json").write_text('{"open": 3}', encoding="utf-8")
+    assert check_g11(repo, repo / "config" / "mara.yaml").status == PASS
+    # a workflow that only names the human queue, without running the sync, is no integration
+    for wf in (repo / ".github" / "workflows").glob("*.yml"):
+        wf.write_text(wf.read_text(encoding="utf-8").replace("--sync-decisions", ""), encoding="utf-8")
+    assert check_g11(repo, repo / "config" / "mara.yaml").status == FAIL
     cfg = MaraConfig.model_validate(json.loads(json.dumps({
         "models": [{"name": "a", "family": "anthropic", "provider": "mock", "model": "m", "data_residency": "on_prem"},
                    {"name": "d", "family": "deepseek", "provider": "mock", "model": "m", "data_residency": "on_prem"},

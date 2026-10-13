@@ -28,9 +28,11 @@ def test_every_item_has_a_verdict_and_evidence(results):
 
 
 def test_verdicts_on_this_repository(results):
-    passing = ("G-2", "G-3", "G-5", "G-6", "G-11")
+    passing = ("G-2", "G-3", "G-5", "G-6")
     assert {k: results[k].status for k in passing} == dict.fromkeys(passing, PASS)
-    failing = ("G-1", "G-4", "G-7", "G-8", "G-10", "G-12", "G-13")
+    # G-11 fails until the ticket sync has run for real (the human-queue job is in dry-run): it used to pass on a
+    # workflow merely naming the human queue
+    failing = ("G-1", "G-4", "G-7", "G-8", "G-10", "G-11", "G-12", "G-13")
     assert {k: results[k].status for k in failing} == dict.fromkeys(failing, FAIL)
     assert results["G-9"].status == FAIL and "mock" in results["G-9"].evidence
     assert not [k for k, r in results.items() if r.status == MANUAL], "every item is machine-decidable now (templates for G-1, G-4, G-10)"

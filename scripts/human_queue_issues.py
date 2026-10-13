@@ -331,19 +331,41 @@ def sync_decisions(repo: str, label: str, decisions_dir: Path, backlog_file: Pat
     return written, open_count, unrecorded
 
 
+def queue_settings(config: Path):
+    """The config's human_queue block (structure only: the policies are check-config's job)."""
+    import yaml
+
+    from mara.config import HumanQueueConfig, MaraConfig
+
+    if not config.is_file():
+        return HumanQueueConfig()
+    raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+    return MaraConfig.model_validate(raw, context={"skip_policies": True}).human_queue
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--queue", type=Path, help="out/human_queue.json from a review; omit with --sync-decisions only")
     ap.add_argument("--repo", required=True, help="owner/repo")
-    ap.add_argument("--label", default="mara-human-queue")
+    ap.add_argument("--config", type=Path, default=resolve("config/mara.yaml"),
+                    help="human_queue.ticketing, .label and .backlog_file come from here (default: <workspace>/config/mara.yaml)")
+    ap.add_argument("--label", default=None, help="default: human_queue.label")
     # MARA's own state, in the workspace the pipeline reads it from (MARA_HOME, else the working directory)
     ap.add_argument("--decisions-dir", type=Path, default=resolve("calib/decisions"))
-    ap.add_argument("--backlog-file", type=Path, default=resolve("calib/decisions/backlog.json"))
+    ap.add_argument("--backlog-file", type=Path, default=None, help="default: <workspace>/<human_queue.backlog_file>")
     ap.add_argument("--sync-decisions", action="store_true")
     ap.add_argument("--register", type=Path, default=resolve("training/records.yaml"),
                     help="AI-literacy register (G-13); decisions by people without a valid adjudicator record are flagged")
     ap.add_argument("--dry-run", action="store_true", help="print the gh commands instead of running the mutating ones")
     args = ap.parse_args()
+    hq = queue_settings(args.config)
+    if hq.ticketing != "github_issues" or not hq.enabled:
+        print(f"human_queue.ticketing is {hq.ticketing!r} (enabled: {hq.enabled}) in {args.config}: no tickets filed or synced")
+        return 0
+    args.label = args.label or hq.label
+    # the pipeline reads the backlog at <workspace>/<human_queue.backlog_file>; written anywhere else, G-11's
+    # tightening never triggered
+    args.backlog_file = args.backlog_file or resolve(hq.backlog_file)
     status = 0
     try:
         if args.queue:

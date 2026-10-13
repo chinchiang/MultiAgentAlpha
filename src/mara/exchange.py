@@ -248,12 +248,18 @@ class Canary:
         if not isinstance(outcome.data, dict):
             return outcome.data, bool(outcome.text and self.echoed(outcome.text)), 0
         rest, reported = dict(outcome.data), 0
+        full = dict(outcome.full_data) if isinstance(outcome.full_data, dict) else dict(outcome.data)
         for key in keys:
             items = outcome.data.get(key)
             if isinstance(items, list):
                 rest[key] = [x for x in items if not cites_canary(x)]
                 reported += len(items) - len(rest[key])
-        return rest, self.echoed(outcome.aside + "\n" + json.dumps(rest, ensure_ascii=False)), reported
+            full_items = full.get(key)
+            if isinstance(full_items, list):
+                full[key] = [x for x in full_items if not cites_canary(x)]
+        # the echo is read from the answer as the model wrote it: a token past a field's maxLength was cut off by
+        # clip_strings and went unseen (screen_verdicts already read full_data)
+        return rest, self.echoed(outcome.aside + "\n" + json.dumps(full, ensure_ascii=False)), reported
 
     def screen_verdicts(self, outcome: Outcome, key: str = "items") -> tuple[bool, set[str]]:
         """(canary echo, ids of the verdicts that report the planted file) for a ballot reply (skeptic, red team).

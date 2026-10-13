@@ -59,8 +59,16 @@ def review(
     if provider == "mock" and any(m.provider != "mock" for m in cfg.models):
         raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock")
     pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out)
+    event = None
+    if psirt_event:
+        # read before the review, and handed to it: the notifications are built once, so the bias audit counts these
+        try:
+            event = json.loads(psirt_event.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            raise typer.BadParameter(f"{psirt_event}: not a readable JSON event ({type(e).__name__})", param_hint="--psirt-event") from e
     try:
-        report = pipe.run(target, sarif_dir=sarif_dir, mode=provider, base_ref=base, calibration_sample=calibration_sample)
+        report = pipe.run(target, sarif_dir=sarif_dir, mode=provider, base_ref=base, calibration_sample=calibration_sample,
+                          psirt_event=event)
     except WorkspaceInsideTarget as e:
         raise typer.BadParameter(str(e), param_hint="TARGET") from e
     except ValueError as e:
@@ -68,9 +76,6 @@ def review(
         if base is not None or calibration_sample:
             raise typer.BadParameter(str(e), param_hint="--base" if base is not None else "--calibration-sample") from e
         raise
-    if psirt_event:
-        from .report.psirt_out import build_notifications
-        report.psirt = build_notifications(report, cfg, event=json.loads(psirt_event.read_text(encoding="utf-8")))
     out.mkdir(parents=True, exist_ok=True)
     write_sarif(report, out / "report.sarif")
     write_markdown(report, out / "report.md", fail_on_gate=fail_on_gate)

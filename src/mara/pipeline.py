@@ -501,7 +501,7 @@ class Pipeline:
 
     # ------------------------------------------------------------------ run
     def run(self, target: str | Path, *, sarif_dir: Path | None = None, mode: str = "live",
-            base_ref: str | None = None, calibration_sample: bool = False) -> ReviewReport:
+            base_ref: str | None = None, calibration_sample: bool = False, psirt_event: dict | None = None) -> ReviewReport:
         actual_modes = {p.spec.provider for p in self.providers.values()}
         actual_mode = "mock" if actual_modes == {"mock"} else "live"
         if mode not in {"mock", "live"} or actual_mode != mode or (mode == "live" and "mock" in actual_modes):
@@ -674,7 +674,7 @@ class Pipeline:
         # G-12: accepted tier-A Critical findings on a shipped product start the CRA Article 14 clock
         from .report.psirt_out import build_notifications
 
-        report.psirt = build_notifications(report, self.cfg)
+        report.psirt = build_notifications(report, self.cfg, event=psirt_event)  # built once: the count below is these
         self.audit["psirt_notifications"] = len(report.psirt)
         report.bias_audit["psirt_notifications"] = len(report.psirt)
         # G-7: which self-hosted weights the report was produced with, as the ML-BOM knows them

@@ -455,21 +455,52 @@ def check_g10(root: Path, config_path: Path, today: dt.date | None = None) -> Ch
                        + "。需要：`rollout.phase`（shadow→advisory→blocking）、`started_on`、影子期結束時的基線報告（`scripts/rollout_phase.py baseline`）")
 
 
+def _sync_steps(root: Path) -> list[str]:
+    """Workflow files with a step that runs the ticket sync (scripts/human_queue_issues.py --sync-decisions), read from
+    the parsed YAML: a name or comment mentioning the human queue is not an integration."""
+    found = []
+    for p in sorted((root / ".github" / "workflows").glob("*.y*ml")):
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            continue
+        jobs = doc.get("jobs") if isinstance(doc, dict) else None
+        for spec in (jobs or {}).values():
+            for step in (spec or {}).get("steps") or [] if isinstance(spec, dict) else []:
+                run = step.get("run") if isinstance(step, dict) else None
+                if isinstance(run, str) and "scripts/human_queue_issues.py" in run and "--sync-decisions" in run:
+                    found.append(p.relative_to(root).as_posix())
+    return sorted(set(found))
+
+
 def check_g11(root: Path, config_path: Path) -> CheckResult:
+    """Tickets and decisions, as evidence rather than words: the config files GitHub issues, a workflow step runs the
+    ticket sync, and that sync has run for real - a backlog it wrote or a decision it recorded in calib/decisions/.
+    A workflow merely naming the human queue, the job staying in dry-run, used to pass."""
     raw = _raw_config(config_path)
-    ev = []
-    if (root / "calib" / "decisions").is_dir():
-        ev.append("`calib/decisions/` 存在")
-    if raw.get("human_queue"):
-        ev.append("設定有 `human_queue` 區塊")
-    for p in (root / ".github" / "workflows").glob("*.y*ml"):
-        text = p.read_text(encoding="utf-8")
-        # only a workflow that names the human queue counts; the governance tracking issue is not one
-        if re.search(r"human[_-]queue", text):
-            ev.append(f"`{p.relative_to(root).as_posix()}` 含人工佇列的工單整合")
-    if len(ev) >= 2:
-        return CheckResult("G-11", PASS, "；".join(ev))
-    return CheckResult("G-11", FAIL, (("已有：" + "；".join(ev) + "。") if ev else "") + "人工佇列未接工單、裁決未回寫。需要：workflow 把 needs_human finding 建成帶標籤的 issue、`calib/decisions/` 的裁決格式與 `calibrate.py` 讀取、佇列超量時收緊門檻的規則")
+    hq = raw.get("human_queue") if isinstance(raw.get("human_queue"), dict) else {}
+    have, missing = [], []
+    if raw.get("human_queue") is not None and hq.get("enabled", True) and hq.get("ticketing", "github_issues") == "github_issues":
+        have.append("設定以 GitHub issue 開單（`human_queue.ticketing: github_issues`）")
+    else:
+        missing.append("設定的 `human_queue` 要啟用並以 `ticketing: github_issues` 開單")
+    steps = _sync_steps(root)
+    if steps:
+        have.append("工單同步步驟：" + "、".join(f"`{s}`" for s in steps))
+    else:
+        missing.append("workflow 要有執行 `scripts/human_queue_issues.py --sync-decisions` 的步驟")
+    decisions_dir = root / "calib" / "decisions"
+    backlog = root / str(hq.get("backlog_file", "calib/decisions/backlog.json"))
+    decisions = [p for p in decisions_dir.glob("*.json") if p.resolve() != backlog.resolve()] if decisions_dir.is_dir() else []
+    if backlog.is_file() or decisions:
+        have.append(f"同步確實執行過：{'backlog 已寫入' if backlog.is_file() else ''}{'、' if backlog.is_file() and decisions else ''}"
+                    f"{f'{len(decisions)} 筆裁決已回寫' if decisions else ''}")
+    else:
+        missing.append(f"同步要實際執行過（不是 dry-run）：`{backlog.relative_to(root).as_posix()}` 或 `calib/decisions/` 的裁決紀錄。"
+                       "CI 的 human-queue job 在儲存庫變數 `MARA_HUMAN_QUEUE_ISSUES=true` 前只 dry-run；裁決由負責人鏡像回 repo")
+    if not missing:
+        return CheckResult("G-11", PASS, "；".join(have))
+    return CheckResult("G-11", FAIL, (("已有：" + "；".join(have) + "。") if have else "") + "需要：" + "；".join(missing))
 
 
 def check_g12(root: Path, config_path: Path) -> CheckResult:

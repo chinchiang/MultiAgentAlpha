@@ -11,6 +11,7 @@ and calibration consult `is_trained`, and governance check G-13 reads `coverage`
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,7 +47,11 @@ class Register:
     path: Path | None = None
 
     def valid(self, day: dt.date, role: str | None = None) -> list[Record]:
-        return [r for r in self.records if r.valid_on(day, self.curriculum_version) and (role is None or r.role == role)]
+        """Records of the current curriculum that cover `day` and passed: a recorded score below the pass mark is a
+        failed assessment, not training (the CLI refused such a record, a hand-edited register did not). A record
+        without a score is an assessor's attestation."""
+        return [r for r in self.records if r.valid_on(day, self.curriculum_version) and (role is None or r.role == role)
+                and (r.score is None or r.score >= self.pass_mark)]
 
     def expiring(self, day: dt.date, within_days: int = EXPIRY_WARNING_DAYS) -> list[Record]:
         return [r for r in self.valid(day) if (r.expires - day).days <= within_days]
@@ -69,7 +74,10 @@ def load_register(path: Path | str) -> Register:
         if role not in ROLES:
             raise ValueError(f"record for {r.get('person')}: unknown role {role!r} (allowed: {', '.join(ROLES)})")
         date = _date(r["date"])
-        expires = _date(r["expires"]) if r.get("expires") else date + dt.timedelta(days=validity)
+        # an explicit expiry may shorten the validity, never extend it: `expires: 2099-01-01` used to make a record
+        # valid for decades
+        longest = date + dt.timedelta(days=validity)
+        expires = min(_date(r["expires"]), longest) if r.get("expires") else longest
         records.append(Record(str(r["person"]), role, str(r.get("curriculum_version", version)), date, expires,
                               None if r.get("score") is None else float(r["score"]), str(r.get("assessor", "")), str(r.get("evidence", ""))))
     return Register(version, validity, float(raw.get("pass_mark", DEFAULT_PASS_MARK)), records, p)
@@ -83,7 +91,9 @@ def save_register(reg: Register, path: Path | str | None = None) -> None:
         raise ValueError("register has no path: pass one to save_register")
     p = Path(target)
     text = p.read_text(encoding="utf-8") if p.exists() else ""
-    head = text.split("records:")[0].rstrip("\n") if "records:" in text else ""
+    # the header ends at the top-level `records:` key, not at the first "records:" anywhere (a comment held one)
+    m = re.search(r"^records:", text, re.MULTILINE)
+    head = text[:m.start()].rstrip("\n") if m else ""
     body = yaml.safe_dump({"records": [{
         "person": r.person, "role": r.role, "curriculum_version": r.curriculum_version, "date": r.date.isoformat(),
         "expires": r.expires.isoformat(), "score": r.score, "assessor": r.assessor, "evidence": r.evidence} for r in reg.records]},
