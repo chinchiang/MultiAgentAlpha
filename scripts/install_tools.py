@@ -36,6 +36,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -65,6 +66,20 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def move_into_place(tmp: Path, dest: Path, *, attempts: int = 10) -> None:
+    """Rename a finished install into place. On Windows a fresh checkout or extraction is opened by the
+    virus scanner or the indexer for a moment, and the rename fails with WinError 5 while it is: retry
+    for a few seconds, then give up with the error."""
+    for attempt in range(attempts):
+        try:
+            tmp.replace(dest)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.5)
 
 
 def download(url: str, dest: Path, *, retries: int = 3, timeout: int = 600) -> Path:
@@ -278,7 +293,7 @@ def install_binary_or_archive(name: str, spec: dict, *, bin_dir: Path, cache: Pa
     else:
         shutil.copyfile(asset, tmp)
     tmp.chmod(tmp.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    tmp.replace(target)
+    move_into_place(tmp, target)
     return {"version": str(spec["version"]), "kind": spec["kind"], "url": url, "sha256": digest,
             "verified_by": verified_by, "signature_verified": signature_verified, "path": str(target)}
 
@@ -409,7 +424,7 @@ def install_npm(name: str, spec: dict, *, install_dir: Path, bin_dir: Path, cach
         _rmtree(tmp)
         raise
     _rmtree(dest)
-    tmp.replace(dest)
+    move_into_place(tmp, dest)
     shim = bin_dir / name
     shim.write_text("#!/bin/sh\n" + f'exec node "$(dirname "$0")/../{name}/mara_driver.js" "$@"\n', encoding="utf-8", newline="\n")
     shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -486,7 +501,7 @@ def install_git(name: str, spec: dict, *, install_dir: Path, cache: Path, no_sig
         _rmtree(tmp)
         raise
     _rmtree(dest)
-    tmp.replace(dest)
+    move_into_place(tmp, dest)
     return {"version": str(spec["version"]), "kind": "git", "url": url, "commit": commit, "paths": list(spec["paths"]), "sha256": digest,
             "verified_by": verified_by, "signature_verified": signature_verified, "path": str(dest)}
 

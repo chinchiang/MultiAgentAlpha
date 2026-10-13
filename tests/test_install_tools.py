@@ -415,3 +415,35 @@ def test_lock_validation_rejects_bad_git_entries(rules_repo, tmp_path):
         p.write_text(yaml.safe_dump(_git_lock(rules_repo, **bad)))
         with pytest.raises(InstallError):
             load_lock(p)
+
+
+def test_moving_into_place_outlasts_a_briefly_held_handle(tmp_path, monkeypatch):
+    """On Windows a fresh checkout is opened by the virus scanner or the indexer for a moment, and the
+    rename into place failed with WinError 5 (seen in this suite: test_git_kind_* flaked)."""
+    import install_tools
+
+    src, dest = tmp_path / "x.installing", tmp_path / "x"
+    src.mkdir()
+    real, calls = Path.replace, []
+
+    def held(self, target):
+        calls.append(target)
+        if len(calls) < 3:
+            raise PermissionError(5, "Access is denied")
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "replace", held)
+    monkeypatch.setattr(install_tools.time, "sleep", lambda s: None)
+    install_tools.move_into_place(src, dest)
+    assert dest.is_dir() and not src.exists() and len(calls) == 3
+
+
+def test_a_handle_that_stays_held_still_fails(tmp_path, monkeypatch):
+    import install_tools
+
+    src = tmp_path / "x.installing"
+    src.mkdir()
+    monkeypatch.setattr(Path, "replace", lambda self, target: (_ for _ in ()).throw(PermissionError(5, "Access is denied")))
+    monkeypatch.setattr(install_tools.time, "sleep", lambda s: None)
+    with pytest.raises(PermissionError):
+        install_tools.move_into_place(src, tmp_path / "x")

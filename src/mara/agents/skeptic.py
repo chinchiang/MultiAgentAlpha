@@ -4,7 +4,7 @@ import re
 from typing import Literal
 
 from .. import exchange
-from ..context.repo_map import RepoContext
+from ..context.repo_map import RepoContext, source_lines
 from ..identity import norm_path
 from ..providers.base import Provider
 from ..schemas import Finding, SkepticVerdict
@@ -46,7 +46,7 @@ def _control_location_ok(ctx: RepoContext, text: str, shown: set[str] | None = N
         for path in dict.fromkeys(candidates):
             if shown is not None and path not in shown:
                 continue
-            lines = ctx.content.get(path, "").splitlines()
+            lines = source_lines(ctx.content.get(path, ""))
             n = int(m.group("line"))
             if 1 <= n <= len(lines) and lines[n - 1].strip():
                 return True

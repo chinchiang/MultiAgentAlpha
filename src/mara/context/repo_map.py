@@ -64,9 +64,20 @@ MAX_TOTAL_CHARS = 400_000
 MAX_REPOSITORY_CHARS = 16_000_000
 
 
+def source_lines(text: str) -> list[str]:
+    """The lines of a file as semgrep, git and every SARIF producer number them: only "\n" (or "\r\n")
+    ends a line. str.splitlines() also breaks on form feeds, file/group/record separators, NEL and the
+    Unicode line separators, which shifted every later line number against the tools' (tier A
+    corroboration and quotes at a tool's line missed)."""
+    lines = text.split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    return [line[:-1] if line.endswith("\r") else line for line in lines]
+
+
 def bundle_cost(rel: str, text: str) -> int:
     """Characters one file costs in a bundle: its text, the line-number prefixes and the <file> fence."""
-    return len(text) + len(text.splitlines()) * 8 + len(rel) + 50
+    return len(text) + len(source_lines(text)) * 8 + len(rel) + 50
 
 
 # The tags that delimit untrusted data in a prompt (mara.exchange.build_prompt). A repository file holding
@@ -144,7 +155,7 @@ class RepoContext:
         for rel, text in self.content.items():
             if paths and rel not in paths:
                 continue
-            numbered = "\n".join(f"{i + 1:5d}| {line}" for i, line in enumerate(fence_safe(text).splitlines()))
+            numbered = "\n".join(f"{i + 1:5d}| {line}" for i, line in enumerate(source_lines(fence_safe(text))))
             parts.append(f'<file path="{escape(rel, quote=True)}">\n{numbered}\n</file>')
         return "\n".join(parts)
 
@@ -498,11 +509,29 @@ def restrict_to_increment(ctx: RepoContext, base: str) -> tuple[list[str], list[
     make every deleting pull request incomplete; their importers are still pulled in as neighbours
     when they changed too.
 
+    The increment is judged on itself: a file outside it that the full bundle could not show no
+    longer makes the review incomplete (it moves to ctx.excluded as 'out_of_increment'; a
+    repository-wide failure such as git_ls_files_failed stays), and a changed file the full bundle
+    left out for the repository budget is read again, since the narrowed bundle may have room for it.
+
     Returns (changed, related). The tree-level revision is unchanged; content_hash is
     recomputed for the narrowed bundle.
     """
     changed = git_changed_files(ctx.root, base)
     ctx.deleted = git_changed_files(ctx.root, base, diff_filter="D")
+    readmitted = []
+    for rel in changed:
+        if ctx.omitted.get(rel) == "repository_size_limit":
+            try:
+                text = _read_bounded(ctx.root, Path(rel))  # read once already; the budget alone left it out
+            except (OSError, ValueError, UnicodeError):
+                continue
+            sanitized = redact_secrets(text)
+            ctx.content[rel] = sanitized
+            if sanitized != text and rel not in ctx.redacted:
+                ctx.redacted.append(rel)
+            del ctx.omitted[rel]
+            readmitted.append(rel)
     in_bundle = [rel for rel in changed if rel in ctx.content]
     for rel in changed:
         if rel not in ctx.content and rel not in ctx.excluded and rel not in ctx.omitted:
@@ -512,6 +541,15 @@ def restrict_to_increment(ctx: RepoContext, base: str) -> tuple[list[str], list[
     for rel in [rel for rel in ctx.content if rel not in keep]:
         ctx.excluded[rel] = "out_of_increment"
         del ctx.content[rel]
+    for rel in [rel for rel in ctx.omitted if rel != "." and rel not in keep and rel not in changed]:
+        ctx.excluded[rel] = "out_of_increment"
+        del ctx.omitted[rel]
+    if sum(len(t) for t in ctx.content.values()) > MAX_REPOSITORY_CHARS:
+        # the increment itself is too large: what the full bundle could not hold stays out, fail closed
+        for rel in readmitted:
+            del ctx.content[rel]
+            ctx.omitted[rel] = "repository_size_limit"
+        in_bundle = [rel for rel in in_bundle if rel not in readmitted]
     ctx.changed = in_bundle
     ctx.related = related
     ctx.content_hash = _content_hash(ctx.content)
