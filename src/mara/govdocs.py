@@ -122,6 +122,9 @@ def policy_status(path: Path | str, today: dt.date) -> PolicyStatus:
         problems.append(f"approved_on {approved_on} is in the future")
     if review_by is not None and review_by < today:
         problems.append(f"review_by {review_by} has passed")
+    if review_by is not None and approved_on is not None and (review_by - approved_on).days > POLICY_MAX_AGE_DAYS:
+        # a review date years ahead would otherwise keep one approval current forever
+        problems.append(f"review_by {review_by} is more than {POLICY_MAX_AGE_DAYS} days after approved_on {approved_on}")
     if approved_on is not None and (today - approved_on).days > POLICY_MAX_AGE_DAYS and (review_by is None or review_by < today):
         problems.append(f"approved more than {POLICY_MAX_AGE_DAYS} days ago and not re-reviewed")
     if problems:

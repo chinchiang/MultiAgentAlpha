@@ -128,6 +128,11 @@ def check_g1(root: Path, today: dt.date | None = None) -> CheckResult:
 REVERSE_PASS_RE = re.compile(r'run_judge(?:\(|,\s*)prov,\s*rev,\s*"reverse"')
 
 
+def _shown(path: Path, root: Path) -> str:
+    """`path` relative to the scanned root, or as given when it lies outside (`--config`, `MARA_HOME`)."""
+    return path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()
+
+
 def check_g2(root: Path, config_path: Path) -> CheckResult:
     from mara.bias.blinding import blind_finding
     from mara.config import load_config
@@ -138,7 +143,7 @@ def check_g2(root: Path, config_path: Path) -> CheckResult:
     cfg = load_config(config_path)
     rev = {cfg.model_by_name(n).family.value for n in cfg.roles.reviewers}
     jud = {cfg.model_by_name(n).family.value for n in cfg.roles.judges}
-    evidence.append(f"`{config_path.relative_to(root).as_posix()}`：reviewer 家族 {sorted(rev)}，judge 家族 {sorted(jud)}")
+    evidence.append(f"`{_shown(config_path, root)}`：reviewer 家族 {sorted(rev)}，judge 家族 {sorted(jud)}")
     if len(rev) < 3:
         problems.append(f"reviewer 家族數 {len(rev)} < 3")
     if len(jud) < 3:
@@ -191,7 +196,7 @@ def check_g3(root: Path, config_path: Path) -> CheckResult:
                                 "也不是附 retention_approval_ref 的 vendor_api_retained")
         if any(k in m.model.lower() for k in COVERED_MARKERS):
             problems.append(f"{m.name} 使用 Fable/Mythos 級模型 {m.model}")
-    ev = f"`{config_path.relative_to(root).as_posix()}` 模型：{', '.join(rows)}"
+    ev = f"`{_shown(config_path, root)}` 模型：{', '.join(rows)}"
     if approvals:
         ev += f"；保留資料的廠商 API 經核准：{', '.join(approvals)}"
     ev += "；`src/mara/policy.py` P1/P2/P5 在載入時強制"
@@ -496,7 +501,7 @@ def check_g11(root: Path, config_path: Path) -> CheckResult:
         have.append(f"同步確實執行過：{'backlog 已寫入' if backlog.is_file() else ''}{'、' if backlog.is_file() and decisions else ''}"
                     f"{f'{len(decisions)} 筆裁決已回寫' if decisions else ''}")
     else:
-        missing.append(f"同步要實際執行過（不是 dry-run）：`{backlog.relative_to(root).as_posix()}` 或 `calib/decisions/` 的裁決紀錄。"
+        missing.append(f"同步要實際執行過（不是 dry-run）：`{_shown(backlog, root)}` 或 `calib/decisions/` 的裁決紀錄。"
                        "CI 的 human-queue job 在儲存庫變數 `MARA_HUMAN_QUEUE_ISSUES=true` 前只 dry-run；裁決由負責人鏡像回 repo")
     if not missing:
         return CheckResult("G-11", PASS, "；".join(have))
@@ -591,7 +596,7 @@ def render(results: list[CheckResult], *, root: Path, config_path: Path, date: s
     L = [f"# 治理合規檢查（{date}）", "",
          "依附錄 E 的 prompt 8，對報告第十部治理建議 G-1 到 G-13 做可自動判定的檢查。本檔由 `scripts/governance_check.py` 產生；"
          "「需人工」表示無法從檔案判定，該列的證據欄寫明需要什麼證據。任一「失敗」使腳本以非零結束。", "",
-         f"- 掃描根目錄：`{root.name}/`；設定檔：`{config_path.relative_to(root).as_posix() if config_path.is_relative_to(root) else config_path.as_posix()}`；報告與紀錄的新鮮度門檻：{FRESH_DAYS} 天。",
+         f"- 掃描根目錄：`{root.name}/`；設定檔：`{_shown(config_path, root)}`；報告與紀錄的新鮮度門檻：{FRESH_DAYS} 天。",
          "- 標準條文取自報告第 25.4 節對應總表；標 * 者的 ISO 控制項標題尚未對照正本（附錄 B）。", "",
          "| 建議 | 內容 | 狀態 | 證據 | 對應標準條文 |", "|---|---|---|---|---|"]
     for r in results:

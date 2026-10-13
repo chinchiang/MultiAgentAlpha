@@ -285,10 +285,13 @@ def parse_garak_report(path: Path | str) -> dict:
 
 
 def _find_model_entry(stats: dict, model: str) -> tuple[str, dict] | None:
-    for k, v in stats.items():
-        if isinstance(v, dict) and (k == model or model in k or k.endswith(model)):
-            return k, v
-    return None
+    """The entry for exactly `model`: its own key, or a `PROVIDER::model` key. A substring match bound
+    `gpt-4o` to the stats of `gpt-4o-mini`; an ambiguous key set binds to nothing."""
+    entries = {k: v for k, v in stats.items() if isinstance(v, dict)}
+    if model in entries:
+        return model, entries[model]
+    hits = [k for k in entries if k.rsplit("::", 1)[-1] == model]
+    return (hits[0], entries[hits[0]]) if len(hits) == 1 else None
 
 
 def parse_cse_prompt_injection(path: Path | str, model: str) -> dict:
@@ -381,6 +384,19 @@ def write_summary(summary: dict, root: Path | str) -> Path:
     return p
 
 
+def _summaries(root: Path | str) -> list[dict]:
+    """The readable evaluation summaries, newest first."""
+    out = []
+    for p in sorted((Path(root) / "calib").glob("model-eval-*.json"), reverse=True):
+        try:
+            s = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(s, dict):
+            out.append(s)
+    return out
+
+
 def latest_summary(root: Path | str) -> dict | None:
     files = sorted((Path(root) / "calib").glob("model-eval-*.json"))
     if not files:
@@ -392,13 +408,15 @@ def latest_summary(root: Path | str) -> dict | None:
 
 
 def family_eval_status(root: Path | str, families: list[str]) -> dict[str, dict]:
-    """For the pipeline's bias audit: latest evaluation date and verdict per family (or 'none')."""
-    s = latest_summary(root)
+    """For the pipeline's bias audit: each family's latest evaluation date and verdict (or 'none'). A
+    family's latest evaluation is the newest summary that covers it: one run may evaluate a single family."""
+    summaries = _summaries(root)
     out = {}
     for fam in families:
-        f = (s or {}).get("families", {}).get(fam)
-        out[fam] = {"date": s["date"] if s and f else None, "mode": s["mode"] if s and f else None,
-                    "status": (f["verdict"].get("overall") if f else "none")}
+        s = next((s for s in summaries if isinstance((s.get("families") or {}).get(fam), dict)), None)
+        f = s["families"][fam] if s else None
+        out[fam] = {"date": s.get("date") if s else None, "mode": s.get("mode") if s else None,
+                    "status": ((f.get("verdict") or {}).get("overall", "none") if f else "none")}
     return out
 
 

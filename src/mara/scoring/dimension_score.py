@@ -17,11 +17,11 @@ def score_dimension(dimension: str, findings: list[Finding], consensus: dict[str
         c = consensus.get(f.id)
         if c is None:
             continue
-        if c.needs_human:
-            human += 1
         if c.accepted:
             accepted += 1
             total -= PENALTY[c.cvss4_severity] * TIER_FACTOR[c.tier]
+        elif c.needs_human:
+            human += 1  # awaiting a decision, not rejected
         else:
             rejected += 1
     total = max(0.0, round(total, 1))
