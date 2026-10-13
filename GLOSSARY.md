@@ -61,6 +61,18 @@ _Avoid_: block, rejection
 
 ## Human decisions
 
+**Jury outcome**:
+What the pipeline itself concluded about a finding from the judges, skeptic, tools and evidence tier: accepted, rejected, or needing a human. It is kept as the pipeline concluded it even when a human later decides, because calibration measures the pipeline, not the human.
+_Avoid_: consensus (the weighted score is one input), verdict
+
+**Final outcome**:
+A finding's outcome after human decisions: a usable decision's ruling where there is one, the jury outcome otherwise. The gate, scores, report, human queue, code-scanning results and PSIRT hand-off follow it.
+_Avoid_: consensus, override result
+
+**Human-resolved finding**:
+A finding whose final outcome comes from a usable decision rather than the jury: the human ruling stands in either direction, while tool results stay subject to their own triage.
+_Avoid_: overridden finding (the jury outcome is not discarded)
+
 **Decision**:
 One adjudicator's ruling, true positive or false positive, on one human-queue key (人工裁決). A well-formed decision is one whose record is internally consistent, whoever made it and whatever it is later compared with.
 _Avoid_: adjudication, label (a label is a calibration sample's answer key), verdict (a judge's vote)
