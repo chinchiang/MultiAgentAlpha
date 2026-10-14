@@ -35,7 +35,7 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
         "",
         "## Dimension scores",
         "",
-        "| Dimension | Score | Accepted | Rejected | Human queue | Tool ran |",
+        "| Dimension | Score | Accepted | Rejected | Awaiting decision | Tool ran |",
         "|---|---:|---:|---:|---:|---|",
     ]
     for d in r.dimensions:
@@ -43,7 +43,7 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
         lines.append(f"| {DIMENSION_LABELS[d.dimension]} | {d.score} | {d.accepted_findings} | {d.rejected_findings} | {d.human_queue} | {tool} |")
     tc = tier_counts(r)
     lines += ["", f"Evidence tiers: A={tc['A']} B={tc['B']} C={tc['C']} D={tc['D']}", "", "## Accepted findings", ""]
-    accepted = [f for f in r.findings if cons.get(f.id) and cons[f.id].final_accepted]
+    accepted = [f for f in r.findings if cons.get(f.id) and cons[f.id].final_outcome == "accepted"]
     accepted.sort(key=lambda f: -(cons[f.id].cvss4_score or 0.0))  # accepted implies a valid vector
     if not accepted:
         lines.append("_None._")
@@ -74,7 +74,7 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
             f"- {literal(tr.get('tool'))} · {literal(tr.get('rule_id'))} · "
             f"{literal(tr.get('file'))}:{tr.get('line')} · {literal(tr.get('message'))}"
         )
-    rejected = [f for f in r.findings if cons.get(f.id) and not cons[f.id].final_accepted]
+    rejected = [f for f in r.findings if cons.get(f.id) and cons[f.id].final_outcome != "accepted"]
     lines += ["## Rejected or unverified findings", ""]
     if not rejected:
         lines.append("_None._")
@@ -86,8 +86,10 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
             else "provenance unverified"
             if c.tier.value == "D" and not any(p.verified for p in f.provenance)
             else f"awaiting human decision: {', '.join(c.human_reasons) or 'unresolved_human_review'}"
-            if c.needs_human
+            if c.final_outcome == "needs_human"
             else ("skeptic refuted" if c.skeptic_refuted else f"consensus {c.weighted_score} below threshold")
+            # rejection review (policy P8, docs/adr/0005-jury-outcome.md): decided by the jury, queued for a human look
+            + (" · rejection review queued" if c.unsupervised_reject_unverified else "")
         )
         lines.append(f"- {f.id} · {literal(f.title)} · {f.source_family.value} · tier {c.tier.value} · {why}")
     lines += ["", "## Human queue", ""]

@@ -22,6 +22,7 @@ from mara.report.markdown_out import render_markdown  # noqa: E402
 from mara.schemas import ConsensusResult, EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, ReviewReport  # noqa: E402
 from mara.scoring.consensus import weighted_consensus  # noqa: E402
 from mara.scoring.dimension_score import score_dimension  # noqa: E402
+from mara.scoring.outcome import OutcomePolicy, OutcomeSignals, decide  # noqa: E402
 
 VEC = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
 ANTHROPIC = {"provider": "anthropic", "model": "claude-opus-5", "data_residency": "vendor_api_zdr"}
@@ -76,7 +77,8 @@ def test_a_judge_votes_with_its_own_weight_not_a_same_family_reviewers(tmp_path,
 
 
 def _awaiting():
-    return ConsensusResult(finding_id="F-1", weighted_score=0.9, votes_tp=4, votes_fp=0, votes_human=0, families_agreeing=[],
+    # tier C: every family confirmed it but reachability went unargued; at Critical it needs a human (Pipeline.score())
+    return ConsensusResult(finding_id="F-1", weighted_score=1.0, votes_tp=6, votes_fp=0, votes_human=0, families_agreeing=[],
                            tool_corroborated=False, skeptic_refuted=False, position_consistent=True, tier=EvidenceTier.C,
                            cvss4_score=9.3, cvss4_severity="Critical", ssvc_decision="Act", accepted=False,
                            needs_human=True, human_reasons=["tier_c_high"])
@@ -90,6 +92,65 @@ def test_a_finding_awaiting_a_human_is_not_counted_or_explained_as_rejected():
                           bias_audit={})
     line = next(x for x in render_markdown(report).splitlines() if x.startswith("- F-1 · t ·"))
     assert "below threshold" not in line and "awaiting human decision: tier_c_high" in line
+
+
+def _under_rejection_review():
+    """A rejected finding with policy P8 in force, as Pipeline.score() writes it (docs/adr/0005-jury-outcome.md)."""
+    # tier A: a tool corroborates it and only the finder's family confirmed it (Pipeline.score() on the three-family panel)
+    s = OutcomeSignals(tier=EvidenceTier.A, score=0.2, severity="High", provenance_verified=True, skeptic_refuted=False,
+                       skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=0.5, votes_tp=2, votes_fp=4,
+                       votes_human=0, position_consistent=True)
+    policy = OutcomePolicy(accept_threshold=0.6, alpha_threshold=0.4, exclude_tier_c=False, tier_c_min_severity="High",
+                           unsupervised_reject_allowed=False)
+    return ConsensusResult(finding_id="F-1", weighted_score=s.score, votes_tp=s.votes_tp, votes_fp=s.votes_fp, votes_human=0,
+                           families_agreeing=[ModelFamily.ANTHROPIC, ModelFamily.TOOL], tool_corroborated=True, skeptic_refuted=False,
+                           position_consistent=True, tier=s.tier, cvss4_score=8.7, cvss4_severity="High", ssvc_decision="Attend",
+                           agreement_proxy=s.alpha,
+                           **decide(s, policy).consensus_fields())
+
+
+def _report_of(c):
+    d = score_dimension("vulnerabilities", [_finding()], {"F-1": c}, tool_ran=True)
+    return d, ReviewReport(target="t", generated_at="now", provider_mode="mock", families_used=[], findings=[_finding()], skeptic=[],
+                           redteam=[], votes=[], consensus=[c], dimensions=[d], overall_score=None, gate_passed=False, bias_audit={})
+
+
+def test_a_rejection_under_review_counts_as_rejected_not_as_awaiting_a_decision():
+    """ADR 0005: the jury decided it; rejection review is a human look, not an open outcome."""
+    d, _ = _report_of(_under_rejection_review())
+    assert (d.accepted_findings, d.rejected_findings, d.human_queue) == (0, 1, 0)
+
+
+def test_the_report_says_a_rejection_is_under_review_until_a_human_rules_on_it():
+    c = _under_rejection_review()
+    _, report = _report_of(c)
+    line = next(x for x in render_markdown(report).splitlines() if x.startswith("- F-1 · t ·"))
+    assert line.endswith("· consensus 0.2 below threshold · rejection review queued")
+    ruled = c.model_copy(update={"human_decision": {"decision": "false_positive", "key": "k", "issue": 7, "decided_by": "alice",
+                                                    "decided_at": "2026-10-14T00:00:00Z"}})
+    _, report = _report_of(ruled)
+    line = next(x for x in render_markdown(report).splitlines() if x.startswith("- F-1 · t ·"))
+    assert "rejection review" not in line and "decided by human" in line
+
+
+def test_the_dimension_table_counts_what_awaits_a_decision_under_that_name():
+    """The third count is findings whose final outcome needs a human; the human queue also lists rejections under review."""
+    _, report = _report_of(_awaiting())
+    assert "| Dimension | Score | Accepted | Rejected | Awaiting decision | Tool ran |" in render_markdown(report).splitlines()
+
+
+def test_the_cli_table_names_the_same_count_awaiting_decision(tmp_path):
+    import re
+
+    from typer.testing import CliRunner
+
+    from mara.cli import app
+
+    res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock",
+                                   "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--out", str(tmp_path / "out")],
+                             env={"COLUMNS": "200"})  # wide enough that rich does not wrap the header
+    header = next(x for x in re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", res.output).splitlines() if "Dimension" in x)
+    assert [c.strip() for c in header.strip("┃│ ").split("┃")] == ["Dimension", "Score", "Accepted", "Rejected", "Awaiting decision", "Tool"]
 
 
 # ---------------------------------------------------------------- G-1 review_by

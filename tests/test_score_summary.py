@@ -210,7 +210,9 @@ def test_an_unreadable_report_is_a_usage_error_not_a_traceback(mock_review, tmp_
     finally:
         source.chmod(0o600)
     assert res.exit_code != 0 and isinstance(res.exception, SystemExit), res.exception
-    assert "report.json" in plain(res.output) and "readable" in plain(res.output)
+    # the panel can wrap the long tmp path inside a word ("report.jso n"), so compare without whitespace
+    squeezed = "".join(plain(res.output).split())
+    assert "report.json" in squeezed and "readable" in squeezed
     assert not (tmp_path / "summary.json").exists()
 
 

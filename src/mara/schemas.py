@@ -158,6 +158,9 @@ class JudgeVote(BaseModel):
     self_family: bool = Field(default=False, description="Judge family co-produced this finding (fallback only; vote discounted)")
 
 
+JuryOutcomeValue = Literal["accepted", "rejected", "dropped", "needs_human"]
+
+
 class ConsensusResult(BaseModel):
     finding_id: str
     weighted_score: float = Field(ge=0.0, le=1.0)
@@ -183,6 +186,25 @@ class ConsensusResult(BaseModel):
     # the same content (docs/adr/0003-human-resolution.md) is recorded here and settles the final outcome
     human_decision: dict | None = Field(default=None, description="The usable decision that settles this finding: "
                                         "decision, key, issue, decided_by, decided_at")
+    unsupervised_reject_unverified: bool = Field(default=False, description="A rejected finding under rejection review "
+                                                 "(policy P8, docs/adr/0005-jury-outcome.md); false in reports written before it")
+
+    @property
+    def jury_outcome(self) -> JuryOutcomeValue:
+        """The jury outcome from the persisted fields, so a report written before the field existed reads the same."""
+        if self.needs_human:
+            return "needs_human"
+        if self.accepted:
+            return "accepted"
+        return "dropped" if self.tier == EvidenceTier.D else "rejected"
+
+    @property
+    def final_outcome(self) -> JuryOutcomeValue:
+        """The final outcome: the ruling of a usable decision where there is one (true positive accepted, false positive
+        rejected), the jury outcome otherwise."""
+        if self.human_decision:
+            return "accepted" if self.human_decision["decision"] == "true_positive" else "rejected"
+        return self.jury_outcome
 
     @property
     def resolved_by_human(self) -> bool:

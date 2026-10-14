@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,6 +11,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara.config import load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
+from mara.schemas import ConsensusResult, EvidenceTier  # noqa: E402
+from mara.scoring.outcome import OutcomePolicy, OutcomeSignals, decide  # noqa: E402
 
 
 def test_label_driven_mock_and_calibrate(root, tmp_path):
@@ -187,13 +190,33 @@ def _finding(i, cwe="CWE-79"):
     return {"id": f"F-{i}", "cwe": cwe, "provenance": [{"file": "app.py", "line": i * 10}]}
 
 
+def _row(i, **signals):
+    """The consensus row Pipeline.score() writes for F-i, as report.json holds it: the jury outcome comes from decide()."""
+    s = replace(OutcomeSignals(tier=EvidenceTier.B, score=1.0, severity="High", provenance_verified=True, skeptic_refuted=False,
+                               skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=1.0, votes_tp=6, votes_fp=0,
+                               votes_human=0, position_consistent=True), **signals)
+    policy = OutcomePolicy(accept_threshold=0.6, alpha_threshold=0.4, exclude_tier_c=False, tier_c_min_severity="High",
+                           unsupervised_reject_allowed=False)
+    return ConsensusResult(finding_id=f"F-{i}", weighted_score=s.score, votes_tp=s.votes_tp, votes_fp=s.votes_fp,
+                           votes_human=s.votes_human, families_agreeing=[], tool_corroborated=s.tier == EvidenceTier.A,
+                           skeptic_refuted=s.skeptic_refuted, agreement_proxy=s.alpha,
+                           position_consistent=s.position_consistent, tier=s.tier, cvss4_score=8.7, cvss4_severity=s.severity,
+                           ssvc_decision="Attend", **decide(s, policy).consensus_fields()).model_dump(mode="json")
+
+
 def _rejected(i):
-    """The consensus row of a finding the pipeline would drop unsupervised (what P8 unlocks)."""
-    return {"finding_id": f"F-{i}", "accepted": False, "needs_human": False, "tier": "C"}
+    """A rejected finding, the rejection P8 unlocks: a tool corroborates it (tier A) and only the finder's family confirmed it.
+    On the three-family panel tier A is the only tier the jury can reject (docs/adr/0005-jury-outcome.md)."""
+    return _row(i, tier=EvidenceTier.A, score=0.2, votes_tp=2, votes_fp=4, alpha=0.5)
 
 
 def _accepted(i):
-    return {"finding_id": f"F-{i}", "accepted": True, "needs_human": False, "tier": "B"}
+    return _row(i)
+
+
+def _dropped(i):
+    """A dropped finding: every family called it a false positive, so it is tier D, out on the evidence rather than the vote."""
+    return _row(i, tier=EvidenceTier.D, score=0.0, votes_tp=0, votes_fp=6)
 
 
 def test_aat_agreement_is_tested_against_chance_and_needs_ten_items():
@@ -251,6 +274,40 @@ def test_aat_rejection_safety_bounds_the_miss_rate_of_unsupervised_rejections():
     assert missed["rejection"]["misses"] == 1 and missed["rejection"]["miss_rate_upper"] > 0.05 and not missed["passed"]
     assert abs(calibrate.clopper_pearson_upper(0, 59) - (1 - 0.05 ** (1 / 59))) < 1e-9
     assert abs(calibrate.clopper_pearson_upper(1, 59) - 0.07790) < 1e-4  # P(X <= 1 | 59, p) = 0.05 at p = 0.0779
+
+
+def test_aat_rejection_safety_counts_rejected_findings_not_dropped_ones():
+    """docs/adr/0005-jury-outcome.md: the rejections P8 unlocks are the jury's own; a dropped finding (tier D) is out
+    on the evidence, so a human confirming one is not a miss of unsupervised rejection."""
+    import calibrate
+
+    findings = [_finding(1), _finding(2)]
+    decisions = [_dec("app.py", 10, "CWE-79", "true_positive"), _dec("app.py", 20, "CWE-79", "true_positive")]
+    post = dict([_post("s9", "F-1", 1), _post("s9", "F-2", 1)])
+    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings, [_rejected(1), _dropped(2)])], decisions, post, _trained())
+    assert (aat["rejection"]["n"], aat["rejection"]["misses"]) == (1, 1)
+
+
+def test_aat_stops_on_a_consensus_row_that_does_not_validate():
+    """Fail closed: a row that is not a ConsensusResult (hand-edited, truncated) is never guessed into the rejection count."""
+    import calibrate
+    import pytest
+
+    broken = {k: v for k, v in _rejected(1).items() if k != "tier"}
+    with pytest.raises(ValueError):
+        calibrate.alternative_annotator_test([_aat_run("s9", [_finding(1)], [broken])], [_dec("app.py", 10, "CWE-79", "true_positive")],
+                                             dict([_post("s9", "F-1", 1)]), _trained())
+
+
+def test_aat_stops_on_an_invalid_consensus_row_even_where_no_decision_is_bound():
+    """Every row is validated before anything is counted, not only the rows a decision happens to bind to."""
+    import calibrate
+    import pytest
+
+    broken = {k: v for k, v in _rejected(2).items() if k != "tier"}
+    with pytest.raises(ValueError):
+        calibrate.alternative_annotator_test([_aat_run("s9", [_finding(1), _finding(2)], [_rejected(1), broken])],
+                                             [_dec("app.py", 10, "CWE-79", "true_positive")], dict([_post("s9", "F-1", 1)]), _trained())
 
 
 def test_aat_binds_one_decision_to_one_finding_by_key():

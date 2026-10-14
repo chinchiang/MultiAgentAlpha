@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from mara.decisions import Decision, TrainingRequirement, binding, select  # noqa: E402
 from mara.decisions import load as load_decision_dir  # noqa: E402
 from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
+from mara.schemas import ConsensusResult  # noqa: E402
 from mara.workspace import resolve  # noqa: E402
 
 
@@ -290,10 +291,10 @@ def alternative_annotator_test(runs, decisions: list[Decision], post, training: 
        agreement of the two label distributions (as in Cohen's kappa; not a fixed 0.5) at p < 0.05.
        A labeller that always gives the same answer agrees exactly at chance and never passes, however
        lopsided the human decisions are.
-    2. Rejection safety, the decision P8 actually unlocks. Among bound items the pipeline itself
-       would drop unsupervised (consensus: not accepted, no human reason, tier not D - the set
-       build_queue marks unsupervised_reject_unverified), a human true_positive is a vulnerability
-       the pipeline would have dropped. The exact one-sided Clopper-Pearson upper bound of that miss
+    2. Rejection safety, the decision P8 actually unlocks. Among bound items whose jury outcome is
+       rejected (docs/adr/0005-jury-outcome.md: evidence enough to stand, but the jury did not carry
+       them; dropped tier D findings are out on the evidence and not counted), a human true_positive
+       is a vulnerability the pipeline would have rejected unsupervised. The exact one-sided Clopper-Pearson upper bound of that miss
        rate at `confidence` must be <= max_miss_rate; with no miss at all that takes
        ceil(ln(1 - confidence) / ln(1 - max_miss_rate)) decided rejections (59 at 0.95 / 0.05).
 
@@ -318,7 +319,9 @@ def alternative_annotator_test(runs, decisions: list[Decision], post, training: 
         sel = select(decisions, rep, training)
         left_out.update({why: n for why, n in sel.by_reason().items() if why != "unbound"})
         verdict_by_key = {d.key: d.decision for d in sel.usable}
-        consensus = {c.get("finding_id"): c for c in rep.get("consensus", [])}
+        # every row is validated before anything is counted (docs/adr/0005-jury-outcome.md): a row that does not
+        # validate stops the test rather than being guessed into, or silently left out of, the count (fail closed)
+        consensus = {c.finding_id: c for c in map(ConsensusResult.model_validate, rep.get("consensus", []))}
         for f in rep.get("findings", []):
             p = f["provenance"][0]
             verdict = verdict_by_key.get(queue_key(p["file"], int(p["line"]), f["cwe"], target_id=target_id,
@@ -327,7 +330,7 @@ def alternative_annotator_test(runs, decisions: list[Decision], post, training: 
                 continue
             human_tp = verdict == "true_positive"
             c = consensus.get(f["id"])
-            if c and not c.get("accepted") and not c.get("needs_human") and c.get("tier") != "D":
+            if c is not None and c.jury_outcome == "rejected":
                 rejected += 1
                 misses += int(human_tp)
             posterior = post.get((sample, f["id"]))
