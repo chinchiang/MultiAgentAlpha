@@ -23,4 +23,4 @@ The shadow-phase baseline (`govdocs.baseline_metrics`) counts the jury outcome's
 - **Export the gate reasons in the score summary:** not done here; see above.
 - **Keep `final_accepted` and `final_needs_human` as one-line aliases of `final_outcome`:** rejected. The readers would keep a second vocabulary for the same outcome.
 - **Let the module verify the signature and write the audit itself:** rejected. With IO and side effects inside, the module could not be checked exhaustively against the old rules.
-- **Move `INCOMPLETE_COUNTERS` into the module now:** left to the reply-outcome accounting work (architecture candidate 2), which owns those counters.
+- **Move `INCOMPLETE_COUNTERS` into the module now:** left to the reply-outcome accounting work (docs/adr/0008-reply-accounting.md), which owns those counters.
