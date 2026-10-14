@@ -112,6 +112,7 @@ python -m pip install --require-hashes --only-binary=:all: -r tools/build-requir
 python -m pip install --no-deps --no-build-isolation -e .                                    # use only the pinned backend
 pytest -q
 mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out
+mara serve                         # the same offline demo in the browser: New review → Offline demo (see Local web workbench)
 ```
 
 `fixtures/vuln-sample` is a deliberately vulnerable "vibe-coded" Flask app (reflected and DOM XSS,
@@ -761,10 +762,11 @@ python scripts/count_words.py            # 字數統計（正體中文計字，�
 
 ```
 config/            mara.yaml (live topology), mara.mock.yaml (offline), examples/ (standby, PRC site, policy cases)
-src/mara/          the prototype (see table above)
+src/mara/          the prototype (layers: see table above; web/ the local workbench, progress.py the stage record)
 fixtures/          vuln-sample app, mock-responses, pre-recorded SARIF, synthetic model-eval outputs
 calib/             labelled calibration samples, human decisions (calib/decisions/)
 tests/             unit + end-to-end tests (no network)
+out/               reports of a plain review; runs/ and jobs/ of the workbench (git-ignored)
 docs/              the report (Markdown + HTML), dated records, runbooks, Appendix E prompt kit, Appendix D questionnaire
 scripts/           CI wrappers (*_ci.py), tool installer, governance, calibration, rollout and report scripts
 tools/             versions.lock, hash-pinned Python closures, triage / ignore / policy files
@@ -783,4 +785,7 @@ calibration ran on 2026-10-07 and 2026-10-08 (`docs/calibration-2026-10-08.md`, 
 `config/mara.yaml` are still 1.0: that calibration suggested weights from 51 labels, too few to adopt, and
 a decision to adopt them waits for a second live period and human adjudications (`docs/assessment-2026-10-12.md`,
 question 59). Since exchange version 2 the refusal, invalid and truncation counts are not comparable with
-that first period, so the next live calibration sets a new baseline.
+that first period, so the next live calibration sets a new baseline. Since v0.9.0 reviews can also be started and
+read from the local workbench (`mara serve`); its end-to-end tests and browser walkthrough use the mock providers.
+A live review started from the page runs the same `mara review` command, but none has yet been run against the
+production panel.
