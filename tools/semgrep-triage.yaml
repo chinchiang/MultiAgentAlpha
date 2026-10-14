@@ -38,6 +38,16 @@ accepted:
       existing file. This replaced a lookup of `sh` on PATH (v0.5.5): an environment variable the operator names is
       the same trust as MARA_TOOLS_DIR, which already decides which binaries run; argv stays a list, no shell=True.
       Reviewed 2026-10-13 with the scan that introduced it.
+  - rule: python.lang.security.audit.dangerous-subprocess-use-audit
+    paths: ["src/mara/web/*.py"]
+    reason: >
+      The local workbench (mara serve, docs/adr/0006-local-web-workbench.md) starts children only as argv lists, never
+      with shell=True: procs.spawn runs sys.executable with `-m mara.cli review|check-config` or one of the workspace's
+      own scripts/install_tools.py and scripts/trivy_db.py, and the values a browser sends reach argv only after
+      runs.RunRegistry.prepare / jobs.JobRegistry.argv validated them (resolved existing directories, a config under
+      config/ or config/examples/, evidence inputs inside the workspace, the git ref matched against a fixed pattern
+      and passed as one --base=<ref> argument, tool names from tools/versions.lock). env.node runs the node the
+      csp-evaluator driver uses with --version only. Reviewed 2026-10-14 with the scan that introduced the package.
   - rule: generic.secrets.security.detected-stripe-api-key
     paths: [scripts/gen_calib_samples.py]
     reason: >
