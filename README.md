@@ -153,7 +153,7 @@ cookie, because a cookie reaches every service on 127.0.0.1 whatever its port. T
 can read, never on the URL, since process arguments are visible to every local user. The server refuses a Host header that is not
 the loopback server (DNS rebinding) and an Origin or Sec-Fetch-Site from another site. The page loads nothing from anywhere else:
 its Content-Security-Policy allows exactly its own script and stylesheet by SHA-256 and requires Trusted Types, and
-`tests/test_web_static.py` grades that policy with the pinned csp-evaluator where it is installed. Only the standard library and the
+`tests/test_web_static.py` grades that policy with the pinned csp-evaluator, which the CI tests job installs for it. Only the standard library and the
 existing dependencies are used, so the hash-locked closures are unchanged.
 
 ## Live mode

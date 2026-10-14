@@ -238,14 +238,17 @@ jobs:
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/dev-requirements.txt
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/build-requirements.txt
           python3 -m pip install --quiet --disable-pip-version-check --no-deps --no-build-isolation -e .
-      - name: Install the locked gitleaks, semgrep and semgrep-rules so their tests run instead of skipping
-        # tests/test_gitleaks_ci.py, tests/test_semgrep_ci.py and tests/test_tool_target_config.py opt in to .mara-tools explicitly (conftest points
-        # MARA_TOOLS_DIR elsewhere for everything else). Same verified installer as the L0 job, limited to the
-        # three tools those tests use: SHA-256 for every asset, gitleaks' publisher checksums, pip --require-hashes
-        # for semgrep, pinned commit + content digest + GPG commit signature for semgrep-rules. No token needed.
+      - name: Install the locked gitleaks, semgrep, semgrep-rules and csp-evaluator so their tests run instead of skipping
+        # tests/test_gitleaks_ci.py, tests/test_semgrep_ci.py, tests/test_tool_target_config.py, tests/test_tools_csp.py and
+        # tests/test_web_static.py opt in to .mara-tools explicitly (conftest points MARA_TOOLS_DIR elsewhere for everything else).
+        # Same verified installer as the L0 job, limited to the four tools those tests use: SHA-256 for every asset, gitleaks'
+        # publisher checksums, pip --require-hashes for semgrep, pinned commit + content digest + GPG commit signature for
+        # semgrep-rules, the registry's dist.integrity for csp-evaluator (run by the runner's node, as in the L0 job). The workbench
+        # page's Content-Security-Policy is assembled at start-up, so scripts/csp_ci.py cannot see it; tests/test_web_static.py
+        # grades it with this csp-evaluator (docs/adr/0006-local-web-workbench.md). No token needed.
         run: |
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
-          python3 scripts/install_tools.py --only gitleaks semgrep semgrep-rules
+          python3 scripts/install_tools.py --only gitleaks semgrep semgrep-rules csp-evaluator
       - name: Lint
         run: ruff check src tests scripts
       - name: Unit and end-to-end tests (mock providers, no network; tool tests against the locked binaries)
