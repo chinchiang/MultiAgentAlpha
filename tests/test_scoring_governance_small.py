@@ -77,7 +77,8 @@ def test_a_judge_votes_with_its_own_weight_not_a_same_family_reviewers(tmp_path,
 
 
 def _awaiting():
-    return ConsensusResult(finding_id="F-1", weighted_score=0.9, votes_tp=4, votes_fp=0, votes_human=0, families_agreeing=[],
+    # tier C: every family confirmed it but reachability went unargued; at Critical it needs a human (Pipeline.score())
+    return ConsensusResult(finding_id="F-1", weighted_score=1.0, votes_tp=6, votes_fp=0, votes_human=0, families_agreeing=[],
                            tool_corroborated=False, skeptic_refuted=False, position_consistent=True, tier=EvidenceTier.C,
                            cvss4_score=9.3, cvss4_severity="Critical", ssvc_decision="Act", accepted=False,
                            needs_human=True, human_reasons=["tier_c_high"])
@@ -95,14 +96,16 @@ def test_a_finding_awaiting_a_human_is_not_counted_or_explained_as_rejected():
 
 def _under_rejection_review():
     """A rejected finding with policy P8 in force, as Pipeline.score() writes it (docs/adr/0005-jury-outcome.md)."""
-    s = OutcomeSignals(tier=EvidenceTier.A, score=0.33, severity="High", provenance_verified=True, skeptic_refuted=False,
-                       skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=1.0, votes_tp=2, votes_fp=4,
+    # tier A: a tool corroborates it and only the finder's family confirmed it (Pipeline.score() on the three-family panel)
+    s = OutcomeSignals(tier=EvidenceTier.A, score=0.2, severity="High", provenance_verified=True, skeptic_refuted=False,
+                       skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=0.5, votes_tp=2, votes_fp=4,
                        votes_human=0, position_consistent=True)
     policy = OutcomePolicy(accept_threshold=0.6, alpha_threshold=0.4, exclude_tier_c=False, tier_c_min_severity="High",
                            unsupervised_reject_allowed=False)
     return ConsensusResult(finding_id="F-1", weighted_score=s.score, votes_tp=s.votes_tp, votes_fp=s.votes_fp, votes_human=0,
-                           families_agreeing=[ModelFamily.DEEPSEEK, ModelFamily.TOOL], tool_corroborated=True, skeptic_refuted=False,
+                           families_agreeing=[ModelFamily.ANTHROPIC, ModelFamily.TOOL], tool_corroborated=True, skeptic_refuted=False,
                            position_consistent=True, tier=s.tier, cvss4_score=8.7, cvss4_severity="High", ssvc_decision="Attend",
+                           agreement_proxy=s.alpha,
                            **decide(s, policy).consensus_fields())
 
 
@@ -122,7 +125,7 @@ def test_the_report_says_a_rejection_is_under_review_until_a_human_rules_on_it()
     c = _under_rejection_review()
     _, report = _report_of(c)
     line = next(x for x in render_markdown(report).splitlines() if x.startswith("- F-1 · t ·"))
-    assert line.endswith("· consensus 0.33 below threshold · rejection review queued")
+    assert line.endswith("· consensus 0.2 below threshold · rejection review queued")
     ruled = c.model_copy(update={"human_decision": {"decision": "false_positive", "key": "k", "issue": 7, "decided_by": "alice",
                                                     "decided_at": "2026-10-14T00:00:00Z"}})
     _, report = _report_of(ruled)

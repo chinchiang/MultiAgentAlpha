@@ -17,10 +17,17 @@ from mara.scoring.outcome import OutcomePolicy, OutcomeSignals, decide  # noqa: 
 POLICY = OutcomePolicy(accept_threshold=0.6, alpha_threshold=0.4, exclude_tier_c=False, tier_c_min_severity="High",
                        unsupervised_reject_allowed=False)
 
-# a tier B finding three judge families confirmed in both passes: nothing about it needs a human
-SUPPORTED = OutcomeSignals(tier=EvidenceTier.B, score=0.9, severity="High", provenance_verified=True, skeptic_refuted=False,
+# Rows Pipeline.score() writes on the three-family panel (equal weights, the finder's own family discounted to 0.5),
+# so the fixtures hold states scoring can produce: a tier B finding three families confirmed in both passes ...
+SUPPORTED = OutcomeSignals(tier=EvidenceTier.B, score=1.0, severity="High", provenance_verified=True, skeptic_refuted=False,
                            skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=1.0, votes_tp=6, votes_fp=0,
                            votes_human=0, position_consistent=True)
+# ... a tool-corroborated finding only the finder's family confirmed: tier A, the only tier the jury can reject (ADR 0005)
+REJECTED = replace(SUPPORTED, tier=EvidenceTier.A, score=0.2, votes_tp=2, votes_fp=4, alpha=0.5)
+# ... one every family called a false positive: tier D on too little support
+DROPPED = replace(SUPPORTED, tier=EvidenceTier.D, score=0.0, votes_tp=0, votes_fp=6)
+# ... and one every family confirmed whose reachability went unargued: tier C, at High it needs a human
+TIER_C_HIGH = replace(SUPPORTED, tier=EvidenceTier.C)
 
 
 def test_a_supported_finding_is_accepted_with_no_reasons():
@@ -30,17 +37,17 @@ def test_a_supported_finding_is_accepted_with_no_reasons():
 
 def test_a_finding_with_evidence_the_jury_did_not_carry_is_rejected():
     allowed = replace(POLICY, unsupervised_reject_allowed=True)
-    out = decide(replace(SUPPORTED, score=0.4, votes_tp=2, votes_fp=4), allowed)
+    out = decide(REJECTED, allowed)
     assert (out.value, out.reasons, out.unsupervised_reject_unverified) == ("rejected", (), False)
 
 
 def test_until_the_aat_passes_a_rejected_finding_goes_to_rejection_review_and_stays_rejected():
-    out = decide(replace(SUPPORTED, score=0.4, votes_tp=2, votes_fp=4), POLICY)
+    out = decide(REJECTED, POLICY)
     assert (out.value, out.reasons, out.unsupervised_reject_unverified) == ("rejected", (), True)
 
 
 def test_a_tier_d_finding_with_verified_provenance_is_dropped_and_not_sent_to_rejection_review():
-    out = decide(replace(SUPPORTED, tier=EvidenceTier.D, score=0.3, votes_tp=1, votes_fp=5), POLICY)
+    out = decide(DROPPED, POLICY)
     assert (out.value, out.reasons, out.unsupervised_reject_unverified) == ("dropped", (), False)
 
 
@@ -77,7 +84,7 @@ def test_a_tier_c_finding_below_the_floor_or_while_the_queue_is_tightened_is_lef
 def test_a_refuted_finding_the_jury_carried_goes_to_a_human_and_one_it_did_not_is_dropped():
     carried = decide(replace(SUPPORTED, tier=EvidenceTier.A, skeptic_refuted=True), POLICY)
     assert (carried.value, carried.reasons) == ("needs_human", ("skeptic_refuted_jury_overrode",))
-    not_carried = decide(replace(SUPPORTED, tier=EvidenceTier.D, skeptic_refuted=True, score=0.3), POLICY)
+    not_carried = decide(replace(DROPPED, skeptic_refuted=True), POLICY)
     assert (not_carried.value, not_carried.reasons) == ("dropped", ())
 
 
@@ -115,20 +122,24 @@ def test_the_policy_is_the_config_in_force_with_the_alpha_threshold_and_tier_c_e
 
 # ---------------------------------------------------------------- persisted in report.json and read back
 
-def _row(tier: EvidenceTier, **fields) -> ConsensusResult:
-    return ConsensusResult(finding_id="F-1", weighted_score=0.5, votes_tp=3, votes_fp=3, votes_human=0, families_agreeing=[],
-                           tool_corroborated=False, skeptic_refuted=False, position_consistent=True, tier=tier, cvss4_score=7.5,
-                           cvss4_severity="High", ssvc_decision="Attend", **fields)
+def _row(signals: OutcomeSignals, policy: OutcomePolicy = POLICY) -> ConsensusResult:
+    """The consensus row Pipeline.score() writes for these signals: its jury outcome from decide()."""
+    s = signals
+    return ConsensusResult(finding_id="F-1", weighted_score=s.score, votes_tp=s.votes_tp, votes_fp=s.votes_fp, votes_human=s.votes_human,
+                           families_agreeing=[], tool_corroborated=s.tier == EvidenceTier.A, skeptic_refuted=s.skeptic_refuted,
+                           skeptic_abstained=s.skeptic_abstained, position_consistent=s.position_consistent, tier=s.tier,
+                           cvss4_score=8.7, cvss4_severity=s.severity, ssvc_decision="Attend", agreement_proxy=s.alpha,
+                           **decide(s, policy).consensus_fields())
 
 
 ROUND_TRIP = {
     "accepted": (SUPPORTED, POLICY),
-    "rejected": (replace(SUPPORTED, score=0.4), replace(POLICY, unsupervised_reject_allowed=True)),
-    "rejected under rejection review": (replace(SUPPORTED, score=0.4), POLICY),
-    "dropped": (replace(SUPPORTED, tier=EvidenceTier.D, score=0.3), POLICY),
-    "dropped after the skeptic refuted it": (replace(SUPPORTED, tier=EvidenceTier.D, skeptic_refuted=True, score=0.3), POLICY),
+    "rejected": (REJECTED, replace(POLICY, unsupervised_reject_allowed=True)),
+    "rejected under rejection review": (REJECTED, POLICY),
+    "dropped": (DROPPED, POLICY),
+    "dropped after the skeptic refuted it": (replace(DROPPED, skeptic_refuted=True), POLICY),
     "needs a human, tier D": (replace(SUPPORTED, tier=EvidenceTier.D, provenance_verified=False), POLICY),
-    "needs a human, tier C": (replace(SUPPORTED, tier=EvidenceTier.C), POLICY),
+    "needs a human, tier C": (TIER_C_HIGH, POLICY),
 }
 
 
@@ -136,13 +147,13 @@ ROUND_TRIP = {
 def test_the_jury_outcome_read_back_from_a_report_is_the_one_decided(case):
     signals, policy = ROUND_TRIP[case]
     out = decide(signals, policy)
-    row = ConsensusResult.model_validate_json(_row(signals.tier, **out.consensus_fields()).model_dump_json())
+    row = ConsensusResult.model_validate_json(_row(signals, policy).model_dump_json())
     assert (row.jury_outcome, row.human_reasons, row.unsupervised_reject_unverified) == (
         out.value, list(out.reasons), out.unsupervised_reject_unverified)
 
 
 def test_a_report_written_before_rejection_review_was_recorded_reads_as_not_under_review():
-    old = _row(EvidenceTier.B, accepted=False).model_dump(exclude={"unsupervised_reject_unverified"})
+    old = _row(REJECTED).model_dump(exclude={"unsupervised_reject_unverified"})
     row = ConsensusResult.model_validate(old)
     assert (row.jury_outcome, row.unsupervised_reject_unverified) == ("rejected", False)
 
@@ -154,15 +165,14 @@ def _ruled(row: ConsensusResult, decision: str) -> ConsensusResult:
 
 def test_without_a_usable_decision_the_final_outcome_is_the_jury_outcome():
     for case, (signals, policy) in ROUND_TRIP.items():
-        row = _row(signals.tier, **decide(signals, policy).consensus_fields())
+        row = _row(signals, policy)
         assert row.final_outcome == row.jury_outcome, case
 
 
 def test_a_usable_decision_settles_the_final_outcome_and_leaves_the_jury_outcome():
     """docs/adr/0003-human-resolution.md: the ruling outranks the jury both ways; the jury outcome stays for calibration."""
-    dropped = _row(EvidenceTier.D, accepted=False)
-    awaiting = _row(EvidenceTier.C, accepted=False, needs_human=True, human_reasons=["tier_c_high"])
-    accepted = _row(EvidenceTier.B, accepted=True)
+    dropped, awaiting, accepted = _row(DROPPED), _row(TIER_C_HIGH), _row(SUPPORTED)
+    assert (dropped.jury_outcome, awaiting.jury_outcome, accepted.jury_outcome) == ("dropped", "needs_human", "accepted")
     assert (_ruled(dropped, "true_positive").final_outcome, _ruled(dropped, "true_positive").jury_outcome) == ("accepted", "dropped")
     assert _ruled(awaiting, "false_positive").final_outcome == "rejected"
     assert _ruled(awaiting, "true_positive").final_outcome == "accepted"

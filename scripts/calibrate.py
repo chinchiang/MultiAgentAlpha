@@ -319,7 +319,9 @@ def alternative_annotator_test(runs, decisions: list[Decision], post, training: 
         sel = select(decisions, rep, training)
         left_out.update({why: n for why, n in sel.by_reason().items() if why != "unbound"})
         verdict_by_key = {d.key: d.decision for d in sel.usable}
-        consensus = {c.get("finding_id"): c for c in rep.get("consensus", [])}
+        # every row is validated before anything is counted (docs/adr/0005-jury-outcome.md): a row that does not
+        # validate stops the test rather than being guessed into, or silently left out of, the count (fail closed)
+        consensus = {c.finding_id: c for c in map(ConsensusResult.model_validate, rep.get("consensus", []))}
         for f in rep.get("findings", []):
             p = f["provenance"][0]
             verdict = verdict_by_key.get(queue_key(p["file"], int(p["line"]), f["cwe"], target_id=target_id,
@@ -328,9 +330,7 @@ def alternative_annotator_test(runs, decisions: list[Decision], post, training: 
                 continue
             human_tp = verdict == "true_positive"
             c = consensus.get(f["id"])
-            # the jury outcome as the report records it (docs/adr/0005-jury-outcome.md); a row that does not
-            # validate stops the test rather than being guessed into the count (fail closed)
-            if c is not None and ConsensusResult.model_validate(c).jury_outcome == "rejected":
+            if c is not None and c.jury_outcome == "rejected":
                 rejected += 1
                 misses += int(human_tp)
             posterior = post.get((sample, f["id"]))

@@ -31,10 +31,18 @@ def _finding(fid, line, cwe="CWE-89", vec=VEC):
                    source_family=ModelFamily.ANTHROPIC, source_model="m", finder_families=[ModelFamily.ANTHROPIC])
 
 
-# a tier B finding the judges confirmed: nothing about it needs a human
-SUPPORTED = OutcomeSignals(tier=EvidenceTier.B, score=0.9, severity="High", provenance_verified=True, skeptic_refuted=False,
-                           skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=1.0, votes_tp=2, votes_fp=0,
+# Rows Pipeline.score() writes on the three-family panel (equal weights, the finder's own family discounted to 0.5):
+# a tier B finding three families confirmed in both passes, which needs no human ...
+SUPPORTED = OutcomeSignals(tier=EvidenceTier.B, score=1.0, severity="High", provenance_verified=True, skeptic_refuted=False,
+                           skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=1.0, votes_tp=6, votes_fp=0,
                            votes_human=0, position_consistent=True)
+# ... and the changes for the other states: a tool-corroborated finding only the finder's family confirmed (tier A, the only
+# tier the jury can reject, ADR 0005), one every family called a false positive (dropped), one every family sent to a human,
+# and one the three families split three ways
+REJECTED = {"tier": EvidenceTier.A, "score": 0.2, "votes_tp": 2, "votes_fp": 4, "alpha": 0.5}
+DROPPED = {"tier": EvidenceTier.D, "score": 0.0, "votes_tp": 0, "votes_fp": 6}
+ALL_NEEDS_HUMAN = {"tier": EvidenceTier.D, "score": 0.5, "votes_tp": 0, "votes_human": 6}
+SPLIT = {"tier": EvidenceTier.D, "score": 0.4, "votes_tp": 2, "votes_fp": 2, "votes_human": 2, "alpha": 0.0}
 
 
 def _policy(cfg, *, exclude_tier_c=False):
@@ -45,7 +53,7 @@ def _cons(fid, policy, **signals):
     """A consensus row as Pipeline.score() writes it: the jury outcome comes from decide()."""
     s = replace(SUPPORTED, **signals)
     return ConsensusResult(finding_id=fid, weighted_score=s.score, votes_tp=s.votes_tp, votes_fp=s.votes_fp, votes_human=s.votes_human,
-                           families_agreeing=[ModelFamily.DEEPSEEK], tool_corroborated=False, skeptic_refuted=s.skeptic_refuted,
+                           families_agreeing=[ModelFamily.DEEPSEEK], tool_corroborated=s.tier == EvidenceTier.A, skeptic_refuted=s.skeptic_refuted,
                            position_consistent=s.position_consistent, tier=s.tier, cvss4_score=8.0, cvss4_severity=s.severity,
                            ssvc_decision="Attend", agreement_proxy=s.alpha, **decide(s, policy).consensus_fields())
 
@@ -63,7 +71,7 @@ def cfg():
 def test_selection_reasons_and_full_context(cfg):
     fs = [_finding("F-1", 10), _finding("F-2", 20), _finding("F-3", 30), _finding("F-4", 40)]
     def rows(policy):
-        return {"F-1": _cons("F-1", policy, votes_tp=0, votes_human=3), "F-2": _cons("F-2", policy, alpha=0.1),
+        return {"F-1": _cons("F-1", policy, **ALL_NEEDS_HUMAN), "F-2": _cons("F-2", policy, **SPLIT),
                 "F-3": _cons("F-3", policy, tier=EvidenceTier.C, severity="High"), "F-4": _cons("F-4", policy)}
 
     cons = rows(_policy(cfg))
@@ -80,11 +88,10 @@ def test_selection_reasons_and_full_context(cfg):
 
 
 def test_rejected_non_d_findings_are_queued_until_p8_allows_silence(cfg):
-    # assessment #60: without a passing AAT (policy P8) no non-D finding is dropped unsupervised
+    # assessment #60: without a passing AAT (policy P8) no rejected finding goes without a human look (rejection review)
     fs = [_finding("F-1", 10), _finding("F-2", 20), _finding("F-3", 30)]
     def rows(policy):
-        return {"F-1": _cons("F-1", policy, score=0.4), "F-2": _cons("F-2", policy, tier=EvidenceTier.D, score=0.3),
-                "F-3": _cons("F-3", policy, score=0.4)}
+        return {"F-1": _cons("F-1", policy, **REJECTED), "F-2": _cons("F-2", policy, **DROPPED), "F-3": _cons("F-3", policy, **REJECTED)}
 
     items = {i.finding_id: i for i in build_queue(fs, rows(_policy(cfg)), {}, {}, [], cfg)}
     assert items["F-1"].reasons == ["unsupervised_reject_unverified"] and items["F-3"].reasons == ["unsupervised_reject_unverified"]
@@ -99,7 +106,7 @@ def test_rejection_review_follows_what_the_row_records_not_the_config_the_queue_
     A rejection recorded without it (P8 allowed when it was scored) is not queued under a stricter config."""
     allowed = cfg.model_copy(deep=True)
     allowed.gate.unsupervised_reject_allowed = True
-    row = _cons("F-1", _policy(allowed), score=0.4)
+    row = _cons("F-1", _policy(allowed), **REJECTED)
     assert row.jury_outcome == "rejected" and not row.unsupervised_reject_unverified
     assert not cfg.gate.unsupervised_reject_allowed
     assert build_queue([_finding("F-1", 10)], {"F-1": row}, {}, {}, [], cfg) == []
@@ -527,7 +534,7 @@ def test_report_and_governance_g11(tmp_path):
                    {"name": "d", "family": "deepseek", "provider": "mock", "model": "m", "data_residency": "on_prem"},
                    {"name": "n", "family": "nemotron", "provider": "mock", "model": "m", "data_residency": "on_prem"}],
         "roles": {"reviewers": ["a", "d", "n"], "skeptic": "n", "redteam": "d", "judges": ["a", "d", "n"]}, "human_queue": {"enabled": False}})))
-    assert build_queue([_finding("F-1", 1)], {"F-1": _cons("F-1", _policy(cfg), votes_tp=0, votes_human=3)}, {}, {}, [], cfg) == []
+    assert build_queue([_finding("F-1", 1)], {"F-1": _cons("F-1", _policy(cfg), **ALL_NEEDS_HUMAN)}, {}, {}, [], cfg) == []
     r = ReviewReport(target="t", generated_at="2026-09-12T00:00:00+00:00", provider_mode="mock", families_used=[], findings=[], skeptic=[], redteam=[],
                      votes=[], consensus=[], dimensions=[], overall_score=0, gate_passed=True, bias_audit={})
     assert "_Empty._" in render_human_queue(r)

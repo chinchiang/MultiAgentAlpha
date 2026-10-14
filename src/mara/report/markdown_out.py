@@ -43,7 +43,7 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
         lines.append(f"| {DIMENSION_LABELS[d.dimension]} | {d.score} | {d.accepted_findings} | {d.rejected_findings} | {d.human_queue} | {tool} |")
     tc = tier_counts(r)
     lines += ["", f"Evidence tiers: A={tc['A']} B={tc['B']} C={tc['C']} D={tc['D']}", "", "## Accepted findings", ""]
-    accepted = [f for f in r.findings if cons.get(f.id) and cons[f.id].final_accepted]
+    accepted = [f for f in r.findings if cons.get(f.id) and cons[f.id].final_outcome == "accepted"]
     accepted.sort(key=lambda f: -(cons[f.id].cvss4_score or 0.0))  # accepted implies a valid vector
     if not accepted:
         lines.append("_None._")

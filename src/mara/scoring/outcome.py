@@ -87,11 +87,11 @@ def decide(s: OutcomeSignals, policy: OutcomePolicy) -> JuryOutcome:
         # jury's vote alone; the jury may speak, but a human decides.
         reasons.append("skeptic_refuted_jury_overrode")
     if reasons:
-        return JuryOutcome("needs_human", tuple(reasons), False)
+        return JuryOutcome("needs_human", tuple(reasons), unsupervised_reject_unverified=False)
     if s.tier == EvidenceTier.D:
-        return JuryOutcome("dropped", (), False)
+        return JuryOutcome("dropped", (), unsupervised_reject_unverified=False)
     if s.score >= policy.accept_threshold:
-        return JuryOutcome("accepted", (), False)
+        return JuryOutcome("accepted", (), unsupervised_reject_unverified=False)
     # assessment #60: without a passing Alternative Annotator Test (policy P8) a human reviews every rejection;
     # the jury outcome stays rejected so the AAT keeps its sample, and the review is not incomplete for it
-    return JuryOutcome("rejected", (), not policy.unsupervised_reject_allowed)
+    return JuryOutcome("rejected", (), unsupervised_reject_unverified=not policy.unsupervised_reject_allowed)

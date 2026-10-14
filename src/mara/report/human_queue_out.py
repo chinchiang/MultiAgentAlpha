@@ -1,8 +1,9 @@
 """G-11: the human queue as an object, a file and a ticket.
 
-Selection consumes the pipeline's effective unresolved reasons, including quorum, invalid
-CVSS, disagreement and tier C at High severity. Backlog tightening never drops a finding
-that still needs a human. Each item carries un-blinded context and its exact review identity.
+Selection consumes the reasons the jury outcome recorded on each consensus row (quorum,
+disagreement, unverified provenance, tier C at the severity floor; docs/adr/0005-jury-outcome.md)
+and the rejected findings under rejection review (policy P8). Backlog tightening never drops a
+finding that still needs a human. Each item carries un-blinded context and its exact review identity.
 """
 
 from __future__ import annotations
