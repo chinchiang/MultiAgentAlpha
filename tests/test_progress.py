@@ -3,6 +3,7 @@ its nine stages in order, the CLI marks the end of the review only after the rep
 leaves a failed record instead of one that reads as a blocked gate."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,11 @@ from mara import progress as prog
 from mara.cli import app
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def plain(text: str) -> str:
+    """CLI output without rich's colour codes and panel borders (CI forces colour)."""
+    return " ".join(re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text).replace("│", " ").split())
 
 
 def test_without_a_path_nothing_is_written_but_stage_names_are_still_checked(tmp_path, monkeypatch):
@@ -125,4 +131,4 @@ def test_a_progress_file_inside_the_target_is_refused(root, tmp_path, monkeypatc
     (target / "app.py").write_text("print(1)\n")
     res = CliRunner().invoke(app, ["review", str(target), "--provider", "mock", "--out", str(tmp_path / "out"),
                                    "--progress-file", str(target / "progress.json")])
-    assert res.exit_code == 2 and "--progress-file" in res.output and not (target / "progress.json").exists()
+    assert res.exit_code == 2 and "--progress-file" in plain(res.output) and not (target / "progress.json").exists()
