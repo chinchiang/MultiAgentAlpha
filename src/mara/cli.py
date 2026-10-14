@@ -190,7 +190,8 @@ def cvss(vector: str):
         s = cvss4.score(vector)
     except cvss4.CVSS4Error as e:
         raise typer.BadParameter(str(e), param_hint="VECTOR") from e
-    console.print(json.dumps({"vector": vector, "score": s, "severity": cvss4.severity(s), "nomenclature": cvss4.nomenclature(vector)}))
+    # JSON goes to stdout as is: the rich console would colour it and wrap long strings, which breaks a parser
+    typer.echo(json.dumps({"vector": vector, "score": s, "severity": cvss4.severity(s), "nomenclature": cvss4.nomenclature(vector)}))
 
 
 @app.command()
@@ -220,7 +221,7 @@ def check_config(
         raise typer.Exit(code=1) from e
     results = evaluate_policies(cfg)
     if as_json:
-        console.print(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1))
+        typer.echo(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1))
     else:
         t = Table(title=f"MARA policy check · {config}")
         for col in ("Policy", "Status", "Reason"):
@@ -229,7 +230,11 @@ def check_config(
             t.add_row(f"{r.id} {r.name}", "[green]PASS[/green]" if r.passed else "[red]FAIL[/red]", r.reason)
         console.print(t)
     failed = [r for r in results if not r.passed]
-    console.print(f"{len(results) - len(failed)}/{len(results)} policies pass; families {sorted({m.family.value for m in cfg.models})}")
+    summary = f"{len(results) - len(failed)}/{len(results)} policies pass; families {sorted({m.family.value for m in cfg.models})}"
+    if as_json:
+        typer.echo(summary, err=True)  # stdout stays one JSON document
+    else:
+        console.print(summary)
     if failed:
         raise typer.Exit(code=1)
 

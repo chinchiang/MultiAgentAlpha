@@ -1,5 +1,6 @@
 {
  "a11y.skip": "跳至主要內容",
+ "a11y.table": "{name}（表格）",
  "action.cancel": "取消評估",
  "action.close": "關閉",
  "action.dismiss": "關閉訊息",

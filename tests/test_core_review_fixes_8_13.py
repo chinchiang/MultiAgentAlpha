@@ -125,7 +125,7 @@ def test_cvss_command_reports_a_bad_vector_as_a_usage_error():
     assert bad.exit_code == 2 and isinstance(bad.exception, SystemExit), "a usage error, not a traceback"
     assert "missing base metrics" in " ".join(bad.output.split())
     good = CliRunner().invoke(app, ["cvss", VECTOR])
-    assert good.exit_code == 0 and json.loads(good.output)["score"] == 9.3
+    assert good.exit_code == 0 and json.loads(good.stdout)["score"] == 9.3
 
 
 # ------------------------------------------------------------------ 13. dedupe across './' paths

@@ -121,7 +121,33 @@ def test_the_page_keeps_its_landmarks_and_language():
     assert '<header class="topbar">' in HTML and re.search(r'<nav class="nav" id="main-nav"[^>]*aria-label=', HTML)
     assert 'role: "tablist"' in JS and '"aria-selected"' in JS and '"aria-current": s.status === "running" ? "step"' in JS
     assert 'role: "dialog", "aria-modal": "true"' in JS, "the findings drawer is a modal dialog"
-    assert 'role: "region", "aria-label": label' in JS, "scrolling tables are labelled regions"
+    assert 'role: "region", "aria-label": t("a11y.table", { name: label })' in JS, "scrolling tables are labelled regions"
+
+
+def _contrast(fg: str, bg: str) -> float:
+    def lum(hexcolor: str) -> float:
+        rgb = [int(hexcolor.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    hi, lo = sorted((lum(fg), lum(bg)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_the_axe_findings_of_2026_10_14_stay_fixed():
+    """axe-core 4.11 (WCAG 2.0/2.1/2.2 A and AA, best-practice) over every view in both languages at 1440 and 375 px,
+    and a contrast check of every visible text run against the pixels behind it, both clean after these fixes."""
+    # a table's region is named apart from its card, which is a region too (landmark-unique)
+    assert '"a11y.table"' in JS and all("{name}" in DICTS[lang]["a11y.table"] for lang in DICTS)
+    assert 'h("header"' not in JS, "the drawer's header made a second banner landmark"
+    assert 'h("aside", { class: "banner info demo", "aria-label": t("top.demo") }' in JS, "the demo note sits in a landmark"
+    assert 'h("h2", null, dimLabel(d.dimension))' in JS, "dimension cards follow the page's h1 (heading-order)"
+    logs = re.findall(r'h\("pre", \{ class: "log"([^}]*)\}', JS)
+    assert logs and all('tabindex: "0"' in rest for rest in logs), "scrolling logs take keyboard focus"
+    panel = re.search(r"--panel: (#[0-9a-f]{6})", CSS).group(1)
+    number = re.search(r"\.numbered \.num \{[^}]*color: (#[0-9a-f]{6})", CSS).group(1)
+    assert _contrast(number, panel) >= 4.5, "the step numbers on the home page are text too"
+    assert re.search(r"@media \(max-width: 640px\) \{[^@]*\.member \{ flex-wrap: wrap; \}", CSS), \
+        "on a phone a long counter chip covered the role and model"
 
 
 

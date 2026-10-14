@@ -1,5 +1,6 @@
 {
  "a11y.skip": "Skip to main content",
+ "a11y.table": "{name} (table)",
  "action.cancel": "Cancel review",
  "action.close": "Close",
  "action.dismiss": "Dismiss",

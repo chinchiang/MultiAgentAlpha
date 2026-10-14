@@ -3,6 +3,7 @@
 
 import datetime as dt
 import json
+import re
 
 import pytest
 import yaml
@@ -332,9 +333,30 @@ def test_check_config_lists_every_violation(root):
     assert res.output.count("FAIL") == 5
     ok = runner.invoke(app, ["check-config", str(root / "config" / "mara.yaml")])
     assert ok.exit_code == 0, ok.output
-    assert "8/8 policies pass" in ok.output
+    assert "8/8 policies pass" in _plain(ok.output)
     js = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml"), "--json"])
-    assert js.exit_code == 1 and '"passed": false' in js.output
+    assert js.exit_code == 1 and any(not r["passed"] for r in json.loads(js.stdout))
+    assert "3/8 policies pass" in js.stderr, "the summary stays off stdout, which a parser reads"
+
+
+def test_json_output_is_plain_even_on_a_colour_terminal(monkeypatch, root):
+    """FORCE_COLOR (as on GitHub Actions) and a narrow terminal made the rich console colour the JSON and wrap its
+    strings; `mara cvss` and `check-config --json` now print JSON as is."""
+    from rich.console import Console
+
+    from mara import cli
+
+    monkeypatch.setattr(cli, "console", Console(force_terminal=True, color_system="truecolor", width=30))
+    runner = CliRunner()
+    js = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml"), "--json"])
+    assert "\x1b" not in js.stdout and len(json.loads(js.stdout)) == 8
+    v = runner.invoke(app, ["cvss", "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"])
+    assert v.exit_code == 0 and json.loads(v.stdout)["score"] == 9.3
+
+
+def _plain(text: str) -> str:
+    """CLI output without rich's colour codes (FORCE_COLOR splits "8/8" into styled pieces)."""
+    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
 
 
 def _p8(cfg):
