@@ -28,7 +28,6 @@ from .providers.base import Provider
 from .schemas import (
     SEVERITY_ORDER,
     ConsensusResult,
-    EvidenceTier,
     Finding,
     JudgeVote,
     ModelFamily,
@@ -40,6 +39,7 @@ from .scoring import cvss4
 from .scoring.consensus import krippendorff_alpha_nominal, weighted_consensus
 from .scoring.dimension_score import score_dimension
 from .scoring.idcheck import check_finding_refs
+from .scoring.outcome import OutcomePolicy, OutcomeSignals, decide, tier_c_needs_human
 from .scoring.tiers import assign_tier, ssvc_decision
 from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
 from .tools.sarif import ToolResult
@@ -382,8 +382,7 @@ class Pipeline:
             return None
         if c.tier.value in self.cfg.gate.block_on_tiers and c.cvss4_severity in self.cfg.gate.block_on_severity:
             return "blocking_tier_and_severity"
-        sev_rank = SEVERITY_ORDER.index(c.cvss4_severity) if c.cvss4_severity in SEVERITY_ORDER else len(SEVERITY_ORDER)
-        if self.exclude_tier_c and c.tier == EvidenceTier.C and sev_rank >= SEVERITY_ORDER.index(self.cfg.human_queue.queue_tier_c_min_severity):
+        if self.exclude_tier_c and tier_c_needs_human(c.tier, c.cvss4_severity, self.cfg.human_queue.queue_tier_c_min_severity):
             return "tier_c_while_tightened"
         return None
 
@@ -405,6 +404,7 @@ class Pipeline:
         by_finding: dict[str, list[JudgeVote]] = defaultdict(list)
         for v in votes:
             by_finding[v.finding_id].append(v)
+        policy = OutcomePolicy.from_config(self.cfg, alpha_threshold=self.human_alpha_threshold, exclude_tier_c=self.exclude_tier_c)
         results: list[ConsensusResult] = []
         flips = 0
         for f in findings:
@@ -446,35 +446,10 @@ class Pipeline:
             operational = sorted(family_bands, key=SEVERITY_ORDER.index)[len(family_bands) // 2] if family_bands else None
             rt = red_by_id.get(f.id)
             ssvc = ssvc_decision(severity=sev, exploitable=rt.exploitable if rt else "unknown", tier=tier)
-            reasons = []
-            if not prov_ok:
-                reasons.append("unverified_provenance")
-            if abstained:
-                reasons.append("skeptic_abstained")
-            if not quorum_ok:
-                reasons.append("insufficient_independent_judges")
-            if len(fv) != len(raw_votes):
-                reasons.append("invalid_or_incomplete_judge_passes")
-            if alpha is not None and alpha < self.human_alpha_threshold:
-                reasons.append("agreement_below_threshold")
-            if human > tp and human > fp:
-                reasons.append("majority_needs_human")
-            if not consistent and fv:
-                reasons.append("position_inconsistent")
-            # G-11: tier C at or above the configured severity goes to a human - unless the queue is
-            # tightened over its backlog limit (config tighten_exclude_tier_c), in which case the
-            # jury's consensus decides and build_queue stops queuing tier C. An unknown severity
-            # ranks above every band so the queue trigger stays fail-closed.
-            min_c = SEVERITY_ORDER.index(self.cfg.human_queue.queue_tier_c_min_severity)
-            sev_rank = SEVERITY_ORDER.index(sev) if sev in SEVERITY_ORDER else len(SEVERITY_ORDER)
-            if tier == EvidenceTier.C and not self.exclude_tier_c and sev_rank >= min_c:
-                reasons.append("tier_c_high")
-            if refuted and tier != EvidenceTier.D:
-                # assessment #37: a refuted finding never re-enters the blocking logic on the
-                # jury's vote alone; the jury may speak, but a human decides.
-                reasons.append("skeptic_refuted_jury_overrode")
-            needs_human = bool(reasons)
-            accepted = tier != EvidenceTier.D and score >= self.cfg.gate.accept_threshold and not needs_human
+            outcome = decide(OutcomeSignals(tier=tier, score=score, severity=sev, provenance_verified=prov_ok, skeptic_refuted=refuted,
+                                            skeptic_abstained=abstained, quorum_ok=quorum_ok, passes_complete=len(fv) == len(raw_votes),
+                                            alpha=alpha, votes_tp=tp, votes_fp=fp, votes_human=human, position_consistent=consistent),
+                             policy)
             results.append(
                 ConsensusResult(
                     finding_id=f.id,
@@ -491,9 +466,7 @@ class Pipeline:
                     cvss4_score=num,
                     cvss4_severity=sev,
                     ssvc_decision=ssvc,
-                    accepted=accepted,
-                    needs_human=needs_human,
-                    human_reasons=reasons,
+                    **outcome.consensus_fields(),
                     independent_judges=len(independent),
                     agreement_proxy=alpha,
                     operational_severity=operational,
