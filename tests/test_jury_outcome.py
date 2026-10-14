@@ -145,3 +145,25 @@ def test_a_report_written_before_rejection_review_was_recorded_reads_as_not_unde
     old = _row(EvidenceTier.B, accepted=False).model_dump(exclude={"unsupervised_reject_unverified"})
     row = ConsensusResult.model_validate(old)
     assert (row.jury_outcome, row.unsupervised_reject_unverified) == ("rejected", False)
+
+
+def _ruled(row: ConsensusResult, decision: str) -> ConsensusResult:
+    return row.model_copy(update={"human_decision": {"decision": decision, "key": "k", "issue": 7, "decided_by": "alice",
+                                                     "decided_at": "2026-10-14T00:00:00Z"}})
+
+
+def test_without_a_usable_decision_the_final_outcome_is_the_jury_outcome():
+    for case, (signals, policy) in ROUND_TRIP.items():
+        row = _row(signals.tier, **decide(signals, policy).consensus_fields())
+        assert row.final_outcome == row.jury_outcome, case
+
+
+def test_a_usable_decision_settles_the_final_outcome_and_leaves_the_jury_outcome():
+    """docs/adr/0003-human-resolution.md: the ruling outranks the jury both ways; the jury outcome stays for calibration."""
+    dropped = _row(EvidenceTier.D, accepted=False)
+    awaiting = _row(EvidenceTier.C, accepted=False, needs_human=True, human_reasons=["tier_c_high"])
+    accepted = _row(EvidenceTier.B, accepted=True)
+    assert (_ruled(dropped, "true_positive").final_outcome, _ruled(dropped, "true_positive").jury_outcome) == ("accepted", "dropped")
+    assert _ruled(awaiting, "false_positive").final_outcome == "rejected"
+    assert _ruled(awaiting, "true_positive").final_outcome == "accepted"
+    assert (_ruled(accepted, "false_positive").final_outcome, _ruled(accepted, "false_positive").jury_outcome) == ("rejected", "accepted")

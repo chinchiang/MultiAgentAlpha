@@ -106,7 +106,7 @@ def review(
 
     overall = f"{report.overall_score}/100" if report.overall_score is not None else "unavailable (review incomplete)"
     t = Table(title=f"MARA · {target} · overall {overall} · gate {'PASSED' if report.gate_passed else 'BLOCKED'}")
-    for col in ("Dimension", "Score", "Accepted", "Rejected", "Human", "Tool"):
+    for col in ("Dimension", "Score", "Accepted", "Rejected", "Awaiting decision", "Tool"):
         t.add_column(col)
     for d in report.dimensions:
         t.add_row(DIMENSION_LABELS[d.dimension], str(d.score), str(d.accepted_findings), str(d.rejected_findings),

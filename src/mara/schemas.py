@@ -199,6 +199,14 @@ class ConsensusResult(BaseModel):
         return "dropped" if self.tier == EvidenceTier.D else "rejected"
 
     @property
+    def final_outcome(self) -> JuryOutcomeValue:
+        """The final outcome: the ruling of a usable decision where there is one (true positive accepted, false positive
+        rejected), the jury outcome otherwise."""
+        if self.human_decision:
+            return "accepted" if self.human_decision["decision"] == "true_positive" else "rejected"
+        return self.jury_outcome
+
+    @property
     def resolved_by_human(self) -> bool:
         return self.human_decision is not None
 

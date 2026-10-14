@@ -17,13 +17,15 @@ def score_dimension(dimension: str, findings: list[Finding], consensus: dict[str
         c = consensus.get(f.id)
         if c is None:
             continue
-        if c.final_accepted:  # the final outcome: a human ruling where there is one (docs/adr/0003-human-resolution.md)
+        # the final outcome: a human ruling where there is one (docs/adr/0003-human-resolution.md)
+        outcome = c.final_outcome
+        if outcome == "accepted":
             accepted += 1
             total -= PENALTY[c.cvss4_severity] * TIER_FACTOR[c.tier]
-        elif c.final_needs_human:
+        elif outcome == "needs_human":
             human += 1  # awaiting a decision, not rejected
         else:
-            rejected += 1
+            rejected += 1  # rejected or dropped; a rejection under review (ADR 0005) is decided, not awaiting
     total = max(0.0, round(total, 1))
     note = "" if tool_ran else "no deterministic tool ran for this dimension; tier A unavailable"
     return DimensionScore(
