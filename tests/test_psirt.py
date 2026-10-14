@@ -33,14 +33,19 @@ def _mock_cfg(**psirt) -> MaraConfig:
     return MaraConfig.model_validate(raw)
 
 
+def _accept(c):
+    # an accepted jury outcome as scoring writes it (JuryOutcome.consensus_fields): accepted, not needing a human
+    c.accepted, c.needs_human, c.human_reasons = True, False, []
+
+
 def _adjudicate_for_psirt_test(report, cfg):
     count = 0
     for c in report.consensus:
         if c.tier.value == "A" and c.cvss4_severity == "Critical" and count < 3:
-            c.accepted = True
+            _accept(c)
             count += 1
         elif c.tier.value == "B":
-            c.accepted = True
+            _accept(c)
     report.psirt = build_notifications(report, cfg)
     report.bias_audit["psirt_notifications"] = len(report.psirt)
 

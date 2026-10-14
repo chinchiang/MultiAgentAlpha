@@ -210,15 +210,6 @@ class ConsensusResult(BaseModel):
     def resolved_by_human(self) -> bool:
         return self.human_decision is not None
 
-    @property
-    def final_accepted(self) -> bool:
-        """The final outcome: the human ruling where there is one, the jury outcome otherwise."""
-        return self.human_decision["decision"] == "true_positive" if self.human_decision else self.accepted
-
-    @property
-    def final_needs_human(self) -> bool:
-        return False if self.human_decision else self.needs_human
-
 
 class DimensionScore(BaseModel):
     dimension: str

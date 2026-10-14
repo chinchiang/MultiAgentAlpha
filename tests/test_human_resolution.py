@@ -55,7 +55,7 @@ def test_decided_findings_are_settled_on_a_review_of_the_same_content(home):
     cons = {c.finding_id: c for c in second.consensus}
     for item in first.human_queue:
         c = cons[item.finding_id]
-        assert c.resolved_by_human and not c.final_accepted and not c.final_needs_human
+        assert c.resolved_by_human and c.final_outcome == "rejected"
         assert c.needs_human, "the jury outcome stays as the pipeline concluded it"
     assert second.bias_audit["human_decisions_applied"] == len(first.human_queue)
 
@@ -85,9 +85,9 @@ def test_the_final_outcome_drives_the_gate_scores_and_report_in_both_directions(
     decide_finding(home, first, "F-0029", "true_positive", issue=29)
     second = review(home, "out2")
     cons = {c.finding_id: c for c in second.consensus}
-    assert cons["F-0002"].final_accepted and not cons["F-0002"].accepted, "jury outcome kept"
-    assert not cons["F-0001"].final_accepted and cons["F-0001"].accepted, "a human false positive outranks an accepting jury"
-    assert cons["F-0029"].final_accepted and cons["F-0029"].tier.value == "D", "tier stays D"
+    assert cons["F-0002"].final_outcome == "accepted" and not cons["F-0002"].accepted, "jury outcome kept"
+    assert cons["F-0001"].final_outcome == "rejected" and cons["F-0001"].accepted, "a human false positive outranks an accepting jury"
+    assert cons["F-0029"].final_outcome == "accepted" and cons["F-0029"].tier.value == "D", "tier stays D"
     pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), out_dir=home / "x")
     assert pipe.blocking_reason(cons["F-0002"]) == "blocking_tier_and_severity"
     assert pipe.blocking_reason(cons["F-0001"]) is None and pipe.blocking_reason(cons["F-0029"]) is None
@@ -109,7 +109,7 @@ def test_a_decision_that_is_not_usable_settles_nothing_and_says_why(home):
     queued = {i.finding_id: i for i in second.human_queue}
     assert item.finding_id in queued and "decision_not_usable:untrained" in queued[item.finding_id].reasons
     c = next(c for c in second.consensus if c.finding_id == item.finding_id)
-    assert not c.resolved_by_human and c.final_needs_human
+    assert not c.resolved_by_human and c.final_outcome == "needs_human"
     assert "unresolved_human_review" in second.incomplete_reasons
     assert second.bias_audit["human_decisions_applied"] == 0
     assert second.bias_audit["human_decisions_not_usable[untrained]"] == 1
@@ -161,7 +161,7 @@ def test_calibration_still_counts_a_jury_drop_that_a_human_confirmed_as_a_miss()
                                 cvss4_score=7.0, cvss4_severity="High", ssvc_decision="Track", accepted=False,
                                 human_decision={"decision": "true_positive", "key": key, "issue": 1, "decided_by": "alice",
                                                 "decided_at": "2026-10-01T08:00:00Z"})
-    assert jury_drop.final_accepted
+    assert jury_drop.final_outcome == "accepted"
     report = {"target_id": "t", "revision": "r", "coverage": {"content_hash": "c"},
               "findings": [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 10}]}],
               "consensus": [json.loads(jury_drop.model_dump_json())]}

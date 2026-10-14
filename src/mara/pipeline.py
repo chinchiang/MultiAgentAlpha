@@ -383,7 +383,7 @@ class Pipeline:
         queue_tier_c_min_severity is no longer queued for a human (tighten_exclude_tier_c), so such
         a finding blocks instead of passing on one family's word plus the jury. Tightening may cut
         human work; it never lets more through. An unknown severity ranks above every band."""
-        if not c.final_accepted:
+        if c.final_outcome != "accepted":
             return None
         if c.tier.value in self.cfg.gate.block_on_tiers and c.cvss4_severity in self.cfg.gate.block_on_severity:
             return "blocking_tier_and_severity"
@@ -630,7 +630,7 @@ class Pipeline:
                 incomplete.append("ml_bom_signature_unverified")
         if self.cfg.roles.context and context_view is None and not egress_blocked:
             incomplete.append("context_view_incomplete")
-        if any(c.final_needs_human for c in consensus):
+        if any(c.final_outcome == "needs_human" for c in consensus):
             incomplete.append("unresolved_human_review")
         # Tool evidence remains visible independently of model output. A model's silence or
         # rejection never clears an unsuppressed tool result.

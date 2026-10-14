@@ -50,8 +50,8 @@ def to_sarif(report: ReviewReport) -> dict:
         q = queued.get(f.id)
         # the final outcome (docs/adr/0003-human-resolution.md): a human false positive is still emitted, dismissed with
         # the ruling as its justification, so code scanning records why the alert closed instead of reading it as fixed
-        dismissed = c.resolved_by_human and not c.final_accepted
-        if not c.final_accepted and q is None and not dismissed:
+        dismissed = c.resolved_by_human and c.final_outcome == "rejected"
+        if c.final_outcome != "accepted" and q is None and not dismissed:
             continue
         rule_id = f"MARA/{f.dimension}/{f.cwe}"
         occurrence = occurrence_of[f.id]
