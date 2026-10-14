@@ -78,11 +78,23 @@ A well-formed, bound decision with no contradicting decision on its key, made by
 _Avoid_: valid decision (ambiguous between well-formed and usable)
 
 **Jury outcome**:
-What the pipeline itself concluded about a finding from the judges, skeptic, tools and evidence tier: accepted, rejected, or needing a human.
+What the pipeline itself concluded about a finding from the judges, skeptic, tools and evidence tier: accepted, rejected, dropped, or needing a human.
 _Avoid_: consensus (the weighted score is one input to it), verdict
 
+**Rejected finding**:
+A finding with enough evidence to stand (any tier but D) that the jury did not accept: the pipeline's own rejection, the kind the Alternative Annotator Test checks.
+_Avoid_: dropped finding, false positive (that is a human ruling)
+
+**Dropped finding**:
+A finding at evidence tier D that needs no human: too little support, or refuted by the skeptic and not carried by the jury. It is out on the evidence, not on the jury's vote.
+_Avoid_: rejected finding
+
+**Rejection review**:
+The human look at every rejected finding that policy P8 requires until the Alternative Annotator Test passes. The finding enters the human queue, its jury outcome stays rejected, and the review is not incomplete because of it.
+_Avoid_: needing a human (that outcome is undecided; a rejection under review is decided)
+
 **Final outcome**:
-A finding's outcome once human decisions are taken into account: the ruling of a usable decision where one exists, the jury outcome otherwise.
+A finding's outcome once human decisions are taken into account: the ruling of a usable decision where one exists, the jury outcome otherwise. It takes the jury outcome's values; a true-positive ruling makes it accepted, a false-positive ruling rejected.
 _Avoid_: override result
 
 **Human-resolved finding**:
