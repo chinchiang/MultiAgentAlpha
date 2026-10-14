@@ -4,6 +4,11 @@ Heterogeneous-model, multi-agent **security and architecture review for vibe-cod
 anchored to deterministic tools and designed so that no single language model's bias can
 decide the outcome.
 
+> **Try the workbench in your browser:** <https://chinchiang.github.io/MultiAgentAlpha/workbench/>
+> (唯讀展示 / read-only demo, 正體中文 and English). It is a snapshot of one offline review of the seeded
+> fixture by the mock model families; it starts nothing and talks to no server. To run reviews
+> yourself, use `mara serve` (see [Local web workbench](#local-web-workbench-mara-serve)).
+
 This repository contains two things:
 
 1. **The research report** (正體中文, GSMD series): `docs/GSMD-RPT-2026-0908-01_多模型多代理資安審查.md`
@@ -16,7 +21,8 @@ This repository contains two things:
 2. **A runnable prototype** (`src/mara`) that implements the six-layer architecture the report
    describes. It runs fully offline with mock providers, and against live models (Claude on Amazon
    Bedrock, Gemini through the Gemini API and a self-hosted GLM behind an OpenAI-compatible
-   endpoint) when configured.
+   endpoint) when configured. `mara serve` adds a local, bilingual web workbench on top of the command
+   line; its [read-only demo](https://chinchiang.github.io/MultiAgentAlpha/workbench/) runs on GitHub Pages.
 
 ## Online report (GitHub Pages)
 
