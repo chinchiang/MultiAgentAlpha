@@ -121,6 +121,41 @@ a hallucinated-looking dependency, a hidden reviewer instruction in the README).
 families behave differently on purpose (one fabricates a quote, one refuses a dimension, one flips
 a vote between the forward and reverse pass) so the tests exercise every defence.
 
+## Local web workbench (`mara serve`)
+
+```bash
+mara serve                       # prints http://127.0.0.1:8765/#token=… and opens it; --port 0 picks a free port, --no-browser only prints
+```
+
+`mara serve` is a local web page (正體中文 and English, switched on the page) on top of the same command line
+(`docs/adr/0006-local-web-workbench.md`). **評估工作台 / Workbench** lists every run with its status, gate and overall score;
+**新建評估 / New review** starts a white-box review of a source directory with a config from `config/` or `config/examples/`
+(mock or live, optionally `--base`, pre-recorded SARIF, `--fail-on-gate`, `--calibration-sample`; *Offline demo* fills in the
+seeded fixture and its recorded SARIF); a run's page follows the nine stages live (bundle, L0 tools, context, reviewers, skeptic,
+red team, jury, scoring, report) and then shows the findings with their evidence, skeptic, red team, judge votes and jury and final
+outcome, the model panel per role with each family's calls and failures, the counts the run used, the reasons the review is
+incomplete, the dimension scores, the tool results, the human queue and the logs, and offers every report for download;
+**工具與執行環境 / Tools & environment** shows each tool of `tools/versions.lock` against what is installed, the trivy database,
+every config's models, data residency, credential variables (set or not, never their values) and policies P1–P8, and runs the
+workspace's `scripts/install_tools.py`, `scripts/trivy_db.py` or `mara check-config` as a job.
+
+Each run is a `mara review` subprocess with its own directory `out/runs/<run-id>/` (`--out` moves the root): the request, the argv,
+the roles and models of the config at launch in `run.json`, the child's output in `run.log`, every report the command line writes,
+and `progress.json`, which `mara review --progress-file` rewrites at every stage boundary. Every check of the command line still
+decides, and the server repeats them before it starts the child only to name the refusal on the page. One review runs at a time,
+and never while a job replaces the tools or the trivy database; stopping the server (Ctrl-C, SIGTERM, SIGHUP) cancels it. The PSIRT options stay on the command line, because they start legal clocks. A plain
+`mara review` into `out/` appears read-only in the list.
+
+The server listens on a loopback address only (`--host 127.0.0.1`, `localhost` or `::1`; reach a remote one through an SSH tunnel,
+since finding detail stays where the review ran). The printed URL carries a token that lives as long as the server in its fragment,
+which no server or log sees; the page keeps it in this origin's localStorage and sends it in an `X-MARA-Token` header. There is no
+cookie, because a cookie reaches every service on 127.0.0.1 whatever its port. The browser is opened on a redirect file only the user
+can read, never on the URL, since process arguments are visible to every local user. The server refuses a Host header that is not
+the loopback server (DNS rebinding) and an Origin or Sec-Fetch-Site from another site. The page loads nothing from anywhere else:
+its Content-Security-Policy allows exactly its own script and stylesheet by SHA-256 and requires Trusted Types, and
+`tests/test_web_static.py` grades that policy with the pinned csp-evaluator, which the CI tests job installs for it. Only the standard library and the
+existing dependencies are used, so the hash-locked closures are unchanged.
+
 ## Live mode
 
 ```bash
@@ -717,6 +752,7 @@ mara cvss "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
 mara review <target> --provider mock --mock-fixtures <dir>   # replay another set of mock responses
 python scripts/gen_mock_fixtures.py      # regenerate mock responses after editing the fixture app
 python scripts/gen_mock_fixtures.py --check   # the committed mock responses are current (also a test)
+mara serve --no-browser --port 0        # the local web workbench on a free loopback port (see Local web workbench)
 python scripts/build_html.py             # rebuild the online edition of the report
 python scripts/count_words.py            # 字數統計（正體中文計字，不含附錄A）
 ```

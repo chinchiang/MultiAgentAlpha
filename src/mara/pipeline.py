@@ -23,6 +23,7 @@ from .bias.diversity import pairwise_family_agreement, pick_independent
 from .config import MaraConfig
 from .context.repo_map import MAX_TOTAL_CHARS, RepoContext, build_context, bundle_cost, restrict_to_increment
 from .identity import NEAR_LINES, norm_cwe, norm_path
+from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
 from .schemas import (
@@ -116,8 +117,11 @@ def _count_invalid(errors: list[str]) -> int:
 
 
 class Pipeline:
-    def __init__(self, cfg: MaraConfig, *, mock_fixtures: str | None = None, out_dir: Path | None = None):
+    def __init__(self, cfg: MaraConfig, *, mock_fixtures: str | None = None, out_dir: Path | None = None,
+                 progress: Progress | None = None):
         self.cfg = cfg
+        # the live view `mara serve` draws (mara.progress); a no-op unless `mara review --progress-file` is given
+        self.progress = progress if progress is not None else Progress()
         self.out_dir = out_dir or resolve("out")  # the workspace, like `mara review --out`
         self.providers: dict[str, Provider] = {m.name: make_provider(m, mock_fixtures) for m in cfg.models}
         # Counters (default 0) plus a few labels and nested tables; becomes the report's bias_audit
@@ -138,6 +142,7 @@ class Pipeline:
 
     def _say(self, msg: str) -> None:
         self.log.append(msg)
+        self.progress.log(msg)
 
     # ------------------------------------------------------------------ L0
     def run_tools(self, target: Path, sarif_dir: Path | None) -> list[ToolRun]:
@@ -521,6 +526,8 @@ class Pipeline:
         check_outside(target)
         answer_key = calibration_answer_key(target) if calibration_sample else None
         self.out_dir.mkdir(parents=True, exist_ok=True)
+        prog = self.progress
+        prog.begin("bundle")
         ctx = build_context(target)
         if base_ref:
             # incremental review (assessment #14): keep the changed files, their import
@@ -532,6 +539,8 @@ class Pipeline:
         for prov in self.providers.values():
             prov.bind_target(ctx.root)
         self._say(f"L1: {ctx.summary()}")
+        prog.done("bundle", f"{len(ctx.content)} file(s) in the bundle, {len(ctx.omitted)} omitted, {len(ctx.excluded)} excluded")
+        prog.begin("tools")
         tool_runs = self.run_tools(target, sarif_dir)
         if mode == "live" and sarif_dir:
             # Pre-recorded SARIF cannot authorize egress from the current working tree.
@@ -552,22 +561,44 @@ class Pipeline:
             self._say(f"L0: secret preflight: {len(exempt)} seeded secret(s) declared by the calibration answer key, "
                       f"{len(unexplained)} other finding(s)")
         egress_blocked = mode == "live" and (not secret_runs or any(not r.ran for r in secret_runs) or bool(unexplained))
+        prog.done("tools", f"{len(tools_ran)} of {len(tool_runs)} tool(s) ran, {len(tool_results)} result(s)"
+                  + ("; source egress blocked by the secret preflight" if egress_blocked else ""))
         # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked
-        context_view = None if egress_blocked else self.run_context(ctx)
+        if egress_blocked or not self.cfg.roles.context:
+            prog.skip("context", "source egress blocked by the secret preflight" if egress_blocked else "no context role configured")
+            context_view = None
+        else:
+            prog.begin("context")
+            context_view = self.run_context(ctx)
+            prog.done("context", f"{len(context_view.items) if context_view else 0} verified fact(s)")
         if context_view is not None:
             (self.out_dir / "context.json").write_text(context_view.model_dump_json(indent=2), encoding="utf-8")
             self.audit["context_view_items"] = len(context_view.items)
-        raw = [] if egress_blocked else self.run_reviewers(ctx, context_view)
+        if egress_blocked:
+            prog.skip("reviewers", "source egress blocked by the secret preflight")
+            raw = []
+        else:
+            prog.begin("reviewers")
+            raw = self.run_reviewers(ctx, context_view)
         findings, finders = self.dedupe(raw)
+        if not egress_blocked:
+            prog.done("reviewers", f"{len(raw)} raw finding(s), {len(findings)} after deduplication")
         findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
         self.audit["findings_raw"] = len(raw)
         self.audit["findings_deduped"] = len(findings)
+        prog.begin("skeptic")
         sk, abstained_ids = self.run_skeptics(ctx, findings, finders)
         sk_by_id = {v.finding_id: v for v in sk}
         survivors = [f for f in findings if sk_by_id.get(f.id, None) is None or sk_by_id[f.id].verdict != "refuted"]
+        prog.done("skeptic", f"{len(sk)} verdict(s) on {len(findings)} finding(s), {len(findings) - len(survivors)} refuted")
+        prog.begin("redteam")
         rt = self.run_redteam(ctx, survivors, finders)
         rt_by_id = {n.finding_id: n for n in rt}
+        prog.done("redteam", f"{len(rt)} note(s), {sum(n.exploitable == 'yes' for n in rt)} exploitable")
+        prog.begin("jury")
         votes = self.run_jury(ctx, findings, sk_by_id, finders)
+        prog.done("jury", f"{len(votes)} vote(s) over the forward and reverse passes")
+        prog.begin("scoring")
         consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=abstained_ids,
                                tool_path_prefix=ctx.repo_prefix)
         # repository + path below its top level for a committed git target (repo_map.target_identity),
@@ -622,6 +653,8 @@ class Pipeline:
             self.audit[f"judge_agreement[{k}]"] = v
         self.audit["tool_results_ingested"] = len(tool_results)
         self.audit["tools_ran"] = ",".join(sorted(tools_ran)) or "none"
+        prog.done("scoring", f"review {'incomplete' if incomplete else 'complete'}, gate {'passed' if gate else 'blocked'}")
+        prog.begin("report")
         report = ReviewReport(
             target=str(target),
             generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
@@ -709,6 +742,7 @@ class Pipeline:
         if ml_bom:
             self._say("L0: ML-BOM: " + ", ".join(f"{n} {v['status']}" for n, v in ml_bom.items()))
         self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")
+        prog.done("report", f"{len(report.human_queue)} human-queue item(s), {len(report.psirt)} PSIRT payload(s)")
         return report
 
 
