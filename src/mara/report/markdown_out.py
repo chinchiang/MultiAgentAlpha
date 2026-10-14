@@ -12,9 +12,13 @@ def _decided(c) -> str:
     return f"decided by human (#{d.get('issue')} by {literal(d.get('decided_by'))}): {d['decision'].replace('_', ' ')}"
 
 
-def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
-    """`fail_on_gate`: `mara review --fail-on-gate` enforces a blocked gate for this run in any rollout phase, so the
-    header must not call it "recorded, not enforced" (G-10; docs/governance-templates.md)."""
+_ENFORCEMENT = {True: " (enforced for this run by --fail-on-gate)", False: " (recorded, not enforced)", None: ""}
+
+
+def render_markdown(r: ReviewReport) -> str:
+    """Outside the blocking phase a blocked gate is recorded, not enforced, unless `mara review --fail-on-gate` enforced
+    it for this run (G-10; docs/governance-templates.md); the header says which, as the report records it
+    (`gate_enforced`, docs/adr/0007-review-status-and-gate.md), and nothing for a report written before that field."""
     cons = {c.finding_id: c for c in r.consensus}
     overall = f"{r.overall_score}/100" if r.overall_score is not None else "unavailable (review incomplete)"
     lines = [
@@ -23,9 +27,9 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
         f"Generated {r.generated_at} · mode `{r.provider_mode}` · families {', '.join(r.families_used)}",
         "",
         f"**Overall score {overall} · gate {'PASSED' if r.gate_passed else 'BLOCKED'}**"
+        + (f" ({literal(', '.join(r.gate_reasons))})" if r.gate_reasons else "")
         + (f" · rollout phase `{r.bias_audit['rollout_phase']}`" if r.bias_audit.get("rollout_phase") else "")
-        + ((" (enforced for this run by --fail-on-gate)" if fail_on_gate else " (recorded, not enforced)")
-           if r.bias_audit.get("rollout_phase") not in (None, "blocking") and not r.gate_passed else ""),
+        + (_ENFORCEMENT[r.gate_enforced] if r.bias_audit.get("rollout_phase") not in (None, "blocking") and not r.gate_passed else ""),
         "",
         f"Review status: **{r.review_status}**; incomplete reasons: {literal(', '.join(r.incomplete_reasons)) or 'none'}",
         "",
@@ -61,6 +65,7 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
             f"- Reachability ({f.reachability}): {literal(f.reachability_argument)}",
             f"- Attacker path: {literal(f.exploit_sketch)}",
             *([f"- Human decision: {_decided(c)}"] if c.resolved_by_human else []),
+            *([f"- Blocks the gate: {literal(c.blocking_reason)}"] if c.blocking_reason else []),
             "",
         ]
     lines += [
@@ -85,7 +90,7 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
             if c.resolved_by_human
             else "provenance unverified"
             if c.tier.value == "D" and not any(p.verified for p in f.provenance)
-            else f"awaiting human decision: {', '.join(c.human_reasons) or 'unresolved_human_review'}"
+            else f"awaiting human decision: {', '.join(c.human_reasons) or 'no reason recorded'}"
             if c.final_outcome == "needs_human"
             else ("skeptic refuted" if c.skeptic_refuted else f"consensus {c.weighted_score} below threshold")
             # rejection review (policy P8, docs/adr/0005-jury-outcome.md): decided by the jury, queued for a human look
@@ -138,5 +143,5 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_markdown(r: ReviewReport, path: Path, *, fail_on_gate: bool = False) -> None:
-    path.write_text(render_markdown(r, fail_on_gate=fail_on_gate), encoding="utf-8")
+def write_markdown(r: ReviewReport, path: Path) -> None:
+    path.write_text(render_markdown(r), encoding="utf-8")

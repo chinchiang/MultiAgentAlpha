@@ -177,3 +177,23 @@ def test_a_usable_decision_settles_the_final_outcome_and_leaves_the_jury_outcome
     assert _ruled(awaiting, "false_positive").final_outcome == "rejected"
     assert _ruled(awaiting, "true_positive").final_outcome == "accepted"
     assert (_ruled(accepted, "false_positive").final_outcome, _ruled(accepted, "false_positive").jury_outcome) == ("rejected", "accepted")
+
+
+def test_a_finding_needing_a_human_always_says_why():
+    """The human queue lists a finding under its reasons and has no fallback reason of its own
+    (docs/adr/0007-review-status-and-gate.md): decide() never sends a finding to a human without one."""
+    import itertools
+
+    votes = ((2, 0, 0), (0, 2, 0), (1, 1, 0), (0, 0, 2))
+    checked = 0
+    for tier, score, severity, alpha, (tp, fp, human), exclude_c, unsupervised, flags in itertools.product(
+            EvidenceTier, (0.0, 0.59, 0.6, 1.0), ("Low", "High", "Critical", "Unknown"), (None, 0.2, 0.9), votes,
+            (False, True), (False, True), itertools.product((False, True), repeat=6)):
+        verified, refuted, abstained, quorum, passes, consistent = flags
+        s = OutcomeSignals(tier=tier, score=score, severity=severity, provenance_verified=verified, skeptic_refuted=refuted,
+                           skeptic_abstained=abstained, quorum_ok=quorum, passes_complete=passes, alpha=alpha, votes_tp=tp,
+                           votes_fp=fp, votes_human=human, position_consistent=consistent)
+        out = decide(s, replace(POLICY, exclude_tier_c=exclude_c, unsupervised_reject_allowed=unsupervised))
+        assert out.value != "needs_human" or out.reasons, s
+        checked += 1
+    assert checked > 100_000

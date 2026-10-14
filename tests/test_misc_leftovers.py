@@ -15,7 +15,6 @@ from typer.testing import CliRunner
 
 from mara.cli import app
 from mara.config import MaraConfig, load_config
-from mara.report.markdown_out import render_markdown
 from mara.tools import trivy_db as tdb
 from tests.test_trivy_db import _fake_trivy, _now_iso
 
@@ -77,13 +76,20 @@ def test_report_header_says_when_fail_on_gate_enforced_the_gate(tmp_path):
     forced = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "forced"), "--fail-on-gate"])
     md = (tmp_path / "forced" / "report.md").read_text(encoding="utf-8")
     assert forced.exit_code == 2 and "enforced for this run by --fail-on-gate" in md and "recorded, not enforced" not in md
+    # the report records the enforcement (docs/adr/0007-review-status-and-gate.md), and the CLI says why the gate blocked
+    assert json.loads((tmp_path / "forced" / "report.json").read_text(encoding="utf-8"))["gate_enforced"] is True
+    assert "gate reasons: review_incomplete, blocking_tier_and_severity" in _plain(forced.output)
     recorded = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "recorded")])
     md = (tmp_path / "recorded" / "report.md").read_text(encoding="utf-8")
     assert recorded.exit_code == 0 and "recorded, not enforced" in md and "--fail-on-gate" not in md.split("\n## ")[0]
-    report = json.loads((tmp_path / "recorded" / "report.json").read_text(encoding="utf-8"))
-    from mara.schemas import ReviewReport
+    assert json.loads((tmp_path / "recorded" / "report.json").read_text(encoding="utf-8"))["gate_enforced"] is False
 
-    assert "enforced for this run" in render_markdown(ReviewReport.model_validate(report), fail_on_gate=True)
+
+def _plain(output: str) -> str:
+    """CLI output without rich's colour codes, which CI renders (GITHUB_ACTIONS), and with lines unwrapped."""
+    import re
+
+    return " ".join(re.sub(r"\x1b\[[0-9;]*m", "", output).split())
 
 
 # ------------------------------------------------------------------ in-country example

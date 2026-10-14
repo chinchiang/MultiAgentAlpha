@@ -255,3 +255,37 @@ def test_fail_on_gate_given_to_the_review_is_recorded_as_an_enforced_gate(root, 
     report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", mode="mock",
                       fail_on_gate=True)
     assert not report.gate_passed and report.gate_enforced is True
+
+
+# ---------------------------------------------------------------- what the readers show
+
+
+def test_the_markdown_report_shows_the_gate_reasons_each_blocking_finding_and_whether_the_gate_was_enforced(mock_report):
+    from mara.report.markdown_out import render_markdown
+
+    _, report = mock_report
+    md = render_markdown(report)
+    header = md.split("\n## ")[0]
+    # codes are escaped like the incomplete reasons beside them (report.escaping.literal: "_" is "&#95;")
+    assert "gate BLOCKED** (review&#95;incomplete, blocking&#95;tier&#95;and&#95;severity)" in header
+    assert "recorded, not enforced" in header, "phase not_started, gate_enforced false"
+    f1 = md.split("### F-0001 · ")[1].split("\n### ")[0]
+    assert "- Blocks the gate: blocking&#95;tier&#95;and&#95;severity" in f1
+    assert "Blocks the gate" not in md.split("### F-0016 · ")[1].split("\n### ")[0]
+    enforced = render_markdown(report.model_copy(update={"gate_enforced": True})).split("\n## ")[0]
+    assert "enforced for this run by --fail-on-gate" in enforced and "recorded, not enforced" not in enforced
+    older = render_markdown(report.model_copy(update={"gate_enforced": None})).split("\n## ")[0]
+    assert "enforced" not in older, "a report written before gate_enforced says nothing it does not know"
+
+
+def test_a_row_waiting_for_a_human_without_a_recorded_reason_says_so(mock_report):
+    """decide() always gives a reason; a hand-written or damaged report may not, and the markdown report then says
+    that no reason was recorded instead of borrowing an incomplete-review code."""
+    from mara.report.markdown_out import render_markdown
+
+    _, report = mock_report
+    report = report.model_copy(deep=True)
+    row = next(c for c in report.consensus if c.final_outcome == "needs_human")
+    row.human_reasons = []
+    line = next(x for x in render_markdown(report).splitlines() if x.startswith(f"- {row.finding_id} · "))
+    assert line.endswith("awaiting human decision: no reason recorded")

@@ -74,9 +74,7 @@ def build_queue(
         c = consensus.get(f.id)
         if c is None or c.resolved_by_human:  # answered: the human ruling is the final outcome
             continue
-        reasons = list(c.human_reasons)
-        if c.needs_human and not reasons:
-            reasons.append("unresolved_human_review")
+        reasons = list(c.human_reasons)  # never empty when the jury sent it to a human (decide() always says why)
         if c.unsupervised_reject_unverified:
             # rejection review (policy P8, docs/adr/0005-jury-outcome.md): the jury outcome stays rejected
             reasons.append("unsupervised_reject_unverified")
