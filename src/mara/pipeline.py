@@ -132,9 +132,10 @@ class Pipeline:
         from .report.human_queue_out import read_backlog, tightening
 
         self.backlog = read_backlog(cfg)
-        self.human_alpha_threshold, self.exclude_tier_c, self.queue_tightened = tightening(cfg, self.backlog)
-        # read once: the jury outcome and the gate see the same tightening (docs/adr/0007-review-status-and-gate.md)
-        self.outcome_policy = OutcomePolicy.from_config(cfg, alpha_threshold=self.human_alpha_threshold, exclude_tier_c=self.exclude_tier_c)
+        alpha_threshold, exclude_tier_c, self.queue_tightened = tightening(cfg, self.backlog)
+        # read once and held only here: the jury outcome, the gate, the audit and the log see the same tightening
+        # (docs/adr/0007-review-status-and-gate.md)
+        self.outcome_policy = OutcomePolicy.from_config(cfg, alpha_threshold=alpha_threshold, exclude_tier_c=exclude_tier_c)
         self.gate_policy = GatePolicy.from_config(cfg)
         from .mlbom import status_for_config
 
@@ -539,17 +540,16 @@ class Pipeline:
         tools_ran = {run.tool for run in tool_runs if run.ran}
         # Live source egress is blocked before any provider sees data if the trusted local
         # secret scan is unavailable or reports secrets (mara.review_status). The masked manifest remains reviewable.
-        secrets = secret_preflight(mode, [r for r in tool_runs if r.tool == "gitleaks"], answer_key)
-        if answer_key is not None and (secrets.exempted or secrets.unexplained):
-            self.audit["secret_preflight_calibration_exempted"] = len(secrets.exempted)
-            self._say(f"L0: secret preflight: {len(secrets.exempted)} seeded secret(s) declared by the calibration answer key, "
-                      f"{len(secrets.unexplained)} other finding(s)")
-        egress_blocked = secrets.blocked
+        egress = secret_preflight(mode, [r for r in tool_runs if r.tool == "gitleaks"], answer_key)
+        if answer_key is not None and (egress.exempted or egress.unexplained):
+            self.audit["secret_preflight_calibration_exempted"] = len(egress.exempted)
+            self._say(f"L0: secret preflight: {len(egress.exempted)} seeded secret(s) declared by the calibration answer key, "
+                      f"{len(egress.unexplained)} other finding(s)")
         prog.done("tools", f"{len(tools_ran)} of {len(tool_runs)} tool(s) ran, {len(tool_results)} result(s)"
-                  + ("; source egress blocked by the secret preflight" if egress_blocked else ""))
+                  + ("; source egress blocked by the secret preflight" if egress.blocked else ""))
         # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked
-        if egress_blocked or not self.cfg.roles.context:
-            prog.skip("context", "source egress blocked by the secret preflight" if egress_blocked else "no context role configured")
+        if egress.blocked or not self.cfg.roles.context:
+            prog.skip("context", "source egress blocked by the secret preflight" if egress.blocked else "no context role configured")
             context_view = None
         else:
             prog.begin("context")
@@ -558,14 +558,14 @@ class Pipeline:
         if context_view is not None:
             (self.out_dir / "context.json").write_text(context_view.model_dump_json(indent=2), encoding="utf-8")
             self.audit["context_view_items"] = len(context_view.items)
-        if egress_blocked:
+        if egress.blocked:
             prog.skip("reviewers", "source egress blocked by the secret preflight")
             raw = []
         else:
             prog.begin("reviewers")
             raw = self.run_reviewers(ctx, context_view)
         findings, finders = self.dedupe(raw)
-        if not egress_blocked:
+        if not egress.blocked:
             prog.done("reviewers", f"{len(raw)} raw finding(s), {len(findings)} after deduplication")
         findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
         self.audit["findings_raw"] = len(raw)
@@ -602,23 +602,23 @@ class Pipeline:
 
             signed, why = verify_signature(self.cfg)
             self.audit["ml_bom_signature"] = "verified" if signed else f"failed: {why}"
-        facts = ReviewFacts(context_complete=ctx.complete, egress_blocked=egress_blocked,
+        facts = ReviewFacts(context_complete=ctx.complete, egress_blocked=egress.blocked,
                             required_tools_ran=required_tools <= tools_ran and all(r.ran for r in tool_runs), ml_bom_signature=signed,
                             context_view_missing=bool(self.cfg.roles.context) and context_view is None,
                             incomplete_counters=tuple(self.audit.incomplete_reasons()),  # audit.INCOMPLETE_COUNTERS: the one list
                             rollout_phase=self.cfg.rollout.phase, fail_on_gate=fail_on_gate)
-        status = assess(facts, consensus, tool_results, dims, self.outcome_policy, self.gate_policy)
+        assessment = assess(facts, consensus, tool_results, dims, self.outcome_policy, self.gate_policy)
         for c in consensus:
-            c.blocking_reason = status.blocking_reasons.get(c.finding_id)
-        if status.tier_c_blocked_while_tightened:
-            self.audit["tier_c_blocked_while_tightened"] = status.tier_c_blocked_while_tightened
+            c.blocking_reason = assessment.blocking_reasons.get(c.finding_id)
+        if assessment.tier_c_blocked_while_tightened:
+            self.audit["tier_c_blocked_while_tightened"] = assessment.tier_c_blocked_while_tightened
         global_alpha = krippendorff_alpha_nominal(_alpha_units(findings, votes))
         self.audit["global_krippendorff_alpha"] = global_alpha if global_alpha is not None else "n/a"
         for k, v in pairwise_family_agreement(votes).items():
             self.audit[f"judge_agreement[{k}]"] = v
         self.audit["tool_results_ingested"] = len(tool_results)
         self.audit["tools_ran"] = ",".join(sorted(tools_ran)) or "none"
-        prog.done("scoring", f"review {status.review_status}, gate {'passed' if status.gate_passed else 'blocked'}")
+        prog.done("scoring", f"review {assessment.review_status}, gate {'passed' if assessment.gate_passed else 'blocked'}")
         prog.begin("report")
         report = ReviewReport(
             target=str(target),
@@ -628,8 +628,8 @@ class Pipeline:
             findings=findings,
             skeptic=sk,
             redteam=rt,
-            review_status=status.review_status,
-            incomplete_reasons=list(status.incomplete_reasons),
+            review_status=assessment.review_status,
+            incomplete_reasons=list(assessment.incomplete_reasons),
             review_scope="incremental" if base_ref else "full",
             coverage=ctx.coverage(),
             tool_results=[asdict(t) for t in tool_results],
@@ -642,10 +642,10 @@ class Pipeline:
             votes=votes,
             consensus=consensus,
             dimensions=dims,
-            overall_score=status.overall_score,
-            gate_passed=status.gate_passed,
-            gate_reasons=list(status.gate_reasons),
-            gate_enforced=status.gate_enforced,
+            overall_score=assessment.overall_score,
+            gate_passed=assessment.gate_passed,
+            gate_reasons=list(assessment.gate_reasons),
+            gate_enforced=assessment.gate_enforced,
             # the accounting the counts above follow (docs/adr/0001-reply-outcome-accounting.md)
             bias_audit={**self.audit, "exchange_version": exchange.EXCHANGE_VERSION},
         )
@@ -667,7 +667,7 @@ class Pipeline:
             "human_queue_size": len(report.human_queue),
             "human_queue_backlog": self.backlog if self.backlog is not None else "unknown",
             "human_queue_tightened": int(self.queue_tightened),
-            "human_alpha_threshold": self.human_alpha_threshold,
+            "human_alpha_threshold": self.outcome_policy.alpha_threshold,
         }
         for k, qv in queue_audit.items():
             self.audit[k] = qv
@@ -675,8 +675,8 @@ class Pipeline:
         self._say(
             f"L5: human queue: {len(report.human_queue)} item(s)"
             + (
-                f" [TIGHTENED: backlog {self.backlog} > {self.cfg.human_queue.backlog_limit}, alpha threshold {self.human_alpha_threshold}"
-                f"{', tier C not queued' if self.exclude_tier_c else ''}]"
+                f" [TIGHTENED: backlog {self.backlog} > {self.cfg.human_queue.backlog_limit}, alpha threshold {self.outcome_policy.alpha_threshold}"
+                f"{', tier C not queued' if self.outcome_policy.exclude_tier_c else ''}]"
                 if self.queue_tightened
                 else ""
             )

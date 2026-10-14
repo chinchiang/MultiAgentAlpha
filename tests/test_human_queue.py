@@ -184,7 +184,7 @@ def test_tier_c_high_needs_a_human_until_the_queue_tightens(tmp_path, monkeypatc
     (tmp_path / "calib" / "decisions").mkdir(parents=True)
     (tmp_path / "calib" / "decisions" / "backlog.json").write_text(json.dumps({"open": 999}), encoding="utf-8")
     tightened = Pipeline(cfg, out_dir=tmp_path / "out2")
-    assert tightened.queue_tightened and tightened.exclude_tier_c
+    assert tightened.queue_tightened and tightened.outcome_policy.exclude_tier_c
     (c2,) = tightened.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
     assert c2.tier == EvidenceTier.C and c2.accepted and c2.human_reasons == []
     assert build_queue([f], {"F-1": c2}, {}, {}, _votes("F-1"), cfg) == []
@@ -196,7 +196,7 @@ def test_tier_c_high_needs_a_human_until_the_queue_tightens(tmp_path, monkeypatc
     # tighten_exclude_tier_c: false keeps tier C in the queue even while tightened
     cfg.human_queue.tighten_exclude_tier_c = False
     kept = Pipeline(cfg, out_dir=tmp_path / "out3")
-    assert kept.queue_tightened and not kept.exclude_tier_c
+    assert kept.queue_tightened and not kept.outcome_policy.exclude_tier_c
     (c3,) = kept.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
     assert [i.reasons for i in build_queue([f], {"F-1": c3}, {}, {}, _votes("F-1"), cfg)] == [["tier_c_high"]]
 

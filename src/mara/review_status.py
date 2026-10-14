@@ -83,11 +83,21 @@ class Assessment:
     tier_c_blocked_while_tightened: int
 
 
-# The codes this module writes, in the order a review writes them; the audit's INCOMPLETE_COUNTERS come after the
-# first three. Together they are every incomplete reason: the score summary's allowlist (docs/adr/0004-score-summary.md)
-CODES = ("context_coverage_incomplete", "source_egress_blocked_by_secret_preflight", "required_tool_incomplete",
-         "ml_bom_signature_unverified", "context_view_incomplete", "unresolved_human_review", "unresolved_tool_findings")
-INCOMPLETE_REASONS = frozenset(CODES) | frozenset(INCOMPLETE_COUNTERS)
+# The incomplete reasons this module writes itself, in the order a review writes them; the audit's INCOMPLETE_COUNTERS
+# come after the first three. Together they are INCOMPLETE_REASONS, every incomplete reason, which the score summary's
+# allowlist imports (docs/adr/0004-score-summary.md).
+OWN_INCOMPLETE_REASONS = ("context_coverage_incomplete", "source_egress_blocked_by_secret_preflight", "required_tool_incomplete",
+                          "ml_bom_signature_unverified", "context_view_incomplete", "unresolved_human_review",
+                          "unresolved_tool_findings")
+INCOMPLETE_REASONS = frozenset(OWN_INCOMPLETE_REASONS) | frozenset(INCOMPLETE_COUNTERS)
+
+# The gate reasons, and GATE_REASONS their fixed order in a report. The two finding codes are also each blocking
+# finding's blocking_reason.
+REVIEW_INCOMPLETE = "review_incomplete"
+BLOCKING_TIER_AND_SEVERITY = "blocking_tier_and_severity"
+TIER_C_WHILE_TIGHTENED = "tier_c_while_tightened"
+DIMENSION_BELOW_MINIMUM = "dimension_below_minimum"
+GATE_REASONS = (REVIEW_INCOMPLETE, BLOCKING_TIER_AND_SEVERITY, TIER_C_WHILE_TIGHTENED, DIMENSION_BELOW_MINIMUM)
 
 
 def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: list[ToolResult], dimensions: list[DimensionScore],
@@ -97,19 +107,15 @@ def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: l
         raise ValueError("a review needs at least one dimension to score")
     reasons = _incomplete_reasons(facts, consensus, tool_results)
     blocking = {c.finding_id: why for c in consensus if (why := _blocking_reason(c, outcome_policy, gate_policy))}
-    found = set(blocking.values())
-    gate_reasons = tuple(code for code, applies in (("review_incomplete", bool(reasons)),
-                                                    ("blocking_tier_and_severity", "blocking_tier_and_severity" in found),
-                                                    ("tier_c_while_tightened", "tier_c_while_tightened" in found),
-                                                    ("dimension_below_minimum",
-                                                     any(d.score < gate_policy.min_dimension_score for d in dimensions)))
-                         if applies)
+    applies = {REVIEW_INCOMPLETE: bool(reasons), **dict.fromkeys(blocking.values(), True),
+               DIMENSION_BELOW_MINIMUM: any(d.score < gate_policy.min_dimension_score for d in dimensions)}
+    gate_reasons = tuple(code for code in GATE_REASONS if applies.get(code))
     overall = None if reasons else round(sum(d.score for d in dimensions) / len(dimensions), 1)
     return Assessment(review_status="incomplete" if reasons else "complete", incomplete_reasons=reasons,
                       gate_passed=not gate_reasons, gate_reasons=gate_reasons,
                       gate_enforced=bool(gate_reasons) and (facts.rollout_phase == "blocking" or facts.fail_on_gate), overall_score=overall,
                       blocking_reasons=blocking,
-                      tier_c_blocked_while_tightened=sum(why == "tier_c_while_tightened" for why in blocking.values()))
+                      tier_c_blocked_while_tightened=sum(why == TIER_C_WHILE_TIGHTENED for why in blocking.values()))
 
 
 def _blocking_reason(c: ConsensusResult, outcome_policy: OutcomePolicy, gate_policy: GatePolicy) -> str | None:
@@ -121,9 +127,9 @@ def _blocking_reason(c: ConsensusResult, outcome_policy: OutcomePolicy, gate_pol
     if c.final_outcome != "accepted":
         return None
     if c.tier.value in gate_policy.block_on_tiers and c.cvss4_severity in gate_policy.block_on_severity:
-        return "blocking_tier_and_severity"
+        return BLOCKING_TIER_AND_SEVERITY
     if outcome_policy.exclude_tier_c and tier_c_needs_human(c.tier, c.cvss4_severity, outcome_policy.tier_c_min_severity):
-        return "tier_c_while_tightened"
+        return TIER_C_WHILE_TIGHTENED
     return None
 
 

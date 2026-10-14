@@ -25,11 +25,20 @@ def dim(name: str, score: float) -> DimensionScore:
     return DimensionScore(dimension=name, score=score, accepted_findings=0, rejected_findings=0, human_queue=0, tool_ran=True)
 
 
+# the jury's score and votes behind each outcome on a three-family panel of weight 1 (accept threshold 0.6)
+_JURY = {"accepted": (1.0, 3, 0), "rejected": (0.0, 0, 3), "needs_human": (0.5, 1, 1)}
+
+
 def row(fid: str, tier: str, severity: str, outcome: str, decision: str | None = None) -> ConsensusResult:
-    """A consensus row in a state scoring produces: the jury outcome written as JuryOutcome.consensus_fields writes it,
-    and optionally a usable human decision on it."""
+    """A consensus row with its jury outcome written as JuryOutcome.consensus_fields writes it (accepted or needing a
+    human, never both; a reason whenever it needs a human), a score and votes that agree with it, and optionally a usable
+    human decision on it. Whether scoring can reach that outcome at that tier depends on the panel and the tightening:
+    the examples below use only rows that scoring reaches with the policy each one passes to assess (a tier B finding
+    is never rejected by the default panel, docs/adr/0005-jury-outcome.md; tier C at the severity floor is accepted only
+    while the queue is tightened). assess itself reads only the tier, severity, outcome and decision."""
     human = {"decision": decision, "key": "k", "issue": 1, "decided_by": "alice", "decided_at": "2026-10-01T08:00:00Z"}
-    return ConsensusResult(finding_id=fid, weighted_score=0.5, votes_tp=2, votes_fp=1, votes_human=0, families_agreeing=[],
+    score, tp, fp = _JURY[outcome]
+    return ConsensusResult(finding_id=fid, weighted_score=score, votes_tp=tp, votes_fp=fp, votes_human=0, families_agreeing=[],
                            tool_corroborated=False, skeptic_refuted=False, position_consistent=True, tier=EvidenceTier(tier),
                            cvss4_score=7.5, cvss4_severity=severity, ssvc_decision="Track", accepted=outcome == "accepted",
                            needs_human=outcome == "needs_human",
@@ -95,9 +104,12 @@ def test_every_incomplete_reason_in_the_order_reviews_have_always_written_them()
 
 
 def test_an_accepted_finding_at_a_blocking_tier_and_severity_blocks_on_its_final_outcome():
-    rows = [row("F-1", "A", "High", "accepted"), row("F-2", "A", "Medium", "accepted"), row("F-3", "B", "Critical", "rejected"),
-            row("F-4", "B", "Critical", "rejected", decision="true_positive"),
-            row("F-5", "A", "Critical", "accepted", decision="false_positive"), row("F-6", "C", "Critical", "accepted")]
+    # rejected by the jury (tier A: corroborated by a tool, voted down); a human true positive on a waiting finding;
+    # a human false positive on an accepted one; and tier C, which is not a blocking tier, accepted by a human
+    rows = [row("F-1", "A", "High", "accepted"), row("F-2", "A", "Medium", "accepted"), row("F-3", "A", "Critical", "rejected"),
+            row("F-4", "B", "Critical", "needs_human", decision="true_positive"),
+            row("F-5", "A", "Critical", "accepted", decision="false_positive"),
+            row("F-6", "C", "Critical", "needs_human", decision="true_positive")]
     a = assess(FACTS, rows, [], [dim("xss", 80.0)], OUTCOME, GATE)
     assert a.blocking_reasons == {"F-1": "blocking_tier_and_severity", "F-4": "blocking_tier_and_severity"}
     assert (a.review_status, a.gate_passed, a.gate_reasons, a.overall_score) == ("complete", False, ("blocking_tier_and_severity",), 80.0)
@@ -111,8 +123,10 @@ def test_while_the_queue_is_tightened_an_accepted_tier_c_finding_at_the_severity
     a = assess(FACTS, rows, [], [dim("xss", 80.0)], tightened, GATE)
     assert a.blocking_reasons == {"F-1": "tier_c_while_tightened"} and a.tier_c_blocked_while_tightened == 1
     assert a.gate_reasons == ("tier_c_while_tightened",)
-    untightened = assess(FACTS, rows, [], [dim("xss", 80.0)], OUTCOME, GATE)
-    assert untightened.gate_passed and untightened.tier_c_blocked_while_tightened == 0
+    # untightened, tier C at the floor goes to a human; accepted only by a human's ruling, it does not block
+    untightened = [row("F-1", "C", "High", "needs_human", decision="true_positive"), row("F-2", "C", "Medium", "accepted")]
+    a = assess(FACTS, untightened, [], [dim("xss", 80.0)], OUTCOME, GATE)
+    assert a.gate_passed and a.blocking_reasons == {} and a.tier_c_blocked_while_tightened == 0
 
 
 def test_gate_reasons_come_in_a_fixed_order_without_repeats():
@@ -200,8 +214,10 @@ def _old_rules(facts: ReviewFacts, consensus, tool_results, dims, *, exclude_tie
 
 
 def _row_states():
-    """Every single consensus row scoring can produce, over the tiers, a few severities (one unknown) and the human
-    decisions; tier D is dropped or needs a human, never accepted or rejected by the jury."""
+    """Every outcome a single consensus row can record (row()), over the tiers, a few severities (one unknown) and the
+    human decisions; tier D is dropped or needs a human, never accepted or rejected by the jury. This is more than one
+    panel and policy reach (a tier B rejection, an untightened tier C accepted at the floor): the old and the new rules
+    must agree on every row a report can hold, reachable under today's config or not."""
     for tier in "ABCD":
         for outcome in (("dropped", "needs_human") if tier == "D" else ("accepted", "rejected", "needs_human")):
             for severity in ("Low", "High", "Critical", "Unknown"):
@@ -247,7 +263,6 @@ def test_the_report_records_why_its_gate_blocked_and_which_findings_blocked_it(m
 
 
 def test_fail_on_gate_given_to_the_review_is_recorded_as_an_enforced_gate(root, tmp_path):
-    from mara.config import load_config
     from mara.pipeline import Pipeline
 
     pipe = Pipeline(load_config(root / "config" / "mara.mock.yaml"), mock_fixtures=str(root / "fixtures" / "mock-responses"),
