@@ -366,6 +366,34 @@ def test_a_failed_run_is_failed_not_finished(server, monkeypatch):
     assert res.status == 404 and _error(err) == "no_report"
 
 
+def _finished_review(real, gate_enforced, exit_code: int):
+    """A child that writes report.json (with gate_enforced unless None) and a finished progress record, then exits."""
+    def spawn(argv, **kw):
+        out, progress_file = argv[argv.index("--out") + 1], argv[argv.index("--progress-file") + 1]
+        report = {} if gate_enforced is None else {"gate_enforced": gate_enforced}
+        code = ("import json, sys\nfrom pathlib import Path\nfrom mara.progress import Progress\n"
+                "Path(sys.argv[1], 'report.json').write_text(sys.argv[3])\nProgress(Path(sys.argv[2])).finish(ok=True)\n"
+                "sys.exit(int(sys.argv[4]))\n")
+        return real([sys.executable, "-c", code, out, progress_file, json.dumps(report), str(exit_code)], **kw)
+    return spawn
+
+
+@pytest.mark.parametrize("recorded, exit_code, enforced", [
+    (True, 3, True),    # a failed PSIRT hand-off exits 3, outranking the gate's 2: the report still says it was enforced
+    (False, 0, False),
+    (None, 2, True),    # a report written before gate_enforced: the exit code is all there is
+    (None, 0, False),
+])
+def test_a_run_reads_whether_its_gate_was_enforced_from_the_report(server, monkeypatch, recorded, exit_code, enforced):
+    monkeypatch.setattr(runs.procs, "spawn", _finished_review(procs.spawn, recorded, exit_code))
+    c = Client(server)
+    res, data, _ = c.request("POST", "/api/runs", body={"target": "fixtures/vuln-sample", "provider": "mock"})
+    assert res.status == 201
+    done = _wait(c, data["run"]["id"])
+    assert done["run"]["status"] == "finished" and done["run"]["exit_code"] == exit_code
+    assert done["run"]["gate_enforced"] is enforced
+
+
 # ------------------------------------------------------------------ environment
 
 

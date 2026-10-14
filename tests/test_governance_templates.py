@@ -340,3 +340,24 @@ def test_governance_rows_are_decidable_now():
     assert "no live drill recorded" in g4.evidence and "standby-for-glm.yaml" in g4.evidence
     assert "not_started" in g10.evidence
     assert all(r.status != gc.MANUAL for r in gc.run_all(ROOT, ROOT / "config" / "mara.yaml", TODAY))
+
+
+def _baseline_row(fid: str, tier: str, *, accepted: bool = False, needs_human: bool = False) -> dict:
+    return {"finding_id": fid, "weighted_score": 0.5, "votes_tp": 1, "votes_fp": 1, "votes_human": 0, "families_agreeing": [],
+            "tool_corroborated": False, "skeptic_refuted": False, "position_consistent": True, "tier": tier, "cvss4_score": 5.0,
+            "cvss4_severity": "Medium", "ssvc_decision": "Track", "accepted": accepted, "needs_human": needs_human,
+            "human_reasons": ["insufficient_independent_judges"] if needs_human else []}
+
+
+def test_the_baseline_counts_each_jury_outcome_and_a_report_without_a_gate_as_blocked(tmp_path):
+    """docs/adr/0007-review-status-and-gate.md: rejected counts rejected findings only; dropped and needing-a-human
+    findings are counted apart, not as rejected. A report that does not say whether its gate passed fails closed."""
+    rows = [_baseline_row("F-1", "A", accepted=True), _baseline_row("F-2", "B"), _baseline_row("F-3", "D"),
+            _baseline_row("F-4", "D"), _baseline_row("F-5", "C", needs_human=True)]
+    (tmp_path / "a.json").write_text(json.dumps({"consensus": rows, "gate_passed": True}), encoding="utf-8")
+    (tmp_path / "b.json").write_text(json.dumps({"consensus": []}), encoding="utf-8")
+    m = govdocs.baseline_metrics([tmp_path / "a.json", tmp_path / "b.json"])
+    assert m["jury_outcomes"] == {"accepted": 1, "rejected": 1, "dropped": 2, "needs_human": 1}
+    assert m["findings_per_review"] == 2.5 and m["gate_would_block_rate"] == 0.5
+    text = govdocs.render_baseline(m, date=dt.date(2026, 10, 14), phase_started="2026-09-01", sources=[])
+    assert "| jury outcomes accepted / rejected / dropped / needing a human | 1 / 1 / 2 / 1 |" in text

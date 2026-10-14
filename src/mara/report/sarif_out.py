@@ -84,10 +84,10 @@ def to_sarif(report: ReviewReport) -> dict:
                 "humanQueue": q is not None, "humanQueueKey": None if q is None else q.key,
                 "humanQueueReasons": [] if q is None else q.reasons,
                 "humanDecision": c.human_decision,
+                # why this finding blocks the gate; its level stays, so the code-scanning alert does too
+                **({"blockingReason": c.blocking_reason} if c.blocking_reason else {}),
             },
         }
-        if c.blocking_reason:  # why this finding blocks the gate; the level stays, so the code-scanning alert does
-            result["properties"]["blockingReason"] = c.blocking_reason
         if dismissed and c.human_decision is not None:
             d = c.human_decision
             result["suppressions"] = [{"kind": "external", "status": "accepted",
