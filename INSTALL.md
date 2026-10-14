@@ -158,9 +158,9 @@ python scripts/trivy_db.py download
 python scripts/trivy_db.py status
 ```
 
-安裝完成後 `pytest -q` 會多執行使用真實工具的測試：gitleaks（`test_gitleaks_ci.py`）、semgrep（`test_semgrep_ci.py`、`test_tool_target_config.py`），有 node 時另含 csp-evaluator（`test_tools_csp.py`）。
+安裝完成後 `pytest -q` 會多執行使用真實工具的測試：gitleaks（`test_gitleaks_ci.py`）、semgrep（`test_semgrep_ci.py`、`test_tool_target_config.py`），有 node 時另含 csp-evaluator（`test_tools_csp.py`，以及為本機網頁工作台頁面的 CSP 評分的 `test_web_static.py`）。CI 的 tests job 裝的就是這四個工具（`--only gitleaks semgrep semgrep-rules csp-evaluator`），所以這些測試在每個 PR 上都會執行。
 
-After that, `pytest -q` also runs the tests that use the real tools: gitleaks (`test_gitleaks_ci.py`), semgrep (`test_semgrep_ci.py`, `test_tool_target_config.py`) and, with node, csp-evaluator (`test_tools_csp.py`).
+After that, `pytest -q` also runs the tests that use the real tools: gitleaks (`test_gitleaks_ci.py`), semgrep (`test_semgrep_ci.py`, `test_tool_target_config.py`) and, with node, csp-evaluator (`test_tools_csp.py`, and `test_web_static.py`, which grades the CSP of the local web workbench's page). The CI tests job installs exactly these four tools (`--only gitleaks semgrep semgrep-rules csp-evaluator`), so these tests run on every pull request.
 
 ### 3.1 Windows
 

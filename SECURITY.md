@@ -11,7 +11,11 @@ problems in MARA itself.
 ## Scope
 
 In scope: `src/mara/**`, `scripts/**`, `.github/workflows/**`, `tools/versions.lock`,
-`tools/*-requirements.txt` and the configuration under `config/`.
+`tools/*-requirements.txt` and the configuration under `config/`. That includes the local web
+workbench `mara serve` (`src/mara/web/`): its loopback-only listener, the session token, the Host,
+Origin and Sec-Fetch-Site checks, the hash-based Content-Security-Policy and the review and job
+subprocesses it starts (design: [docs/adr/0006-local-web-workbench.md](docs/adr/0006-local-web-workbench.md)).
+A report about it should also name the browser and its version, and the exact `mara serve` command.
 
 Out of scope, on purpose: `fixtures/vuln-sample/` and `calib/samples/` are **deliberately
 vulnerable** review material (reflected and DOM XSS, SQL injection, IDOR, hard-coded tokens, an
@@ -80,7 +84,7 @@ tools miss is what this file is for.
 
 本檔案處理的是**本 repo 自身程式碼**的漏洞回報：請使用上方的 GitHub private vulnerability
 reporting 連結，不要開公開 issue。`fixtures/vuln-sample/` 與 `calib/samples/` 是刻意種下漏洞的審查材料，
-不受理。管線把 A 級 Critical finding 交給產品 PSIRT 的流程在 `docs/psirt-integration.md`，與本檔案無關。
+不受理。本機網頁工作台 `mara serve`（`src/mara/web/`）也在範圍內：只聽本機位址、權杖、Host／Origin／Sec-Fetch-Site 檢查、hash-based CSP 與它啟動的審查和背景工作子程序，回報時請另附瀏覽器與版本、啟動 `mara serve` 的完整指令。管線把 A 級 Critical finding 交給產品 PSIRT 的流程在 `docs/psirt-integration.md`，與本檔案無關。
 回報後的處理節奏比照該文件的三個階段（預警、通報、報告），時限是內部目標而非承諾。本 repo 已於
 2026-09-17 開啟 private vulnerability reporting，公開期間上方連結直接開啟私密回報表單。自 2026-09-21
 repo 改為私有後，GitHub 不提供該功能、連結回應 404；此時能讀到程式碼的都是協作者，請以私訊或內部
