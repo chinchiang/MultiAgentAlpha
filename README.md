@@ -674,7 +674,9 @@ draft), `config/examples/standby-for-<family>.yaml` plus `ops/model-swap-drills.
 logs a live swap timed from decision to first real PR; mock rehearsals for all three production families are recorded, live drills are still missing), and `rollout:` in
 `config/mara.yaml` with `scripts/rollout_phase.py` (`status`, `baseline`, `advance`). The rollout
 phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking` (or with
-`--fail-on-gate`); exit 3 is reserved for a failed PSIRT hand-off. All three fail
+`--fail-on-gate`); the report records why the gate blocked (`gate_reasons`, and `blocking_reason` on each
+blocking finding) and whether it was enforced (`gate_enforced`, `docs/adr/0007-review-status-and-gate.md`);
+exit 3 is reserved for a failed PSIRT hand-off. All three fail
 today for the stated reasons: the policy awaits PSO approval, no live drill has run, the rollout
 has not started. See `docs/governance-templates.md`.
 
