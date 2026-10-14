@@ -24,7 +24,7 @@
 | Krippendorff's α | 可處理缺值與多評分者的一致性係數 | 第 11.2 節；雛型只在整批 finding（語料層級）計算，單一 finding 改用 agreement proxy |
 | Agreement proxy | 單一 finding 的評審一致度代理指標：每個 judge 家族取一個裁決，計算眾數占比並做機遇校正；不是 Krippendorff's α | 第 13 章第 13 項、附錄B 第 48 項 |
 | Alternative Annotator Test (AAT) | 以人工裁決為對照，檢定管線的判斷能否在統計上替代人類標註者；通過前不允許無監督地不採納 finding | 第 15.3 節、G-9 |
-| Human queue | 人工佇列：不得自動採納、須由安全團隊裁決的 finding；未清空前審查標記為不完整 | 第 15.1 節 |
+| Human queue | 人工佇列：須由安全團隊裁決或覆核的 finding；其中待人工裁決者未裁決前審查標記為不完整，評審團已否決、只待不採納覆核（rejection review）者不影響審查完整性 | 第 15.1 節 |
 | Shadow mode | 影子模式：只產出報告、不評論也不阻擋的導入階段 | 第 15.4 節、G-10 |
 | Cold standby | 冷備家族：事先備妥設定、可在一週內替換既有家族的模型 | 第 7.3 節、G-4 |
 | Seeded benchmark | 刻意植入已知漏洞並附標籤的樣本集，用於校準 | 第 11.5 節、`calib/` |

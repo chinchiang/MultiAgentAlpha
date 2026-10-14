@@ -65,7 +65,7 @@ L4 的 judge 只看到「盲化視圖」：finding ID（依內容排序指派，
 
 ### 6.6 L5：評分與輸出層
 
-L5 不呼叫任何模型。它做四件事：（1）用移植自 FIRST 參考實作的計算器把 L2 的 CVSS 4.0 向量算成分數（捨入方式與參考實作的 `Math.round` 一致，並以全部 419,904 個 base×E 向量逐一比對），另把 judge 的嚴重度中位數列為「營運嚴重度」並列呈現，不修改 CVSS；向量無效的 finding 送人工佇列；（2）以家族權重計算加權共識分數與每個 finding 的家族一致度（agreement proxy），並計算整批的 Krippendorff's α 寫入偏誤稽核；（3）依來源證據是否驗證、工具是否佐證、幾個家族同意、Skeptic 是否否證、可達性如何，指定證據層級 A 到 D；（4）用簡化的 SSVC 決策樹給出 Track、Track*、Attend 或 Act。最後產出 SARIF 2.1（含 `level`、`rank`、內容雜湊指紋 `partialFingerprints.maraContent/v1` 與 MARA 特有的 `properties`；指紋不含行號與排序編號，新增或刪除其他 finding 不會把 code scanning 的告警狀態搬到別的 finding 上）、Markdown 報告、JSON 報告與人工佇列。第四部第 11 章與第 12 章詳述。
+L5 不呼叫任何模型。它做四件事：（1）用移植自 FIRST 參考實作的計算器把 L2 的 CVSS 4.0 向量算成分數（捨入方式與參考實作的 `Math.round` 一致，並以全部 419,904 個 base×E 向量逐一比對），另把 judge 的嚴重度中位數列為「營運嚴重度」並列呈現，不修改 CVSS；向量無效的 finding 不會到達 L5，L2 建立 finding 時就把它當無效輸出丟棄並計數（`invalid_findings_dropped`），審查因此標記為不完整；（2）以家族權重計算加權共識分數與每個 finding 的家族一致度（agreement proxy），並計算整批的 Krippendorff's α 寫入偏誤稽核；（3）依來源證據是否驗證、工具是否佐證、幾個家族同意、Skeptic 是否否證、可達性如何，指定證據層級 A 到 D；（4）用簡化的 SSVC 決策樹給出 Track、Track*、Attend 或 Act。最後產出 SARIF 2.1（含 `level`、`rank`、內容雜湊指紋 `partialFingerprints.maraContent/v1` 與 MARA 特有的 `properties`；指紋不含行號與排序編號，新增或刪除其他 finding 不會把 code scanning 的告警狀態搬到別的 finding 上）、Markdown 報告、JSON 報告與人工佇列。第四部第 11 章與第 12 章詳述。
 
 ## 第 7 章　模型家族與部署拓樸
 
