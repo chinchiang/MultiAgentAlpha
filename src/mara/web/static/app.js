@@ -29,6 +29,7 @@
   const store = {
     get(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } },
     set(key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* not persisted */ } },
+    remove(key) { try { window.localStorage.removeItem(key); } catch (e) { /* nothing stored */ } },
   };
 
   // ---------------------------------------------------------------- i18n
@@ -211,13 +212,28 @@
   class ApiError extends Error {
     constructor(code, message, status) { super(message || code); this.code = code; this.detail = message || ""; this.status = status || 0; }
   }
-  let CSRF = "";
+  // The server's token arrives in the URL fragment (#token=...), which no server, log or Referer ever sees. It is kept in
+  // this origin's localStorage - scoped to scheme, host and port, unlike a cookie, which every service on 127.0.0.1
+  // would receive - and sent in a header no other origin can send without a CORS preflight the server never grants.
+  const TOKEN_KEY = "mara.token";
+  let TOKEN = "";
   let loggedOut = false;
 
+  function takeToken() {
+    const m = /^#token=([A-Za-z0-9_-]{20,200})$/.exec(location.hash);
+    if (m) {
+      TOKEN = m[1];
+      store.set(TOKEN_KEY, TOKEN);
+      history.replaceState(null, "", location.pathname + "#/");  // out of the address bar and the history entry
+      return true;
+    }
+    TOKEN = TOKEN || store.get(TOKEN_KEY) || "";
+    return false;
+  }
+
   async function api(method, path, body) {
-    const headers = { Accept: "application/json" };
-    const opts = { method, headers, credentials: "same-origin", cache: "no-store", redirect: "error" };
-    if (method !== "GET") headers["X-MARA-CSRF"] = CSRF;
+    const headers = { Accept: "application/json", "X-MARA-Token": TOKEN };
+    const opts = { method, headers, credentials: "omit", cache: "no-store", redirect: "error" };
     if (body !== undefined) { headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
     let res;
     try {
@@ -231,12 +247,29 @@
     try { data = await res.json(); } catch (e) { data = null; }
     if (!res.ok) {
       const err = (data && data.error) || {};
-      if (res.status === 401) showLoggedOut();
+      if (res.status === 401) { store.remove(TOKEN_KEY); TOKEN = ""; showLoggedOut(); }
       throw new ApiError(err.code || "http_" + res.status, err.message || "", res.status);
     }
     return data;
   }
   const enc = encodeURIComponent;
+
+  async function download(runId, name) {
+    // artifacts need the token header too, so they are fetched and handed to the browser as a local blob
+    try {
+      const res = await fetch("/api/runs/" + enc(runId) + "/files/" + enc(name),
+        { headers: { "X-MARA-Token": TOKEN }, credentials: "omit", cache: "no-store", redirect: "error" });
+      if (!res.ok) throw new ApiError(res.status === 401 ? "unauthenticated" : "not_found", "", res.status);
+      const href = URL.createObjectURL(await res.blob());
+      const a = h("a", { href, download: "mara-" + runId + "-" + name, hidden: true });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 30000);
+    } catch (e) {
+      showError(e instanceof ApiError ? e : new ApiError("network", ""));
+    }
+  }
 
   // ---------------------------------------------------------------- banners
   function showError(err) {
@@ -669,13 +702,16 @@
       const files = r.artifacts || [];
       if (files.length) {
         items.push(h("details", { class: "menu" }, h("summary", { class: "btn small" }, icon("download", "sm"), t("action.export")),
-          h("div", { class: "menu-list" }, files.map((name) => h("a", { href: "/api/runs/" + enc(id) + "/files/" + enc(name), download: name },
+          h("div", { class: "menu-list" }, files.map((name) => h("button", { type: "button", on: { click: () => download(id, name) } },
             icon("file", "sm"), name)))));
       }
       fill(actionsSlot, ...items);
     }
     function renderStepper(r, progress) {
-      const stages = progress && Array.isArray(progress.stages) ? progress.stages : STAGES.map((s) => ({ id: s, status: "pending" }));
+      const active = ACTIVE.includes(r.status);
+      // a review that is no longer running has no stage at work, whatever a killed child left in its record
+      const stages = (progress && Array.isArray(progress.stages) ? progress.stages : STAGES.map((s) => ({ id: s, status: "pending" })))
+        .map((s) => (s.status === "running" && !active ? { ...s, status: "failed" } : s));
       const done = stages.filter((s) => s.status === "done" || s.status === "skipped").length;
       const current = stages.find((s) => s.status === "running");
       const failed = stages.find((s) => s.status === "failed");
@@ -757,7 +793,7 @@
         renderStatus(next.run);
         renderActions(next.run);
         renderStepper(next.run, next.progress);
-        if (logParts.slot) logParts.slot(next.progress);
+        if (logParts.slot) logParts.slot(next.progress, next.run);
       },
     };
   }
@@ -1056,8 +1092,9 @@
     const progressLog = h("pre", { class: "log" });
     const pipelineLog = h("pre", { class: "log" });
     const runLog = h("pre", { class: "log" });
-    function drawStages(p) {
-      const stages = p && p.stages ? p.stages : [];
+    function drawStages(p, r) {
+      const active = ACTIVE.includes((r || run).status);
+      const stages = (p && p.stages ? p.stages : []).map((s) => (s.status === "running" && !active ? { ...s, status: "failed" } : s));
       fill(stagesSlot, stages.length ? tableWrap(t("log.stages"), [t("col.stage"), t("col.status"), t("col.started"), { label: t("col.duration"), num: true }, t("col.note")],
         stages.map((s) => h("tr", null, h("td", null, tCode("stage.", s.id), " ", h("span", { class: "s-layer small muted" }, STAGE_LAYER[s.id])),
           h("td", null, chip(tCode("stage_status.", s.status), { done: "ok", running: "info", failed: "danger", skipped: "" }[s.status] || "")),
@@ -1076,7 +1113,7 @@
         }
       } catch (e) { /* shown on the next poll */ }
     }
-    drawStages(progress);
+    drawStages(progress, run);
     loadLogs();
     panel.append(h("div", { class: "stack" },
       card(t("log.stages_label"), t("log.stages"), stagesSlot),
@@ -1084,7 +1121,7 @@
       card(t("log.progress_label"), t("log.progress"), progressLog),
       card(t("log.pipeline_label"), t("log.pipeline"), pipelineLog),
       card(t("log.run_label"), t("log.run"), runLog)));
-    return (p) => { drawStages(p); loadLogs(); };
+    return (p, r) => { drawStages(p, r); loadLogs(); };
   }
 
   // ---------------------------------------------------------------- environment
@@ -1229,24 +1266,34 @@
     render(false);
   }
 
-  async function boot() {
-    applyStatic();
-    document.getElementById("lang-toggle").addEventListener("click", () => setLang(lang === "zh-TW" ? "en" : "zh-TW"));
-    document.getElementById("refresh").addEventListener("click", () => { state.env = null; state.configs = null; refreshRuns().then(() => render(false)).catch(showError); });
-    document.getElementById("logout").addEventListener("click", async () => {
-      try { await api("POST", "/api/logout"); } catch (e) { /* the session ends either way */ }
-      showLoggedOut();
-    });
-    window.addEventListener("hashchange", () => render(true));
+  async function startSession() {
+    if (!TOKEN) { showLoggedOut(); return; }
     try {
       state.session = await api("GET", "/api/session");
-      CSRF = state.session.csrf;
       if (!store.get("mara.lang") && state.session.settings && LANGS.includes(state.session.settings.language)) lang = state.session.settings.language;
     } catch (e) {
       if (e.code !== "unauthenticated") showError(e);
       if (loggedOut) return;
     }
     await render(false);
+  }
+
+  async function boot() {
+    applyStatic();
+    document.getElementById("lang-toggle").addEventListener("click", () => setLang(lang === "zh-TW" ? "en" : "zh-TW"));
+    document.getElementById("refresh").addEventListener("click", () => { state.env = null; state.configs = null; refreshRuns().then(() => render(false)).catch(showError); });
+    document.getElementById("logout").addEventListener("click", () => {
+      // this browser forgets the key; the server and any running review go on, and the printed URL still opens it
+      store.remove(TOKEN_KEY);
+      TOKEN = "";
+      showLoggedOut();
+    });
+    window.addEventListener("hashchange", () => {
+      if (takeToken()) { loggedOut = false; startSession(); return; }
+      render(true);
+    });
+    takeToken();
+    await startSession();
     const pollList = async () => {
       if (!loggedOut) {
         try { await refreshRuns(); } catch (e) { /* the service dot shows it */ }

@@ -124,7 +124,7 @@ a vote between the forward and reverse pass) so the tests exercise every defence
 ## Local web workbench (`mara serve`)
 
 ```bash
-mara serve                       # prints http://127.0.0.1:8765/?token=… and opens it; --port 0 picks a free port, --no-browser only prints
+mara serve                       # prints http://127.0.0.1:8765/#token=… and opens it; --port 0 picks a free port, --no-browser only prints
 ```
 
 `mara serve` is a local web page (正體中文 and English, switched on the page) on top of the same command line
@@ -142,17 +142,19 @@ workspace's `scripts/install_tools.py`, `scripts/trivy_db.py` or `mara check-con
 Each run is a `mara review` subprocess with its own directory `out/runs/<run-id>/` (`--out` moves the root): the request, the argv,
 the roles and models of the config at launch in `run.json`, the child's output in `run.log`, every report the command line writes,
 and `progress.json`, which `mara review --progress-file` rewrites at every stage boundary. Every check of the command line still
-decides, and the server repeats them before it starts the child only to name the refusal on the page. One review runs at a time;
-stopping the server cancels it. The PSIRT options stay on the command line, because they start legal clocks. A plain
+decides, and the server repeats them before it starts the child only to name the refusal on the page. One review runs at a time,
+and never while a job replaces the tools or the trivy database; stopping the server (Ctrl-C, SIGTERM, SIGHUP) cancels it. The PSIRT options stay on the command line, because they start legal clocks. A plain
 `mara review` into `out/` appears read-only in the list.
 
 The server listens on a loopback address only (`--host 127.0.0.1`, `localhost` or `::1`; reach a remote one through an SSH tunnel,
-since finding detail stays where the review ran). The printed URL carries a token that lives as long as the server and becomes an
-HttpOnly, SameSite=Strict cookie. Every change also needs a CSRF value only a same-origin script can read. The server refuses a Host
-header that is not the loopback server (DNS rebinding) and an Origin or Sec-Fetch-Site from another site. The page loads nothing
-from anywhere else: its Content-Security-Policy allows exactly its own script and stylesheet by SHA-256 and requires Trusted Types,
-and `tests/test_web_static.py` grades that policy with the pinned csp-evaluator. Only the standard library and the existing
-dependencies are used, so the hash-locked closures are unchanged.
+since finding detail stays where the review ran). The printed URL carries a token that lives as long as the server in its fragment,
+which no server or log sees; the page keeps it in this origin's localStorage and sends it in an `X-MARA-Token` header. There is no
+cookie, because a cookie reaches every service on 127.0.0.1 whatever its port. The browser is opened on a redirect file only the user
+can read, never on the URL, since process arguments are visible to every local user. The server refuses a Host header that is not
+the loopback server (DNS rebinding) and an Origin or Sec-Fetch-Site from another site. The page loads nothing from anywhere else:
+its Content-Security-Policy allows exactly its own script and stylesheet by SHA-256 and requires Trusted Types, and
+`tests/test_web_static.py` grades that policy with the pinned csp-evaluator where it is installed. Only the standard library and the
+existing dependencies are used, so the hash-locked closures are unchanged.
 
 ## Live mode
 

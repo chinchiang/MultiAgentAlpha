@@ -18,6 +18,7 @@ import re
 import sys
 import threading
 import unicodedata
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -80,11 +81,15 @@ class RunRegistry:
         self._waiters: dict[str, threading.Thread] = {}
         self._cancelled: set[str] = set()
         self._reports: dict[str, tuple[int, int, ReviewReport]] = {}
+        self.blocked_by: Callable[[], bool] | None = None  # set by the server: an environment job changing the tools
 
     # ------------------------------------------------------------------ validation
     def _path(self, value: str) -> Path:
-        p = Path(value.strip()).expanduser()
-        return (p if p.is_absolute() else self.workspace / p).resolve()
+        try:
+            p = Path(value.strip()).expanduser()
+            return (p if p.is_absolute() else self.workspace / p).resolve()
+        except (ValueError, RuntimeError, OSError) as e:  # a NUL byte, a symlink loop, an unknown ~user
+            raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path ({type(e).__name__})") from e
 
     def _inside_workspace(self, p: Path) -> bool:
         return p == self.workspace or self.workspace in p.parents
@@ -168,6 +173,8 @@ class RunRegistry:
         with self._lock:
             if self.busy():
                 raise LaunchError("busy", "a review is already running; wait for it or cancel it", status=409)
+            if self.blocked_by is not None and self.blocked_by():
+                raise LaunchError("busy", "an environment job is replacing the tools or the trivy database; wait for it", status=409)
             run_id = procs.new_id()
             run_dir = self.runs_dir / run_id
             run_dir.mkdir(parents=True)
@@ -212,6 +219,8 @@ class RunRegistry:
                 status = "cancelled"
             else:
                 status = "finished" if finished else "failed"
+            if not finished:
+                progress_mod.close_abandoned(run_dir / "progress.json", "cancelled" if status == "cancelled" else f"exit {code}")
             manifest.update(status=status, exit_code=code, finished_at=procs.now(),
                             gate_enforced=finished and code == 2, psirt_failed=finished and code == 3)
             procs.write_json(run_dir / "run.json", manifest)

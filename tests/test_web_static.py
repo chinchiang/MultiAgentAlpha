@@ -18,7 +18,7 @@ JS = (STATIC / "app.js").read_text(encoding="utf-8")
 CSS = (STATIC / "app.css").read_text(encoding="utf-8")
 HTML = (STATIC / "index.html").read_text(encoding="utf-8")
 DICTS = {lang: json.loads((STATIC / "i18n" / f"{lang}.json").read_text(encoding="utf-8")) for lang in ("zh-TW", "en")}
-STORAGE_KEYS = {"mara.lang"}
+STORAGE_KEYS = {"mara.lang", "mara.token"}
 
 
 def _keys_used() -> set[str]:
@@ -84,7 +84,7 @@ def _enumerations() -> dict[str, set[str]]:
 
 def test_every_code_the_server_or_the_report_can_send_has_a_name_in_both_languages():
     enums = _enumerations()
-    assert len(enums["reason."]) > len(enums["hreason."]) > 5 and {"busy", "csrf", "inside_target"} <= enums["error."]
+    assert len(enums["reason."]) > len(enums["hreason."]) > 5 and {"busy", "bad_path", "inside_target"} <= enums["error."]
     for prefix, values in enums.items():
         missing = sorted(prefix + v for v in values if prefix + v not in DICTS["zh-TW"])
         assert not missing, missing
@@ -146,8 +146,14 @@ def test_every_static_file_ships_in_the_package():
     globs = meta["tool"]["setuptools"]["package-data"]["mara"]
     pkg = ROOT / "src" / "mara"
     files = [p.relative_to(pkg).as_posix() for p in STATIC.rglob("*") if p.is_file()]
-    unshipped = [f for f in files if not any(fnmatch.fnmatchcase(f, g) for g in globs)]
+
+    def shipped(path: str, glob: str) -> bool:  # setuptools globs: `*` stops at a slash, unlike fnmatch's
+        parts, pattern = path.split("/"), glob.split("/")
+        return len(parts) == len(pattern) and all(fnmatch.fnmatchcase(a, b) for a, b in zip(parts, pattern, strict=True))
+
+    unshipped = [f for f in files if not any(shipped(f, g) for g in globs)]
     assert files and not unshipped, unshipped
+    assert not shipped("web/static/i18n/en.json", "web/static/*.json"), "a glob one level up must not count"
 
 
 REAL_INSTALL = ROOT / ".mara-tools"

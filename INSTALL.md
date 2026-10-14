@@ -118,7 +118,7 @@ The first line runs the whole test suite (a few tool-integration tests skip whil
 Available once section 2 is done; no further package is needed:
 
 ```bash
-mara serve                 # 印出並開啟 http://127.0.0.1:8765/?token=… / prints and opens http://127.0.0.1:8765/?token=…
+mara serve                 # 印出並開啟 http://127.0.0.1:8765/#token=… / prints and opens http://127.0.0.1:8765/#token=…
 mara serve --no-browser    # 只印出網址（遠端主機、WSL）/ print the URL only (remote host, WSL)
 ```
 

@@ -146,6 +146,27 @@ class Progress:
                     pass
 
 
+def close_abandoned(path: Path, error: str) -> None:
+    """End a record its review left running: the child was killed (a cancel, a stopped server) before it could finish
+    the record itself. The running stage becomes failed, so the page never shows a dead review still at work."""
+    data = read(path)
+    if data is None or data.get("status") != "running":
+        return
+    now = _now()
+    for s in data["stages"]:
+        if isinstance(s, dict) and s.get("status") == "running":
+            s["status"] = "failed"
+            s["finished_at"] = now
+    data.update(status="failed", finished_at=now, error=error[:NOTE_CHARS], current=None)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as e:
+        _log.warning("progress file %s not closed: %s", path, e)
+        tmp.unlink(missing_ok=True)
+
+
 def read(path: Path) -> dict[str, Any] | None:
     """The progress file at `path`, or None when it is missing, unreadable or not a version-1 progress record."""
     try:

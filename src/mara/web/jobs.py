@@ -22,6 +22,7 @@ from .runs import LaunchError, RunRegistry
 
 JobKind = Literal["install_tools", "trivy_db_download", "trivy_db_status", "check_config"]
 SCRIPTS = {"install_tools": "scripts/install_tools.py", "trivy_db_download": "scripts/trivy_db.py", "trivy_db_status": "scripts/trivy_db.py"}
+CHANGES_TOOLS = frozenset({"install_tools", "trivy_db_download"})  # never while a review executes the tools or reads the database
 
 
 class JobRequest(BaseModel):
@@ -53,6 +54,7 @@ class JobRegistry:
         self.runs = runs  # for the config allowlist
         self._lock = threading.RLock()
         self._procs: dict[str, Any] = {}
+        self._kinds: dict[str, str] = {}
 
     def argv(self, req: JobRequest) -> list[str]:
         if req.kind in SCRIPTS and not available(self.workspace)[req.kind]:
@@ -73,6 +75,8 @@ class JobRegistry:
         with self._lock:
             if any(p.poll() is None for p in self._procs.values()):
                 raise LaunchError("busy", "an environment job is already running", status=409)
+            if req.kind in CHANGES_TOOLS and self.runs.busy():
+                raise LaunchError("busy", "a review is running with the installed tools; wait for it or cancel it", status=409)
             job_id = procs.new_id()
             d = self.jobs_dir / job_id
             d.mkdir(parents=True)
@@ -86,8 +90,14 @@ class JobRegistry:
                 procs.write_json(d / "job.json", job)
                 raise LaunchError("spawn_failed", str(e), status=500) from e
             self._procs[job_id] = proc
+            self._kinds[job_id] = req.kind
             threading.Thread(target=self._wait, args=(job_id, proc), name=f"mara-job-{job_id}", daemon=True).start()
         return self.get(job_id) or job
+
+    def changing_tools(self) -> bool:
+        """A running job that replaces the tools or the trivy database (a review must not start meanwhile)."""
+        with self._lock:
+            return any(p.poll() is None and self._kinds.get(j) in CHANGES_TOOLS for j, p in self._procs.items())
 
     def _wait(self, job_id: str, proc: Any) -> None:
         code = proc.wait()

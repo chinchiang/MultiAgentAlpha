@@ -1,11 +1,13 @@
 """The workbench's HTTP server: `http.server` on a loopback address, one page and a small JSON API.
 
-Access: `mara serve` prints a URL carrying a random token that exists for this server's lifetime; opening it sets
-an HttpOnly, SameSite=Strict session cookie. Every API call needs the cookie, and every call that changes
-something also needs the CSRF value `/api/session` returns, in the `X-MARA-CSRF` header; a page on another origin
-can neither read that value (no CORS headers are ever sent) nor send the header without a preflight. The Host
-header must name the loopback address the server listens on, which keeps DNS-rebinding pages out, and an Origin or
-Sec-Fetch-Site naming another site is refused.
+Access: `mara serve` prints a URL whose fragment carries a random token that exists for this server's lifetime
+(`#token=...`; a fragment never reaches a server, a log or a Referer). The page keeps it in this origin's
+localStorage, which is scoped to scheme, host and port, and sends it in the `X-MARA-Token` header of every API
+call. There is no cookie: a cookie would be sent to every service on 127.0.0.1 whatever its port, and another
+user's listener there could collect it. A page on another origin can neither read the token nor send the header
+without a CORS preflight, which is never granted, so the header is also the CSRF defence. The Host header must name
+the loopback address the server listens on, which keeps DNS-rebinding pages out, and an Origin or Sec-Fetch-Site
+naming another site is refused. The page itself holds no data and needs no token.
 
 The page is assembled once at start-up from the packaged template, stylesheet, script and the two dictionaries;
 its Content-Security-Policy allows exactly that script and that stylesheet by SHA-256, no other origin, and Trusted
@@ -18,13 +20,16 @@ import base64
 import datetime as dt
 import hashlib
 import hmac
+import html
 import json
+import os
 import re
 import secrets
+import signal
 import socket
 import sys
+import threading
 from http import HTTPStatus
-from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
@@ -70,7 +75,7 @@ def build_page() -> tuple[bytes, str]:
     if "</style" in css.lower() or "</script" in js.lower():
         raise RuntimeError("an inline asset would end its own element")
     parts = {"CSS": css, "JS": js, "I18N": _json_for_script(dictionaries), "VERSION": __version__}
-    html = _PLACEHOLDER.sub(lambda m: parts[m.group(1)], (static / "index.html").read_text(encoding="utf-8"))
+    document = _PLACEHOLDER.sub(lambda m: parts[m.group(1)], (static / "index.html").read_text(encoding="utf-8"))
     policy = "; ".join((
         "default-src 'none'",
         f"script-src '{csp_source_hash(js)}'",
@@ -82,7 +87,7 @@ def build_page() -> tuple[bytes, str]:
         "frame-ancestors 'none'",
         "require-trusted-types-for 'script'",
     ))
-    return html.encode("utf-8"), policy
+    return document.encode("utf-8"), policy
 
 
 # Responses other than the page load nothing at all
@@ -99,17 +104,16 @@ class WorkbenchServer(ThreadingHTTPServer):
         self.out_dir = out_dir.resolve()
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.token = token or secrets.token_urlsafe(32)
-        self.csrf = secrets.token_urlsafe(32)
         self.started_at = procs.now()
         self.runs = RunRegistry(self.workspace, self.out_dir)
         self.jobs = JobRegistry(self.workspace, self.out_dir, self.runs)
+        self.runs.blocked_by = self.jobs.changing_tools  # a review never runs while the tools it executes are replaced
         self.page, self.csp = build_page()
         host = address[0]
         port = self.port
         names = {host, "127.0.0.1", "localhost"} if host != "::1" else {"::1", "localhost"}
         self.allowed_hosts = {f"[{n}]" if ":" in n else n for n in names}
         self.allowed_hosts |= {f"{n}:{port}" for n in self.allowed_hosts}
-        self.cookie_name = f"mara_session_{port}"  # cookies ignore ports: one per server
 
     @property
     def port(self) -> int:
@@ -141,6 +145,7 @@ class WorkbenchServer6(WorkbenchServer):
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "mara-workbench"
+    timeout = 60  # an idle or stalled connection gives its thread back after a minute
 
     def version_string(self) -> str:
         return self.server_version  # no Python version in the Server header
@@ -150,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
         return cast(WorkbenchServer, self.server)
 
     def log_message(self, format: str, *args: Any) -> None:
-        return  # requests carry the session token in the first URL; nothing is logged
+        return  # the console belongs to the operator; requests are not logged
 
     # ------------------------------------------------------------------ plumbing
     def _headers(self, status: int, ctype: str, length: int, *, page: bool = False, extra: dict[str, str] | None = None) -> None:
@@ -179,9 +184,6 @@ class Handler(BaseHTTPRequestHandler):
     def _error(self, status: int, code: str, message: str = "") -> None:
         self._json(status, {"error": {"code": code, "message": message}})
 
-    def _text(self, status: int, text: str) -> None:
-        self._send(status, text.encode("utf-8"), "text/plain; charset=utf-8")
-
     def _read_body(self) -> bytes | None:
         """The request body; None after an error response (the connection is then closed)."""
         raw = self.headers.get("Content-Length")
@@ -201,15 +203,9 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return self.rfile.read(length) if length else b""
 
-    def _cookie_ok(self) -> bool:
-        try:
-            jar = SimpleCookie(self.headers.get("Cookie", ""))
-        except CookieError:
-            return False
-        morsel = jar.get(self.app.cookie_name)
-        if morsel is None:
-            return False
-        return hmac.compare_digest(morsel.value.encode(), self.app.token.encode())
+    def _token_ok(self) -> bool:
+        sent = (self.headers.get("X-MARA-Token") or "").strip()
+        return hmac.compare_digest(sent.encode("utf-8", "replace"), self.app.token.encode())
 
     def _host_ok(self) -> bool:
         return (self.headers.get("Host") or "").strip().lower() in self.app.allowed_hosts
@@ -266,7 +262,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.headers.get("Content-Length", "0").strip() not in ("", "0") or self.headers.get("Transfer-Encoding"):
             self.close_connection = True  # a body on a GET is never read: the connection cannot carry another request
         if path == "/" and method == "GET":
-            self._page(query)
+            # the page holds no data (every number comes from the API); a token in a query string is not read
+            self._send(HTTPStatus.OK, self.app.page, "text/html; charset=utf-8", page=True)
             return
         if path == "/api/health" and method == "GET":
             self._json(HTTPStatus.OK, {"ok": True, "version": __version__, "time": procs.now()})
@@ -274,37 +271,17 @@ class Handler(BaseHTTPRequestHandler):
         if not path.startswith("/api/"):
             self._error(HTTPStatus.NOT_FOUND, "not_found")
             return
-        if not self._cookie_ok():
+        if not self._token_ok():
             self._error(HTTPStatus.UNAUTHORIZED, "unauthenticated", "open the URL printed by `mara serve`")
             return
         if method != "GET":
             if not self._same_origin():
                 self._error(HTTPStatus.FORBIDDEN, "cross_origin")
                 return
-            sent = self.headers.get("X-MARA-CSRF", "")
-            if not hmac.compare_digest(sent.encode(), self.app.csrf.encode()):
-                self._error(HTTPStatus.FORBIDDEN, "csrf", "missing or wrong X-MARA-CSRF header")
-                return
             if body and not (self.headers.get("Content-Type") or "").lower().startswith("application/json"):
                 self._error(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "json_required")
                 return
         self._api(method, path, query, body)
-
-    def _page(self, query: dict[str, list[str]]) -> None:
-        token = (query.get("token") or [""])[0]
-        if token:
-            if hmac.compare_digest(token.encode(), self.app.token.encode()):
-                cookie = f"{self.app.cookie_name}={self.app.token}; HttpOnly; SameSite=Strict; Path=/"
-                self._send(HTTPStatus.SEE_OTHER, b"", "text/plain; charset=utf-8", extra={"Location": "/", "Set-Cookie": cookie})
-            else:
-                self._text(HTTPStatus.FORBIDDEN, "MARA workbench: this link is not valid for the running server.\n"
-                                                 "MARA 工作台：此連結不屬於目前執行中的服務。\n")
-            return
-        if not self._cookie_ok():
-            self._text(HTTPStatus.UNAUTHORIZED, "MARA workbench: open the URL that `mara serve` printed (it carries the session token).\n"
-                                                "MARA 工作台：請開啟 `mara serve` 印出的網址（內含本次工作階段的權杖）。\n")
-            return
-        self._send(HTTPStatus.OK, self.app.page, "text/html; charset=utf-8", page=True)
 
     # ------------------------------------------------------------------ API
     def _api(self, method: str, path: str, query: dict[str, list[str]], body: bytes) -> None:
@@ -321,12 +298,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             match method, parts:
                 case "GET", ["session"]:
-                    self._json(HTTPStatus.OK, {"version": __version__, "csrf": app.csrf, "workspace": str(app.workspace),
-                                               "out_dir": str(app.out_dir), "started_at": app.started_at, "settings": app.settings(),
-                                               "python": sys.version.split()[0]})
-                case "POST", ["logout"]:
-                    self._json(HTTPStatus.OK, {"ok": True},
-                               extra={"Set-Cookie": f"{app.cookie_name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0"})
+                    self._json(HTTPStatus.OK, {"version": __version__, "workspace": str(app.workspace), "out_dir": str(app.out_dir),
+                                               "started_at": app.started_at, "settings": app.settings(), "python": sys.version.split()[0]})
                 case "GET", ["runs"]:
                     self._json(HTTPStatus.OK, {"runs": app.runs.list(), "busy": app.runs.busy()})
                 case "POST", ["runs"]:
@@ -410,21 +383,64 @@ def make_server(*, host: str = "127.0.0.1", port: int = 8765, workspace: Path, o
     return cls((host, port), workspace=workspace, out_dir=out_dir, token=token)
 
 
+def open_file(out_dir: Path, url: str, port: int) -> Path:
+    """A redirect page only this user can read. The browser is started on the file, never on the URL: a process's
+    arguments are visible to every local user, and the browser keeps its own for as long as it runs."""
+    path = out_dir / f".mara-serve-{port}.html"
+    path.unlink(missing_ok=True)  # O_EXCL below: never write through a file or link someone else left there
+    target = html.escape(url, quote=True)
+    page = (f'<!DOCTYPE html>\n<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url={target}">'
+            f'<title>MARA</title></head><body><a href="{target}">MARA workbench</a></body></html>\n')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(page)
+    return path
+
+
+def _stop_on_signals() -> dict[int, Any]:
+    """SIGTERM and SIGHUP (a `kill`, a service stop, a closed terminal) end the server like Ctrl-C does, so the reviews
+    it started are stopped and recorded instead of running on unseen: they live in their own process groups and would
+    not receive the signal themselves."""
+    previous: dict[int, Any] = {}
+    if threading.current_thread() is not threading.main_thread():
+        return previous
+
+    def stop(signum: int, frame: Any) -> None:
+        raise KeyboardInterrupt
+
+    for name in ("SIGTERM", "SIGHUP"):
+        sig = getattr(signal, name, None)
+        if sig is not None:
+            previous[sig] = signal.signal(sig, stop)
+    return previous
+
+
 def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser: bool, echo: Any = print) -> None:
-    """Run until interrupted; reviews and jobs still running then are stopped and recorded as cancelled."""
+    """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); reviews and jobs still running then are stopped and recorded
+    as cancelled."""
     httpd = make_server(host=host, port=port, workspace=workspace, out_dir=out_dir)
-    url = f"{httpd.url}?token={httpd.token}"
+    url = f"{httpd.url}#token={httpd.token}"
     echo(f"MARA workbench {__version__} · workspace {httpd.workspace} · runs in {httpd.runs.runs_dir}")
     echo(f"open: {url}")
-    echo("the link is the session key for this server: do not share it; Ctrl-C stops the server and any running review")
-    if open_browser:
-        import webbrowser
-
-        webbrowser.open(url)
+    echo("the link is the key to this server: do not share it; Ctrl-C stops the server and any running review")
+    previous = _stop_on_signals()
+    redirect: Path | None = None
     try:
+        if open_browser:
+            import webbrowser
+
+            redirect = open_file(httpd.out_dir, url, httpd.port)
+            webbrowser.open(redirect.as_uri())
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        for sig in previous:
+            signal.signal(sig, signal.SIG_IGN)  # a second signal must not cut the cleanup short
+        echo("stopping: cancelling any running review or job")
         httpd.shutdown_children()
         httpd.server_close()
+        if redirect is not None:
+            redirect.unlink(missing_ok=True)
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)

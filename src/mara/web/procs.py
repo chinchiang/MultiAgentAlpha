@@ -16,6 +16,7 @@ import secrets
 import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -34,9 +35,13 @@ def new_id() -> str:
 
 def write_json(path: Path, data: Any) -> None:
     """Replace `path` atomically, so a concurrent reader sees the old or the new record, never half of one."""
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-    os.replace(tmp, path)
+    # one temporary name per writer: two request threads saving the same record must not share one
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.{secrets.token_hex(4)}.tmp")
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def read_json(path: Path) -> dict[str, Any] | None:
