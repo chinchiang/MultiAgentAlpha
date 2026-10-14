@@ -35,7 +35,7 @@ request (the Pages API reports `public: true`). Keeping it public is the owner's
 private repository therefore protects the source tree, the fixtures and the history, not `docs/`.
 Everything under `docs/` is reachable at that address, so it must contain only intended public documentation:
 the report, its parts, the appendices, the dated assessment, calibration, inventory, governance and
-ground-truth records, the runbooks and the changelog. Before the 2026-09-18 remediation, Pages served
+ground-truth records, the runbooks, the changelog and the read-only workbench demo (`docs/workbench/`, below). Before the 2026-09-18 remediation, Pages served
 the repository root; it now serves `/docs` only, and the deliberately vulnerable fixture URLs return
 404. Two files at the repository root are defence in depth for the day someone switches the source
 back to the root by mistake: `index.html` is a self-contained redirect to `docs/`, and `_config.yml`
@@ -127,6 +127,16 @@ a vote between the forward and reverse pass) so the tests exercise every defence
 ```bash
 mara serve                       # prints http://127.0.0.1:8765/#token=… and opens it; --port 0 picks a free port, --no-browser only prints
 ```
+
+To look at it without installing anything, open the **read-only demo** at
+<https://chinchiang.github.io/MultiAgentAlpha/workbench/>: the same page, holding a snapshot of one offline review of the
+seeded fixture by the three mock model families. It talks to no server, cannot start a review or change anything, and shows
+no config but `config/mara.mock.yaml` and no path of the machine that captured it. `scripts/build_workbench_demo.py --refresh`
+captures a new snapshot (it runs that review through a real `mara serve` in-process); without `--refresh` it re-assembles
+`docs/workbench/index.html` around the committed snapshot, which is needed after any change to the page's script,
+stylesheet, dictionaries or the version, and `tests/test_workbench_demo.py` fails until it is done. GitHub Pages sends no
+headers, so the demo carries its Content-Security-Policy in a meta element, which `scripts/csp_ci.py` grades with the rest of
+the repository.
 
 `mara serve` is a local web page (正體中文 and English, switched on the page) on top of the same command line
 (`docs/adr/0006-local-web-workbench.md`). **評估工作台 / Workbench** lists every run with its status, gate and overall score;
@@ -755,6 +765,7 @@ python scripts/gen_mock_fixtures.py      # regenerate mock responses after editi
 python scripts/gen_mock_fixtures.py --check   # the committed mock responses are current (also a test)
 mara serve --no-browser --port 0        # the local web workbench on a free loopback port (see Local web workbench)
 python scripts/build_html.py             # rebuild the online edition of the report
+python scripts/build_workbench_demo.py   # re-assemble the read-only workbench demo (--refresh: new snapshot)
 python scripts/count_words.py            # 字數統計（正體中文計字，不含附錄A）
 ```
 
@@ -767,7 +778,7 @@ fixtures/          vuln-sample app, mock-responses, pre-recorded SARIF, syntheti
 calib/             labelled calibration samples, human decisions (calib/decisions/)
 tests/             unit + end-to-end tests (no network)
 out/               reports of a plain review; runs/ and jobs/ of the workbench (git-ignored)
-docs/              the report (Markdown + HTML), dated records, runbooks, Appendix E prompt kit, Appendix D questionnaire
+docs/              the report (Markdown + HTML), dated records, runbooks, Appendix E prompt kit, Appendix D questionnaire, workbench/ demo
 scripts/           CI wrappers (*_ci.py), tool installer, governance, calibration, rollout and report scripts
 tools/             versions.lock, hash-pinned Python closures, triage / ignore / policy files
 sbom/              ML-BOM manifest (models.yaml) and the CycloneDX BOM
