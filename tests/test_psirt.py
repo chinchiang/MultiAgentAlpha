@@ -4,6 +4,7 @@ from the environment; policy P6 keeps the trigger narrow."""
 
 import datetime as dt
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -127,7 +128,8 @@ def test_write_and_cli_file_output(shipped_report, tmp_path):
                                   "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--mock-fixtures", str(ROOT / "fixtures" / "mock-responses"),
                                   "--out", str(out)])
     assert res.exit_code == 0, res.output
-    assert (out / "psirt-notifications.json").is_file() and "PSIRT payload" in res.output
+    plain = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", res.output)  # without colour codes (FORCE_COLOR on CI runners)
+    assert (out / "psirt-notifications.json").is_file() and "PSIRT payload" in " ".join(plain.split())
 
 
 def test_policy_p6_keeps_the_trigger_narrow():

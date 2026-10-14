@@ -192,7 +192,8 @@
   }
 
   function tableWrap(label, head, rows) {
-    return h("div", { class: "tablewrap", tabindex: "0", role: "region", "aria-label": label },
+    // the region is named apart from the card around it, which is a region of its own (axe landmark-unique)
+    return h("div", { class: "tablewrap", tabindex: "0", role: "region", "aria-label": t("a11y.table", { name: label }) },
       h("table", null, h("caption", { class: "sr-only" }, label),
         h("thead", null, h("tr", null, head.map((c) => h("th", { scope: "col", class: c.num ? "num" : null }, c.label || c)))),
         h("tbody", null, rows)));
@@ -567,7 +568,7 @@
       return h("label", { class: "radio-card" }, input, icon(ic), h("span", null, h("strong", null, title), h("span", { class: "d" }, desc)));
     };
     const configInfo = h("div", { class: "stack" });
-    const preview = h("pre", { class: "log", "aria-live": "off" });
+    const preview = h("pre", { class: "log", tabindex: "0", "aria-live": "off" });
     const submit = btn(t("new.submit"), { kind: "primary", icon: "play" });
     submit.setAttribute("type", "submit");
 
@@ -1022,7 +1023,7 @@
     close.addEventListener("click", () => closeDrawer(true));
     const heading = h("h2", { id: "drawer-title", tabindex: "-1" }, f.title);
     const drawer = h("div", { class: "drawer", id: "drawer", role: "dialog", "aria-modal": "true", "aria-labelledby": "drawer-title" },
-      h("header", null, h("div", { style: { flex: "1" } }, h("div", { class: "card-label" }, f.id + " · " + dimLabel(f.dimension) + " · " + f.cwe), heading,
+      h("div", { class: "drawer-head" }, h("div", { style: { flex: "1" } }, h("div", { class: "card-label" }, f.id + " · " + dimLabel(f.dimension) + " · " + f.cwe), heading,
         h("div", { class: "row", style: { "margin-top": "8px" } }, sevChip(f.severity), c.tier ? tierChip(c.tier) : null, c.final_outcome ? outcomeChip(c.final_outcome) : null,
           typeof c.cvss4_score === "number" ? chip("CVSS 4.0 " + c.cvss4_score) : null, c.ssvc_decision ? chip("SSVC " + c.ssvc_decision) : null)), close),
       h("div", { class: "d-body" },
@@ -1067,7 +1068,7 @@
     const cards = view.dimensions.map((d) => {
       const cls = d.score < min ? "danger" : d.score < 80 ? "warn" : "";
       return h("section", { class: "card dim", "aria-label": dimLabel(d.dimension) },
-        h("div", { class: "row between" }, h("h3", null, dimLabel(d.dimension)), d.tool_ran ? chip(t("dim.tool_ran"), "ok") : chip(t("dim.tool_not_ran"), "warn")),
+        h("div", { class: "row between" }, h("h2", null, dimLabel(d.dimension)), d.tool_ran ? chip(t("dim.tool_ran"), "ok") : chip(t("dim.tool_not_ran"), "warn")),
         h("div", { class: "d-score" + (cls ? " " + cls : "") }, String(d.score), h("span", { class: "small muted" }, " / 100")),
         bar(d.score, 100, cls),
         h("div", { class: "d-counts" }, h("span", null, t("dim.accepted"), " ", h("strong", null, String(d.accepted_findings))),
@@ -1116,9 +1117,9 @@
 
   function tabLog(run, progress, panel, seq) {
     const stagesSlot = h("div");
-    const progressLog = h("pre", { class: "log" });
-    const pipelineLog = h("pre", { class: "log" });
-    const runLog = h("pre", { class: "log" });
+    const progressLog = h("pre", { class: "log", tabindex: "0" });
+    const pipelineLog = h("pre", { class: "log", tabindex: "0" });
+    const runLog = h("pre", { class: "log", tabindex: "0" });
     function drawStages(p, r) {
       const active = ACTIVE.includes((r || run).status);
       const stages = (p && p.stages ? p.stages : []).map((s) => (s.status === "running" && !active ? { ...s, status: "failed" } : s));
@@ -1144,7 +1145,7 @@
     loadLogs();
     panel.append(h("div", { class: "stack" },
       card(t("log.stages_label"), t("log.stages"), stagesSlot),
-      run.argv && run.argv.length ? card(t("log.argv_label"), t("log.argv"), h("pre", { class: "log" }, run.argv.join(" "))) : null,
+      run.argv && run.argv.length ? card(t("log.argv_label"), t("log.argv"), h("pre", { class: "log", tabindex: "0" }, run.argv.join(" "))) : null,
       card(t("log.progress_label"), t("log.progress"), progressLog),
       card(t("log.pipeline_label"), t("log.pipeline"), pipelineLog),
       card(t("log.run_label"), t("log.run"), runLog)));
@@ -1169,7 +1170,7 @@
         fill(jobSlot, h("div", { class: "stack" },
           h("div", { class: "row" }, chip(tCode("job.", j.kind)), chip(tCode("job_status.", j.status), cls), h("span", { class: "small muted" }, fmtTime(j.started_at, true)),
             j.exit_code !== null && j.exit_code !== undefined ? chip(t("env.job.exit", { code: j.exit_code })) : null),
-          h("pre", { class: "log" }, j.argv.join(" ")), h("pre", { class: "log" }, j.log_tail || t("log.empty"))));
+          h("pre", { class: "log", tabindex: "0" }, j.argv.join(" ")), h("pre", { class: "log", tabindex: "0" }, j.log_tail || t("log.empty"))));
         if (j.status !== "running" && running && running.id === j.id) { state.env = null; render(false); }
       } catch (e) { fill(jobSlot, emptyState(tCode("error.", e.code), "alert")); }
     }
@@ -1231,7 +1232,7 @@
         btn(t("env.trivy.check"), { small: true, icon: "search", disabled: busy || !actions.trivy_db_status, onClick: () => startJob({ kind: "trivy_db_status" }) }),
         btn(t("env.trivy.download"), { small: true, kind: "primary", icon: "database", disabled: busy || !actions.trivy_db_download,
           onClick: () => startJob({ kind: "trivy_db_download" }, "env.confirm_trivy") })),
-      h("pre", { class: "log" }, (env.trivy_db.lines || []).join("\n"))));
+      h("pre", { class: "log", tabindex: "0" }, (env.trivy_db.lines || []).join("\n"))));
 
     const jobCard = card(t("env.job.label"), t("env.job.title"), jobSlot);
 
@@ -1323,7 +1324,7 @@
       // nothing to sign out of and nothing to poll: the data is a snapshot, and every change is refused
       document.getElementById("logout").remove();  // .btn would override the hidden attribute
       const area = document.getElementById("banner-area");
-      area.before(h("div", { class: "banner info demo", role: "note" }, icon("info"),
+      area.before(h("aside", { class: "banner info demo", "aria-label": t("top.demo") }, icon("info"),
         h("div", null, h("strong", null, t("demo.title")), h("div", { class: "detail" }, t("demo.body", { when: fmtTime(DEMO.captured_at, true) })))));
       await startSession();
       return;

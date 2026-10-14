@@ -103,8 +103,7 @@ def test_check_config_reports_two_judges_of_one_family_in_its_policy_table(tmp_p
     cfg.write_text(yaml.safe_dump(_two_anthropic_judges()), encoding="utf-8")
     r = CliRunner().invoke(app, ["check-config", str(cfg), "--json"])
     assert r.exit_code == 1 and not isinstance(r.exception, ValueError), "a policy failure, not an aborted validation"
-    # the console wraps long lines, even inside JSON strings: parse leniently and compare collapsed whitespace
-    results = {x["id"]: x for x in json.JSONDecoder(strict=False).raw_decode(r.output)[0]}
+    results = {x["id"]: x for x in json.loads(r.stdout)}  # stdout is one JSON document; the summary goes to stderr
     assert set(results) >= {"P1", "P2", "P3", "P4", "P5"}, "every other policy is still evaluated and shown"
     reason = " ".join(results["P3"]["reason"].split())
     assert not results["P3"]["passed"] and "each judge must come from a different model family" in reason
