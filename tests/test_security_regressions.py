@@ -568,10 +568,15 @@ def test_the_calibration_secret_exemption_is_narrow(tmp_path, monkeypatch):
     monkeypatch.setenv("MARA_HOME", str(tmp_path))
     key = pl.calibration_answer_key(sample)
     assert [(lab["file"], lab["line"]) for lab in key] == [("app.py", 3)]
-    seeded = ToolResult("gitleaks", "generic-api-key", "error", "secret", "app.py", 3, "CWE-798")
-    assert pl._declared_secret(seeded, key)
-    assert not pl._declared_secret(ToolResult("gitleaks", "aws", "error", "secret", "app.py", 4, "CWE-798"), key), "another line"
-    assert not pl._declared_secret(ToolResult("gitleaks", "aws", "error", "secret", "config.py", 3, "CWE-798"), key), "another file"
+    from mara.review_status import secret_preflight
+    from mara.tools.runner import ToolRun
+
+    def exempted(res):
+        return secret_preflight("live", [ToolRun("gitleaks", True, [res])], key).exempted == (res,)
+
+    assert exempted(ToolResult("gitleaks", "generic-api-key", "error", "secret", "app.py", 3, "CWE-798"))
+    assert not exempted(ToolResult("gitleaks", "aws", "error", "secret", "app.py", 4, "CWE-798")), "another line"
+    assert not exempted(ToolResult("gitleaks", "aws", "error", "secret", "config.py", 3, "CWE-798")), "another file"
     # a reviewed repository cannot claim the exemption by shipping its own labels.json
     elsewhere = tmp_path / "repo"
     elsewhere.mkdir()
@@ -610,9 +615,7 @@ def test_live_egress_with_the_exemption_passes_only_declared_secrets(tmp_path, m
     pipe, report = run(extra_secret=True)
     assert report.bias_audit["secret_preflight_calibration_exempted"] == 1, "the undeclared one is not exempted"
     assert any("0 other finding(s)" not in line and "1 other finding(s)" in line for line in pipe.log), "and it still blocks"
-    # the egress rule itself: in live mode any unexplained finding blocks, an exempted one does not
-    src = (ROOT / "src" / "mara" / "pipeline.py").read_text(encoding="utf-8")
-    assert 'egress_blocked = mode == "live" and (not secret_runs or any(not r.ran for r in secret_runs) or bool(unexplained))' in src
+    # the egress rule itself is mara.review_status.secret_preflight (tests/test_review_status.py)
     assert mod.Pipeline.run.__kwdefaults__["calibration_sample"] is False, "off unless the operator asks"
 
 

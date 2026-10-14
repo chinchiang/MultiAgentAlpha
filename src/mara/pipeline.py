@@ -26,6 +26,7 @@ from .identity import NEAR_LINES, norm_cwe, norm_path
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
+from .review_status import secret_preflight
 from .schemas import (
     SEVERITY_ORDER,
     ConsensusResult,
@@ -549,18 +550,13 @@ class Pipeline:
         tool_results = [r for run in tool_runs for r in run.results]
         tools_ran = {run.tool for run in tool_runs if run.ran}
         # Live source egress is blocked before any provider sees data if the trusted local
-        # secret scan is unavailable or reports secrets. The masked manifest remains reviewable.
-        secret_runs = [r for r in tool_runs if r.tool == "gitleaks"]
-        unexplained = [res for run in secret_runs for res in run.results]
-        if answer_key is not None and unexplained:
-            # calibration only: a seeded secret the sample's answer key declares (CWE-798, same file and
-            # line) is expected and does not block; anything else the scan finds still does
-            exempt = [res for res in unexplained if _declared_secret(res, answer_key)]
-            unexplained = [res for res in unexplained if res not in exempt]
-            self.audit["secret_preflight_calibration_exempted"] = len(exempt)
-            self._say(f"L0: secret preflight: {len(exempt)} seeded secret(s) declared by the calibration answer key, "
-                      f"{len(unexplained)} other finding(s)")
-        egress_blocked = mode == "live" and (not secret_runs or any(not r.ran for r in secret_runs) or bool(unexplained))
+        # secret scan is unavailable or reports secrets (mara.review_status). The masked manifest remains reviewable.
+        preflight = secret_preflight(mode, [r for r in tool_runs if r.tool == "gitleaks"], answer_key)
+        if answer_key is not None and (preflight.exempted or preflight.unexplained):
+            self.audit["secret_preflight_calibration_exempted"] = len(preflight.exempted)
+            self._say(f"L0: secret preflight: {len(preflight.exempted)} seeded secret(s) declared by the calibration answer key, "
+                      f"{len(preflight.unexplained)} other finding(s)")
+        egress_blocked = preflight.blocked
         prog.done("tools", f"{len(tools_ran)} of {len(tool_runs)} tool(s) ran, {len(tool_results)} result(s)"
                   + ("; source egress blocked by the secret preflight" if egress_blocked else ""))
         # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked
@@ -786,10 +782,6 @@ def calibration_answer_key(target: Path) -> list[dict]:
     if not is_calibration_answer_key("labels.json", text):
         raise ValueError(f"--calibration-sample: {path} is not a calibration answer key")
     return [lab for lab in json.loads(text)["labels"] if str(lab.get("cwe", "")).upper() == "CWE-798"]
-
-
-def _declared_secret(res: ToolResult, answer_key: list[dict]) -> bool:
-    return any(norm_path(str(lab["file"])) == norm_path(res.file) and int(lab["line"]) == res.line for lab in answer_key)
 
 
 def _alpha_units(findings: list[Finding], votes: list[JudgeVote]) -> dict[str, list[str]]:
