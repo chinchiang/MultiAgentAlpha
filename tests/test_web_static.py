@@ -97,7 +97,8 @@ def test_the_page_is_self_contained_and_carries_no_policy_of_its_own():
         assert not urls, f"{name} names off-site resources: {urls}"
     assert not re.search(r"\son[a-z]+\s*=", HTML), "no inline event handlers"
     assert "@import" not in CSS and "url(" not in CSS
-    assert HTML.count("__MARA_CSS__") == HTML.count("__MARA_JS__") == HTML.count("__MARA_I18N__") == 1
+    assert all(HTML.count(f"__MARA_{m}__") == 1 for m in ("CSS", "JS", "I18N", "HEAD", "DEMO"))
+    assert HTML.index("__MARA_HEAD__") < HTML.index("</head>") and HTML.index("__MARA_DEMO__") < HTML.index("<script>__MARA_JS__")
 
 
 @pytest.mark.parametrize("sink", ["innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "new RegExp(",
@@ -139,6 +140,7 @@ def test_the_assembled_page_is_allowed_exactly_its_own_script_and_style():
     data = html.split('<script type="application/json" id="i18n">', 1)[1].split("</script>", 1)[0]
     assert "<" not in data and json.loads(data) == DICTS
     assert "__MARA_" not in html
+    assert 'id="demo"' not in html, "the served page answers from the API, never from demo data"
 
 
 def test_every_static_file_ships_in_the_package():

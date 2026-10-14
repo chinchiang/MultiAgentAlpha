@@ -4,11 +4,20 @@
  * requires Trusted Types, so the DOM is built only through element and text APIs (h(), textContent, append,
  * fill()): repository-derived text - titles, quotes, arguments, file names - is always text, never markup.
  * Every number on the page comes from the server, which reads the validated report; nothing is re-derived here.
+ *
+ * The read-only demo on GitHub Pages (scripts/build_workbench_demo.py) is this same page with a "demo" data block:
+ * it holds the server's answers to every GET the page makes for one offline mock review, so api() answers from it,
+ * refuses everything else and never calls fetch(). The served page never carries that block.
  */
 "use strict";
 
 (function () {
   const DICT = JSON.parse(document.getElementById("i18n").textContent || "{}");
+  const DEMO = (() => {
+    const el = document.getElementById("demo");
+    if (!el) return null;
+    try { return JSON.parse(el.textContent || "null"); } catch (e) { return null; }
+  })();
   const LANGS = ["zh-TW", "en"];
   const STAGES = ["bundle", "tools", "context", "reviewers", "skeptic", "redteam", "jury", "scoring", "report"];
   const STAGE_LAYER = { bundle: "L1", tools: "L0", context: "L1", reviewers: "L2", skeptic: "L3", redteam: "L3", jury: "L4", scoring: "L5", report: "L5" };
@@ -231,7 +240,16 @@
     return false;
   }
 
+  async function demoApi(method, path) {
+    if (method !== "GET") throw new ApiError("demo_read_only", "");
+    const key = path.split("?")[0];
+    if (!own(DEMO.api || {}, key)) throw new ApiError("not_found", "", 404);
+    setService(true);
+    return JSON.parse(JSON.stringify(DEMO.api[key]));
+  }
+
   async function api(method, path, body) {
+    if (DEMO) return demoApi(method, path);
     const headers = { Accept: "application/json", "X-MARA-Token": TOKEN };
     const opts = { method, headers, credentials: "omit", cache: "no-store", redirect: "error" };
     if (body !== undefined) { headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
@@ -257,10 +275,18 @@
   async function download(runId, name) {
     // artifacts need the token header too, so they are fetched and handed to the browser as a local blob
     try {
-      const res = await fetch("/api/runs/" + enc(runId) + "/files/" + enc(name),
-        { headers: { "X-MARA-Token": TOKEN }, credentials: "omit", cache: "no-store", redirect: "error" });
-      if (!res.ok) throw new ApiError(res.status === 401 ? "unauthenticated" : "not_found", "", res.status);
-      const href = URL.createObjectURL(await res.blob());
+      let blob;
+      if (DEMO) {
+        const text = own(DEMO.files || {}, runId) && own(DEMO.files[runId], name) ? DEMO.files[runId][name] : null;
+        if (typeof text !== "string") throw new ApiError("demo_read_only", "");
+        blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      } else {
+        const res = await fetch("/api/runs/" + enc(runId) + "/files/" + enc(name),
+          { headers: { "X-MARA-Token": TOKEN }, credentials: "omit", cache: "no-store", redirect: "error" });
+        if (!res.ok) throw new ApiError(res.status === 401 ? "unauthenticated" : "not_found", "", res.status);
+        blob = await res.blob();
+      }
+      const href = URL.createObjectURL(blob);
       const a = h("a", { href, download: "mara-" + runId + "-" + name, hidden: true });
       document.body.append(a);
       a.click();
@@ -304,6 +330,7 @@
   function setService(ok) {
     const el = document.getElementById("svc-status");
     if (!el) return;
+    if (DEMO) { fill(el, dot("info"), h("span", null, t("top.demo"))); return; }
     fill(el, dot(ok ? "" : "danger"), h("span", null, t(ok ? "top.connected" : "top.disconnected")));
   }
 
@@ -1267,7 +1294,7 @@
   }
 
   async function startSession() {
-    if (!TOKEN) { showLoggedOut(); return; }
+    if (!TOKEN && !DEMO) { showLoggedOut(); return; }
     try {
       state.session = await api("GET", "/api/session");
       if (!store.get("mara.lang") && state.session.settings && LANGS.includes(state.session.settings.language)) lang = state.session.settings.language;
@@ -1292,6 +1319,15 @@
       if (takeToken()) { loggedOut = false; startSession(); return; }
       render(true);
     });
+    if (DEMO) {
+      // nothing to sign out of and nothing to poll: the data is a snapshot, and every change is refused
+      document.getElementById("logout").remove();  // .btn would override the hidden attribute
+      const area = document.getElementById("banner-area");
+      area.before(h("div", { class: "banner info demo", role: "note" }, icon("info"),
+        h("div", null, h("strong", null, t("demo.title")), h("div", { class: "detail" }, t("demo.body", { when: fmtTime(DEMO.captured_at, true) })))));
+      await startSession();
+      return;
+    }
     takeToken();
     await startSession();
     const pollList = async () => {

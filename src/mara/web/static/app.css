@@ -194,6 +194,11 @@ details > summary::marker { color: var(--accent); }
 .banner.ok .icon { color: var(--accent); }
 .banner.ok strong { color: #d9fff0; }
 .banner .close { margin-left: auto; }
+.banner.info { border-color: rgba(108, 180, 255, 0.35); background: linear-gradient(0deg, var(--info-soft), var(--info-soft)), #0f1620; }
+.banner.info .icon { color: var(--info); }
+.banner.info strong { color: #dcecff; }
+.banner.info .detail { color: #b9d4f2; }
+.banner.demo { margin: 0 0 10px; }
 .strip {
   display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: var(--radius); border: 1px solid var(--accent-line);
   background: linear-gradient(90deg, rgba(79, 209, 165, 0.12), rgba(79, 209, 165, 0.04)); margin-bottom: 16px;

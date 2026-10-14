@@ -46,7 +46,7 @@ from .runs import LaunchError, LaunchRequest, RunRegistry
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 MAX_BODY = 64 * 1024
 LANGUAGES = ("zh-TW", "en")
-_PLACEHOLDER = re.compile(r"__MARA_(CSS|JS|I18N|VERSION)__")  # plain markers, not a template language
+_PLACEHOLDER = re.compile(r"__MARA_(CSS|JS|I18N|VERSION|HEAD|DEMO)__")  # plain markers, not a template language
 
 
 class Settings(BaseModel):
@@ -62,20 +62,31 @@ def csp_source_hash(text: str) -> str:
 
 
 def _json_for_script(data: Any) -> str:
-    """JSON inside a <script type="application/json"> data block: nothing in it can end the element."""
-    return json.dumps(data, ensure_ascii=False, sort_keys=True).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    """JSON inside a <script type="application/json"> data block: nothing in it can end the element, and no `{{` or `{%`
+    in a quoted string reads as a template (semgrep's template-injection rules; JSON's own syntax never has either)."""
+    text = json.dumps(data, ensure_ascii=False, sort_keys=True).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    return text.replace("{{", "\\u007b\\u007b").replace("{%", "\\u007b%")
 
 
-def build_page() -> tuple[bytes, str]:
-    """(page, Content-Security-Policy). The policy is built here from the hashes of the exact inline texts."""
+def render_page(head: str = "", demo: Any = None) -> tuple[str, str, str]:
+    """(document, script, stylesheet) from the packaged template. The served page passes neither argument: its policy
+    travels in a header and its data comes from the API. scripts/build_workbench_demo.py passes a policy meta element
+    and the data of the read-only demo, which the script then answers its API calls from."""
     static = resources.files("mara.web") / "static"
     css = (static / "app.css").read_text(encoding="utf-8")
     js = (static / "app.js").read_text(encoding="utf-8")
     dictionaries = {lang: json.loads((static / "i18n" / f"{lang}.json").read_text(encoding="utf-8")) for lang in LANGUAGES}
     if "</style" in css.lower() or "</script" in js.lower():
         raise RuntimeError("an inline asset would end its own element")
-    parts = {"CSS": css, "JS": js, "I18N": _json_for_script(dictionaries), "VERSION": __version__}
+    block = f'<script type="application/json" id="demo">{_json_for_script(demo)}</script>' if demo is not None else ""
+    parts = {"CSS": css, "JS": js, "I18N": _json_for_script(dictionaries), "VERSION": __version__, "HEAD": head, "DEMO": block}
     document = _PLACEHOLDER.sub(lambda m: parts[m.group(1)], (static / "index.html").read_text(encoding="utf-8"))
+    return document, js, css
+
+
+def build_page() -> tuple[bytes, str]:
+    """(page, Content-Security-Policy). The policy is built here from the hashes of the exact inline texts."""
+    document, js, css = render_page()
     policy = "; ".join((
         "default-src 'none'",
         f"script-src '{csp_source_hash(js)}'",
