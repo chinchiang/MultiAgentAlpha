@@ -116,7 +116,7 @@ One thing that keeps a review from standing as a conclusion: coverage or a requi
 _Avoid_: error (an error is one kind of reply outcome), failure
 
 **Gate**:
-Whether a review's result lets the change merge, and when it does not, the gate reasons: the review is incomplete, a blocking finding, or a dimension score below the minimum. In the rollout phases before blocking, the gate is recorded but not enforced.
+Whether a review's result lets the change merge, and when it does not, the gate reasons: the review is incomplete, a blocking finding, or a dimension score below the minimum. A blocked gate is enforced only in the blocking rollout phase, or for one review when the operator asks for it (`--fail-on-gate`); otherwise it is recorded but not enforced, and the report records which.
 _Avoid_: check (a CI check is a different thing), pass/fail
 
 **Blocking finding**:
