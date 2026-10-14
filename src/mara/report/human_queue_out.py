@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 from ..config import MaraConfig
-from ..schemas import SEVERITY_ORDER, ConsensusResult, EvidenceTier, Finding, HumanQueueItem, JudgeVote, RedTeamNote, ReviewReport, SkepticVerdict
+from ..schemas import ConsensusResult, Finding, HumanQueueItem, JudgeVote, RedTeamNote, ReviewReport, SkepticVerdict
 from .escaping import code, literal
 
 
@@ -58,7 +58,6 @@ def build_queue(
     votes: list[JudgeVote],
     cfg: MaraConfig,
     *,
-    exclude_tier_c: bool = False,
     target_id: str = "",
     revision: str = "",
     context_hash: str = "",
@@ -66,7 +65,6 @@ def build_queue(
     hq = cfg.human_queue
     if not hq.enabled:
         return []
-    min_c = SEVERITY_ORDER.index(hq.queue_tier_c_min_severity)
     by_finding: dict[str, list[JudgeVote]] = {}
     for v in votes:
         by_finding.setdefault(v.finding_id, []).append(v)
@@ -78,21 +76,8 @@ def build_queue(
         reasons = list(c.human_reasons)
         if c.needs_human and not reasons:
             reasons.append("unresolved_human_review")
-        if (
-            c.tier == EvidenceTier.C
-            and (SEVERITY_ORDER.index(c.cvss4_severity) if c.cvss4_severity in SEVERITY_ORDER else 4) >= min_c
-            and not exclude_tier_c
-            and c.accepted
-        ):
-            reasons.append("tier_c_high")
-        if (
-            not reasons
-            and not c.accepted
-            and c.tier != EvidenceTier.D
-            and not cfg.gate.unsupervised_reject_allowed
-        ):
-            # assessment #60: without a passing Alternative Annotator Test (policy P8) the pipeline
-            # may not drop a non-D finding unsupervised; a human sees every rejection.
+        if c.unsupervised_reject_unverified:
+            # rejection review (policy P8, docs/adr/0005-jury-outcome.md): the jury outcome stays rejected
             reasons.append("unsupervised_reject_unverified")
         if not reasons:
             continue

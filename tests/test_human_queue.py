@@ -5,6 +5,7 @@ import json
 import os
 import stat
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from mara.config import MaraConfig, load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
 from mara.report.human_queue_out import build_queue, queue_key, render_human_queue, tightening  # noqa: E402
 from mara.schemas import ConsensusResult, EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, ReviewReport, SkepticVerdict  # noqa: E402
+from mara.scoring.outcome import OutcomePolicy, OutcomeSignals, decide  # noqa: E402
 
 VEC = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"  # 9.3, Critical
 HIGH_VEC = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:L/VA:L/SC:N/SI:N/SA:N"  # 8.7, High
@@ -29,12 +31,23 @@ def _finding(fid, line, cwe="CWE-89", vec=VEC):
                    source_family=ModelFamily.ANTHROPIC, source_model="m", finder_families=[ModelFamily.ANTHROPIC])
 
 
-def _cons(fid, *, tp=2, fp=0, human=0, alpha=1.0, tier=EvidenceTier.B, sev="High", accepted=True):
-    return ConsensusResult(finding_id=fid, weighted_score=0.9, votes_tp=tp, votes_fp=fp, votes_human=human, families_agreeing=[ModelFamily.DEEPSEEK],
-                           tool_corroborated=False, skeptic_refuted=False, position_consistent=True, krippendorff_alpha=alpha, tier=tier,
-                           cvss4_score=8.0, cvss4_severity=sev, ssvc_decision="Attend", accepted=accepted,
-                           needs_human=human > tp or alpha < 0.4,
-                           human_reasons=(["majority_needs_human"] if human > tp else []) + (["agreement_below_threshold"] if alpha < 0.4 else []))
+# a tier B finding the judges confirmed: nothing about it needs a human
+SUPPORTED = OutcomeSignals(tier=EvidenceTier.B, score=0.9, severity="High", provenance_verified=True, skeptic_refuted=False,
+                           skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=1.0, votes_tp=2, votes_fp=0,
+                           votes_human=0, position_consistent=True)
+
+
+def _policy(cfg, *, exclude_tier_c=False):
+    return OutcomePolicy.from_config(cfg, alpha_threshold=cfg.gate.human_threshold_alpha, exclude_tier_c=exclude_tier_c)
+
+
+def _cons(fid, policy, **signals):
+    """A consensus row as Pipeline.score() writes it: the jury outcome comes from decide()."""
+    s = replace(SUPPORTED, **signals)
+    return ConsensusResult(finding_id=fid, weighted_score=s.score, votes_tp=s.votes_tp, votes_fp=s.votes_fp, votes_human=s.votes_human,
+                           families_agreeing=[ModelFamily.DEEPSEEK], tool_corroborated=False, skeptic_refuted=s.skeptic_refuted,
+                           position_consistent=s.position_consistent, tier=s.tier, cvss4_score=8.0, cvss4_severity=s.severity,
+                           ssvc_decision="Attend", agreement_proxy=s.alpha, **decide(s, policy).consensus_fields())
 
 
 def _vote(fid, fam, pass_id, verdict):
@@ -49,8 +62,11 @@ def cfg():
 
 def test_selection_reasons_and_full_context(cfg):
     fs = [_finding("F-1", 10), _finding("F-2", 20), _finding("F-3", 30), _finding("F-4", 40)]
-    cons = {"F-1": _cons("F-1", tp=0, human=3), "F-2": _cons("F-2", alpha=0.1), "F-3": _cons("F-3", tier=EvidenceTier.C, sev="High"),
-            "F-4": _cons("F-4")}
+    def rows(policy):
+        return {"F-1": _cons("F-1", policy, votes_tp=0, votes_human=3), "F-2": _cons("F-2", policy, alpha=0.1),
+                "F-3": _cons("F-3", policy, tier=EvidenceTier.C, severity="High"), "F-4": _cons("F-4", policy)}
+
+    cons = rows(_policy(cfg))
     sk = {"F-1": SkepticVerdict(finding_id="F-1", verdict="weakened", reason="maybe", sanitizer_or_control="", source_family=ModelFamily.NEMOTRON, source_model="n")}
     votes = [_vote("F-1", ModelFamily.DEEPSEEK, "forward", "needs_human"), _vote("F-1", ModelFamily.DEEPSEEK, "reverse", "needs_human")]
     items = {i.finding_id: i for i in build_queue(fs, cons, sk, {}, votes, cfg)}
@@ -58,22 +74,35 @@ def test_selection_reasons_and_full_context(cfg):
     assert items["F-1"].reasons == ["majority_needs_human"] and items["F-2"].reasons == ["agreement_below_threshold"] and items["F-3"].reasons == ["tier_c_high"]
     assert items["F-1"].skeptic["verdict"] == "weakened" and len(items["F-1"].judge_votes) == 2 and items["F-1"].judge_votes[0]["family"] == "deepseek"
     assert items["F-1"].key == queue_key("app.py", 10, "CWE-89") == queue_key("./app.py", 10, "cwe-89")
-    # tier C is dropped while tightened; the other reasons stay
-    tightened = {i.finding_id for i in build_queue(fs, cons, sk, {}, votes, cfg, exclude_tier_c=True)}
+    # tier C is left to the jury while tightened; the other reasons stay
+    tightened = {i.finding_id for i in build_queue(fs, rows(_policy(cfg, exclude_tier_c=True)), sk, {}, votes, cfg)}
     assert tightened == {"F-1", "F-2"}
 
 
 def test_rejected_non_d_findings_are_queued_until_p8_allows_silence(cfg):
     # assessment #60: without a passing AAT (policy P8) no non-D finding is dropped unsupervised
     fs = [_finding("F-1", 10), _finding("F-2", 20), _finding("F-3", 30)]
-    cons = {"F-1": _cons("F-1", accepted=False), "F-2": _cons("F-2", accepted=False, tier=EvidenceTier.D),
-            "F-3": _cons("F-3", accepted=False)}
-    items = {i.finding_id: i for i in build_queue(fs, cons, {}, {}, [], cfg)}
+    def rows(policy):
+        return {"F-1": _cons("F-1", policy, score=0.4), "F-2": _cons("F-2", policy, tier=EvidenceTier.D, score=0.3),
+                "F-3": _cons("F-3", policy, score=0.4)}
+
+    items = {i.finding_id: i for i in build_queue(fs, rows(_policy(cfg)), {}, {}, [], cfg)}
     assert items["F-1"].reasons == ["unsupervised_reject_unverified"] and items["F-3"].reasons == ["unsupervised_reject_unverified"]
-    assert "F-2" not in items  # tier D is a normal drop, not an unsupervised rejection
+    assert "F-2" not in items  # a dropped finding (tier D) is not a rejection
     cfg_true = cfg.model_copy(deep=True)
     cfg_true.gate.unsupervised_reject_allowed = True
-    assert build_queue(fs, cons, {}, {}, [], cfg_true) == []
+    assert build_queue(fs, rows(_policy(cfg_true)), {}, {}, [], cfg_true) == []
+
+
+def test_rejection_review_follows_what_the_row_records_not_the_config_the_queue_is_built_with(cfg):
+    """docs/adr/0005-jury-outcome.md: the jury outcome module decides rejection review once, and the queue reads it.
+    A rejection recorded without it (P8 allowed when it was scored) is not queued under a stricter config."""
+    allowed = cfg.model_copy(deep=True)
+    allowed.gate.unsupervised_reject_allowed = True
+    row = _cons("F-1", _policy(allowed), score=0.4)
+    assert row.jury_outcome == "rejected" and not row.unsupervised_reject_unverified
+    assert not cfg.gate.unsupervised_reject_allowed
+    assert build_queue([_finding("F-1", 10)], {"F-1": row}, {}, {}, [], cfg) == []
 
 
 def test_tightening_only_when_backlog_is_over_the_limit(cfg):
@@ -141,14 +170,17 @@ def test_tier_c_high_needs_a_human_until_the_queue_tightens(tmp_path, monkeypatc
     assert tightened.queue_tightened and tightened.exclude_tier_c
     (c2,) = tightened.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
     assert c2.tier == EvidenceTier.C and c2.accepted and c2.human_reasons == []
-    assert build_queue([f], {"F-1": c2}, {}, {}, _votes("F-1"), cfg, exclude_tier_c=True) == []
+    assert build_queue([f], {"F-1": c2}, {}, {}, _votes("F-1"), cfg) == []
     # ...and since nobody will look at it, it blocks the gate instead of passing (tightening never loosens);
     # tier C is not in block_on_tiers, so before this rule an over-limit backlog let a tier C Critical through
     assert "C" not in cfg.gate.block_on_tiers and pipe.blocking_reason(c2) is None
     assert tightened.blocking_reason(c2) == "tier_c_while_tightened"
     # tighten_exclude_tier_c: false keeps tier C in the queue even while tightened
-    kept = build_queue([f], {"F-1": c2}, {}, {}, _votes("F-1"), cfg, exclude_tier_c=False)
-    assert [i.reasons for i in kept] == [["tier_c_high"]]
+    cfg.human_queue.tighten_exclude_tier_c = False
+    kept = Pipeline(cfg, out_dir=tmp_path / "out3")
+    assert kept.queue_tightened and not kept.exclude_tier_c
+    (c3,) = kept.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
+    assert [i.reasons for i in build_queue([f], {"F-1": c3}, {}, {}, _votes("F-1"), cfg)] == [["tier_c_high"]]
 
 
 def test_queue_tier_c_min_severity_configures_the_trigger(tmp_path, monkeypatch):
@@ -495,7 +527,7 @@ def test_report_and_governance_g11(tmp_path):
                    {"name": "d", "family": "deepseek", "provider": "mock", "model": "m", "data_residency": "on_prem"},
                    {"name": "n", "family": "nemotron", "provider": "mock", "model": "m", "data_residency": "on_prem"}],
         "roles": {"reviewers": ["a", "d", "n"], "skeptic": "n", "redteam": "d", "judges": ["a", "d", "n"]}, "human_queue": {"enabled": False}})))
-    assert build_queue([_finding("F-1", 1)], {"F-1": _cons("F-1", tp=0, human=3)}, {}, {}, [], cfg) == []
+    assert build_queue([_finding("F-1", 1)], {"F-1": _cons("F-1", _policy(cfg), votes_tp=0, votes_human=3)}, {}, {}, [], cfg) == []
     r = ReviewReport(target="t", generated_at="2026-09-12T00:00:00+00:00", provider_mode="mock", families_used=[], findings=[], skeptic=[], redteam=[],
                      votes=[], consensus=[], dimensions=[], overall_score=0, gate_passed=True, bias_audit={})
     assert "_Empty._" in render_human_queue(r)

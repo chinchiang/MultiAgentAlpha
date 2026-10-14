@@ -659,7 +659,6 @@ class Pipeline:
             rt_by_id,
             votes,
             self.cfg,
-            exclude_tier_c=self.exclude_tier_c,
             target_id=target_id,
             revision=ctx.revision,
             context_hash=ctx.content_hash,
