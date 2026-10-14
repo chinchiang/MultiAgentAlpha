@@ -136,3 +136,21 @@ _Avoid_: aggregate report, redacted report (nothing is masked; the summary is bu
 **Summary pseudonym**:
 A keyed hash that stands in for the reviewed target or its revision in a score summary: the same under the same key from one export to the next, so the receiving team can follow a target over time, and not reversible without the key, which stays in the country.
 _Avoid_: anonymised ID (the in-country team can map it back), hashed ID (an unkeyed hash can be confirmed from a list of candidates)
+
+## Workbench
+
+**Workbench**:
+The local web page `mara serve` serves on a loopback address (評估工作台), from which reviews are started, followed and read; a view on `mara review`, never a second way to review. See docs/adr/0006-local-web-workbench.md.
+_Avoid_: dashboard (it also starts reviews), web app, portal
+
+**Workbench demo**:
+The read-only copy of the workbench page on GitHub Pages (docs/workbench/, 唯讀展示): a snapshot of one offline review of the seeded fixture by the mock providers, answered from data in the page itself. It starts nothing and talks to no server.
+_Avoid_: online workbench, hosted workbench (there is none: the workbench runs only on a loopback address)
+
+**Run**:
+One `mara review` subprocess the workbench started, with its own output directory holding the request, the argv, the roles and models of the config at launch, the child's output and every report it wrote. A run is finished only when its progress record says the reports were written; its exit code alone cannot tell a blocked gate from a usage error.
+_Avoid_: job (a job is an environment task such as installing the tools), review (the review is what the run performs)
+
+**Progress record**:
+The file `mara review --progress-file` keeps rewriting while a review runs: its nine stages, each pending, running, done, skipped or failed, and the newest pipeline log lines. A view of the review, never evidence: nothing reads it back into a report.
+_Avoid_: status file, log

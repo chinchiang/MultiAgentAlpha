@@ -4,6 +4,11 @@ Heterogeneous-model, multi-agent **security and architecture review for vibe-cod
 anchored to deterministic tools and designed so that no single language model's bias can
 decide the outcome.
 
+> **Try the workbench in your browser:** <https://chinchiang.github.io/MultiAgentAlpha/workbench/>
+> (唯讀展示 / read-only demo, 正體中文 and English). It is a snapshot of one offline review of the seeded
+> fixture by the mock model families; it starts nothing and talks to no server. To run reviews
+> yourself, use `mara serve` (see [Local web workbench](#local-web-workbench-mara-serve)).
+
 This repository contains two things:
 
 1. **The research report** (正體中文, GSMD series): `docs/GSMD-RPT-2026-0908-01_多模型多代理資安審查.md`
@@ -16,7 +21,8 @@ This repository contains two things:
 2. **A runnable prototype** (`src/mara`) that implements the six-layer architecture the report
    describes. It runs fully offline with mock providers, and against live models (Claude on Amazon
    Bedrock, Gemini through the Gemini API and a self-hosted GLM behind an OpenAI-compatible
-   endpoint) when configured.
+   endpoint) when configured. `mara serve` adds a local, bilingual web workbench on top of the command
+   line; its [read-only demo](https://chinchiang.github.io/MultiAgentAlpha/workbench/) runs on GitHub Pages.
 
 ## Online report (GitHub Pages)
 
@@ -35,7 +41,7 @@ request (the Pages API reports `public: true`). Keeping it public is the owner's
 private repository therefore protects the source tree, the fixtures and the history, not `docs/`.
 Everything under `docs/` is reachable at that address, so it must contain only intended public documentation:
 the report, its parts, the appendices, the dated assessment, calibration, inventory, governance and
-ground-truth records, the runbooks and the changelog. Before the 2026-09-18 remediation, Pages served
+ground-truth records, the runbooks, the changelog and the read-only workbench demo (`docs/workbench/`, below). Before the 2026-09-18 remediation, Pages served
 the repository root; it now serves `/docs` only, and the deliberately vulnerable fixture URLs return
 404. Two files at the repository root are defence in depth for the day someone switches the source
 back to the root by mistake: `index.html` is a self-contained redirect to `docs/`, and `_config.yml`
@@ -112,6 +118,7 @@ python -m pip install --require-hashes --only-binary=:all: -r tools/build-requir
 python -m pip install --no-deps --no-build-isolation -e .                                    # use only the pinned backend
 pytest -q
 mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out
+mara serve                         # the same offline demo in the browser: New review → Offline demo (see Local web workbench)
 ```
 
 `fixtures/vuln-sample` is a deliberately vulnerable "vibe-coded" Flask app (reflected and DOM XSS,
@@ -120,6 +127,51 @@ pages, a pwn-request workflow with title injection and unpinned actions, curl|sh
 a hallucinated-looking dependency, a hidden reviewer instruction in the README). The three mock
 families behave differently on purpose (one fabricates a quote, one refuses a dimension, one flips
 a vote between the forward and reverse pass) so the tests exercise every defence.
+
+## Local web workbench (`mara serve`)
+
+```bash
+mara serve                       # prints http://127.0.0.1:8765/#token=… and opens it; --port 0 picks a free port, --no-browser only prints
+```
+
+To look at it without installing anything, open the **read-only demo** at
+<https://chinchiang.github.io/MultiAgentAlpha/workbench/>: the same page, holding a snapshot of one offline review of the
+seeded fixture by the three mock model families. It talks to no server, cannot start a review or change anything, and shows
+no config but `config/mara.mock.yaml` and no path of the machine that captured it. `scripts/build_workbench_demo.py --refresh`
+captures a new snapshot (it runs that review through a real `mara serve` in-process); without `--refresh` it re-assembles
+`docs/workbench/index.html` around the committed snapshot, which is needed after any change to the page's script,
+stylesheet, dictionaries or the version, and `tests/test_workbench_demo.py` fails until it is done. GitHub Pages sends no
+headers, so the demo carries its Content-Security-Policy in a meta element, which `scripts/csp_ci.py` grades with the rest of
+the repository.
+
+`mara serve` is a local web page (正體中文 and English, switched on the page) on top of the same command line
+(`docs/adr/0006-local-web-workbench.md`). **評估工作台 / Workbench** lists every run with its status, gate and overall score;
+**新建評估 / New review** starts a white-box review of a source directory with a config from `config/` or `config/examples/`
+(mock or live, optionally `--base`, pre-recorded SARIF, `--fail-on-gate`, `--calibration-sample`; *Offline demo* fills in the
+seeded fixture and its recorded SARIF); a run's page follows the nine stages live (bundle, L0 tools, context, reviewers, skeptic,
+red team, jury, scoring, report) and then shows the findings with their evidence, skeptic, red team, judge votes and jury and final
+outcome, the model panel per role with each family's calls and failures, the counts the run used, the reasons the review is
+incomplete, the dimension scores, the tool results, the human queue and the logs, and offers every report for download;
+**工具與執行環境 / Tools & environment** shows each tool of `tools/versions.lock` against what is installed, the trivy database,
+every config's models, data residency, credential variables (set or not, never their values) and policies P1–P8, and runs the
+workspace's `scripts/install_tools.py`, `scripts/trivy_db.py` or `mara check-config` as a job.
+
+Each run is a `mara review` subprocess with its own directory `out/runs/<run-id>/` (`--out` moves the root): the request, the argv,
+the roles and models of the config at launch in `run.json`, the child's output in `run.log`, every report the command line writes,
+and `progress.json`, which `mara review --progress-file` rewrites at every stage boundary. Every check of the command line still
+decides, and the server repeats them before it starts the child only to name the refusal on the page. One review runs at a time,
+and never while a job replaces the tools or the trivy database; stopping the server (Ctrl-C, SIGTERM, SIGHUP) cancels it. The PSIRT options stay on the command line, because they start legal clocks. A plain
+`mara review` into `out/` appears read-only in the list.
+
+The server listens on a loopback address only (`--host 127.0.0.1`, `localhost` or `::1`; reach a remote one through an SSH tunnel,
+since finding detail stays where the review ran). The printed URL carries a token that lives as long as the server in its fragment,
+which no server or log sees; the page keeps it in this origin's localStorage and sends it in an `X-MARA-Token` header. There is no
+cookie, because a cookie reaches every service on 127.0.0.1 whatever its port. The browser is opened on a redirect file only the user
+can read, never on the URL, since process arguments are visible to every local user. The server refuses a Host header that is not
+the loopback server (DNS rebinding) and an Origin or Sec-Fetch-Site from another site. The page loads nothing from anywhere else:
+its Content-Security-Policy allows exactly its own script and stylesheet by SHA-256 and requires Trusted Types, and
+`tests/test_web_static.py` grades that policy with the pinned csp-evaluator, which the CI tests job installs for it. Only the standard library and the
+existing dependencies are used, so the hash-locked closures are unchanged.
 
 ## Live mode
 
@@ -717,7 +769,9 @@ mara cvss "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
 mara review <target> --provider mock --mock-fixtures <dir>   # replay another set of mock responses
 python scripts/gen_mock_fixtures.py      # regenerate mock responses after editing the fixture app
 python scripts/gen_mock_fixtures.py --check   # the committed mock responses are current (also a test)
+mara serve --no-browser --port 0        # the local web workbench on a free loopback port (see Local web workbench)
 python scripts/build_html.py             # rebuild the online edition of the report
+python scripts/build_workbench_demo.py   # re-assemble the read-only workbench demo (--refresh: new snapshot)
 python scripts/count_words.py            # 字數統計（正體中文計字，不含附錄A）
 ```
 
@@ -725,11 +779,12 @@ python scripts/count_words.py            # 字數統計（正體中文計字，�
 
 ```
 config/            mara.yaml (live topology), mara.mock.yaml (offline), examples/ (standby, PRC site, policy cases)
-src/mara/          the prototype (see table above)
+src/mara/          the prototype (layers: see table above; web/ the local workbench, progress.py the stage record)
 fixtures/          vuln-sample app, mock-responses, pre-recorded SARIF, synthetic model-eval outputs
 calib/             labelled calibration samples, human decisions (calib/decisions/)
 tests/             unit + end-to-end tests (no network)
-docs/              the report (Markdown + HTML), dated records, runbooks, Appendix E prompt kit, Appendix D questionnaire
+out/               reports of a plain review; runs/ and jobs/ of the workbench (git-ignored)
+docs/              the report (Markdown + HTML), dated records, runbooks, Appendix E prompt kit, Appendix D questionnaire, workbench/ demo
 scripts/           CI wrappers (*_ci.py), tool installer, governance, calibration, rollout and report scripts
 tools/             versions.lock, hash-pinned Python closures, triage / ignore / policy files
 sbom/              ML-BOM manifest (models.yaml) and the CycloneDX BOM
@@ -747,4 +802,7 @@ calibration ran on 2026-10-07 and 2026-10-08 (`docs/calibration-2026-10-08.md`, 
 `config/mara.yaml` are still 1.0: that calibration suggested weights from 51 labels, too few to adopt, and
 a decision to adopt them waits for a second live period and human adjudications (`docs/assessment-2026-10-12.md`,
 question 59). Since exchange version 2 the refusal, invalid and truncation counts are not comparable with
-that first period, so the next live calibration sets a new baseline.
+that first period, so the next live calibration sets a new baseline. Since v0.9.0 reviews can also be started and
+read from the local workbench (`mara serve`); its end-to-end tests and browser walkthrough use the mock providers.
+A live review started from the page runs the same `mara review` command, but none has yet been run against the
+production panel.

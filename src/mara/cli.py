@@ -8,11 +8,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from .config import load_config
+from .config import MaraConfig, load_config
 from .pipeline import Pipeline
+from .progress import Progress
 from .report.markdown_out import write_markdown
 from .report.sarif_out import write_sarif
-from .schemas import DIMENSION_LABELS
+from .schemas import DIMENSION_LABELS, ReviewReport
 
 app = typer.Typer(add_completion=False, help="MARA - Multi-Agent Review Architecture")
 console = Console()
@@ -36,6 +37,8 @@ def review(
     calibration_sample: bool = typer.Option(False, "--calibration-sample",
                                             help="The target is a labelled sample under <workspace>/calib/samples/: the secrets its "
                                                  "answer key declares (CWE-798) do not block live egress; any other secret still does"),
+    progress_file: Path | None = typer.Option(None, "--progress-file",
+                                              help="Write the review's live progress (stages, log lines) to this JSON file; `mara serve` reads it"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
     from .workspace import WorkspaceInsideTarget, check_outside, resolve
@@ -52,7 +55,8 @@ def review(
         # before the config is even read; the pipeline repeats the workspace, tool and trivy checks
         # pre-recorded SARIF is tool evidence, mock fixtures are the models' answers and a PSIRT event
         # starts legal clocks: from inside the target, the reviewed repository would supply its own verdict
-        inputs = {"--sarif-dir": sarif_dir, "--mock-fixtures": mock_fixtures, "--psirt-event": psirt_event}
+        # the progress file is an output: inside the target it would be bundled into the next review
+        inputs = {"--sarif-dir": sarif_dir, "--mock-fixtures": mock_fixtures, "--psirt-event": psirt_event, "--progress-file": progress_file}
         check_outside(target, {f"the config file {cfg_path}": cfg_path, f"the output directory {out}": out,
                                **{f"{flag} {p}": p for flag, p in inputs.items() if p is not None}})
     except WorkspaceInsideTarget as e:
@@ -60,10 +64,42 @@ def review(
     if not cfg_path.is_file():
         raise typer.BadParameter(f"config file not found: {cfg_path} (run from the MARA workspace, set MARA_HOME or pass --config)",
                                  param_hint="--config")
+    progress = Progress(progress_file)  # a no-op without --progress-file
+    try:
+        report, cfg, psirt_failed = _review(target, cfg_path, provider, out, sarif_dir, mock_fixtures, fail_on_gate, notify_psirt,
+                                            psirt_event, psirt_resend, base, calibration_sample, progress)
+    except BaseException as e:
+        # the reports were not all written: the workbench must not read a usage error's exit 2 as a blocked gate
+        progress.finish(ok=False, error=type(e).__name__)
+        raise
+    progress.finish(ok=True)
+    phase = cfg.rollout.phase
+    if not report.gate_passed and phase != "blocking":
+        # G-10: outside `blocking` the phase records a blocked gate without enforcing it; an explicit
+        # --fail-on-gate overrides that for this run (docs/governance-templates.md), and the message says so
+        if fail_on_gate:
+            console.print(f"rollout phase [bold]{phase}[/bold]: the gate blocked; --fail-on-gate enforces it for this run (exit 2)")
+        else:
+            console.print(f"rollout phase [bold]{phase}[/bold]: the gate would have blocked; result recorded, merge not enforced (G-10)")
+    if psirt_failed:
+        # an internal hand-off that did not arrive is an operational failure (EU CRA Article 14 clocks
+        # may depend on it): never a green run. It outranks the gate's 2; the reports are written.
+        console.print("[bold red]PSIRT hand-off failed for at least one finding; see the ledger and retry with --notify-psirt[/bold red]")
+        raise typer.Exit(code=3)
+    if not report.gate_passed and (fail_on_gate or phase == "blocking"):
+        raise typer.Exit(code=2)
+
+
+def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: Path | None, mock_fixtures: Path | None,
+            fail_on_gate: bool, notify_psirt: bool, psirt_event: Path | None, psirt_resend: bool, base: str | None,
+            calibration_sample: bool, progress: Progress) -> tuple[ReviewReport, MaraConfig, bool]:
+    """Load the config, run the review and write every report; returns (report, config, PSIRT send failed)."""
+    from .workspace import WorkspaceInsideTarget, resolve
+
     cfg = load_config(cfg_path)
     if provider == "mock" and any(m.provider != "mock" for m in cfg.models):
         raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock")
-    pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out)
+    pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out, progress=progress)
     event = None
     if psirt_event:
         # read before the review, and handed to it: the notifications are built once, so the bias audit counts these
@@ -115,21 +151,7 @@ def review(
     console.print(f"[bold]wrote[/bold] {out/'report.sarif'}, {out/'report.md'}, {out/'report.json'}"
                   + (f", {out/'human_queue.md'} ({len(report.human_queue)} item(s))" if cfg.human_queue.enabled else "")
                   + (f", {out/'psirt-notifications.json'} ({len(report.psirt)} PSIRT payload(s))" if cfg.psirt.enabled else ""))
-    phase = cfg.rollout.phase
-    if not report.gate_passed and phase != "blocking":
-        # G-10: outside `blocking` the phase records a blocked gate without enforcing it; an explicit
-        # --fail-on-gate overrides that for this run (docs/governance-templates.md), and the message says so
-        if fail_on_gate:
-            console.print(f"rollout phase [bold]{phase}[/bold]: the gate blocked; --fail-on-gate enforces it for this run (exit 2)")
-        else:
-            console.print(f"rollout phase [bold]{phase}[/bold]: the gate would have blocked; result recorded, merge not enforced (G-10)")
-    if psirt_failed:
-        # an internal hand-off that did not arrive is an operational failure (EU CRA Article 14 clocks
-        # may depend on it): never a green run. It outranks the gate's 2; the reports are written.
-        console.print("[bold red]PSIRT hand-off failed for at least one finding; see the ledger and retry with --notify-psirt[/bold red]")
-        raise typer.Exit(code=3)
-    if not report.gate_passed and (fail_on_gate or phase == "blocking"):
-        raise typer.Exit(code=2)
+    return report, cfg, psirt_failed
 
 
 @app.command()
@@ -168,7 +190,8 @@ def cvss(vector: str):
         s = cvss4.score(vector)
     except cvss4.CVSS4Error as e:
         raise typer.BadParameter(str(e), param_hint="VECTOR") from e
-    console.print(json.dumps({"vector": vector, "score": s, "severity": cvss4.severity(s), "nomenclature": cvss4.nomenclature(vector)}))
+    # JSON goes to stdout as is: the rich console would colour it and wrap long strings, which breaks a parser
+    typer.echo(json.dumps({"vector": vector, "score": s, "severity": cvss4.severity(s), "nomenclature": cvss4.nomenclature(vector)}))
 
 
 @app.command()
@@ -198,7 +221,7 @@ def check_config(
         raise typer.Exit(code=1) from e
     results = evaluate_policies(cfg)
     if as_json:
-        console.print(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1))
+        typer.echo(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1))
     else:
         t = Table(title=f"MARA policy check · {config}")
         for col in ("Policy", "Status", "Reason"):
@@ -207,9 +230,40 @@ def check_config(
             t.add_row(f"{r.id} {r.name}", "[green]PASS[/green]" if r.passed else "[red]FAIL[/red]", r.reason)
         console.print(t)
     failed = [r for r in results if not r.passed]
-    console.print(f"{len(results) - len(failed)}/{len(results)} policies pass; families {sorted({m.family.value for m in cfg.models})}")
+    summary = f"{len(results) - len(failed)}/{len(results)} policies pass; families {sorted({m.family.value for m in cfg.models})}"
+    if as_json:
+        typer.echo(summary, err=True)  # stdout stays one JSON document
+    else:
+        console.print(summary)
     if failed:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="Loopback address to listen on: 127.0.0.1, localhost or ::1"),
+    port: int = typer.Option(8765, "--port", min=0, max=65535, help="TCP port; 0 picks a free one"),
+    out: Path | None = typer.Option(None, "--out", "-o", show_default=False,
+                                    help="Where runs and jobs are kept (runs/<id>/, jobs/<id>/); default: <workspace>/out"),
+    no_browser: bool = typer.Option(False, "--no-browser", help="Print the URL without opening a browser"),
+):
+    """Start the local web workbench: launch reviews, follow their stages, read findings, roles and models, check the tools.
+    Loopback only; the printed URL carries this server's session token (docs/adr/0006-local-web-workbench.md)."""
+    from .web.server import LOOPBACK_HOSTS
+    from .web.server import serve as run_server
+    from .workspace import resolve, root
+
+    if host not in LOOPBACK_HOSTS:
+        # finding detail must stay where the review ran (CN-3); reach a remote workbench through an SSH tunnel instead
+        raise typer.BadParameter(f"{host}: the workbench listens on a loopback address only ({', '.join(LOOPBACK_HOSTS)}); "
+                                 "use an SSH tunnel (ssh -L 8765:127.0.0.1:8765 host) to open it from another machine",
+                                 param_hint="--host")
+    try:
+        run_server(host=host, port=port, workspace=root(), out_dir=out if out is not None else resolve("out"), open_browser=not no_browser,
+                   echo=console.print)
+    except OSError as e:
+        console.print(f"[red]cannot listen on {host}:{port}:[/red] {e}")
+        raise typer.Exit(code=1) from e
 
 
 if __name__ == "__main__":

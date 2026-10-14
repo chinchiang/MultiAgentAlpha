@@ -31,7 +31,8 @@ version = { attr = "mara.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-mara = ["prompts/*.md", "groundtruth/*.json", "groundtruth/cyclonedx/*.json", "scoring/*.json"]
+mara = ["prompts/*.md", "groundtruth/*.json", "groundtruth/cyclonedx/*.json", "scoring/*.json",
+        "web/static/*.html", "web/static/*.css", "web/static/*.js", "web/static/i18n/*.json"]
 
 [tool.ruff]
 line-length = 150

@@ -111,6 +111,21 @@ Type checking (`mypy`, configured in `pyproject.toml`) is not in the `dev` depen
 
 The first line runs the whole test suite (a few tool-integration tests skip while the L0 tools are not installed; that is normal). The second line reviews the built-in vulnerable sample offline; the three mock model families need no network, and the results are `out/report.md`, `out/report.sarif`, `out/human_queue.md` and `out/context.json` (the architecture view the context agent builds, every fact verified against a verbatim quote). Expect `overall unavailable (review incomplete)` and `gate BLOCKED`: since the 2026-09-18 remediation, a missing required L0 tool, a reviewer refusal or a finding awaiting human adjudication marks the review incomplete and withholds the overall score; "incomplete reasons" in `report.md` lists why. This is not a broken install. Once the tools from section 3 are installed, `required_tool_incomplete` disappears.
 
+### 2.5 本機網頁工作台（可選）/ Local web workbench (optional)
+
+裝好第 2 節後即可使用，不需要額外套件：
+
+Available once section 2 is done; no further package is needed:
+
+```bash
+mara serve                 # 印出並開啟 http://127.0.0.1:8765/#token=… / prints and opens http://127.0.0.1:8765/#token=…
+mara serve --no-browser    # 只印出網址（遠端主機、WSL）/ print the URL only (remote host, WSL)
+```
+
+從 repo 根目錄（或設好 `MARA_HOME` 後）執行。開啟印出的網址，在「新建評估」按「合成示範」，就能以內建的刻意弱點範例與三個 mock 模型家族離線跑完整流程，並在瀏覽器中看九個階段、發現、審查小組與驗證缺口；右上角可切換中文與英文。每次執行的報告都寫在 `out/runs/<run-id>/`。服務只聽本機位址（127.0.0.1、localhost 或 ::1），網址中的權杖就是這次服務的登入鑰匙，不要分享；要從另一台電腦使用，請用 SSH 通道（`ssh -L 8765:127.0.0.1:8765 主機`）。「工具與執行環境」頁的安裝與下載按鈕執行的就是第 3 節的 `scripts/install_tools.py` 與 `scripts/trivy_db.py`；實際評估需要的金鑰環境變數，要在啟動 `mara serve` 的終端機先設好（第 4 節）。細節見 README 的「Local web workbench」與 `docs/adr/0006-local-web-workbench.md`。
+
+Run it from the repository root (or with `MARA_HOME` set). Open the printed URL, choose *Offline demo* under *New review*, and the built-in deliberately vulnerable sample runs through the whole pipeline offline with three mock model families; the browser shows the nine stages, the findings, the review panel and the verification gaps, and the switch at the top right changes between Chinese and English. Each run's reports are written to `out/runs/<run-id>/`. The server listens on a loopback address only (127.0.0.1, localhost or ::1), and the token in the URL is the key to this server: do not share it; from another machine, use an SSH tunnel (`ssh -L 8765:127.0.0.1:8765 host`). The install and download buttons on the *Tools & environment* page run section 3's `scripts/install_tools.py` and `scripts/trivy_db.py`; the key variables a live review needs must be set in the terminal that starts `mara serve` (section 4). See "Local web workbench" in the README and `docs/adr/0006-local-web-workbench.md`.
+
 ## 3. L0 掃描工具（可選）/ L0 scanning tools (optional)
 
 要對自己的 repo 做真實的 semgrep、gitleaks、osv-scanner、zizmor、trivy、csp-evaluator 掃描才需要。工具版本、下載 URL 與 SHA-256 都固定在 `tools/versions.lock`，安裝器會核對雜湊並執行發行者的簽章或 provenance 驗證，裝進 `mara` 執行工具的同一個目錄：有設 `MARA_TOOLS_DIR` 就是它，否則是 MARA 工作區（`MARA_HOME`，未設時為目前目錄）下的 `.mara-tools/`；從 repo 根目錄執行時就是 repo 內的 `.mara-tools/`。程式只從那裡執行工具，永遠不看系統 PATH。目前只鎖定 Linux x86_64 的二進位；csp-evaluator 是 npm 套件，另外需要 node ≥ 18（直譯器路徑可用 `MARA_NODE` 覆寫）。
@@ -143,9 +158,9 @@ python scripts/trivy_db.py download
 python scripts/trivy_db.py status
 ```
 
-安裝完成後 `pytest -q` 會多執行使用真實工具的測試：gitleaks（`test_gitleaks_ci.py`）、semgrep（`test_semgrep_ci.py`、`test_tool_target_config.py`），有 node 時另含 csp-evaluator（`test_tools_csp.py`）。
+安裝完成後 `pytest -q` 會多執行使用真實工具的測試：gitleaks（`test_gitleaks_ci.py`）、semgrep（`test_semgrep_ci.py`、`test_tool_target_config.py`），有 node 時另含 csp-evaluator（`test_tools_csp.py`，以及為本機網頁工作台頁面的 CSP 評分的 `test_web_static.py`）。CI 的 tests job 裝的就是這四個工具（`--only gitleaks semgrep semgrep-rules csp-evaluator`），所以這些測試在每個 PR 上都會執行。
 
-After that, `pytest -q` also runs the tests that use the real tools: gitleaks (`test_gitleaks_ci.py`), semgrep (`test_semgrep_ci.py`, `test_tool_target_config.py`) and, with node, csp-evaluator (`test_tools_csp.py`).
+After that, `pytest -q` also runs the tests that use the real tools: gitleaks (`test_gitleaks_ci.py`), semgrep (`test_semgrep_ci.py`, `test_tool_target_config.py`) and, with node, csp-evaluator (`test_tools_csp.py`, and `test_web_static.py`, which grades the CSP of the local web workbench's page). The CI tests job installs exactly these four tools (`--only gitleaks semgrep semgrep-rules csp-evaluator`), so these tests run on every pull request.
 
 ### 3.1 Windows
 
