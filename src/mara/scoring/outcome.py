@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING
 
-from ..schemas import SEVERITY_ORDER, EvidenceTier
+from ..schemas import SEVERITY_ORDER, EvidenceTier, JuryOutcomeValue
+
+if TYPE_CHECKING:
+    from ..config import MaraConfig
 
 
 @dataclass(frozen=True)
@@ -15,6 +18,13 @@ class OutcomePolicy:
     exclude_tier_c: bool  # after tightening
     tier_c_min_severity: str
     unsupervised_reject_allowed: bool
+
+    @classmethod
+    def from_config(cls, cfg: MaraConfig, *, alpha_threshold: float, exclude_tier_c: bool) -> OutcomePolicy:
+        """The config in force, with the two values the human queue's tightening may have changed."""
+        return cls(accept_threshold=cfg.gate.accept_threshold, alpha_threshold=alpha_threshold, exclude_tier_c=exclude_tier_c,
+                   tier_c_min_severity=cfg.human_queue.queue_tier_c_min_severity,
+                   unsupervised_reject_allowed=cfg.gate.unsupervised_reject_allowed)
 
 
 @dataclass(frozen=True)
@@ -36,9 +46,14 @@ class OutcomeSignals:
 
 @dataclass(frozen=True)
 class JuryOutcome:
-    value: Literal["accepted", "rejected", "dropped", "needs_human"]
+    value: JuryOutcomeValue
     reasons: tuple[str, ...]
     unsupervised_reject_unverified: bool
+
+    def consensus_fields(self) -> dict:
+        """The outcome as ConsensusResult persists it; ConsensusResult.jury_outcome reads the value back."""
+        return {"accepted": self.value == "accepted", "needs_human": self.value == "needs_human",
+                "human_reasons": list(self.reasons), "unsupervised_reject_unverified": self.unsupervised_reject_unverified}
 
 
 def tier_c_needs_human(tier: EvidenceTier, severity: str, min_severity: str) -> bool:

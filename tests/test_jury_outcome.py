@@ -10,7 +10,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mara.schemas import EvidenceTier  # noqa: E402
+from mara.config import load_config  # noqa: E402
+from mara.schemas import ConsensusResult, EvidenceTier  # noqa: E402
 from mara.scoring.outcome import OutcomePolicy, OutcomeSignals, decide  # noqa: E402
 
 POLICY = OutcomePolicy(accept_threshold=0.6, alpha_threshold=0.4, exclude_tier_c=False, tier_c_min_severity="High",
@@ -98,3 +99,49 @@ def test_every_reason_that_applies_is_kept_in_order_and_a_finding_awaiting_a_hum
 def test_a_tier_c_finding_of_unknown_severity_goes_to_a_human_even_under_the_highest_floor():
     out = decide(replace(SUPPORTED, tier=EvidenceTier.C, severity="unknown"), replace(POLICY, tier_c_min_severity="Critical"))
     assert out.reasons == ("tier_c_high",)
+
+
+def test_the_policy_is_the_config_in_force_with_the_alpha_threshold_and_tier_c_exclusion_after_tightening():
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = cfg.model_copy(update={
+        "gate": cfg.gate.model_copy(update={"accept_threshold": 0.7, "human_threshold_alpha": 0.3, "unsupervised_reject_allowed": True}),
+        "human_queue": cfg.human_queue.model_copy(update={"queue_tier_c_min_severity": "Critical"}),
+    })
+    assert OutcomePolicy.from_config(cfg, alpha_threshold=0.5, exclude_tier_c=True) == OutcomePolicy(
+        accept_threshold=0.7, alpha_threshold=0.5, exclude_tier_c=True, tier_c_min_severity="Critical",
+        unsupervised_reject_allowed=True)
+
+
+
+# ---------------------------------------------------------------- persisted in report.json and read back
+
+def _row(tier: EvidenceTier, **fields) -> ConsensusResult:
+    return ConsensusResult(finding_id="F-1", weighted_score=0.5, votes_tp=3, votes_fp=3, votes_human=0, families_agreeing=[],
+                           tool_corroborated=False, skeptic_refuted=False, position_consistent=True, tier=tier, cvss4_score=7.5,
+                           cvss4_severity="High", ssvc_decision="Attend", **fields)
+
+
+ROUND_TRIP = {
+    "accepted": (SUPPORTED, POLICY),
+    "rejected": (replace(SUPPORTED, score=0.4), replace(POLICY, unsupervised_reject_allowed=True)),
+    "rejected under rejection review": (replace(SUPPORTED, score=0.4), POLICY),
+    "dropped": (replace(SUPPORTED, tier=EvidenceTier.D, score=0.3), POLICY),
+    "dropped after the skeptic refuted it": (replace(SUPPORTED, tier=EvidenceTier.D, skeptic_refuted=True, score=0.3), POLICY),
+    "needs a human, tier D": (replace(SUPPORTED, tier=EvidenceTier.D, provenance_verified=False), POLICY),
+    "needs a human, tier C": (replace(SUPPORTED, tier=EvidenceTier.C), POLICY),
+}
+
+
+@pytest.mark.parametrize("case", ROUND_TRIP)
+def test_the_jury_outcome_read_back_from_a_report_is_the_one_decided(case):
+    signals, policy = ROUND_TRIP[case]
+    out = decide(signals, policy)
+    row = ConsensusResult.model_validate_json(_row(signals.tier, **out.consensus_fields()).model_dump_json())
+    assert (row.jury_outcome, row.human_reasons, row.unsupervised_reject_unverified) == (
+        out.value, list(out.reasons), out.unsupervised_reject_unverified)
+
+
+def test_a_report_written_before_rejection_review_was_recorded_reads_as_not_under_review():
+    old = _row(EvidenceTier.B, accepted=False).model_dump(exclude={"unsupervised_reject_unverified"})
+    row = ConsensusResult.model_validate(old)
+    assert (row.jury_outcome, row.unsupervised_reject_unverified) == ("rejected", False)
