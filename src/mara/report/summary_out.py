@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from ..audit import INCOMPLETE_COUNTERS
+from ..review_status import INCOMPLETE_REASONS  # every incomplete-review code (docs/adr/0007-review-status-and-gate.md)
 from ..schemas import DIMENSION_LABELS, ModelFamily, ReviewReport
 
 SCHEMA = "mara-score-summary/1"  # mara-<name>/<n>, as psirt_out and psirt_ledger
@@ -23,11 +23,6 @@ REPORT_FIELDS = ("review_scope", "generated_at", "provider_mode", "families_used
 DIMENSION_FIELDS = ("dimension", "score", "accepted_findings", "rejected_findings", "human_queue", "tool_ran")
 
 
-# Every incomplete-review code: the audit counters and the pipeline's own codes (pipeline.py, `incomplete.append`);
-# tests/test_score_summary.py fails when the pipeline writes a code this list lacks.
-INCOMPLETE_REASONS = frozenset(INCOMPLETE_COUNTERS) | {
-    "context_coverage_incomplete", "source_egress_blocked_by_secret_preflight", "required_tool_incomplete",
-    "ml_bom_signature_unverified", "context_view_incomplete", "unresolved_human_review", "unresolved_tool_findings"}
 FAMILIES = frozenset(f.value for f in ModelFamily)
 HEX64 = re.compile(r"[0-9a-f]{64}")
 

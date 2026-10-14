@@ -1,4 +1,5 @@
 """Adversarial regressions from the 2026-09-18 review; no live providers or attack traffic."""
+import dataclasses
 import json
 import subprocess
 import sys
@@ -675,7 +676,7 @@ def test_nonempty_model_bom_does_not_crash_completed_report(tmp_path, monkeypatc
 
 def test_human_queue_uses_effective_decision_without_recalculating_threshold(tmp_path):
     pipe, f = pipeline(tmp_path), finding()
-    pipe.human_alpha_threshold = 1.0
+    pipe.outcome_policy = dataclasses.replace(pipe.outcome_policy, alpha_threshold=1.0)
     votes = [vote(fam, pass_id, verdict) for fam, verdict in [(ModelFamily.DEEPSEEK, "true_positive"),
              (ModelFamily.NEMOTRON, "false_positive")] for pass_id in ("forward", "reverse")]
     result = pipe.score([f], {f.id: {ModelFamily.ANTHROPIC}}, {}, {}, votes, [])[0]

@@ -88,9 +88,8 @@ def test_the_final_outcome_drives_the_gate_scores_and_report_in_both_directions(
     assert cons["F-0002"].final_outcome == "accepted" and not cons["F-0002"].accepted, "jury outcome kept"
     assert cons["F-0001"].final_outcome == "rejected" and cons["F-0001"].accepted, "a human false positive outranks an accepting jury"
     assert cons["F-0029"].final_outcome == "accepted" and cons["F-0029"].tier.value == "D", "tier stays D"
-    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), out_dir=home / "x")
-    assert pipe.blocking_reason(cons["F-0002"]) == "blocking_tier_and_severity"
-    assert pipe.blocking_reason(cons["F-0001"]) is None and pipe.blocking_reason(cons["F-0029"]) is None
+    assert cons["F-0002"].blocking_reason == "blocking_tier_and_severity"
+    assert cons["F-0001"].blocking_reason is None and cons["F-0029"].blocking_reason is None
     # two human true positives join the accepted findings, one human false positive leaves them
     assert sum(d.accepted_findings for d in second.dimensions) == sum(d.accepted_findings for d in first.dimensions) + 2 - 1
     md = render_markdown(second)

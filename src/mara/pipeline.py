@@ -26,7 +26,7 @@ from .identity import NEAR_LINES, norm_cwe, norm_path
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
-from .review_status import secret_preflight
+from .review_status import GatePolicy, ReviewFacts, assess, secret_preflight
 from .schemas import (
     SEVERITY_ORDER,
     ConsensusResult,
@@ -41,7 +41,7 @@ from .scoring import cvss4
 from .scoring.consensus import krippendorff_alpha_nominal, weighted_consensus
 from .scoring.dimension_score import score_dimension
 from .scoring.idcheck import check_finding_refs
-from .scoring.outcome import OutcomePolicy, OutcomeSignals, decide, tier_c_needs_human
+from .scoring.outcome import OutcomePolicy, OutcomeSignals, decide
 from .scoring.tiers import assign_tier, ssvc_decision
 from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
 from .tools.sarif import ToolResult
@@ -133,6 +133,9 @@ class Pipeline:
 
         self.backlog = read_backlog(cfg)
         self.human_alpha_threshold, self.exclude_tier_c, self.queue_tightened = tightening(cfg, self.backlog)
+        # read once: the jury outcome and the gate see the same tightening (docs/adr/0007-review-status-and-gate.md)
+        self.outcome_policy = OutcomePolicy.from_config(cfg, alpha_threshold=self.human_alpha_threshold, exclude_tier_c=self.exclude_tier_c)
+        self.gate_policy = GatePolicy.from_config(cfg)
         from .mlbom import status_for_config
 
         self.ml_bom_status = status_for_config(cfg)
@@ -376,22 +379,6 @@ class Pipeline:
         return votes
 
     # ------------------------------------------------------------------ L5
-    def blocking_reason(self, c: ConsensusResult) -> str | None:
-        """Why an accepted finding (final outcome: a human ruling outranks the jury) blocks the gate, or None.
-
-        The configured conjunction (tier in block_on_tiers, severity in block_on_severity), plus one
-        rule of G-11's tightening: over the backlog limit tier C at or above
-        queue_tier_c_min_severity is no longer queued for a human (tighten_exclude_tier_c), so such
-        a finding blocks instead of passing on one family's word plus the jury. Tightening may cut
-        human work; it never lets more through. An unknown severity ranks above every band."""
-        if c.final_outcome != "accepted":
-            return None
-        if c.tier.value in self.cfg.gate.block_on_tiers and c.cvss4_severity in self.cfg.gate.block_on_severity:
-            return "blocking_tier_and_severity"
-        if self.exclude_tier_c and tier_c_needs_human(c.tier, c.cvss4_severity, self.cfg.human_queue.queue_tier_c_min_severity):
-            return "tier_c_while_tightened"
-        return None
-
     def score(
         self,
         findings: list[Finding],
@@ -410,7 +397,7 @@ class Pipeline:
         by_finding: dict[str, list[JudgeVote]] = defaultdict(list)
         for v in votes:
             by_finding[v.finding_id].append(v)
-        policy = OutcomePolicy.from_config(self.cfg, alpha_threshold=self.human_alpha_threshold, exclude_tier_c=self.exclude_tier_c)
+        policy = self.outcome_policy
         results: list[ConsensusResult] = []
         flips = 0
         for f in findings:
@@ -516,7 +503,8 @@ class Pipeline:
 
     # ------------------------------------------------------------------ run
     def run(self, target: str | Path, *, sarif_dir: Path | None = None, mode: str = "live",
-            base_ref: str | None = None, calibration_sample: bool = False, psirt_event: dict | None = None) -> ReviewReport:
+            base_ref: str | None = None, calibration_sample: bool = False, psirt_event: dict | None = None,
+            fail_on_gate: bool = False) -> ReviewReport:
         actual_modes = {p.spec.provider for p in self.providers.values()}
         actual_mode = "mock" if actual_modes == {"mock"} else "live"
         if mode not in {"mock", "live"} or actual_mode != mode or (mode == "live" and "mock" in actual_modes):
@@ -551,12 +539,12 @@ class Pipeline:
         tools_ran = {run.tool for run in tool_runs if run.ran}
         # Live source egress is blocked before any provider sees data if the trusted local
         # secret scan is unavailable or reports secrets (mara.review_status). The masked manifest remains reviewable.
-        preflight = secret_preflight(mode, [r for r in tool_runs if r.tool == "gitleaks"], answer_key)
-        if answer_key is not None and (preflight.exempted or preflight.unexplained):
-            self.audit["secret_preflight_calibration_exempted"] = len(preflight.exempted)
-            self._say(f"L0: secret preflight: {len(preflight.exempted)} seeded secret(s) declared by the calibration answer key, "
-                      f"{len(preflight.unexplained)} other finding(s)")
-        egress_blocked = preflight.blocked
+        secrets = secret_preflight(mode, [r for r in tool_runs if r.tool == "gitleaks"], answer_key)
+        if answer_key is not None and (secrets.exempted or secrets.unexplained):
+            self.audit["secret_preflight_calibration_exempted"] = len(secrets.exempted)
+            self._say(f"L0: secret preflight: {len(secrets.exempted)} seeded secret(s) declared by the calibration answer key, "
+                      f"{len(secrets.unexplained)} other finding(s)")
+        egress_blocked = secrets.blocked
         prog.done("tools", f"{len(tools_ran)} of {len(tool_runs)} tool(s) ran, {len(tool_results)} result(s)"
                   + ("; source egress blocked by the secret preflight" if egress_blocked else ""))
         # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked
@@ -606,50 +594,31 @@ class Pipeline:
         for d in self.cfg.dimensions:
             tool_ran = any(d in TOOL_DIMENSIONS.get(t, []) for t in tools_ran)
             dims.append(score_dimension(d, findings, cons_by_id, tool_ran))
-        overall: float | None = round(sum(x.score for x in dims) / len(dims), 1) if dims else 0.0
-        incomplete = []
-        if not ctx.complete:
-            incomplete.append("context_coverage_incomplete")
-        if egress_blocked:
-            incomplete.append("source_egress_blocked_by_secret_preflight")
         required_tools = {t for t, ds in TOOL_DIMENSIONS.items() if set(ds) & set(self.cfg.dimensions)}
-        if not required_tools <= tools_ran or any(not r.ran for r in tool_runs):
-            incomplete.append("required_tool_incomplete")
-        incomplete.extend(self.audit.incomplete_reasons())  # audit.INCOMPLETE_COUNTERS: the one list
+        signed: bool | None = None
         if self.cfg.ml_bom.require_signature:
             # P7 checked offline that the bundle belongs to the BOM; here cosign verifies the signature and its signer
             from .mlbom import verify_signature
 
             signed, why = verify_signature(self.cfg)
             self.audit["ml_bom_signature"] = "verified" if signed else f"failed: {why}"
-            if not signed:
-                incomplete.append("ml_bom_signature_unverified")
-        if self.cfg.roles.context and context_view is None and not egress_blocked:
-            incomplete.append("context_view_incomplete")
-        if any(c.final_outcome == "needs_human" for c in consensus):
-            incomplete.append("unresolved_human_review")
-        # Tool evidence remains visible independently of model output. A model's silence or
-        # rejection never clears an unsuppressed tool result.
-        if any(t.level in {"error", "warning"} for t in tool_results):
-            incomplete.append("unresolved_tool_findings")
-        gate = not incomplete
-        if incomplete:
-            overall = None
+        facts = ReviewFacts(context_complete=ctx.complete, egress_blocked=egress_blocked,
+                            required_tools_ran=required_tools <= tools_ran and all(r.ran for r in tool_runs), ml_bom_signature=signed,
+                            context_view_missing=bool(self.cfg.roles.context) and context_view is None,
+                            incomplete_counters=tuple(self.audit.incomplete_reasons()),  # audit.INCOMPLETE_COUNTERS: the one list
+                            rollout_phase=self.cfg.rollout.phase, fail_on_gate=fail_on_gate)
+        status = assess(facts, consensus, tool_results, dims, self.outcome_policy, self.gate_policy)
         for c in consensus:
-            reason = self.blocking_reason(c)
-            if reason:
-                gate = False
-                if reason == "tier_c_while_tightened":
-                    self.audit["tier_c_blocked_while_tightened"] += 1
-        if any(x.score < self.cfg.gate.min_dimension_score for x in dims):
-            gate = False
+            c.blocking_reason = status.blocking_reasons.get(c.finding_id)
+        if status.tier_c_blocked_while_tightened:
+            self.audit["tier_c_blocked_while_tightened"] = status.tier_c_blocked_while_tightened
         global_alpha = krippendorff_alpha_nominal(_alpha_units(findings, votes))
         self.audit["global_krippendorff_alpha"] = global_alpha if global_alpha is not None else "n/a"
         for k, v in pairwise_family_agreement(votes).items():
             self.audit[f"judge_agreement[{k}]"] = v
         self.audit["tool_results_ingested"] = len(tool_results)
         self.audit["tools_ran"] = ",".join(sorted(tools_ran)) or "none"
-        prog.done("scoring", f"review {'incomplete' if incomplete else 'complete'}, gate {'passed' if gate else 'blocked'}")
+        prog.done("scoring", f"review {status.review_status}, gate {'passed' if status.gate_passed else 'blocked'}")
         prog.begin("report")
         report = ReviewReport(
             target=str(target),
@@ -659,8 +628,8 @@ class Pipeline:
             findings=findings,
             skeptic=sk,
             redteam=rt,
-            review_status="incomplete" if incomplete else "complete",
-            incomplete_reasons=incomplete,
+            review_status=status.review_status,
+            incomplete_reasons=list(status.incomplete_reasons),
             review_scope="incremental" if base_ref else "full",
             coverage=ctx.coverage(),
             tool_results=[asdict(t) for t in tool_results],
@@ -673,8 +642,10 @@ class Pipeline:
             votes=votes,
             consensus=consensus,
             dimensions=dims,
-            overall_score=overall,
-            gate_passed=gate,
+            overall_score=status.overall_score,
+            gate_passed=status.gate_passed,
+            gate_reasons=list(status.gate_reasons),
+            gate_enforced=status.gate_enforced,
             # the accounting the counts above follow (docs/adr/0001-reply-outcome-accounting.md)
             bias_audit={**self.audit, "exchange_version": exchange.EXCHANGE_VERSION},
         )

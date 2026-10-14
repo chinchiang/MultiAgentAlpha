@@ -188,6 +188,9 @@ class ConsensusResult(BaseModel):
                                         "decision, key, issue, decided_by, decided_at")
     unsupervised_reject_unverified: bool = Field(default=False, description="A rejected finding under rejection review "
                                                  "(policy P8, docs/adr/0005-jury-outcome.md); false in reports written before it")
+    blocking_reason: str | None = Field(default=None, description="Why this blocking finding blocks the gate "
+                                        "(docs/adr/0007-review-status-and-gate.md); null on every other finding and in reports "
+                                        "written before it")
 
     @property
     def jury_outcome(self) -> JuryOutcomeValue:
@@ -280,6 +283,11 @@ class ReviewReport(BaseModel):
     target_id: str = ""
     revision: str = ""
     gate_passed: bool
+    # why the gate blocked, in fixed order; empty in reports written before it (docs/adr/0007-review-status-and-gate.md)
+    gate_reasons: list[str] = Field(default_factory=list)
+    # whether a blocked gate was enforced (rollout phase blocking, or --fail-on-gate); false when the gate passed,
+    # null in reports written before it: unknown, not "not enforced"
+    gate_enforced: bool | None = None
     bias_audit: dict[str, float | int | str | dict]
     psirt: list[dict] = Field(default_factory=list, description="G-12: CRA Article 14 early-warning payloads for accepted tier-A Critical findings")
     human_queue: list[HumanQueueItem] = Field(default_factory=list, description="G-11: findings that need a human decision, with full context")

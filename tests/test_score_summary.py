@@ -297,14 +297,12 @@ def test_an_allowlisted_field_carrying_free_text_is_refused(mock_review, tmp_pat
     assert not (tmp_path / "summary.json").exists()
 
 
-def test_every_incomplete_reason_the_pipeline_writes_can_be_exported(mock_review, tmp_path):
-    import re as _re
+def test_every_incomplete_reason_a_review_can_write_can_be_exported(mock_review, tmp_path):
+    """mara.review_status owns the codes (tests/test_review_status.py checks assess writes no other); the allowlist is
+    that set, not a copy of it."""
+    from mara.review_status import INCOMPLETE_REASONS
 
-    from mara.audit import INCOMPLETE_COUNTERS
-
-    pipeline = (ROOT / "src" / "mara" / "pipeline.py").read_text(encoding="utf-8")
-    written = set(_re.findall(r'incomplete\.append\("([a-z_]+)"\)', pipeline)) | set(INCOMPLETE_COUNTERS)
-    assert len(written) > len(INCOMPLETE_COUNTERS)  # the pattern still finds the pipeline's own codes
+    assert {"unresolved_human_review", "source_egress_blocked_by_secret_preflight", "judge_errors"} <= INCOMPLETE_REASONS
     summary = summary_of(mock_review, tmp_path, "a", review_status="incomplete", overall_score=None,
-                         incomplete_reasons=sorted(written))
-    assert summary["incomplete_reasons"] == sorted(written)
+                         incomplete_reasons=sorted(INCOMPLETE_REASONS))
+    assert summary["incomplete_reasons"] == sorted(INCOMPLETE_REASONS)
