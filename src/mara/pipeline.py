@@ -17,7 +17,7 @@ from pathlib import Path
 from . import exchange
 from .agents import base, context_agent, judge, redteam, reviewer, skeptic
 from .agents.context_agent import ContextView
-from .audit import Audit
+from .audit import Audit, log_tags
 from .bias.blinding import blinded_batches
 from .bias.diversity import pairwise_family_agreement, pick_independent
 from .config import MaraConfig
@@ -173,19 +173,10 @@ class Pipeline:
             return None
         prov = self._p(name)
         fam = prov.family.value
-        view, audit = context_agent.run_context_agent(prov, ctx)
-        self.audit.add("context_calls", fam, audit["calls"])
-        for key, counter in (("refused", "context_refusals"), ("truncated", "context_truncations"),
-                             ("unparseable", "context_unparseable_replies"),
-                             ("errored", "context_errors"), ("canary_echoed", "canary_echoes"), ("canary_reported", "canary_reports"),
-                             ("invalid", "context_invalid_items"), ("unverified", "context_unverified_items")):
-            self.audit.add(counter, fam, int(audit[key]))
-        self.audit["input_tokens"] += audit["input_tokens"]
-        self.audit["output_tokens"] += audit["output_tokens"]
-        flags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "errored": " [PROVIDER ERROR]",
-                 "canary_echoed": " [CANARY ECHOED]", "canary_reported": " [CANARY REPORTED]"}
-        self._say(f"L1: context {fam}: {len(view.items) if view else 0} fact(s)"
-                  + "".join(tag for key, tag in flags.items() if audit[key]))
+        view, records = context_agent.run_context_agent(prov, ctx)
+        for rec in records:
+            self.audit.record(rec)
+        self._say(f"L1: context {fam}: {len(view.items) if view else 0} fact(s)" + log_tags(*records))
         return view
 
     # ------------------------------------------------------------------ L2

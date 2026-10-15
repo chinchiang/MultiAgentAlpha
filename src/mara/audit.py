@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .exchange import EMPTY, ERROR, KINDS, REFUSAL, TRUNCATION, UNPARSEABLE
+from .exchange import EMPTY, ERROR, KINDS, REFUSAL, TRUNCATION, UNPARSEABLE, Outcome
 
 Role = Literal["reviewer", "context", "skeptic", "redteam", "judge"]
 
@@ -104,6 +104,12 @@ class ReplyRecord:
         if counters.canary_echoes is None and (self.canary_echoes or self.canary_reports):
             raise ValueError(f"{self.role} carries no canary")
 
+    @classmethod
+    def of(cls, outcome: Outcome, role: Role, family: str, **fields: Any) -> ReplyRecord:
+        """The record of one classified reply: its kind and tokens come from the outcome, the rest from `fields`."""
+        return cls(role=role, family=family, kind=outcome.kind, input_tokens=outcome.input_tokens,
+                   output_tokens=outcome.output_tokens, details=(outcome.error,) if outcome.error else (), **fields)
+
 
 def worth_retrying(rec: ReplyRecord) -> bool:
     """A ballot reply voided as malformed, cut off or not covering every finding exactly once is worth one more call.
@@ -118,10 +124,11 @@ def _abstained(rec: ReplyRecord) -> bool:
     return rec.kind == REFUSAL or (rec.kind == EMPTY and ROLES[rec.role].form == "extraction")
 
 
-def log_tags(rec: ReplyRecord) -> str:
-    """The pipeline log's tags for one reply, as its counters read it ([REFUSED] for an abstention, ...)."""
-    flags = ((_abstained(rec), "REFUSED"), (rec.kind == TRUNCATION, "TRUNCATED"), (rec.kind == ERROR, "PROVIDER ERROR"),
-             (rec.canary_echoes, "CANARY ECHOED"), (rec.canary_reports, "CANARY REPORTED"))
+def log_tags(*records: ReplyRecord) -> str:
+    """The pipeline log's tags for one or more replies, as their counters read them: [REFUSED] when any abstained, ..."""
+    flags = ((any(_abstained(r) for r in records), "REFUSED"), (any(r.kind == TRUNCATION for r in records), "TRUNCATED"),
+             (any(r.kind == ERROR for r in records), "PROVIDER ERROR"), (any(r.canary_echoes for r in records), "CANARY ECHOED"),
+             (any(r.canary_reports for r in records), "CANARY REPORTED"))
     return "".join(f" [{tag}]" for on, tag in flags if on)
 
 

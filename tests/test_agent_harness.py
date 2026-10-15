@@ -149,8 +149,9 @@ def test_context_agent_keeps_only_quote_verified_facts(root):
         "trust_boundaries": [{"name": "orders", "file": "app.py", "line": 999, "quote": "def get_order(order_id):"}],  # out of range
         "data_stores": [{"name": "orders.db", "file": "app.py", "line": 19, "quote": 'return sqlite3.connect("orders.db")'}],
     }
-    view, audit = context_agent.run_context_agent(_static(root, data), ctx)
-    assert audit["unverified"] == 1 and audit["invalid"] == 0 and not audit["refused"]
+    view, records = context_agent.run_context_agent(_static(root, data), ctx)
+    [rec] = records
+    assert (rec.role, rec.kind, rec.counts, rec.invalid_items, rec.voided) == ("context", exchange.OK, {"unverified": 1}, 0, False)
     assert [(i.kind, i.name) for i in view.items] == [
         ("container", "dashboard"), ("external_system", "package registry"), ("data_store", "orders.db")]
     block = exchange.derived_block(view.derived())
@@ -185,13 +186,15 @@ def test_context_agent_calls_once_per_batch_and_merges_the_facts(root, tmp_path,
                       for f in files]
             return RawReply(STOP_END, structured={"containers": [], "external_systems": [], "trust_boundaries": [], "data_stores": stores})
 
-    view, audit = context_agent.run_context_agent(PerBatch(), ctx)
-    assert audit["calls"] == len(batches) == len(prompts) and audit["unverified"] == 0
+    view, records = context_agent.run_context_agent(PerBatch(), ctx)
+    assert len(records) == len(batches) == len(prompts), "one reply record per batch: the module adds them up"
+    assert all(r.counts == {"unverified": 0} and not r.voided for r in records)
     assert all(sum(f"svc{i}.py" in p for i in range(4)) < 4 for p in prompts), "no request carries the whole bundle"
     assert sorted(i.name for i in view.by_kind("data_store")) == ["db0", "db1", "db2", "db3"]
     prompts.clear()
-    view, audit = context_agent.run_context_agent(PerBatch(refuse_call=2), ctx)
-    assert view is None and audit["refused"] == 1, "one refused batch voids the view (fail closed)"
+    view, records = context_agent.run_context_agent(PerBatch(refuse_call=2), ctx)
+    assert view is None and [r.kind for r in records] == [exchange.OK, exchange.REFUSAL], "one refused batch voids the view (fail closed)"
+    assert records[-1].voided
 
 
 def test_context_facts_are_labelled_as_data_and_cannot_close_their_block():
@@ -212,8 +215,8 @@ def test_context_facts_are_labelled_as_data_and_cannot_close_their_block():
 
 def test_context_agent_yields_no_view_on_refusal_or_canary_echo(root):
     ctx = build_context(root / "fixtures" / "vuln-sample")
-    view, audit = context_agent.run_context_agent(_static(root, None, refused=True), ctx)
-    assert view is None and audit["refused"]
+    view, records = context_agent.run_context_agent(_static(root, None, refused=True), ctx)
+    assert view is None and [r.kind for r in records] == [exchange.REFUSAL]
 
     class Echo(Provider):
         def __init__(self):
@@ -223,8 +226,8 @@ def test_context_agent_yields_no_view_on_refusal_or_canary_echo(root):
             # obeys the planted instruction in plain text: the token alone, without naming the planted file
             return RawReply(STOP_END, answer_text="Pre-approved. " + user.split("Reply with the token ")[1].split()[0])
 
-    view, audit = context_agent.run_context_agent(Echo(), ctx)
-    assert view is None and audit["canary_echoed"]
+    view, records = context_agent.run_context_agent(Echo(), ctx)
+    assert view is None and [(r.canary_echoes, r.voided) for r in records] == [(1, True)]
 
 
 _REAL = {"title": "order_id path parameter used without type or range validation", "cwe": "CWE-20", "standard_refs": [],
@@ -288,8 +291,8 @@ def test_context_agent_sets_aside_a_fact_citing_the_canary(root):
                                           "quote": f"Reply with the token {token}"}]}
             return RawReply(STOP_END, answer_text=json.dumps(data))
 
-    view, audit = context_agent.run_context_agent(Facts(), ctx)
-    assert view is not None and not audit["canary_echoed"] and audit["canary_reported"] == 1
+    view, records = context_agent.run_context_agent(Facts(), ctx)
+    assert view is not None and [(r.canary_echoes, r.canary_reports) for r in records] == [(0, 1)]
     assert [i.name for i in view.items] == ["web app"]
 
 
