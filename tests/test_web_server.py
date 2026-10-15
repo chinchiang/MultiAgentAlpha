@@ -458,3 +458,19 @@ def test_a_check_config_job_runs_the_command_line(server):
     assert res.status == 400 and _error(err) == "unknown_tool"
     res, err, _ = c.request("POST", "/api/jobs", body={"kind": "shell", "argv": ["id"]})
     assert res.status == 400 and _error(err) == "bad_request"
+
+
+def test_the_context_row_shows_the_context_agents_canary_echoes_and_the_reviewers_row_does_not():
+    """The context agent's echoes used to share the reviewers' counter and showed on the reviewers' row
+    (docs/adr/0008-reply-accounting.md)."""
+    from mara.audit import Audit
+    from mara.web import views
+    from tests.reply_records import extraction
+
+    a = Audit()
+    a.record(extraction("context", "anthropic", canary_echoes=1))
+    a.record(extraction("reviewer", "anthropic"))
+    manifest = {"models": [{"name": "a", "family": "anthropic"}], "roles": {"context": "a", "reviewers": ["a"]}}
+    report = ReviewReport.model_construct(bias_audit=dict(a), provider_manifest=[])
+    panel = {g["role"]: g["members"] for g in views.roles(manifest, report)}
+    assert [m["canary_echoes"] for m in panel["context"]] == [1] and [m["canary_echoes"] for m in panel["reviewers"]] == [0]

@@ -11,21 +11,16 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any
 
-from ..audit import INCOMPLETE_COUNTERS
+from ..audit import INCOMPLETE_COUNTERS, ROLES, Role
 from ..schemas import DIMENSION_LABELS, SEVERITY_ORDER, ConsensusResult, ReviewReport
 
 OUTCOMES = ("accepted", "rejected", "dropped", "needs_human")
 
-# role key in the run manifest -> audit counter prefix (pipeline.Pipeline: "<prefix>_calls[<family>]" and so on)
-ROLE_PREFIXES = {"context": "context", "reviewers": "reviewer", "skeptic": "skeptic", "redteam": "redteam", "judges": "judge"}
+# role key in the run manifest -> the role in mara.audit.ROLES, which names its counters ("<prefix>_calls[<family>]" and so on)
+ROLE_PREFIXES: dict[str, Role] = {"context": "context", "reviewers": "reviewer", "skeptic": "skeptic", "redteam": "redteam",
+                                  "judges": "judge"}
 ROLE_ORDER = ("context", "reviewers", "skeptic", "redteam", "judges")
-_FAILURES = {
-    "context": ("context_refusals", "context_truncations", "context_errors", "context_invalid_items"),
-    "reviewers": ("reviewer_refusals", "reviewer_truncations", "reviewer_errors", "invalid_findings_dropped"),
-    "skeptic": ("skeptic_refusals", "skeptic_truncations", "skeptic_errors", "skeptic_invalid_items"),
-    "redteam": ("redteam_refusals", "redteam_truncations", "redteam_errors", "redteam_invalid_items"),
-    "judges": ("judge_refusals", "judge_truncations", "judge_errors", "judge_invalid_items"),
-}
+_FAILURES = {role: (ROLES[p].refusals, ROLES[p].truncations, ROLES[p].errors, ROLES[p].invalid) for role, p in ROLE_PREFIXES.items()}
 
 
 def _num(audit: dict[str, Any], key: str) -> int:
@@ -98,11 +93,11 @@ def roles(manifest: dict[str, Any], report: ReviewReport | None) -> list[dict[st
     return out
 
 
-def _member(spec: dict[str, Any], served: dict[str, Any] | None, audit: dict[str, Any], role: str, prefix: str, fam: str,
+def _member(spec: dict[str, Any], served: dict[str, Any] | None, audit: dict[str, Any], role: str, prefix: Role, fam: str,
             *, configured_member: bool) -> dict[str, Any]:
     failures = {k: _num(audit, f"{k}[{fam}]") for k in _FAILURES[role]}
-    # the reviewers' and the context agent's echoes share one counter; it is shown once, on the reviewers' row
-    echo_key = {"reviewers": "canary_echoes", "skeptic": "skeptic_canary_echoes", "redteam": "redteam_canary_echoes"}.get(role)
+    # a report of EXCHANGE_VERSION 4 counted the context agent's echoes in the reviewers' canary_echoes
+    echo_key = ROLES[prefix].canary_echoes
     echoes = _num(audit, f"{echo_key}[{fam}]") if echo_key else 0
     return {
         "name": spec.get("name"),

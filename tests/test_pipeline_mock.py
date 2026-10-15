@@ -134,6 +134,17 @@ def test_bias_audit_captures_refusal_and_position_flip(mock_report):
     assert isinstance(audit["global_krippendorff_alpha"], float)
 
 
+def test_the_ballot_item_counts_have_totals(mock_report):
+    """skeptic_items, redteam_items and judge_items were written per family only (docs/adr/0008-reply-accounting.md)."""
+    _, report = mock_report
+    audit = report.bias_audit
+    for role in ("skeptic", "redteam", "judge"):
+        per_family = [v for k, v in audit.items() if k.startswith(f"{role}_items[")]
+        assert len(per_family) == 3 and audit[f"{role}_items"] == sum(per_family) > 0, role
+    # a finding counts once per judge family although it is judged in two passes, each giving one vote
+    assert audit["judge_refusals"] == audit["judge_invalid_items"] == 0 and len(report.votes) == 2 * audit["judge_items"]
+
+
 def test_unstable_finding_is_not_accepted(mock_report):
     _, report = mock_report
     _, cons = _accepted(report)
@@ -317,21 +328,21 @@ def _pipe(tmp_path):
     return Pipeline(load_config(root / "config" / "mara.mock.yaml"), out_dir=tmp_path)
 
 
-def test_a_malformed_or_incomplete_reply_is_asked_once_more_but_signals_are_not(tmp_path):
-    from mara.pipeline import _retryable
+def test_an_unparseable_or_incomplete_reply_is_asked_once_more_but_signals_are_not(tmp_path):
+    from mara import exchange
+    from tests.reply_records import ballot
 
-    assert _retryable(["unexpected_verdict", "incomplete_or_duplicate_response"]) and _retryable(["empty"])
-    for signal in (["refused"], ["canary_echoed"], ["provider_http_error:500"], ["provider_call_failed"], []):
-        assert not _retryable(signal), signal
     pipe = _pipe(tmp_path)
-    replies = iter([([], ["unexpected_verdict", "incomplete_or_duplicate_response"], 0), (["v1", "v2"], [], 0)])
-    assert pipe._once_more("skeptic", "glm", lambda: next(replies)) == (["v1", "v2"], [], 0)
+    replies = iter([([], ballot("skeptic", "glm", 2, missing=1)), (["v1", "v2"], ballot("skeptic", "glm", 2))])
+    assert pipe._once_more(lambda: next(replies)) == (["v1", "v2"], ballot("skeptic", "glm", 2))
     assert pipe.audit["skeptic_retries"] == 1 and pipe.audit["skeptic_retries[glm]"] == 1
     calls = []
-    out = pipe._once_more("redteam", "glm", lambda: calls.append(1) or ([], ["canary_echoed"], 0))
-    assert out == ([], ["canary_echoed"], 0) and len(calls) == 1, "an echo is a finding about the model, not noise"
-    replies = iter([([], ["empty"], 0), ([], ["missing_verdict", "incomplete_or_duplicate_response"], 0)])
-    assert pipe._once_more("judge", "gemini", lambda: next(replies))[1] == ["missing_verdict", "incomplete_or_duplicate_response"]
+    echo = ballot("redteam", "glm", 1, canary_echoes=1)
+    assert pipe._once_more(lambda: calls.append(1) or ([], echo)) == ([], echo) and len(calls) == 1, \
+        "an echo is a finding about the model, not noise"
+    second = ballot("judge", "gemini", 1, missing=1)
+    replies = iter([([], ballot("judge", "gemini", 1, exchange.EMPTY)), ([], second)])
+    assert pipe._once_more(lambda: next(replies)) == ([], second)
     assert pipe.audit["judge_retries"] == 1, "only one more call; the second answer stands"
 
 
@@ -346,7 +357,9 @@ def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path, monkeypatch)
                 source_family=ModelFamily.ANTHROPIC, source_model="m")
     good = SkepticVerdict(finding_id="F-0001", verdict="stands", reason="r", sanitizer_or_control="none",
                           source_family=ModelFamily.DEEPSEEK, source_model="m")
-    replies = iter([([], ["unexpected_verdict", "incomplete_or_duplicate_response"], 0, 0), ([good], [], 0, 0)])
+    from tests.reply_records import ballot
+
+    replies = iter([([], ballot("skeptic", "deepseek", 1, missing=1)), ([good], ballot("skeptic", "deepseek", 1))])
     monkeypatch.setattr(skeptic, "run_skeptic", lambda *a, **k: next(replies))
     verdicts, abstained = pipe.run_skeptics(RepoContext(root=tmp_path), [f], {"F-0001": {ModelFamily.ANTHROPIC}})
     assert verdicts == [good] and not abstained

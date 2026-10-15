@@ -399,6 +399,7 @@
  "reach.unknown": "未知",
  "reach.unreachable": "不可達",
  "reason.canary_echoes": "canary 回聲（遵循了植入的指令）",
+ "reason.context_canary_echoes": "情境建構 canary 回聲",
  "reason.context_coverage_incomplete": "檔案包未涵蓋全部檔案",
  "reason.context_errors": "情境建構呼叫錯誤",
  "reason.context_invalid_items": "情境事實格式無效",

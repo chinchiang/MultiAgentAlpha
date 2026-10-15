@@ -15,6 +15,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from .. import exchange
+from ..audit import ReplyRecord
 from ..context.repo_map import RepoContext
 from ..identity import norm_path
 from ..providers.base import Provider
@@ -90,29 +91,23 @@ class ContextView(BaseModel):
 
 MAX_ITEMS_PER_KIND = 12  # the schema's per-call limit, kept for the merged view: the reviewer prompt stays bounded
 
-_AUDIT_KEYS = ("refused", "truncated", "errored", "unparseable", "canary_echoed", "canary_reported", "input_tokens", "output_tokens",
-               "invalid", "unverified")
-
-
-def run_context_agent(provider: Provider, ctx: RepoContext) -> tuple[ContextView | None, dict]:
-    """Returns (view, audit); view is None when no trustworthy view could be produced.
+def run_context_agent(provider: Provider, ctx: RepoContext) -> tuple[ContextView | None, list[ReplyRecord]]:
+    """Returns (view, the reply record of every call made); view is None when no trustworthy view could be produced.
 
     One call per bundle batch (RepoContext.batches, the bound every reviewer request has): the whole
     bundle in one request - up to MAX_REPOSITORY_CHARS - failed as a provider error on any repository
     larger than the context model's window and left every review incomplete. A batch that is refused,
     echoes its canary or returns no usable object voids the whole view (fail closed); a batch with no
     architecture facts in it just contributes none. Facts are de-duplicated and capped per kind.
-    Audit counters are summed over the calls; `calls` says how many were made."""
-    totals = dict.fromkeys(_AUDIT_KEYS, 0) | {"calls": 0}
+    mara.audit adds the records up."""
+    records: list[ReplyRecord] = []
     merged: list[ContextItem] = []
     seen: set[tuple[str, str, str, int]] = set()
     for batch in ctx.batches():
-        items, audit = _context_call(provider, batch)
-        totals["calls"] += 1
-        for k in _AUDIT_KEYS:
-            totals[k] += int(audit[k])
+        items, rec = _context_call(provider, batch)
+        records.append(rec)
         if items is None:
-            return None, totals
+            return None, records
         for it in items:
             key = (it.kind, it.name, it.file, it.line)
             if key in seen or sum(m.kind == it.kind for m in merged) >= MAX_ITEMS_PER_KIND:
@@ -120,32 +115,33 @@ def run_context_agent(provider: Provider, ctx: RepoContext) -> tuple[ContextView
             seen.add(key)
             merged.append(it)
     if not merged:
-        return None, totals
-    return ContextView(source_family=provider.family.value, source_model=provider.model, items=merged), totals
+        return None, records
+    return ContextView(source_family=provider.family.value, source_model=provider.model, items=merged), records
 
 
-def _context_call(provider: Provider, ctx: RepoContext) -> tuple[list[ContextItem] | None, dict]:
-    """One context call over one batch: (verified items, audit); None when the call is unusable."""
+def _context_call(provider: Provider, ctx: RepoContext) -> tuple[list[ContextItem] | None, ReplyRecord]:
+    """One context call over one batch: (verified items, its reply record); None when the call is unusable."""
     canary = base.Canary()
     outcome = exchange.ask(provider, role="context", system_extra=base.load_prompt("context"), schema=CONTEXT_SCHEMA, lead="",
                            ctx=ctx, canary=canary,
                            close='Return {"containers": [...], "external_systems": [...], "trust_boundaries": [...], '
                                  '"data_stores": [...]} following the schema.')
     data, echoed, reported = canary.screen(outcome, tuple(key for _, key in _KIND_BY_KEY))
-    # an unparseable reply is invalid output, one per reply (docs/adr/0001-reply-outcome-accounting.md)
-    audit = {**exchange.extraction_flags(outcome), "canary_echoed": echoed, "canary_reported": reported,
-             "input_tokens": outcome.input_tokens, "output_tokens": outcome.output_tokens, "invalid": int(outcome.unparseable),
-             "unverified": 0}
-    if outcome.data is None or audit["canary_echoed"]:
-        return None, audit
+
+    def record(invalid: int = 0, unverified: int = 0, voided: bool = False) -> ReplyRecord:
+        return ReplyRecord.of(outcome, "context", provider.family.value, canary_echoes=int(echoed), canary_reports=reported,
+                              invalid_items=invalid, voided=voided, counts={"unverified": unverified})
+
+    if outcome.data is None or echoed:
+        return None, record(voided=True)
     if not isinstance(data, dict):
-        audit["invalid"] += 1
-        return None, audit
+        return None, record(invalid=1, voided=True)
+    invalid = unverified = 0
     raw: list[tuple[_ContextKind, dict]] = []
     for kind, key in _KIND_BY_KEY:
         arr = data.get(key)
         if not isinstance(arr, list):
-            audit["invalid"] += 1
+            invalid += 1
             continue
         raw.extend((kind, x) for x in arr if isinstance(x, dict))
     items: list[ContextItem] = []
@@ -153,10 +149,10 @@ def _context_call(provider: Provider, ctx: RepoContext) -> tuple[list[ContextIte
         try:
             item = _ContextItemRaw(kind=kind, **{k: v for k, v in x.items() if k != "kind"})
         except ValidationError:
-            audit["invalid"] += 1
+            invalid += 1
             continue
         if not base.verify_quote(ctx, item.file, item.line, item.quote):
-            audit["unverified"] += 1
+            unverified += 1
             continue
         items.append(ContextItem(**item.model_dump()))
-    return items, audit
+    return items, record(invalid, unverified)

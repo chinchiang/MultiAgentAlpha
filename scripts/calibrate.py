@@ -31,6 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from mara.audit import by_family  # noqa: E402
 from mara.decisions import Decision, TrainingRequirement, binding, select  # noqa: E402
 from mara.decisions import load as load_decision_dir  # noqa: E402
 from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
@@ -119,16 +120,15 @@ def _match(f: dict, lab: dict) -> bool:
 def family_metrics(runs):
     """Per family, per CWE: tp, fp, fn (a label counts as found by a family if that family is among finder_families)."""
     stats = defaultdict(lambda: defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0}))
-    families = set()
+    # the families whose reviewers were called in each run (mara.audit reads the per-family counters back)
+    reviewed = [{fam for fam, counters in by_family(rep.get("bias_audit", {})).items() if counters.get("reviewer_calls", 0) > 0}
+                for _, rep, _labels in runs]
+    families = set().union(*reviewed)
     for _, rep, _labels in runs:
-        families |= {k[len("reviewer_calls["):-1] for k, v in rep.get("bias_audit", {}).items()
-                     if k.startswith("reviewer_calls[") and k.endswith("]") and isinstance(v, (int, float)) and v > 0}
         families |= {f for fnd in rep["findings"] for f in fnd["finder_families"]}
-    for _, rep, labels in runs:
+    for (_, rep, labels), called in zip(runs, reviewed, strict=True):
         for fam in families:
-            if rep.get("bias_audit", {}).get(f"reviewer_calls[{fam}]", 0) == 0 and not any(
-                fam in f.get("finder_families", []) for f in rep["findings"]
-            ):
+            if fam not in called and not any(fam in f.get("finder_families", []) for f in rep["findings"]):
                 continue
             found = [f for f in rep["findings"] if fam in f["finder_families"]]
             matched_labels = set()
@@ -148,9 +148,8 @@ def family_metrics(runs):
 def audit_rates(runs, families):
     agg = defaultdict(lambda: defaultdict(int))
     for _, rep, _ in runs:
-        for k, v in rep["bias_audit"].items():
-            if "[" in k and k.endswith("]") and isinstance(v, (int, float)) and "~" not in k:
-                key, fam = k[:-1].split("[")
+        for fam, counters in by_family(rep["bias_audit"]).items():
+            for key, v in counters.items():
                 agg[fam][key] += v
     rows = {}
     for fam in families:

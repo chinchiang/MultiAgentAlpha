@@ -6,12 +6,15 @@ that judges a reply happens here, once, for every family:
   * `classify` turns a RawReply into an `Outcome` of one kind - ok, truncation, unparseable, empty, refusal or
     error - by the rules of docs/adr/0001-reply-outcome-accounting.md: a truncation is a reply stopped at the
     output limit (a budget problem, never charged to the model), an unparseable reply ended normally without
-    the structured answer (invalid output, charged to the model), an empty reply is read by role;
+    the structured answer (invalid output, charged to the model), an empty reply has no answer, neither text
+    nor structured data;
   * `call` makes the provider call and maps any exception to a sanitised error code;
   * `Canary` plants the injection canary and screens an Outcome for a canary echo or a canary report;
   * `parse_items` validates a ballot reply's items against a pydantic model;
   * `build_prompt` / `ask` lay a role's prompt out: trusted instructions outside the fences, repository data
     inside <untrusted_repository_data>, derived data inside <derived_data kind=...>.
+
+How each reply outcome counts for a role, an empty reply included, is mara.audit's table, not a rule here.
 
 EXCHANGE_VERSION names the accounting these rules produce: refusal, invalid and truncation counts of different
 versions are not comparable, so it is recorded in every report and calibration record.
@@ -38,7 +41,9 @@ from .providers.base import STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply, c
 # 2: one classification for every family (docs/adr/0001-reply-outcome-accounting.md)
 # 3: the repository summary inside the repository fence, derived data (context facts, findings) in <derived_data>
 # 4: a ballot's failed call is a provider error (<role>_errors), no longer invalid output, and never retried
-EXCHANGE_VERSION = 4
+# 5: the context agent's canary echoes and reports are context_canary_*, so canary_echoes counts reviewer replies only;
+#    skeptic_items, redteam_items and judge_items have totals (docs/adr/0008-reply-accounting.md)
+EXCHANGE_VERSION = 5
 
 OK, TRUNCATION, UNPARSEABLE, EMPTY, REFUSAL, ERROR = "ok", "truncation", "unparseable", "empty", "refusal", "error"
 KINDS = (OK, TRUNCATION, UNPARSEABLE, EMPTY, REFUSAL, ERROR)
@@ -158,33 +163,22 @@ def call(provider: Provider, *, system_extra: str, user: str, schema: dict, role
     return outcome
 
 
-def extraction_flags(outcome: Outcome) -> dict[str, bool]:
-    """How an extraction role (reviewer, context) reads a reply that produced no items: an empty reply is an
-    abstention, counted with the refusals; an unparseable reply is invalid output."""
-    return {"refused": outcome.refused or outcome.empty, "truncated": outcome.truncated, "errored": outcome.kind == ERROR,
-            "unparseable": outcome.unparseable}
-
-
-def parse_items(outcome: Outcome, model_cls, key: str = "items") -> tuple[list, list[str]]:
-    """Validate a ballot reply (skeptic, red team, judge) against a pydantic model; return (valid, errors).
-
-    A reply without items is one response-level error: the provider code, `refused` (an abstention, never
-    retried), `truncated` (the budget, never charged to the model), `unparseable` or `empty` (invalid output:
-    a ballot cannot abstain by saying nothing)."""
-    if outcome.kind == ERROR:
-        return [], [outcome.error]
+def parse_items(outcome: Outcome, model_cls, key: str = "items") -> tuple[list | None, int]:
+    """Validate a ballot reply (skeptic, red team, judge) against a pydantic model: (the valid items, the number of
+    invalid ones). The items are None when the reply holds no list: a reply of any kind but ok, which mara.audit
+    counts by its kind, or an answer without the list, which is one invalid item."""
     if outcome.kind != OK:
-        return [], [{REFUSAL: "refused", TRUNCATION: "truncated", UNPARSEABLE: "unparseable", EMPTY: "empty"}[outcome.kind]]
+        return None, 0
     data = outcome.data
     if not isinstance(data, dict) or not isinstance(data.get(key), list):
-        return [], ["invalid_response_shape"]
-    valid, errors = [], []
+        return None, 1
+    valid, invalid = [], 0
     for raw in data[key]:
         try:
             valid.append(model_cls.model_validate(raw))
-        except ValidationError as e:
-            errors.append("invalid_item:" + e.errors()[0]["type"])
-    return valid, errors
+        except ValidationError:
+            invalid += 1
+    return valid, invalid
 
 
 # ---------------------------------------------------------------- canary

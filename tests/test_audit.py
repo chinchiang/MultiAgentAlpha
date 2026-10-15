@@ -1,20 +1,18 @@
-"""mara.audit: counters kept in total and per family by one call, and one list of the counters that make a review
-incomplete (architecture review candidate 4)."""
+"""mara.audit: counters kept in total and per family by one call, every reply record counted by one table, and the
+counters that make a review incomplete derived from it (docs/adr/0008-reply-accounting.md)."""
 
-import re
 from pathlib import Path
 
 import pytest
 
 from mara import exchange
-from mara.audit import INCOMPLETE_COUNTERS, Audit
+from mara.audit import INCOMPLETE_COUNTERS, ROLES, Audit, ReplyRecord, by_family, log_tags, worth_retrying
 from mara.config import load_config
-from mara.pipeline import Pipeline, _count_invalid, _retryable
+from mara.pipeline import Pipeline
 from mara.providers.base import Provider
+from tests.reply_records import ballot, extraction
 
 ROOT = Path(__file__).resolve().parents[1]
-FAILURE = re.compile(r"_(refusals|truncations|errors|invalid_items|canary_echoes)$")
-NOT_BLOCKING = {"canary_reports"}  # reports are resistance, not failure
 
 
 def test_add_counts_total_and_family_and_the_incomplete_list_is_read_in_order():
@@ -27,33 +25,73 @@ def test_add_counts_total_and_family_and_the_incomplete_list_is_read_in_order():
     assert all(k in a for k in INCOMPLETE_COUNTERS), "every completeness counter is in the report, 0 or not"
 
 
-def test_every_failure_counter_the_pipeline_writes_makes_the_review_incomplete():
-    """The completeness list used to be a hand-kept mirror of counter names written elsewhere: nothing ensured that
-    a new counter was listed. Every counter written under a failure name, literally or as f"{role}_...", must be."""
-    src = (ROOT / "src" / "mara" / "pipeline.py").read_text(encoding="utf-8")
-    written = set(re.findall(r'(?:audit\.add\(|self\.audit\[)f?"([a-z_{}]+?)(?:\[\{fam\}\])?"', src))
-    names = set()
-    for w in written:
-        if "{role}" in w:
-            # the canary counters are written only for the roles that carry one: a judge sees no bundle (Q6)
-            roles = ("skeptic", "redteam") if "canary" in w else ("skeptic", "redteam", "judge")
-            names |= {w.replace("{role}", role) for role in roles}
-        else:
-            names.add(w)
-    names |= {counter for _, counter in re.findall(r'\("(\w+)", "(\w+)"\)', src)}  # the (audit key, counter) tables of L1/L2
-    failures = {n for n in names if FAILURE.search(n) and n not in NOT_BLOCKING}
-    assert failures, "the scan found the counters"
-    assert failures <= set(INCOMPLETE_COUNTERS), sorted(failures - set(INCOMPLETE_COUNTERS))
-    assert {"skeptic_errors", "redteam_errors", "judge_errors", "reviewer_errors", "context_errors"} <= failures
+# INCOMPLETE_COUNTERS as written by hand before it was derived from ROLES (EXCHANGE_VERSION 4)
+_V4_INCOMPLETE_COUNTERS = (
+    "reviewer_refusals", "reviewer_truncations", "reviewer_errors", "invalid_findings_dropped", "canary_echoes",
+    "context_refusals", "context_truncations", "context_errors", "context_invalid_items", "context_unverified_items",
+    "skeptic_refusals", "skeptic_truncations", "skeptic_errors", "skeptic_invalid_items", "skeptic_canary_echoes",
+    "redteam_refusals", "redteam_truncations", "redteam_errors", "redteam_invalid_items", "redteam_canary_echoes",
+    "redteam_exploit_code_stripped",
+    "judge_refusals", "judge_truncations", "judge_errors", "judge_invalid_items",
+)
+CANARY_ROLES = ("reviewer", "context", "skeptic", "redteam")
+
+
+def _record(role, kind=exchange.OK, **fields):
+    """A record of `role` as its agent writes it; a ballot's is over one finding (tests/reply_records.py)."""
+    if ROLES[role].form == "ballot":
+        return ballot(role, "glm", 1, kind, **fields)
+    return extraction(role, "glm", kind, **fields)
+
+
+@pytest.mark.parametrize("role", list(ROLES))
+@pytest.mark.parametrize("kind", exchange.KINDS)
+def test_every_reply_but_an_ok_one_makes_the_review_incomplete(role, kind):
+    """The completeness rule used to be checked by a test reading pipeline.py as text."""
+    a = Audit()
+    a.record(_record(role, kind))
+    assert bool(a.incomplete_reasons()) == (kind != exchange.OK), a.incomplete_reasons()
+    assert all(k in a for k in INCOMPLETE_COUNTERS), "every completeness counter is in the report, 0 or not"
+
+
+@pytest.mark.parametrize("role", CANARY_ROLES)
+def test_a_canary_echo_makes_the_review_incomplete_and_a_report_does_not(role):
+    echo, report = Audit(), Audit()
+    echo.record(_record(role, canary_echoes=1))
+    report.record(_record(role, canary_reports=1))
+    assert len(echo.incomplete_reasons()) == 1 and not report.incomplete_reasons()
+
+
+def test_a_count_the_table_does_not_declare_is_refused():
+    with pytest.raises(ValueError, match="declares no count"):
+        ReplyRecord(role="judge", family="glm", kind=exchange.OK, counts={"refuted": 1})
+    with pytest.raises(ValueError, match="carries no canary"):
+        ReplyRecord(role="judge", family="glm", kind=exchange.OK, canary_echoes=1)
+    assert set(ROLES) - set(CANARY_ROLES) == {"judge"}, "a judge sees no bundle, so it gets no canary"
+
+
+def test_only_the_extraction_roles_count_their_tokens():
+    a = Audit()
+    a.record(extraction("reviewer", "glm", input_tokens=5, output_tokens=2))
+    a.record(extraction("context", "glm", exchange.TRUNCATION, input_tokens=3, output_tokens=1))
+    a.record(ballot("judge", "glm", 1, input_tokens=7, output_tokens=7))
+    assert (a["input_tokens"], a["output_tokens"]) == (8, 3), "a ballot role's tokens are not counted"
+
+def test_the_incomplete_counters_are_the_old_ones_in_their_old_order_and_the_context_canary_echoes():
+    assert set(INCOMPLETE_COUNTERS) == set(_V4_INCOMPLETE_COUNTERS) | {"context_canary_echoes"}
+    assert len(INCOMPLETE_COUNTERS) == len(set(INCOMPLETE_COUNTERS))
+    assert tuple(k for k in INCOMPLETE_COUNTERS if k in _V4_INCOMPLETE_COUNTERS) == _V4_INCOMPLETE_COUNTERS
 
 
 def test_a_failed_call_is_never_invalid_output_and_never_retried():
     for code in ("provider_http_error:503", "provider_connection_failed", "provider_call_failed:KeyError"):
         assert exchange.is_provider_error(code)
-        assert _count_invalid([code, "incomplete_or_duplicate_response"]) == 0
-        assert not _retryable([code, "incomplete_or_duplicate_response"]), "a bug in a provider would only repeat"
-    assert not exchange.is_provider_error("invalid_item:missing") and _count_invalid(["invalid_item:missing"]) == 1
-    assert _retryable(["unparseable", "incomplete_or_duplicate_response"])
+        rec = ReplyRecord.of(exchange.Outcome(exchange.ERROR, error=code), "skeptic", "glm", voided=True, counts={"findings": 1})
+        a = Audit()
+        a.record(rec)
+        assert (a["skeptic_errors"], a["skeptic_invalid_items"], rec.details) == (1, 0, (code,))
+        assert not worth_retrying(rec), "a bug in a provider would only repeat"
+    assert not exchange.is_provider_error("invalid_item:missing")
 
 
 class _FailRole(Provider):
@@ -82,3 +120,45 @@ def test_a_ballot_provider_failure_is_counted_as_an_error_and_blocks(tmp_path, r
     audit = report.bias_audit
     assert audit[f"{role}_errors"] > 0 and audit[f"{role}_invalid_items"] == 0 and audit.get(f"{role}_retries", 0) == 0
     assert f"{role}_errors" in report.incomplete_reasons and not report.gate_passed
+
+
+def test_a_voided_ballot_reply_is_worth_one_more_call_unless_refused_failed_or_echoed():
+    """GLM as skeptic answered four verdicts for three findings on one call and exactly three on the next
+    (2026-10-08). Refusals and canary echoes are signals; providers retry their own failures."""
+    for role in ("skeptic", "redteam", "judge"):
+        assert all(worth_retrying(ballot(role, "glm", 1, k)) for k in (exchange.TRUNCATION, exchange.UNPARSEABLE, exchange.EMPTY))
+        assert worth_retrying(ballot(role, "glm", 1, missing=1)), "an ok reply that did not cover every finding"
+        assert not any(worth_retrying(ballot(role, "glm", 1, k)) for k in (exchange.REFUSAL, exchange.ERROR))
+        assert not worth_retrying(ballot(role, "glm", 1)), "a reply that was used"
+    assert not worth_retrying(ballot("skeptic", "glm", 1, canary_echoes=1))
+    assert not worth_retrying(extraction("reviewer", "glm", exchange.TRUNCATION)), "an extraction role is never asked again"
+    a = Audit()
+    a.retried(ballot("judge", "glm", 1, exchange.UNPARSEABLE))
+    assert (a["judge_retries"], a["judge_retries[glm]"], a.incomplete_reasons()) == (1, 1, [])
+
+
+def test_the_log_tags_say_what_the_record_counts():
+    def tags(role, kind, **fields):
+        return log_tags(_record(role, kind, **fields))
+
+    assert tags("reviewer", exchange.OK) == ""
+    assert tags("reviewer", exchange.EMPTY) == " [REFUSED]", "an extraction role abstains by saying nothing"
+    assert tags("judge", exchange.EMPTY) == "", "a ballot cannot: invalid output, which the counters show"
+    assert tags("skeptic", exchange.REFUSAL) == " [REFUSED]"
+    assert tags("context", exchange.TRUNCATION) == " [TRUNCATED]"
+    assert tags("redteam", exchange.ERROR) == " [PROVIDER ERROR]"
+    assert tags("reviewer", exchange.OK, canary_echoes=1, canary_reports=1) == " [CANARY ECHOED] [CANARY REPORTED]"
+
+
+def test_the_per_family_counters_are_read_back_from_their_names():
+    a = Audit()
+    a.add("judge_refusals", "glm", 2)
+    a.add("judge_refusals", "gemini")
+    a.record(extraction("context", "gemini", canary_echoes=1))
+    a["judge_agreement[glm~gemini]"] = 0.5  # a pair of families, not one
+    a["rollout_phase"] = "shadow"
+    fams = by_family(dict(a))
+    assert set(fams) == {"glm", "gemini"}
+    assert fams["glm"] == {"judge_refusals": 2}
+    assert fams["gemini"]["judge_refusals"] == 1 and fams["gemini"]["context_canary_echoes"] == 1
+    assert "canary_echoes" not in fams["gemini"]

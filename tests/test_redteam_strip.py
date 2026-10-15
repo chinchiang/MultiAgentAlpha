@@ -10,10 +10,10 @@ must NOT match are tested next to the payload cases that must.
 from pathlib import Path
 from types import SimpleNamespace
 
-from mara import exchange
 from mara.agents import redteam
-from mara.providers.base import STOP_END, RawReply
-from mara.schemas import ModelFamily
+from mara.config import load_config
+from mara.context.repo_map import RepoContext
+from mara.providers.base import STOP_END, Provider, RawReply
 
 
 def test_fenced_blocks_and_shell_one_liners_are_stripped():
@@ -65,40 +65,48 @@ def test_all_code_yields_the_placeholder():
     # stripping only removes characters, so it can never push a note over the limit
 
 
-def _provider():
-    return SimpleNamespace(family=ModelFamily.MOCK, model="mock-1")
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def _redteam_response(items: list[dict]) -> exchange.Outcome:
-    return exchange.classify(RawReply(STOP_END, structured={"items": items}), {})
+class _Items(Provider):
+    """A red team whose reply holds `items`, classified and screened by mara.exchange like any other reply."""
+
+    def __init__(self, items: list[dict]):
+        super().__init__(load_config(ROOT / "config" / "mara.mock.yaml").models[0])
+        self.items = items
+
+    def complete(self, **kwargs):
+        return RawReply(STOP_END, structured={"items": self.items})
 
 
-def test_run_redteam_strips_code_and_counts(monkeypatch):
+def _run(items: list[dict], findings: list):
+    provider = _Items(items)
+    ctx = RepoContext(root=ROOT, content={"app.py": "def render(t):\n    return t\n"})
+    return provider, *redteam.run_redteam(provider, ctx, findings)  # type: ignore[arg-type]
+
+
+def test_run_redteam_strips_code_and_counts():
     payload = {
         "finding_id": "F1", "exploitable": "conditional",
         "preconditions": "Attacker must control the template.\n```\n{{ 7*7 }}\n```\nNo authentication needed.",
     }
     clean_item = {"finding_id": "F2", "exploitable": "yes", "preconditions": "No authentication needed."}
-    monkeypatch.setattr(redteam.exchange, "call", lambda *a, **k: _redteam_response([payload, clean_item]))
-    ctx = SimpleNamespace(summary=lambda: "s", content={}, complete=True, bundle=lambda paths=None: "")
     findings = [SimpleNamespace(id="F1", title="t1", cwe="CWE-94", exploit_sketch=None, provenance=[]),
                 SimpleNamespace(id="F2", title="t2", cwe="CWE-79", exploit_sketch=None, provenance=[])]
-    notes, errors, stripped, _ = redteam.run_redteam(_provider(), ctx, findings)  # type: ignore[arg-type]
-    assert errors == [] and stripped == 1
+    _, notes, rec = _run([payload, clean_item], findings)
+    assert not rec.voided and rec.counts["exploit_code_stripped"] == 1
     by_id = {n.finding_id: n for n in notes}
     assert by_id["F1"].preconditions == "Attacker must control the template.\nNo authentication needed."
     assert by_id["F2"].preconditions == "No authentication needed."
 
 
-def test_run_redteam_all_code_preconditions_become_the_placeholder(monkeypatch):
+def test_run_redteam_all_code_preconditions_become_the_placeholder():
     item = {"finding_id": "F1", "exploitable": "conditional", "preconditions": "$ curl http://target/x"}
-    monkeypatch.setattr(redteam.exchange, "call", lambda *a, **k: _redteam_response([item]))
-    ctx = SimpleNamespace(summary=lambda: "s", content={}, complete=True, bundle=lambda paths=None: "")
     f = SimpleNamespace(id="F1", title="t", cwe="CWE-94", exploit_sketch=None, provenance=[])
-    notes, errors, stripped, _ = redteam.run_redteam(_provider(), ctx, [f])  # type: ignore[arg-type]
-    assert stripped == 1 and errors == []
+    provider, notes, rec = _run([item], [f])
+    assert rec.counts["exploit_code_stripped"] == 1 and not rec.voided
     assert notes[0].preconditions == redteam.EXPLOIT_STRIP_PLACEHOLDER
-    assert notes[0].source_family == ModelFamily.MOCK
+    assert notes[0].source_family == provider.family
 
 
 def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkeypatch):
@@ -106,10 +114,10 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
     report is incomplete (the same fail-closed treatment as reviewer refusals or canary echoes)."""
     import json as jsonlib
 
-    from mara.config import load_config
     from mara.pipeline import Pipeline
-    from mara.providers.base import Provider
+    from mara.schemas import RedTeamNote
     from mara.tools.runner import ToolRun
+    from tests.reply_records import ballot
 
     root = Path(__file__).resolve().parents[1]
     vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
@@ -131,7 +139,13 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
     (tmp_path / "app.py").write_text("unsafe()\n")
     pipe.providers = {n: Reply(p.spec) for n, p in pipe.providers.items()}
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: ([], [], 1, 0))
+    def stripped_once(p, ctx, fs):
+        # a note for every finding, the first one's preconditions stripped of exploit code
+        notes = [RedTeamNote(finding_id=f.id, exploitable="conditional", preconditions=redteam.EXPLOIT_STRIP_PLACEHOLDER if i == 0 else "none",
+                             source_family=p.family, source_model=p.model) for i, f in enumerate(fs)]
+        return notes, ballot("redteam", p.family.value, len(fs), counts={"exploit_code_stripped": 1})
+
+    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", stripped_once)
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["redteam_exploit_code_stripped"] == 1
     assert "redteam_exploit_code_stripped" in report.incomplete_reasons
