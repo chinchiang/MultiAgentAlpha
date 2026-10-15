@@ -219,7 +219,7 @@ class Pipeline:
         out, rec = call()
         if rec is not None and worth_retrying(rec):
             self.audit.retried(rec)
-            why = ", ".join(sorted(set(rec.details))) or rec.kind
+            why = ", ".join(sorted(set(rec.log_codes))) or rec.kind
             self._say(f"L3/L4: {rec.role} {rec.family} reply rejected ({why}); asked once more")
             out, rec = call()
         return out, rec

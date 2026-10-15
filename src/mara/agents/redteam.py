@@ -125,7 +125,7 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     items, invalid, gaps = base.ballot_items(outcome, _RedRaw, {f.id for f in findings})
     if items is None:
         return [], record(canary_reports=len(tainted), invalid_items=invalid, voided=True, counts={"findings": len(findings)},
-                          details=gaps)
+                          log_codes=gaps)
     stripped = 0
     out = []
     for i in items:

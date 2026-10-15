@@ -89,7 +89,7 @@ def test_a_failed_call_is_never_invalid_output_and_never_retried():
         rec = ReplyRecord.of(exchange.Outcome(exchange.ERROR, error=code), "skeptic", "glm", voided=True, counts={"findings": 1})
         a = Audit()
         a.record(rec)
-        assert (a["skeptic_errors"], a["skeptic_invalid_items"], rec.details) == (1, 0, (code,))
+        assert (a["skeptic_errors"], a["skeptic_invalid_items"], rec.log_codes) == (1, 0, (code,))
         assert not worth_retrying(rec), "a bug in a provider would only repeat"
     assert not exchange.is_provider_error("invalid_item:missing")
 

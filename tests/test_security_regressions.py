@@ -190,7 +190,7 @@ def test_duplicate_judge_reply_is_not_counted(tmp_path):
 
 
 def _voided_skeptic(data, n=3, *, refused=False, error=""):
-    """(the voided reply's detail codes, the counters it writes)."""
+    """(the voided reply's log codes, the counters it writes)."""
     from mara.agents import skeptic
     from mara.audit import Audit
 
@@ -208,7 +208,7 @@ def _voided_skeptic(data, n=3, *, refused=False, error=""):
     assert verdicts == [] and rec.voided
     audit = Audit()
     audit.record(rec)
-    return rec.details, audit
+    return rec.log_codes, audit
 
 
 def _sk(fid, verdict="stands"):

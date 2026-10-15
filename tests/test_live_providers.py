@@ -409,7 +409,7 @@ def test_agent_layer_records_provider_failures_as_errors_not_refusals(exc, code)
     assert comp.error == code and not comp.refused and not comp.truncated and comp.data is None and comp.text == ""
     assert comp.kind == exchange.ERROR and exchange.parse_items(comp, dict) == (None, 0)
     _, rec = review_dimension(_Raises(exc), RepoContext(root=Path(".")), "xss", agent_base.Canary())
-    assert (rec.kind, rec.details) == (exchange.ERROR, (code,)), "an error, not a refusal; its code goes to the log only"
+    assert (rec.kind, rec.log_codes) == (exchange.ERROR, (code,)), "an error, not a refusal; its code goes to the log only"
 
 
 def test_an_unexpected_provider_exception_is_logged_without_its_message(caplog):
