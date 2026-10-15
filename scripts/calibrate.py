@@ -31,6 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from mara.audit import by_family  # noqa: E402
 from mara.decisions import Decision, TrainingRequirement, binding, select  # noqa: E402
 from mara.decisions import load as load_decision_dir  # noqa: E402
 from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
@@ -148,9 +149,8 @@ def family_metrics(runs):
 def audit_rates(runs, families):
     agg = defaultdict(lambda: defaultdict(int))
     for _, rep, _ in runs:
-        for k, v in rep["bias_audit"].items():
-            if "[" in k and k.endswith("]") and isinstance(v, (int, float)) and "~" not in k:
-                key, fam = k[:-1].split("[")
+        for fam, counters in by_family(rep["bias_audit"]).items():
+            for key, v in counters.items():
                 agg[fam][key] += v
     rows = {}
     for fam in families:

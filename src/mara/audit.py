@@ -105,6 +105,26 @@ class ReplyRecord:
             raise ValueError(f"{self.role} carries no canary")
 
 
+def worth_retrying(rec: ReplyRecord) -> bool:
+    """A ballot reply voided as malformed, cut off or not covering every finding exactly once is worth one more call.
+    A refusal and a canary echo are signals, never retried; providers retry their own failures, and any other
+    exception in a provider is a bug a second call would only repeat. The retry depends on whether the reply was
+    well-formed, never on what it concluded."""
+    return (ROLES[rec.role].form == "ballot" and rec.voided and rec.kind not in (REFUSAL, ERROR)
+            and not rec.canary_echoes)
+
+
+def _abstained(rec: ReplyRecord) -> bool:
+    return rec.kind == REFUSAL or (rec.kind == EMPTY and ROLES[rec.role].form == "extraction")
+
+
+def log_tags(rec: ReplyRecord) -> str:
+    """The pipeline log's tags for one reply, as its counters read it ([REFUSED] for an abstention, ...)."""
+    flags = ((_abstained(rec), "REFUSED"), (rec.kind == TRUNCATION, "TRUNCATED"), (rec.kind == ERROR, "PROVIDER ERROR"),
+             (rec.canary_echoes, "CANARY ECHOED"), (rec.canary_reports, "CANARY REPORTED"))
+    return "".join(f" [{tag}]" for on, tag in flags if on)
+
+
 class Audit(defaultdict[str, Any]):
     """Counters (default 0) plus a few labels and nested tables."""
 
@@ -120,12 +140,11 @@ class Audit(defaultdict[str, Any]):
         """Count one reply: the call, how its outcome kind counts for its role, its canary echoes and reports, its
         invalid items and its own counts. Every counter of the role is written, 0 when nothing was counted."""
         c, fam, kind = ROLES[rec.role], rec.family, rec.kind
-        abstained = kind == REFUSAL or (kind == EMPTY and c.form == "extraction")
         # an unparseable reply, and a ballot's empty one, is invalid output: one per reply
         # (docs/adr/0001-reply-outcome-accounting.md)
         invalid_reply = kind == UNPARSEABLE or (kind == EMPTY and c.form == "ballot")
         self.add(c.calls, fam)
-        self.add(c.refusals, fam, int(abstained))
+        self.add(c.refusals, fam, int(_abstained(rec)))
         self.add(c.truncations, fam, int(kind == TRUNCATION))
         self.add(c.errors, fam, int(kind == ERROR))
         self.add(c.unparseable, fam, int(kind == UNPARSEABLE))
@@ -139,7 +158,25 @@ class Audit(defaultdict[str, Any]):
             self["input_tokens"] += rec.input_tokens
             self["output_tokens"] += rec.output_tokens
 
+    def retried(self, rec: ReplyRecord) -> None:
+        """Count a reply discarded for one more call (worth_retrying): only the answer used counts otherwise."""
+        retries = ROLES[rec.role].retries
+        if retries is None:
+            raise ValueError(f"{rec.role} is never asked again")
+        self.add(retries, rec.family)
+
     def incomplete_reasons(self) -> list[str]:
         """The counters of INCOMPLETE_COUNTERS that are non-zero, in that order. Every one of them is then present
         in the audit (0 when nothing was counted), so a report always shows the whole list."""
         return [k for k in INCOMPLETE_COUNTERS if self[k]]
+
+
+def by_family(bias_audit: Mapping[str, Any]) -> dict[str, dict[str, float]]:
+    """The per-family counters of a report's bias_audit, read back from `name[family]`: family -> name -> value.
+    A key naming a pair of families (judge_agreement[a~b]) or holding no number is not one family's counter."""
+    out: dict[str, dict[str, float]] = defaultdict(dict)
+    for k, v in bias_audit.items():
+        name, sep, rest = k.partition("[")
+        if sep and rest.endswith("]") and "[" not in rest and "~" not in rest and isinstance(v, (int, float)):
+            out[rest[:-1]][name] = v
+    return dict(out)
