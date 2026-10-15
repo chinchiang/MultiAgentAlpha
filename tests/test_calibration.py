@@ -126,6 +126,22 @@ def test_audit_rates_reports_per_role_refusals_and_invalid_output():
     assert r["skeptic_unverified_controls"] == 1
 
 
+def test_a_context_canary_echo_does_not_reach_the_reviewer_canary_rate():
+    """The context agent's echoes used to be written into the reviewers' canary_echoes, so calibration charged a
+    context echo to that family's reviewers (docs/adr/0008-reply-accounting.md)."""
+    import calibrate
+
+    from mara import exchange
+    from mara.audit import Audit, ReplyRecord
+
+    a = Audit()
+    a.record(ReplyRecord(role="context", family="anthropic", kind=exchange.OK, canary_echoes=1))
+    a.record(ReplyRecord(role="reviewer", family="anthropic", kind=exchange.OK))
+    r = calibrate.audit_rates([("s", {"bias_audit": dict(a)}, [])], ["anthropic"])["anthropic"]
+    assert r["calls"] == 1 and r["canary_rate"] == 0
+    assert a["context_canary_echoes[anthropic]"] == 1 and "context_canary_echoes" in a.incomplete_reasons()
+
+
 def test_refutation_rates_are_per_finder_family():
     import calibrate
 

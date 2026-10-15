@@ -399,6 +399,7 @@
  "reach.unknown": "unknown",
  "reach.unreachable": "unreachable",
  "reason.canary_echoes": "canary echoes (a planted instruction was followed)",
+ "reason.context_canary_echoes": "context canary echoes",
  "reason.context_coverage_incomplete": "the bundle did not cover every file",
  "reason.context_errors": "context provider errors",
  "reason.context_invalid_items": "invalid context facts",
