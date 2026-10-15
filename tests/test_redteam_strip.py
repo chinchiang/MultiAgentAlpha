@@ -106,12 +106,12 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
     report is incomplete (the same fail-closed treatment as reviewer refusals or canary echoes)."""
     import json as jsonlib
 
-    from mara import exchange
-    from mara.audit import ReplyRecord
     from mara.config import load_config
     from mara.pipeline import Pipeline
     from mara.providers.base import Provider
+    from mara.schemas import RedTeamNote
     from mara.tools.runner import ToolRun
+    from tests.reply_records import ballot
 
     root = Path(__file__).resolve().parents[1]
     vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
@@ -133,8 +133,13 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
     (tmp_path / "app.py").write_text("unsafe()\n")
     pipe.providers = {n: Reply(p.spec) for n, p in pipe.providers.items()}
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: ([], ReplyRecord(
-        role="redteam", family=p.family.value, kind=exchange.OK, counts={"findings": len(fs), "exploit_code_stripped": 1})))
+    def stripped_once(p, ctx, fs):
+        # a note for every finding, the first one's preconditions stripped of exploit code
+        notes = [RedTeamNote(finding_id=f.id, exploitable="conditional", preconditions=redteam.EXPLOIT_STRIP_PLACEHOLDER if i == 0 else "none",
+                             source_family=p.family, source_model=p.model) for i, f in enumerate(fs)]
+        return notes, ballot("redteam", p.family.value, len(fs), counts={"exploit_code_stripped": 1})
+
+    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", stripped_once)
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["redteam_exploit_code_stripped"] == 1
     assert "redteam_exploit_code_stripped" in report.incomplete_reasons

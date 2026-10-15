@@ -12,7 +12,6 @@ from pydantic import ValidationError
 
 from mara import exchange
 from mara.agents import base, judge
-from mara.audit import ReplyRecord
 from mara.config import ModelSpec, load_config
 from mara.context.repo_map import RepoContext, build_context
 from mara.pipeline import Pipeline
@@ -23,6 +22,7 @@ from mara.report.psirt_out import legal_deadlines
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
 from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
+from tests.reply_records import ballot
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -189,7 +189,7 @@ def test_duplicate_judge_reply_is_not_counted(tmp_path):
     assert not votes and rec.voided and rec.invalid_items == 99
 
 
-def _skeptic_errors(data, n=3, *, refused=False, error=""):
+def _voided_skeptic(data, n=3, *, refused=False, error=""):
     """(the voided reply's detail codes, the counters it writes)."""
     from mara.agents import skeptic
     from mara.audit import Audit
@@ -218,21 +218,21 @@ def _sk(fid, verdict="stands"):
 def test_incomplete_ballots_count_one_invalid_item_per_uncovered_finding():
     """A well-formed reply that drops findings used to leave only the summary marker, which the
     invalid-output audit does not count: nothing was counted and the run stayed complete."""
-    details, audit = _skeptic_errors({"items": []})
+    details, audit = _voided_skeptic({"items": []})
     assert details.count("missing_verdict") == 3 and audit["skeptic_invalid_items"] == 3
-    assert _skeptic_errors({"items": [_sk("F-1"), _sk("F-2")]})[1]["skeptic_invalid_items"] == 1
-    details, audit = _skeptic_errors({"items": [_sk("F-1"), _sk("F-1"), _sk("F-2"), _sk("F-3"), _sk("F-9")]})
+    assert _voided_skeptic({"items": [_sk("F-1"), _sk("F-2")]})[1]["skeptic_invalid_items"] == 1
+    details, audit = _voided_skeptic({"items": [_sk("F-1"), _sk("F-1"), _sk("F-2"), _sk("F-3"), _sk("F-9")]})
     assert details.count("duplicate_verdict") == 1 and details.count("unexpected_verdict") == 1 and audit["skeptic_invalid_items"] == 2
     # a schema-invalid item already counts once and is not counted again as missing
-    details, audit = _skeptic_errors({"items": [_sk("F-1"), {"finding_id": "F-2", "verdict": "maybe"}]})
+    details, audit = _voided_skeptic({"items": [_sk("F-1"), {"finding_id": "F-2", "verdict": "maybe"}]})
     assert audit["skeptic_invalid_items"] == 2 and details.count("missing_verdict") == 1
     # response-level outcomes are not multiplied by the batch size
-    details, audit = _skeptic_errors(None, refused=True)
+    details, audit = _voided_skeptic(None, refused=True)
     assert (audit["skeptic_refusals"], audit["skeptic_invalid_items"], details) == (1, 0, ())
     # a failed call is a provider error (skeptic_errors), never invalid output charged to the model
-    details, audit = _skeptic_errors(None, error="provider_http_error:503")
+    details, audit = _voided_skeptic(None, error="provider_http_error:503")
     assert (audit["skeptic_errors"], audit["skeptic_invalid_items"]) == (1, 0) and "provider_http_error:503" in details
-    assert _skeptic_errors(None)[1]["skeptic_invalid_items"] == 1  # empty body
+    assert _voided_skeptic(None)[1]["skeptic_invalid_items"] == 1  # empty body
 
 
 class _OverrideRole(Provider):
@@ -370,7 +370,7 @@ def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_pa
     pipe, f = pipeline(tmp_path), finding()
     seen = []
     def answer(role):
-        return lambda p, ctx, fs: (seen.append((role, p.family)), ([], ReplyRecord(role=role, family=p.family.value, kind=exchange.OK)))[1]
+        return lambda p, ctx, fs: (seen.append((role, p.family)), ([], ballot(role, p.family.value, len(fs), exchange.REFUSAL)))[1]
 
     monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", answer("skeptic"))
     monkeypatch.setattr("mara.pipeline.redteam.run_redteam", answer("redteam"))
@@ -406,8 +406,7 @@ def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path, monkeypat
     pipe = pipeline(tmp_path)
     (tmp_path / "app.py").write_text("unsafe()")
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic",
-                        lambda p, ctx, fs: ([], ReplyRecord(role="skeptic", family=p.family.value, kind=exchange.REFUSAL, voided=True)))
+    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([], ballot("skeptic", p.family.value, len(fs), exchange.REFUSAL)))
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["skeptic_refusals"] == report.bias_audit["skeptic_calls"] >= 1
     assert report.bias_audit["skeptic_invalid_items"] == 0
@@ -421,7 +420,7 @@ def test_judge_refusal_is_counted_separately_from_invalid_output(tmp_path, monke
     (tmp_path / "app.py").write_text("unsafe()")
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     monkeypatch.setattr("mara.pipeline.judge.run_judge", lambda p, batch, pass_id, self_ids=None: (
-        [], ReplyRecord(role="judge", family=p.family.value, kind=exchange.REFUSAL, voided=True)))
+        [], ballot("judge", p.family.value, len(batch), exchange.REFUSAL, pass_id=pass_id)))
     report = pipe.run(tmp_path, mode="mock")
     # every judge call refused: 3 families x 2 chunks (30 findings, MAX_L4_FINDINGS per pass) x 2 passes
     assert report.bias_audit["judge_refusals"] == report.bias_audit["judge_calls"] == 12

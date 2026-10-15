@@ -10,9 +10,10 @@ from collections import Counter
 from pathlib import Path
 
 from ..context.repo_map import RepoContext, fence_safe, source_lines
-from ..exchange import CANARY_PATH, COMMON_SYSTEM, PROVIDER_ERROR_RE, Canary, cites_canary, load_prompt
+from ..exchange import CANARY_PATH, COMMON_SYSTEM, PROVIDER_ERROR_RE, Canary, Outcome, cites_canary, load_prompt, parse_items
 
-__all__ = ["CANARY_PATH", "COMMON_SYSTEM", "PROVIDER_ERROR_RE", "Canary", "cites_canary", "coverage_gaps", "load_prompt", "verify_quote"]
+__all__ = ["CANARY_PATH", "COMMON_SYSTEM", "PROVIDER_ERROR_RE", "Canary", "ballot_items", "cites_canary", "coverage_gaps", "load_prompt",
+           "verify_quote"]
 
 
 MIN_QUOTE_CHARS = 8  # non-whitespace characters a quote needs, unless it is the whole claimed line
@@ -57,3 +58,14 @@ def coverage_gaps(expected: set[str], ids: list[str], invalid: int) -> tuple[str
     duplicated = sum(n - 1 for i, n in seen.items() if i in expected)
     unexpected = sum(n for i, n in seen.items() if i not in expected)
     return ("missing_verdict",) * missing + ("duplicate_verdict",) * duplicated + ("unexpected_verdict",) * unexpected
+
+
+def ballot_items(outcome: Outcome, model_cls, expected: set[str]) -> tuple[list | None, int, tuple[str, ...]]:
+    """The one rule every ballot role (skeptic, red team, judge) applies to its reply: (the items, or None when the
+    reply is voided; the invalid items it held; the coverage codes, for the log). A reply is voided when it holds no
+    list, holds an invalid item, or does not rule on every expected finding exactly once."""
+    items, invalid = parse_items(outcome, model_cls)
+    gaps = coverage_gaps(expected, [i.finding_id for i in items], invalid) if items is not None else ()
+    if items is None or invalid or gaps:
+        return None, invalid + len(gaps), gaps
+    return items, 0, ()

@@ -10,6 +10,7 @@ from mara.audit import INCOMPLETE_COUNTERS, ROLES, Audit, ReplyRecord, by_family
 from mara.config import load_config
 from mara.pipeline import Pipeline
 from mara.providers.base import Provider
+from tests.reply_records import ballot, extraction
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,12 +37,19 @@ _V4_INCOMPLETE_COUNTERS = (
 CANARY_ROLES = ("reviewer", "context", "skeptic", "redteam")
 
 
+def _record(role, kind=exchange.OK, **fields):
+    """A record of `role` as its agent writes it; a ballot's is over one finding (tests/reply_records.py)."""
+    if ROLES[role].form == "ballot":
+        return ballot(role, "glm", 1, kind, **fields)
+    return extraction(role, "glm", kind, **fields)
+
+
 @pytest.mark.parametrize("role", list(ROLES))
 @pytest.mark.parametrize("kind", exchange.KINDS)
 def test_every_reply_but_an_ok_one_makes_the_review_incomplete(role, kind):
     """The completeness rule used to be checked by a test reading pipeline.py as text."""
     a = Audit()
-    a.record(ReplyRecord(role=role, family="glm", kind=kind))
+    a.record(_record(role, kind))
     assert bool(a.incomplete_reasons()) == (kind != exchange.OK), a.incomplete_reasons()
     assert all(k in a for k in INCOMPLETE_COUNTERS), "every completeness counter is in the report, 0 or not"
 
@@ -49,8 +57,8 @@ def test_every_reply_but_an_ok_one_makes_the_review_incomplete(role, kind):
 @pytest.mark.parametrize("role", CANARY_ROLES)
 def test_a_canary_echo_makes_the_review_incomplete_and_a_report_does_not(role):
     echo, report = Audit(), Audit()
-    echo.record(ReplyRecord(role=role, family="glm", kind=exchange.OK, canary_echoes=1))
-    report.record(ReplyRecord(role=role, family="glm", kind=exchange.OK, canary_reports=2))
+    echo.record(_record(role, canary_echoes=1))
+    report.record(_record(role, canary_reports=1))
     assert len(echo.incomplete_reasons()) == 1 and not report.incomplete_reasons()
 
 
@@ -71,7 +79,7 @@ def test_the_incomplete_counters_are_the_old_ones_in_their_old_order_and_the_con
 def test_a_failed_call_is_never_invalid_output_and_never_retried():
     for code in ("provider_http_error:503", "provider_connection_failed", "provider_call_failed:KeyError"):
         assert exchange.is_provider_error(code)
-        rec = ReplyRecord.of(exchange.Outcome(exchange.ERROR, error=code), "skeptic", "glm", voided=True)
+        rec = ReplyRecord.of(exchange.Outcome(exchange.ERROR, error=code), "skeptic", "glm", voided=True, counts={"findings": 1})
         a = Audit()
         a.record(rec)
         assert (a["skeptic_errors"], a["skeptic_invalid_items"], rec.details) == (1, 0, (code,))
@@ -110,23 +118,21 @@ def test_a_ballot_provider_failure_is_counted_as_an_error_and_blocks(tmp_path, r
 def test_a_voided_ballot_reply_is_worth_one_more_call_unless_refused_failed_or_echoed():
     """GLM as skeptic answered four verdicts for three findings on one call and exactly three on the next
     (2026-10-08). Refusals and canary echoes are signals; providers retry their own failures."""
-    def voided(kind, role="skeptic", **kw):
-        return ReplyRecord(role=role, family="glm", kind=kind, voided=True, **kw)
-
     for role in ("skeptic", "redteam", "judge"):
-        assert all(worth_retrying(voided(k, role)) for k in (exchange.TRUNCATION, exchange.UNPARSEABLE, exchange.EMPTY, exchange.OK))
-        assert not any(worth_retrying(voided(k, role)) for k in (exchange.REFUSAL, exchange.ERROR))
-    assert not worth_retrying(voided(exchange.OK, canary_echoes=1))
-    assert not worth_retrying(ReplyRecord(role="skeptic", family="glm", kind=exchange.OK)), "a reply that was used"
-    assert not worth_retrying(voided(exchange.TRUNCATION, "reviewer")), "an extraction role is never asked again"
+        assert all(worth_retrying(ballot(role, "glm", 1, k)) for k in (exchange.TRUNCATION, exchange.UNPARSEABLE, exchange.EMPTY))
+        assert worth_retrying(ballot(role, "glm", 1, missing=1)), "an ok reply that did not cover every finding"
+        assert not any(worth_retrying(ballot(role, "glm", 1, k)) for k in (exchange.REFUSAL, exchange.ERROR))
+        assert not worth_retrying(ballot(role, "glm", 1)), "a reply that was used"
+    assert not worth_retrying(ballot("skeptic", "glm", 1, canary_echoes=1))
+    assert not worth_retrying(extraction("reviewer", "glm", exchange.TRUNCATION)), "an extraction role is never asked again"
     a = Audit()
-    a.retried(voided(exchange.UNPARSEABLE, "judge"))
+    a.retried(ballot("judge", "glm", 1, exchange.UNPARSEABLE))
     assert (a["judge_retries"], a["judge_retries[glm]"], a.incomplete_reasons()) == (1, 1, [])
 
 
 def test_the_log_tags_say_what_the_record_counts():
-    def tags(role, kind, **kw):
-        return log_tags(ReplyRecord(role=role, family="glm", kind=kind, **kw))
+    def tags(role, kind, **fields):
+        return log_tags(_record(role, kind, **fields))
 
     assert tags("reviewer", exchange.OK) == ""
     assert tags("reviewer", exchange.EMPTY) == " [REFUSED]", "an extraction role abstains by saying nothing"
@@ -141,7 +147,7 @@ def test_the_per_family_counters_are_read_back_from_their_names():
     a = Audit()
     a.add("judge_refusals", "glm", 2)
     a.add("judge_refusals", "gemini")
-    a.record(ReplyRecord(role="context", family="gemini", kind=exchange.OK, canary_echoes=1))
+    a.record(extraction("context", "gemini", canary_echoes=1))
     a["judge_agreement[glm~gemini]"] = 0.5  # a pair of families, not one
     a["rollout_phase"] = "shadow"
     fams = by_family(dict(a))

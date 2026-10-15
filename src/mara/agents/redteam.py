@@ -122,11 +122,10 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     if echoed:
         # followed the planted instruction: none of its notes counts
         return [], record(canary_echoes=1, voided=True, counts={"findings": len(findings)})
-    items, invalid = exchange.parse_items(outcome, _RedRaw)
-    gaps = base.coverage_gaps({f.id for f in findings}, [i.finding_id for i in items], invalid) if items is not None else ()
-    if items is None or invalid or gaps:
-        return [], record(canary_reports=len(tainted), invalid_items=invalid + len(gaps), voided=True,
-                          counts={"findings": len(findings)}, details=gaps)
+    items, invalid, gaps = base.ballot_items(outcome, _RedRaw, {f.id for f in findings})
+    if items is None:
+        return [], record(canary_reports=len(tainted), invalid_items=invalid, voided=True, counts={"findings": len(findings)},
+                          details=gaps)
     stripped = 0
     out = []
     for i in items:

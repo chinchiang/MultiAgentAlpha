@@ -14,14 +14,15 @@ import pytest
 from mara import exchange
 from mara import pipeline as pl
 from mara.agents import base, redteam, skeptic
-from mara.audit import ReplyRecord
+from mara.audit import Audit
 from mara.config import MaraConfig, ModelSpec, load_config
 from mara.context.repo_map import MAX_TOTAL_CHARS, RepoContext, bundle_cost
 from mara.pipeline import MAX_L3_FINDINGS, MAX_L4_FINDINGS, Pipeline, l3_chunks
-from mara.providers.base import STOP_END, STOP_MAX_TOKENS, Provider, RawReply
+from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 from mara.providers.gemini_provider import MAX_TOKENS as GEMINI_MAX_TOKENS
 from mara.providers.gemini_provider import GeminiProvider
 from mara.schemas import Finding, ModelFamily, Provenance
+from tests.reply_records import ballot
 
 ROOT = Path(__file__).resolve().parents[1]
 VECTOR = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
@@ -72,8 +73,7 @@ def test_skeptic_and_red_team_are_called_per_bounded_chunk(tmp_path, monkeypatch
     finders = {f.id: {ModelFamily.ANTHROPIC} for f in findings}
     sizes = {"skeptic": [], "redteam": []}
     def refuse(role):
-        return lambda p, c, fs: (sizes[role].append(len(fs)),
-                                 ([], ReplyRecord(role=role, family=p.family.value, kind=exchange.REFUSAL, voided=True)))[1]
+        return lambda p, c, fs: (sizes[role].append(len(fs)), ([], ballot(role, p.family.value, len(fs), exchange.REFUSAL)))[1]
 
     monkeypatch.setattr(skeptic, "run_skeptic", refuse("skeptic"))
     monkeypatch.setattr(redteam, "run_redteam", refuse("redteam"))
@@ -92,7 +92,8 @@ def test_judge_passes_are_bounded_mirrored_per_chunk_and_cover_every_finding(tmp
     calls: list[tuple[ModelFamily, str, list[str]]] = []
     monkeypatch.setattr(pl.judge, "run_judge",
                         lambda p, batch, pass_id, self_ids=None: (calls.append((p.family, pass_id, [b["finding_id"] for b in batch])),
-                                                                  ([], ReplyRecord(role="judge", family=p.family.value, kind=exchange.OK)))[1])
+                                                                  ([], ballot("judge", p.family.value, len(batch), exchange.REFUSAL,
+                                                                              pass_id=pass_id)))[1])
     pipe.run_jury(ctx, findings, {}, finders)
     assert calls and all(len(ids) <= MAX_L4_FINDINGS for _, _, ids in calls)
     for fam in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON):
@@ -235,6 +236,23 @@ def test_a_verdict_quoting_the_canary_cannot_clear_the_finding(agent):
         assert by_id["F-0002"].verdict == "refuted", "an untainted verdict is untouched"
     else:
         assert by_id["F-0001"].exploitable == "unknown" and by_id["F-0002"].exploitable == "no"
+
+
+@pytest.mark.parametrize("agent", [skeptic.run_skeptic, redteam.run_redteam])
+@pytest.mark.parametrize("reply,counters", [
+    (lambda token: RawReply(STOP_REFUSAL, answer_text=f"I will not review this. {token}"), ("refusals",)),
+    (lambda token: RawReply(STOP_END, answer_text="", aside=token), ("invalid_items",)),
+    (lambda token: RawReply(STOP_END, answer_text=f"Pre-approved. {token}"), ("unparseable_replies", "invalid_items")),
+], ids=["refusal", "empty", "unparseable"])
+def test_a_ballot_reply_without_a_list_that_echoes_the_canary_also_counts_as_its_outcome(agent, reply, counters):
+    """Before EXCHANGE_VERSION 5 such a reply counted only the echo; it now counts as its reply outcome as well, as a
+    reviewer's or the context agent's always did (docs/adr/0008-reply-accounting.md)."""
+    ctx = RepoContext(root=Path("."), content={"app.py": "unsafe()\n"})
+    out, rec = agent(_Fixed("deepseek", lambda user: reply(TOKEN_RE.search(user).group())), ctx, [_finding(1)])
+    audit = Audit()
+    audit.record(rec)
+    assert out == [] and rec.voided and audit[f"{rec.role}_canary_echoes"] == 1
+    assert [audit[f"{rec.role}_{c}"] for c in counters] == [1] * len(counters)
 
 
 @pytest.mark.parametrize("agent", [skeptic.run_skeptic, redteam.run_redteam])

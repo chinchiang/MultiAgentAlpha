@@ -15,13 +15,13 @@ from typer.testing import CliRunner
 
 from mara import exchange
 from mara.agents import skeptic
-from mara.audit import ReplyRecord
 from mara.cli import app
 from mara.config import MaraConfig, load_config
 from mara.context.repo_map import RepoContext
 from mara.pipeline import MAX_L4_FINDINGS, Pipeline, l4_chunks
-from mara.schemas import Finding, ModelFamily, Provenance, SkepticVerdict
+from mara.schemas import Finding, ModelFamily, Provenance, RedTeamNote, SkepticVerdict
 from mara.tools import runner
+from tests.reply_records import ballot
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -56,7 +56,8 @@ def test_no_finding_is_left_alone_in_a_judge_chunk(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr("mara.pipeline.judge.run_judge",
                         lambda p, batch, pass_id, self_ids=None: (calls.append([b["finding_id"] for b in batch]),
-                                                                  ([], ReplyRecord(role="judge", family=p.family.value, kind=exchange.OK)))[1])
+                                                                  ([], ballot("judge", p.family.value, len(batch), exchange.REFUSAL,
+                                                                              pass_id=pass_id)))[1])
     pipe.run_jury(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings, {},
                   {f.id: {ModelFamily.ANTHROPIC} for f in findings})
     assert calls and {len(c) for c in calls} == {13}
@@ -82,10 +83,10 @@ def test_l3_canary_reports_reach_the_bias_audit(tmp_path, monkeypatch):
     f = _finding(1)
     verdict = SkepticVerdict(finding_id=f.id, verdict="stands", reason="r", sanitizer_or_control="", source_family=ModelFamily.NEMOTRON,
                              source_model="m")
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: (
-        [verdict], ReplyRecord(role="skeptic", family=p.family.value, kind=exchange.OK, canary_reports=1)))
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: (
-        [], ReplyRecord(role="redteam", family=p.family.value, kind=exchange.REFUSAL, canary_reports=1, voided=True)))
+    note = RedTeamNote(finding_id=f.id, exploitable="unknown", preconditions="none", source_family=ModelFamily.DEEPSEEK, source_model="m")
+    # each answered its one finding with a verdict that names the planted file: kept, and counted as a report
+    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([verdict], ballot("skeptic", p.family.value, 1, canary_reports=1)))
+    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: ([note], ballot("redteam", p.family.value, 1, canary_reports=1)))
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"})
     pipe.run_skeptics(ctx, [f], {f.id: {ModelFamily.ANTHROPIC}})
     pipe.run_redteam(ctx, [f], {f.id: {ModelFamily.ANTHROPIC}})

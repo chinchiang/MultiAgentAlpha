@@ -285,8 +285,8 @@ an empty reply is an abstention for the reviewers and the context agent and inva
 ballots. A single ```` ```json ```` code fence around the answer is accepted from any family. Reports
 carry `exchange_version` in the bias audit, and the calibration trend compares only periods of one
 version. From version 5 the context agent's canary echoes and reports are `context_canary_echoes` and
-`context_canary_reports`, so `canary_echoes` counts reviewer replies only (`docs/adr/0008-reply-accounting.md`). The same module lays every role's prompt out (`build_prompt`): only MARA's own instructions
-stand outside a fence; repository data - the files, and the repository summary, whose names and routes
+`context_canary_reports`, so `canary_echoes` counts reviewer replies only (`docs/adr/0008-reply-accounting.md`).
+The same module lays every role's prompt out (`build_prompt`): only MARA's own instructions stand outside a fence; repository data - the files, and the repository summary, whose names and routes
 come from the repository - is inside `<untrusted_repository_data>`, and derived data - the context facts
 for the reviewers, the findings with their verbatim quotes for the skeptic, red team and judges - inside
 `<derived_data kind="...">` with `<`, `>` and `&` escaped (`tests/test_prompt_fences.py` plants a sentinel in

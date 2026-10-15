@@ -52,11 +52,13 @@ def test_extraction_roles_read_an_empty_reply_as_an_abstention_and_ballots_as_in
     assert (empty.kind, unparseable.kind) == (exchange.EMPTY, exchange.UNPARSEABLE)
     for role, counter in (("reviewer", "reviewer_refusals"), ("context", "context_refusals"), ("skeptic", "skeptic_invalid_items"),
                           ("redteam", "redteam_invalid_items"), ("judge", "judge_invalid_items")):
+        # as the agents write them: voided, and a ballot's over the one finding it was asked about
+        asked = {"counts": {"findings": 1}} if ROLES[role].form == "ballot" else {}
         a = Audit()
-        a.record(ReplyRecord.of(empty, role, "glm"))
+        a.record(ReplyRecord.of(empty, role, "glm", voided=True, **asked))
         assert a.incomplete_reasons() == [counter], role
         a = Audit()
-        a.record(ReplyRecord.of(unparseable, role, "glm"))
+        a.record(ReplyRecord.of(unparseable, role, "glm", voided=True, **asked))
         assert a[f"{role}_unparseable_replies"] == 1 and a[ROLES[role].refusals] == 0 and a[ROLES[role].invalid] == 1, role
     assert exchange.parse_items(empty, dict) == (None, 0)
 

@@ -43,12 +43,11 @@ def run_judge(provider: Provider, batch: list[dict], pass_id: PassId,
                            derived=(exchange.Derived("findings", batch),))
     # a finding is judged in two mirrored passes and counted once, with the forward one
     findings = {"findings": len(batch) if pass_id == "forward" else 0}
-    items, invalid = exchange.parse_items(outcome, _JudgeRaw)
     order = {b["finding_id"]: i for i, b in enumerate(batch)}
-    gaps = base.coverage_gaps(set(order), [i.finding_id for i in items], invalid) if items is not None else ()
-    if items is None or invalid or gaps:
-        return [], ReplyRecord.of(outcome, "judge", provider.family.value, invalid_items=invalid + len(gaps), voided=True,
-                                  counts=findings, details=gaps)
+    items, invalid, gaps = base.ballot_items(outcome, _JudgeRaw, set(order))
+    if items is None:
+        return [], ReplyRecord.of(outcome, "judge", provider.family.value, invalid_items=invalid, voided=True, counts=findings,
+                                  details=gaps)
     votes = []
     for i in items:
         # every finding_id of the batch is covered exactly once (checked above), so no lookup guard is needed

@@ -328,23 +328,20 @@ def _pipe(tmp_path):
     return Pipeline(load_config(root / "config" / "mara.mock.yaml"), out_dir=tmp_path)
 
 
-def test_a_malformed_or_incomplete_reply_is_asked_once_more_but_signals_are_not(tmp_path):
+def test_an_unparseable_or_incomplete_reply_is_asked_once_more_but_signals_are_not(tmp_path):
     from mara import exchange
-    from mara.audit import ReplyRecord
-
-    def rec(role="skeptic", kind=exchange.OK, family="glm", **kw):
-        return ReplyRecord(role=role, family=family, kind=kind, **kw)
+    from tests.reply_records import ballot
 
     pipe = _pipe(tmp_path)
-    replies = iter([([], rec(voided=True, invalid_items=1, details=("unexpected_verdict",))), (["v1", "v2"], rec())])
-    assert pipe._once_more(lambda: next(replies)) == (["v1", "v2"], rec())
+    replies = iter([([], ballot("skeptic", "glm", 2, missing=1)), (["v1", "v2"], ballot("skeptic", "glm", 2))])
+    assert pipe._once_more(lambda: next(replies)) == (["v1", "v2"], ballot("skeptic", "glm", 2))
     assert pipe.audit["skeptic_retries"] == 1 and pipe.audit["skeptic_retries[glm]"] == 1
     calls = []
-    echo = rec("redteam", canary_echoes=1, voided=True)
+    echo = ballot("redteam", "glm", 1, canary_echoes=1)
     assert pipe._once_more(lambda: calls.append(1) or ([], echo)) == ([], echo) and len(calls) == 1, \
         "an echo is a finding about the model, not noise"
-    second = rec("judge", family="gemini", voided=True, invalid_items=1, details=("missing_verdict",))
-    replies = iter([([], rec("judge", exchange.EMPTY, "gemini", voided=True)), ([], second)])
+    second = ballot("judge", "gemini", 1, missing=1)
+    replies = iter([([], ballot("judge", "gemini", 1, exchange.EMPTY)), ([], second)])
     assert pipe._once_more(lambda: next(replies)) == ([], second)
     assert pipe.audit["judge_retries"] == 1, "only one more call; the second answer stands"
 
@@ -360,13 +357,9 @@ def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path, monkeypatch)
                 source_family=ModelFamily.ANTHROPIC, source_model="m")
     good = SkepticVerdict(finding_id="F-0001", verdict="stands", reason="r", sanitizer_or_control="none",
                           source_family=ModelFamily.DEEPSEEK, source_model="m")
-    from mara import exchange
-    from mara.audit import ReplyRecord
+    from tests.reply_records import ballot
 
-    def rec(**kw):
-        return ReplyRecord(role="skeptic", family="deepseek", kind=exchange.OK, **kw)
-
-    replies = iter([([], rec(voided=True, invalid_items=1, details=("unexpected_verdict",))), ([good], rec())])
+    replies = iter([([], ballot("skeptic", "deepseek", 1, missing=1)), ([good], ballot("skeptic", "deepseek", 1))])
     monkeypatch.setattr(skeptic, "run_skeptic", lambda *a, **k: next(replies))
     verdicts, abstained = pipe.run_skeptics(RepoContext(root=tmp_path), [f], {"F-0001": {ModelFamily.ANTHROPIC}})
     assert verdicts == [good] and not abstained

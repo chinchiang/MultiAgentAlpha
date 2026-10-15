@@ -113,7 +113,8 @@ class ReplyRecord:
 
 
 def worth_retrying(rec: ReplyRecord) -> bool:
-    """A ballot reply voided as malformed, cut off or not covering every finding exactly once is worth one more call.
+    """A ballot reply voided as unparseable, empty, cut off, holding invalid items or not covering every finding exactly
+    once is worth one more call.
     A refusal and a canary echo are signals, never retried; providers retry their own failures, and any other
     exception in a provider is a bug a second call would only repeat. The retry depends on whether the reply was
     well-formed, never on what it concluded."""

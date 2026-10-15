@@ -131,12 +131,12 @@ def test_a_context_canary_echo_does_not_reach_the_reviewer_canary_rate():
     context echo to that family's reviewers (docs/adr/0008-reply-accounting.md)."""
     import calibrate
 
-    from mara import exchange
-    from mara.audit import Audit, ReplyRecord
+    from mara.audit import Audit
+    from tests.reply_records import extraction
 
     a = Audit()
-    a.record(ReplyRecord(role="context", family="anthropic", kind=exchange.OK, canary_echoes=1))
-    a.record(ReplyRecord(role="reviewer", family="anthropic", kind=exchange.OK))
+    a.record(extraction("context", "anthropic", canary_echoes=1))
+    a.record(extraction("reviewer", "anthropic"))
     r = calibrate.audit_rates([("s", {"bias_audit": dict(a)}, [])], ["anthropic"])["anthropic"]
     assert r["calls"] == 1 and r["canary_rate"] == 0
     assert a["context_canary_echoes[anthropic]"] == 1 and "context_canary_echoes" in a.incomplete_reasons()

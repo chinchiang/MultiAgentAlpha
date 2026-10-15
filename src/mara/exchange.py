@@ -6,14 +6,14 @@ that judges a reply happens here, once, for every family:
   * `classify` turns a RawReply into an `Outcome` of one kind - ok, truncation, unparseable, empty, refusal or
     error - by the rules of docs/adr/0001-reply-outcome-accounting.md: a truncation is a reply stopped at the
     output limit (a budget problem, never charged to the model), an unparseable reply ended normally without
-    the structured answer (invalid output, charged to the model), an empty reply is read by role;
+    the structured answer (invalid output, charged to the model), an empty reply ended normally with no text;
   * `call` makes the provider call and maps any exception to a sanitised error code;
   * `Canary` plants the injection canary and screens an Outcome for a canary echo or a canary report;
   * `parse_items` validates a ballot reply's items against a pydantic model;
-
-How each reply outcome counts for a role, an empty reply included, is mara.audit's table, not a rule here.
   * `build_prompt` / `ask` lay a role's prompt out: trusted instructions outside the fences, repository data
     inside <untrusted_repository_data>, derived data inside <derived_data kind=...>.
+
+How each reply outcome counts for a role, an empty reply included, is mara.audit's table, not a rule here.
 
 EXCHANGE_VERSION names the accounting these rules produce: refusal, invalid and truncation counts of different
 versions are not comparable, so it is recorded in every report and calibration record.
