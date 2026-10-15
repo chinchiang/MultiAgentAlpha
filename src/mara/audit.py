@@ -34,7 +34,7 @@ class RoleCounters:
     so an empty reply is invalid output. `local` maps each of the role's own counts to (counter, whether a non-zero
     value makes the review incomplete). A role without canary counters carries no canary."""
 
-    form: Literal["extraction", "ballot"]
+    role_type: Literal["extraction", "ballot"]
     calls: str
     refusals: str
     truncations: str
@@ -46,14 +46,14 @@ class RoleCounters:
     local: Mapping[str, tuple[str, bool]] = field(default_factory=dict)
     tokens: bool = False  # the ballot roles do not count their tokens
 
-    def blocking(self) -> tuple[str, ...]:
+    def incomplete_counters(self) -> tuple[str, ...]:
         """This role's counters that make the review incomplete, in the order the review status lists them."""
         fixed = (self.refusals, self.truncations, self.errors, self.invalid, self.canary.echoes if self.canary else None)
-        return tuple(c for c in fixed if c) + tuple(name for name, blocks in self.local.values() if blocks)
+        return tuple(c for c in fixed if c) + tuple(name for name, makes_incomplete in self.local.values() if makes_incomplete)
 
 
 def _ballot(role: str, *, canary: bool, local: Mapping[str, tuple[str, bool]]) -> RoleCounters:
-    return RoleCounters(form="ballot", calls=f"{role}_calls", refusals=f"{role}_refusals", truncations=f"{role}_truncations",
+    return RoleCounters(role_type="ballot", calls=f"{role}_calls", refusals=f"{role}_refusals", truncations=f"{role}_truncations",
                         errors=f"{role}_errors", unparseable=f"{role}_unparseable_replies", invalid=f"{role}_invalid_items",
                         canary=CanaryCounters(f"{role}_canary_echoes", f"{role}_canary_reports") if canary else None,
                         retries=f"{role}_retries",
@@ -62,12 +62,12 @@ def _ballot(role: str, *, canary: bool, local: Mapping[str, tuple[str, bool]]) -
 
 ROLES: Mapping[Role, RoleCounters] = {
     # the reviewers' counters keep the names they had before the other roles existed
-    "reviewer": RoleCounters(form="extraction", calls="reviewer_calls", refusals="reviewer_refusals",
+    "reviewer": RoleCounters(role_type="extraction", calls="reviewer_calls", refusals="reviewer_refusals",
                              truncations="reviewer_truncations", errors="reviewer_errors",
                              unparseable="reviewer_unparseable_replies", invalid="invalid_findings_dropped",
                              canary=CanaryCounters("canary_echoes", "canary_reports"),
                              local={"unverified_quotes": ("findings_with_unverified_quotes", False)}, tokens=True),
-    "context": RoleCounters(form="extraction", calls="context_calls", refusals="context_refusals",
+    "context": RoleCounters(role_type="extraction", calls="context_calls", refusals="context_refusals",
                             truncations="context_truncations", errors="context_errors",
                             unparseable="context_unparseable_replies", invalid="context_invalid_items",
                             canary=CanaryCounters("context_canary_echoes", "context_canary_reports"),
@@ -78,7 +78,7 @@ ROLES: Mapping[Role, RoleCounters] = {
     "judge": _ballot("judge", canary=False, local={}),
 }
 
-INCOMPLETE_COUNTERS = tuple(name for counters in ROLES.values() for name in counters.blocking())
+INCOMPLETE_COUNTERS = tuple(name for counters in ROLES.values() for name in counters.incomplete_counters())
 
 
 @dataclass(frozen=True)
@@ -125,12 +125,12 @@ def worth_retrying(rec: ReplyRecord) -> bool:
     A refusal and a canary echo are signals, never retried; providers retry their own failures, and any other
     exception in a provider is a bug a second call would only repeat. The retry depends on whether the reply was
     well-formed, never on what it concluded."""
-    return (ROLES[rec.role].form == "ballot" and rec.voided and rec.kind not in (REFUSAL, ERROR)
+    return (ROLES[rec.role].role_type == "ballot" and rec.voided and rec.kind not in (REFUSAL, ERROR)
             and not rec.canary_echoes)
 
 
 def _abstained(rec: ReplyRecord) -> bool:
-    return rec.kind == REFUSAL or (rec.kind == EMPTY and ROLES[rec.role].form == "extraction")
+    return rec.kind == REFUSAL or (rec.kind == EMPTY and ROLES[rec.role].role_type == "extraction")
 
 
 def log_tags(*records: ReplyRecord) -> str:
@@ -158,7 +158,7 @@ class Audit(defaultdict[str, Any]):
         c, fam, kind = ROLES[rec.role], rec.family, rec.kind
         # an unparseable reply, and a ballot's empty one, is invalid output: one per reply
         # (docs/adr/0001-reply-outcome-accounting.md)
-        invalid_reply = kind == UNPARSEABLE or (kind == EMPTY and c.form == "ballot")
+        invalid_reply = kind == UNPARSEABLE or (kind == EMPTY and c.role_type == "ballot")
         self.add(c.calls, fam)
         self.add(c.refusals, fam, int(_abstained(rec)))
         self.add(c.truncations, fam, int(kind == TRUNCATION))

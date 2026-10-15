@@ -36,7 +36,7 @@ def extraction(role: Role, family: str, kind: str = OK, *, wrong_shape: bool = F
                log_codes: tuple[str, ...] = (), **fields) -> ReplyRecord:
     """A reviewer's or the context agent's record. `wrong_shape`: an ok reply whose answer is not the object asked for,
     voided as one invalid item; `invalid_items` are the items an ok reply the agent used could not read."""
-    if ROLES[role].form != "extraction":
+    if ROLES[role].role_type != "extraction":
         raise ValueError(f"{role} is a ballot role")
     _check_reply(kind, fields)
     echoed = bool(fields.get("canary_echoes"))
@@ -58,7 +58,7 @@ def ballot(role: Role, family: str, findings: int, kind: str = OK, *, missing: i
            counts: dict[str, int] | None = None, log_codes: tuple[str, ...] = (), **fields) -> ReplyRecord:
     """A skeptic's, red team's or judge's record for one call over `findings` findings. `missing`: the findings an ok
     reply ruled on not at all, each an invalid item that voids it."""
-    if ROLES[role].form != "ballot":
+    if ROLES[role].role_type != "ballot":
         raise ValueError(f"{role} is an extraction role")
     if missing and kind != OK:
         raise ValueError("a reply without a list is not checked for coverage")
