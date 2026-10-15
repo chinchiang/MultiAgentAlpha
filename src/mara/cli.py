@@ -74,11 +74,11 @@ def review(
         raise
     progress.finish(ok=True)
     phase = cfg.rollout.phase
-    if not report.gate_passed and phase != "blocking":
-        # G-10: outside `blocking` the phase records a blocked gate without enforcing it; an explicit
-        # --fail-on-gate overrides that for this run (docs/governance-templates.md), and the message says so
+    if not report.gate_passed:
+        # G-10: whether a blocked gate is enforced (the blocking phase, or --fail-on-gate) was decided by
+        # mara.review_status and recorded in report.json; the message only says which
         if report.gate_enforced:
-            console.print(f"rollout phase [bold]{phase}[/bold]: the gate blocked; --fail-on-gate enforces it for this run (exit 2)")
+            console.print(f"rollout phase [bold]{phase}[/bold]: the gate blocked and is enforced (exit 2)")
         else:
             console.print(f"rollout phase [bold]{phase}[/bold]: the gate would have blocked; result recorded, merge not enforced (G-10)")
     if psirt_failed:

@@ -288,7 +288,7 @@ def test_the_markdown_report_shows_the_gate_reasons_each_blocking_finding_and_wh
     assert "- Blocks the gate: blocking&#95;tier&#95;and&#95;severity" in f1
     assert "Blocks the gate" not in md.split("### F-0016 · ")[1].split("\n### ")[0]
     enforced = render_markdown(report.model_copy(update={"gate_enforced": True})).split("\n## ")[0]
-    assert "enforced for this run by --fail-on-gate" in enforced and "recorded, not enforced" not in enforced
+    assert "(enforced)" in enforced and "recorded, not enforced" not in enforced
     older = render_markdown(report.model_copy(update={"gate_enforced": None})).split("\n## ")[0]
     assert "enforced" not in older, "a report written before gate_enforced says nothing it does not know"
 

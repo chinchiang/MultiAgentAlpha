@@ -75,7 +75,8 @@ def test_report_header_says_when_fail_on_gate_enforced_the_gate(tmp_path):
             "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif")]
     forced = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "forced"), "--fail-on-gate"])
     md = (tmp_path / "forced" / "report.md").read_text(encoding="utf-8")
-    assert forced.exit_code == 2 and "enforced for this run by --fail-on-gate" in md and "recorded, not enforced" not in md
+    assert forced.exit_code == 2 and "(enforced)" in md and "recorded, not enforced" not in md
+    assert "the gate blocked and is enforced (exit 2)" in _plain(forced.output)
     # the report records the enforcement (docs/adr/0007-review-status-and-gate.md), and the CLI says why the gate blocked
     assert json.loads((tmp_path / "forced" / "report.json").read_text(encoding="utf-8"))["gate_enforced"] is True
     assert "gate reasons: review_incomplete, blocking_tier_and_severity" in _plain(forced.output)

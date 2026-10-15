@@ -12,13 +12,14 @@ def _decided(c) -> str:
     return f"decided by human (#{d.get('issue')} by {literal(d.get('decided_by'))}): {d['decision'].replace('_', ' ')}"
 
 
-_ENFORCEMENT = {True: " (enforced for this run by --fail-on-gate)", False: " (recorded, not enforced)", None: ""}
+# whether a blocked gate was enforced, as the report records it; a report written before gate_enforced says nothing
+_ENFORCEMENT = {True: " (enforced)", False: " (recorded, not enforced)", None: ""}
 
 
 def render_markdown(r: ReviewReport) -> str:
-    """Outside the blocking phase a blocked gate is recorded, not enforced, unless `mara review --fail-on-gate` enforced
-    it for this run (G-10; docs/governance-templates.md); the header says which, as the report records it
-    (`gate_enforced`, docs/adr/0007-review-status-and-gate.md), and nothing for a report written before that field."""
+    """A blocked gate is enforced in the blocking phase or with `mara review --fail-on-gate`, and only recorded otherwise
+    (G-10; docs/governance-templates.md). The header says which from the report's `gate_enforced` alone, which
+    mara.review_status decided (docs/adr/0007-review-status-and-gate.md), and nothing for a report written before it."""
     cons = {c.finding_id: c for c in r.consensus}
     overall = f"{r.overall_score}/100" if r.overall_score is not None else "unavailable (review incomplete)"
     lines = [
@@ -29,7 +30,7 @@ def render_markdown(r: ReviewReport) -> str:
         f"**Overall score {overall} · gate {'PASSED' if r.gate_passed else 'BLOCKED'}**"
         + (f" ({literal(', '.join(r.gate_reasons))})" if r.gate_reasons else "")
         + (f" · rollout phase `{r.bias_audit['rollout_phase']}`" if r.bias_audit.get("rollout_phase") else "")
-        + (_ENFORCEMENT[r.gate_enforced] if r.bias_audit.get("rollout_phase") not in (None, "blocking") and not r.gate_passed else ""),
+        + ("" if r.gate_passed else _ENFORCEMENT[r.gate_enforced]),
         "",
         f"Review status: **{r.review_status}**; incomplete reasons: {literal(', '.join(r.incomplete_reasons)) or 'none'}",
         "",

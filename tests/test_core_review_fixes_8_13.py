@@ -112,10 +112,10 @@ def test_forced_gate_outside_blocking_says_it_is_enforced(tmp_path):
             "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif")]
     forced = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "forced"), "--fail-on-gate"])
     text = " ".join(forced.output.split())
-    assert forced.exit_code == 2 and "--fail-on-gate enforces it" in text and "merge not enforced" not in text
+    assert forced.exit_code == 2 and "the gate blocked and is enforced (exit 2)" in text and "merge not enforced" not in text
     recorded = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "recorded")])
     text = " ".join(recorded.output.split())
-    assert recorded.exit_code == 0 and "merge not enforced" in text and "enforces it" not in text
+    assert recorded.exit_code == 0 and "merge not enforced" in text and "is enforced" not in text
 
 
 # ------------------------------------------------------------------ 12. mara cvss on a bad vector
