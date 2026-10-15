@@ -67,9 +67,11 @@ not started, so all three fail today with precise reasons.
 - `rollout:` in `config/mara.yaml`: `phase` (`not_started` | `shadow` | `advisory` | `blocking`),
   `started_on`, `shadow_months` (2), `advisory_months` (3), `baseline_report`.
 - The phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking` (or with
-  `--fail-on-gate`); in `shadow` and `advisory` the result is recorded, the report header says so,
-  and merge is not enforced. The phase is written into the report's bias audit; why the gate blocked
-  (`gate_reasons`) and whether it was enforced (`gate_enforced`) are report fields of their own.
+  `--fail-on-gate`); in the other phases (`not_started`, `shadow`, `advisory`) the result is recorded
+  and merge is not enforced. In every phase the CLI and the report header say whether a blocked gate
+  was enforced or only recorded, as the report's `gate_enforced` records it. The phase is written into
+  the report's bias audit; why the gate blocked (`gate_reasons`) and whether it was enforced
+  (`gate_enforced`) are report fields of their own.
 - `scripts/rollout_phase.py`:
   - `status`: phase, days in phase, due date, problems.
   - `baseline --runs <dirs> --out docs/rollout-baseline-<date>.md`: aggregates every `report.json`
