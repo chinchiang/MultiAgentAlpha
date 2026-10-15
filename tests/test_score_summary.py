@@ -298,11 +298,30 @@ def test_an_allowlisted_field_carrying_free_text_is_refused(mock_review, tmp_pat
 
 
 def test_every_incomplete_reason_a_review_can_write_can_be_exported(mock_review, tmp_path):
-    """mara.review_status owns the codes (tests/test_review_status.py checks assess writes no other); the allowlist is
-    that set, not a copy of it."""
-    from mara.review_status import INCOMPLETE_REASONS
+    """The reasons come from the writers, not from the allowlist: every completeness counter counted in an Audit, and
+    what assess() writes with every fact wrong, once with egress blocked and once without (a blocked egress makes no
+    context call, so the context view cannot be missing then). Whatever a review can write, the summary exports."""
+    from dataclasses import replace
 
-    assert {"unresolved_human_review", "source_egress_blocked_by_secret_preflight", "judge_errors"} <= INCOMPLETE_REASONS
-    summary = summary_of(mock_review, tmp_path, "a", review_status="incomplete", overall_score=None,
-                         incomplete_reasons=sorted(INCOMPLETE_REASONS))
-    assert summary["incomplete_reasons"] == sorted(INCOMPLETE_REASONS)
+    from mara.audit import INCOMPLETE_COUNTERS, Audit
+    from mara.review_status import assess
+    from mara.tools.sarif import ToolResult
+    from tests.test_review_status import FACTS, GATE, OUTCOME, dim, row
+
+    audit = Audit()
+    for counter in INCOMPLETE_COUNTERS:
+        audit.add(counter, "glm")
+    wrong = replace(FACTS, context_complete=False, required_tools_ran=False, ml_bom_signature=False, context_view_missing=True,
+                    incomplete_counters=tuple(audit.incomplete_reasons()))
+    evidence = ([row("F-1", "B", "Medium", "needs_human")], [ToolResult("semgrep", "r", "warning", "m", "app.py", 1)],
+                [dim("xss", 80.0)], OUTCOME, GATE)
+    written: list[str] = []
+    for facts in (replace(wrong, egress_blocked=True), wrong):
+        written += [r for r in assess(facts, *evidence).incomplete_reasons if r not in written]
+    # every code the review status writes itself (docs/adr/0007-review-status-and-gate.md), and every counter
+    assert set(written) - set(INCOMPLETE_COUNTERS) == {
+        "context_coverage_incomplete", "source_egress_blocked_by_secret_preflight", "required_tool_incomplete",
+        "ml_bom_signature_unverified", "context_view_incomplete", "unresolved_human_review", "unresolved_tool_findings"}
+    assert set(INCOMPLETE_COUNTERS) <= set(written)
+    summary = summary_of(mock_review, tmp_path, "a", review_status="incomplete", overall_score=None, incomplete_reasons=written)
+    assert summary["incomplete_reasons"] == written
