@@ -134,6 +134,17 @@ def test_bias_audit_captures_refusal_and_position_flip(mock_report):
     assert isinstance(audit["global_krippendorff_alpha"], float)
 
 
+def test_the_ballot_item_counts_have_totals(mock_report):
+    """skeptic_items, redteam_items and judge_items were written per family only (docs/adr/0008-reply-accounting.md)."""
+    _, report = mock_report
+    audit = report.bias_audit
+    for role in ("skeptic", "redteam", "judge"):
+        per_family = [v for k, v in audit.items() if k.startswith(f"{role}_items[")]
+        assert len(per_family) == 3 and audit[f"{role}_items"] == sum(per_family) > 0, role
+    # a finding counts once per judge family although it is judged in two passes, each giving one vote
+    assert audit["judge_refusals"] == audit["judge_invalid_items"] == 0 and len(report.votes) == 2 * audit["judge_items"]
+
+
 def test_unstable_finding_is_not_accepted(mock_report):
     _, report = mock_report
     _, cons = _accepted(report)

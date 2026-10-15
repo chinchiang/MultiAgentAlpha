@@ -37,6 +37,9 @@ _Avoid_: canary citation
 **Reply outcome**:
 The single classification of one reply: ok, truncation, unparseable reply, empty reply, refusal or error (no reply at all). Recorded once for every reply; see docs/adr/0001-reply-outcome-accounting.md.
 
+**Reply record**:
+What one exchange's reply counts for: its role and family, its reply outcome, canary echoes and reports, invalid items, whether it was voided as a whole, the role's own counts and its tokens. `mara.audit` turns every record into the audit counters by one table; see docs/adr/0008-reply-accounting.md.
+
 **Extraction role**:
 A role that produces new items from repository data (reviewer, context); an empty reply from it is an abstention.
 

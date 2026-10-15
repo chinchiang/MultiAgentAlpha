@@ -40,7 +40,9 @@ from .providers.base import STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply, c
 # 2: one classification for every family (docs/adr/0001-reply-outcome-accounting.md)
 # 3: the repository summary inside the repository fence, derived data (context facts, findings) in <derived_data>
 # 4: a ballot's failed call is a provider error (<role>_errors), no longer invalid output, and never retried
-EXCHANGE_VERSION = 4
+# 5: the context agent's canary echoes and reports are context_canary_*, so canary_echoes counts reviewer replies only;
+#    skeptic_items, redteam_items and judge_items have totals (docs/adr/0008-reply-accounting.md)
+EXCHANGE_VERSION = 5
 
 OK, TRUNCATION, UNPARSEABLE, EMPTY, REFUSAL, ERROR = "ok", "truncation", "unparseable", "empty", "refusal", "error"
 KINDS = (OK, TRUNCATION, UNPARSEABLE, EMPTY, REFUSAL, ERROR)
