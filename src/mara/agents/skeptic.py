@@ -81,16 +81,16 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     # else the model followed it
     echoed, tainted = canary.screen_verdicts(outcome)
 
-    def record(**fields) -> ReplyRecord:
-        return ReplyRecord.of(outcome, "skeptic", provider.family.value, **fields)
+    def record(counts: dict[str, int] | None = None, **fields) -> ReplyRecord:
+        # every record carries the findings the reply was asked about
+        return ReplyRecord.of(outcome, "skeptic", provider.family.value, counts={"findings": len(findings), **(counts or {})}, **fields)
 
     if echoed:
         # followed the planted instruction: none of its verdicts counts
-        return [], record(canary_echoes=1, voided=True, counts={"findings": len(findings)})
+        return [], record(canary_echoes=1, voided=True)
     items, invalid, gaps = base.ballot_items(outcome, _SkepticRaw, {f.id for f in findings})
     if items is None:
-        return [], record(canary_reports=len(tainted), invalid_items=invalid, voided=True, counts={"findings": len(findings)},
-                          log_codes=gaps)
+        return [], record(canary_reports=len(tainted), invalid_items=invalid, voided=True, log_codes=gaps)
     unverified = 0
     out = []
     for i in items:
@@ -106,7 +106,7 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         out.append(SkepticVerdict(**data, source_family=provider.family, source_model=provider.model))
     # every finding_id is covered exactly once (checked above), so no filter is needed here
     # canary_reports: verdicts that reported the planted file (the bias audit's L3 injection-resistance count)
-    return out, record(canary_reports=len(tainted), counts={"findings": len(findings), "unverified_controls": unverified,
+    return out, record(canary_reports=len(tainted), counts={"unverified_controls": unverified,
                                                             "refuted": sum(v.verdict == "refuted" for v in out)})
 
 

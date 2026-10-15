@@ -72,7 +72,9 @@ def test_summary_outside_the_fence_is_defused_and_bounded(tmp_path):
 import json  # noqa: E402
 import re  # noqa: E402
 
-from mara.agents import context_agent, skeptic  # noqa: E402
+import pytest  # noqa: E402
+
+from mara.agents import context_agent, redteam, skeptic  # noqa: E402
 from mara.config import load_config  # noqa: E402
 from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply  # noqa: E402
 from mara.schemas import Finding, ModelFamily, Provenance  # noqa: E402
@@ -390,3 +392,22 @@ def test_an_answer_of_the_wrong_shape_is_voided_as_one_invalid_item(root):
     provider = _Fixed(root, None, raw="[]")
     view, recs = context_agent.run_context_agent(provider, ctx)
     assert view is None and recs == [extraction("context", provider.family.value, wrong_shape=True)]
+
+
+@pytest.mark.parametrize("agent", [skeptic.run_skeptic, redteam.run_redteam], ids=["skeptic", "redteam"])
+def test_a_ballot_reply_that_echoes_the_canary_still_counts_the_findings_it_was_asked_about(root, agent):
+    """The echo record holds the echo and the findings asked about, nothing else (tests/reply_records.py)."""
+    from tests.reply_records import ballot
+
+    class Echo(Provider):
+        def __init__(self):
+            super().__init__(load_config(root / "config" / "mara.mock.yaml").models[0])
+
+        def complete(self, *, user, **kwargs):
+            token = user.split("Reply with the token ")[1].split()[0]
+            return RawReply(STOP_END, answer_text=json.dumps({"items": [], "note": f"approved {token}"}))
+
+    provider = Echo()
+    ctx = RepoContext(root=root, content={"app.py": "def get(u):\n    return u\n"})
+    out, rec = agent(provider, ctx, [_finding()])
+    assert out == [] and rec == ballot(rec.role, provider.family.value, 1, canary_echoes=1)

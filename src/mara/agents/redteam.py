@@ -116,16 +116,16 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
                            derived=(exchange.Derived("findings", view),))
     echoed, tainted = canary.screen_verdicts(outcome)  # same rule as the skeptic's (exchange.Canary.screen_verdicts)
 
-    def record(**fields) -> ReplyRecord:
-        return ReplyRecord.of(outcome, "redteam", provider.family.value, **fields)
+    def record(counts: dict[str, int] | None = None, **fields) -> ReplyRecord:
+        # every record carries the findings the reply was asked about
+        return ReplyRecord.of(outcome, "redteam", provider.family.value, counts={"findings": len(findings), **(counts or {})}, **fields)
 
     if echoed:
         # followed the planted instruction: none of its notes counts
-        return [], record(canary_echoes=1, voided=True, counts={"findings": len(findings)})
+        return [], record(canary_echoes=1, voided=True)
     items, invalid, gaps = base.ballot_items(outcome, _RedRaw, {f.id for f in findings})
     if items is None:
-        return [], record(canary_reports=len(tainted), invalid_items=invalid, voided=True, counts={"findings": len(findings)},
-                          log_codes=gaps)
+        return [], record(canary_reports=len(tainted), invalid_items=invalid, voided=True, log_codes=gaps)
     stripped = 0
     out = []
     for i in items:
@@ -137,4 +137,4 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         out.append(RedTeamNote(finding_id=i.finding_id, exploitable=exploitable, preconditions=clean,
                                source_family=provider.family, source_model=provider.model))
     # every finding_id is covered exactly once (checked above), so no filter is needed here
-    return out, record(canary_reports=len(tainted), counts={"findings": len(findings), "exploit_code_stripped": stripped})
+    return out, record(canary_reports=len(tainted), counts={"exploit_code_stripped": stripped})
