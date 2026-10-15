@@ -70,6 +70,13 @@ def test_a_count_the_table_does_not_declare_is_refused():
     assert set(ROLES) - set(CANARY_ROLES) == {"judge"}, "a judge sees no bundle, so it gets no canary"
 
 
+def test_only_the_extraction_roles_count_their_tokens():
+    a = Audit()
+    a.record(extraction("reviewer", "glm", input_tokens=5, output_tokens=2))
+    a.record(extraction("context", "glm", exchange.TRUNCATION, input_tokens=3, output_tokens=1))
+    a.record(ballot("judge", "glm", 1, input_tokens=7, output_tokens=7))
+    assert (a["input_tokens"], a["output_tokens"]) == (8, 3), "a ballot role's tokens are not counted"
+
 def test_the_incomplete_counters_are_the_old_ones_in_their_old_order_and_the_context_canary_echoes():
     assert set(INCOMPLETE_COUNTERS) == set(_V4_INCOMPLETE_COUNTERS) | {"context_canary_echoes"}
     assert len(INCOMPLETE_COUNTERS) == len(set(INCOMPLETE_COUNTERS))

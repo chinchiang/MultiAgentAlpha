@@ -375,3 +375,18 @@ def test_a_truncated_answer_is_a_truncation_not_a_canary_echo(root):
     counted = _counted(rec)
     assert counted["reviewer_truncations"] == 0 and counted["reviewer_unparseable_replies"] == counted["invalid_findings_dropped"] == 1
     assert not rec.canary_echoes and rec.canary_reports == 1
+
+
+def test_an_answer_of_the_wrong_shape_is_voided_as_one_invalid_item(root):
+    """A reply that parsed but is not the object asked for is ok as a reply outcome; the agent voids it and counts one
+    invalid item, and tests/reply_records.py writes the same record."""
+    from mara.agents.reviewer import review_dimension
+    from tests.reply_records import extraction
+
+    ctx = build_context(root / "fixtures" / "vuln-sample")
+    provider = _Fixed(root, {"findings": "none"})
+    findings, rec = review_dimension(provider, ctx, "input_validation", base.Canary())
+    assert findings == [] and rec == extraction("reviewer", provider.family.value, malformed=True)
+    provider = _Fixed(root, None, raw="[]")
+    view, recs = context_agent.run_context_agent(provider, ctx)
+    assert view is None and recs == [extraction("context", provider.family.value, malformed=True)]

@@ -6,7 +6,8 @@ that judges a reply happens here, once, for every family:
   * `classify` turns a RawReply into an `Outcome` of one kind - ok, truncation, unparseable, empty, refusal or
     error - by the rules of docs/adr/0001-reply-outcome-accounting.md: a truncation is a reply stopped at the
     output limit (a budget problem, never charged to the model), an unparseable reply ended normally without
-    the structured answer (invalid output, charged to the model), an empty reply has no answer text;
+    the structured answer (invalid output, charged to the model), an empty reply has no answer, neither text
+    nor structured data;
   * `call` makes the provider call and maps any exception to a sanitised error code;
   * `Canary` plants the injection canary and screens an Outcome for a canary echo or a canary report;
   * `parse_items` validates a ballot reply's items against a pydantic model;

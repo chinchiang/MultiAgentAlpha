@@ -1,9 +1,10 @@
 """Reply records as the agents write them (mara.audit.ReplyRecord), for tests of what reads them: a record here states
 only what an agent can produce (docs/adr/0008-reply-accounting.md). A reply of any kind but ok, or with a canary echo,
 is voided; an ok ballot reply is voided only when it held invalid items or missed findings; a ballot record carries the
-findings it was asked about, which the judge counts on its forward pass only. An error carries its provider code, and
-every record carries the counts its agent writes on that path, 0 unless given. A canary echo is never in a truncation or
-an error, and a ballot's echo record holds nothing else: no invalid items, no canary reports."""
+findings it was asked about, which the judge counts on its forward pass only. An error carries its provider code and
+no tokens, and every record carries the counts its agent writes on that path, 0 unless given, tokens included. A canary
+echo is never in a truncation or an error, and a ballot's echo record holds nothing else: no invalid items, no canary
+reports."""
 
 from __future__ import annotations
 
@@ -23,21 +24,34 @@ def _provider_code(kind: str) -> tuple[str, ...]:
     return (PROVIDER_ERROR,) if kind == ERROR else ()
 
 
-def _check_echo(kind: str, fields: dict) -> None:
-    # a truncation is never an echo (exchange.Canary), and a failed call has no text to echo
+def _check_reply(kind: str, fields: dict) -> None:
+    # a truncation is never an echo (exchange.Canary), and a failed call has no text to echo and no usage
     if fields.get("canary_echoes") and kind in (TRUNCATION, ERROR):
         raise ValueError(f"a reply of kind {kind} carries no canary echo")
+    if kind == ERROR and (fields.get("input_tokens") or fields.get("output_tokens")):
+        raise ValueError("a failed call carries no tokens")
 
 
-def extraction(role: Role, family: str, kind: str = OK, *, counts: dict[str, int] | None = None, details: tuple[str, ...] = (),
-               **fields) -> ReplyRecord:
-    """A reviewer's or the context agent's record."""
+def extraction(role: Role, family: str, kind: str = OK, *, malformed: bool = False, counts: dict[str, int] | None = None,
+               details: tuple[str, ...] = (), **fields) -> ReplyRecord:
+    """A reviewer's or the context agent's record. `malformed`: an ok reply whose answer is not the object asked for,
+    voided as one invalid item; `invalid_items` are the items an ok reply the agent used could not read."""
     if ROLES[role].form != "extraction":
         raise ValueError(f"{role} is a ballot role")
-    _check_echo(kind, fields)
-    voided = kind != OK or bool(fields.get("canary_echoes"))
-    return ReplyRecord(role=role, family=family, kind=kind, voided=voided, details=_provider_code(kind) + details,
-                       counts={**dict.fromkeys(_COUNTS[role], 0), **(counts or {})}, **fields)
+    _check_reply(kind, fields)
+    echoed = bool(fields.get("canary_echoes"))
+    if malformed and kind != OK:
+        raise ValueError("only an ok reply has an answer of the wrong shape")
+    # the context agent stops at an echo before it reads the answer's shape; the reviewer reads the shape first
+    # (agents.context_agent, agents.reviewer)
+    if malformed and echoed and role == "context":
+        raise ValueError("the context agent's echo record holds no invalid items")
+    if fields.get("invalid_items") and (malformed or kind != OK or echoed):
+        raise ValueError("only an ok reply the agent used has items it could not read")
+    voided = kind != OK or echoed or malformed
+    return ReplyRecord(role=role, family=family, kind=kind, voided=voided, invalid_items=int(malformed),
+                       details=_provider_code(kind) + details, counts={**dict.fromkeys(_COUNTS[role], 0), **(counts or {})},
+                       **fields)
 
 
 def ballot(role: Role, family: str, findings: int, kind: str = OK, *, missing: int = 0, pass_id: PassId = "forward",
@@ -48,7 +62,7 @@ def ballot(role: Role, family: str, findings: int, kind: str = OK, *, missing: i
         raise ValueError(f"{role} is an extraction role")
     if missing and kind != OK:
         raise ValueError("a reply without a list is not checked for coverage")
-    _check_echo(kind, fields)
+    _check_reply(kind, fields)
     # the skeptic and red team stop at an echo, before the reports and the coverage check (agents.skeptic, agents.redteam)
     if fields.get("canary_echoes") and (missing or fields.get("canary_reports")):
         raise ValueError("a ballot's echo record holds no invalid items and no canary reports")
