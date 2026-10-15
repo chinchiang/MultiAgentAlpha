@@ -14,9 +14,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .exchange import EMPTY, ERROR, KINDS, REFUSAL, TRUNCATION, UNPARSEABLE, Outcome
+from .exchange import EMPTY, ERROR, KINDS, REFUSAL, TRUNCATION, UNPARSEABLE, Kind, Outcome
 
 Role = Literal["reviewer", "context", "skeptic", "redteam", "judge"]
+
+
+@dataclass(frozen=True)
+class CanaryCounters:
+    """A role's canary counters: an echo makes the review incomplete, a report does not."""
+
+    echoes: str
+    reports: str
 
 
 @dataclass(frozen=True)
@@ -33,23 +41,22 @@ class RoleCounters:
     errors: str
     unparseable: str
     invalid: str
-    canary_echoes: str | None = None
-    canary_reports: str | None = None
+    canary: CanaryCounters | None = None
     retries: str | None = None
     local: Mapping[str, tuple[str, bool]] = field(default_factory=dict)
     tokens: bool = False  # the ballot roles do not count their tokens
 
     def blocking(self) -> tuple[str, ...]:
         """This role's counters that make the review incomplete, in the order the review status lists them."""
-        fixed = (self.refusals, self.truncations, self.errors, self.invalid, self.canary_echoes)
+        fixed = (self.refusals, self.truncations, self.errors, self.invalid, self.canary.echoes if self.canary else None)
         return tuple(c for c in fixed if c) + tuple(name for name, blocks in self.local.values() if blocks)
 
 
 def _ballot(role: str, *, canary: bool, local: Mapping[str, tuple[str, bool]]) -> RoleCounters:
     return RoleCounters(form="ballot", calls=f"{role}_calls", refusals=f"{role}_refusals", truncations=f"{role}_truncations",
                         errors=f"{role}_errors", unparseable=f"{role}_unparseable_replies", invalid=f"{role}_invalid_items",
-                        canary_echoes=f"{role}_canary_echoes" if canary else None,
-                        canary_reports=f"{role}_canary_reports" if canary else None, retries=f"{role}_retries",
+                        canary=CanaryCounters(f"{role}_canary_echoes", f"{role}_canary_reports") if canary else None,
+                        retries=f"{role}_retries",
                         local={"findings": (f"{role}_items", False), **local})
 
 
@@ -58,12 +65,12 @@ ROLES: Mapping[Role, RoleCounters] = {
     "reviewer": RoleCounters(form="extraction", calls="reviewer_calls", refusals="reviewer_refusals",
                              truncations="reviewer_truncations", errors="reviewer_errors",
                              unparseable="reviewer_unparseable_replies", invalid="invalid_findings_dropped",
-                             canary_echoes="canary_echoes", canary_reports="canary_reports",
+                             canary=CanaryCounters("canary_echoes", "canary_reports"),
                              local={"unverified_quotes": ("findings_with_unverified_quotes", False)}, tokens=True),
     "context": RoleCounters(form="extraction", calls="context_calls", refusals="context_refusals",
                             truncations="context_truncations", errors="context_errors",
                             unparseable="context_unparseable_replies", invalid="context_invalid_items",
-                            canary_echoes="context_canary_echoes", canary_reports="context_canary_reports",
+                            canary=CanaryCounters("context_canary_echoes", "context_canary_reports"),
                             local={"unverified": ("context_unverified_items", True)}, tokens=True),
     "skeptic": _ballot("skeptic", canary=True, local={"unverified_controls": ("skeptic_unverified_controls", False),
                                                       "refuted": ("skeptic_refuted", False)}),
@@ -82,7 +89,7 @@ class ReplyRecord:
 
     role: Role
     family: str
-    kind: str
+    kind: Kind
     canary_echoes: int = 0
     canary_reports: int = 0
     invalid_items: int = 0
@@ -101,7 +108,7 @@ class ReplyRecord:
         undeclared = sorted(set(self.counts) - set(counters.local))
         if undeclared:
             raise ValueError(f"{self.role} declares no count {', '.join(undeclared)}; its counts are {tuple(counters.local)}")
-        if counters.canary_echoes is None and (self.canary_echoes or self.canary_reports):
+        if counters.canary is None and (self.canary_echoes or self.canary_reports):
             raise ValueError(f"{self.role} carries no canary")
 
     @classmethod
@@ -158,9 +165,9 @@ class Audit(defaultdict[str, Any]):
         self.add(c.errors, fam, int(kind == ERROR))
         self.add(c.unparseable, fam, int(kind == UNPARSEABLE))
         self.add(c.invalid, fam, int(invalid_reply) + rec.invalid_items)
-        if c.canary_echoes and c.canary_reports:
-            self.add(c.canary_echoes, fam, rec.canary_echoes)
-            self.add(c.canary_reports, fam, rec.canary_reports)
+        if c.canary:
+            self.add(c.canary.echoes, fam, rec.canary_echoes)
+            self.add(c.canary.reports, fam, rec.canary_reports)
         for local, (name, _) in c.local.items():
             self.add(name, fam, rec.counts.get(local, 0))
         if c.tokens:
