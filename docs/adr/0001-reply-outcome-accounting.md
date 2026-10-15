@@ -14,6 +14,8 @@ An **error** - no reply at all, the call failed - is never charged to the model:
 
 Refusal, invalid and truncation counts change meaning at this decision. Calibration records therefore carry an exchange version, and cross-period trends compare only records of the same version.
 
+From exchange version 5, how each outcome is counted for each role is decided in one module, and the context agent's canary echoes and reports are counted apart from the reviewers' (docs/adr/0008-reply-accounting.md).
+
 ## Considered options
 
 - **Treat any token in a truncation as an echo:** rejected on the 2026-10-08 evidence.
