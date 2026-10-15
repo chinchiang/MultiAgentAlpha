@@ -410,7 +410,7 @@ def render_baseline(metrics: dict, *, date: dt.date, phase_started: str, sources
          "", "| metric | value |", "|---|---:|",
          f"| findings per review | {metrics['findings_per_review']} |",
          f"| accepted findings per review | {metrics['accepted_per_review']} |",
-         "| jury outcomes accepted / rejected / dropped / needing a human | "
+         f"| jury outcomes {' / '.join(o.replace('needs_human', 'needing a human') for o in JURY_OUTCOMES)} | "
          + " / ".join(str(metrics["jury_outcomes"][k]) for k in JURY_OUTCOMES) + " |",
          f"| evidence tiers A / B / C / D | {metrics['tiers']['A']} / {metrics['tiers']['B']} / {metrics['tiers']['C']} / {metrics['tiers']['D']} |",
          f"| gate would-block rate | {metrics['gate_would_block_rate']} |",

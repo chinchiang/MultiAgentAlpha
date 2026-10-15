@@ -5,7 +5,7 @@ the pipeline runs the tools and cosign and passes in only what they found."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, get_args
 
 from .audit import INCOMPLETE_COUNTERS
 from .identity import norm_path
@@ -97,13 +97,13 @@ OWN_INCOMPLETE_REASONS = (CONTEXT_COVERAGE_INCOMPLETE, SOURCE_EGRESS_BLOCKED, RE
                           CONTEXT_VIEW_INCOMPLETE, UNRESOLVED_HUMAN_REVIEW, UNRESOLVED_TOOL_FINDINGS)
 INCOMPLETE_REASONS = frozenset(OWN_INCOMPLETE_REASONS) | frozenset(INCOMPLETE_COUNTERS)
 
-# The gate reasons (schemas.GateReason), and GATE_REASONS their fixed order in a report. The two finding codes are also
-# each blocking finding's blocking_reason (schemas.BlockingReason).
+# The gate reasons, and GATE_REASONS their fixed order in a report, which is schemas.GateReason's. The two finding codes
+# are also each blocking finding's blocking_reason (schemas.BlockingReason).
 REVIEW_INCOMPLETE: GateReason = "review_incomplete"
 BLOCKING_TIER_AND_SEVERITY: BlockingReason = "blocking_tier_and_severity"
 TIER_C_WHILE_TIGHTENED: BlockingReason = "tier_c_while_tightened"
 DIMENSION_BELOW_MINIMUM: GateReason = "dimension_below_minimum"
-GATE_REASONS: tuple[GateReason, ...] = (REVIEW_INCOMPLETE, BLOCKING_TIER_AND_SEVERITY, TIER_C_WHILE_TIGHTENED, DIMENSION_BELOW_MINIMUM)
+GATE_REASONS: tuple[GateReason, ...] = get_args(GateReason)
 
 
 def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: list[ToolResult], dimensions: list[DimensionScore],
@@ -112,9 +112,9 @@ def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: l
         # the config requires at least one dimension (MaraConfig.dimensions); a review that scored nothing has no score
         raise ValueError("a review needs at least one dimension to score")
     reasons = _incomplete_reasons(facts, consensus, tool_results)
-    blocking = blocking_reasons(consensus, outcome_policy, gate_policy)
+    blocking = _blocking_reasons(consensus, outcome_policy, gate_policy)
     applies: dict[str, bool] = {REVIEW_INCOMPLETE: bool(reasons), **dict.fromkeys(blocking.values(), True),
-               DIMENSION_BELOW_MINIMUM: any(d.score < gate_policy.min_dimension_score for d in dimensions)}
+                                DIMENSION_BELOW_MINIMUM: any(d.score < gate_policy.min_dimension_score for d in dimensions)}
     gate_reasons = tuple(code for code in GATE_REASONS if applies.get(code))
     overall = None if reasons else round(sum(d.score for d in dimensions) / len(dimensions), 1)
     return Assessment(review_status="incomplete" if reasons else "complete", incomplete_reasons=reasons,
@@ -124,9 +124,9 @@ def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: l
                       tier_c_blocked_while_tightened=sum(why == TIER_C_WHILE_TIGHTENED for why in blocking.values()))
 
 
-def blocking_reasons(consensus: list[ConsensusResult], outcome_policy: OutcomePolicy,
-                     gate_policy: GatePolicy) -> dict[str, BlockingReason]:
-    """The blocking finding among `consensus` and why each blocks (finding id -> reason). assess reads these; they
+def _blocking_reasons(consensus: list[ConsensusResult], outcome_policy: OutcomePolicy,
+                      gate_policy: GatePolicy) -> dict[str, BlockingReason]:
+    """The blocking findings among `consensus` and why each blocks (finding id -> reason). assess reads these; they
     depend on no fact of the review, only on the rows and the two policies."""
     return {c.finding_id: why for c in consensus if (why := _blocking_reason(c, outcome_policy, gate_policy))}
 

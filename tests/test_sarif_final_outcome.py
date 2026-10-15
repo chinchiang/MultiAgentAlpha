@@ -227,8 +227,9 @@ def _variants(report, cfg, tmp_path) -> list[_Variant]:
     from mara.context.repo_map import build_context
     from mara.pipeline import Pipeline
     from mara.report.human_queue_out import build_queue
-    from mara.review_status import blocking_reasons
+    from mara.review_status import assess
     from mara.tools.sarif import ToolResult
+    from tests.review_facts import FACTS
 
     finders = {f.id: set(f.finder_families) for f in report.findings}
     skeptic, redteam = {v.finding_id: v for v in report.skeptic}, {n.finding_id: n for n in report.redteam}
@@ -252,8 +253,8 @@ def _variants(report, cfg, tmp_path) -> list[_Variant]:
                 for i, c in enumerate(consensus):
                     ruling = ("false_positive", "true_positive", None)[i % 3]
                     c.human_decision = {"decision": ruling, **_DECIDED} if ruling else None
-            # as Pipeline.run writes them from its assessment
-            blocking = blocking_reasons(consensus, scorer.outcome_policy, scorer.gate_policy)
+            # as Pipeline.run writes them from its assessment; the blocking reasons depend on no fact of the review
+            blocking = assess(FACTS, consensus, tools, report.dimensions, scorer.outcome_policy, scorer.gate_policy).blocking_reasons
             for c in consensus:
                 c.blocking_reason = blocking.get(c.finding_id)
             v = report.model_copy(update={"votes": votes, "consensus": consensus})
