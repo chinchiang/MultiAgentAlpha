@@ -116,6 +116,19 @@ def live_copy(mock_review: Path, tmp_path: Path, drop: tuple[str, ...] = (), **c
     return path
 
 
+def test_a_report_with_a_gate_code_the_review_status_does_not_write_is_refused(mock_review, tmp_path):
+    """gate_reasons and each row's blocking_reason hold only the review status's codes (docs/adr/0007-review-status-and-
+    gate.md), so a report holding any other code does not validate, and the summary of it is refused although the
+    summary exports neither field (docs/adr/0004-score-summary.md: a report that does not validate produces nothing)."""
+    report = json.loads((mock_review / "report.json").read_text(encoding="utf-8"))
+    rows = [{**c, "blocking_reason": "blocked_by_the_owner"} if i == 0 else c for i, c in enumerate(report["consensus"])]
+    for bad in (live_copy(mock_review, tmp_path, gate_reasons=["review_incomplete", "blocked_by_the_owner"]),
+                live_copy(mock_review, tmp_path, consensus=rows)):
+        res = export(bad, tmp_path / "summary.json")
+        assert res.exit_code != 0 and "not a valid MARA review report" in plain(res.output), plain(res.output)
+        assert not (tmp_path / "summary.json").exists()
+
+
 def test_a_report_that_does_not_validate_is_refused(mock_review, tmp_path):
     truncated = tmp_path / "truncated.json"
     truncated.write_bytes((mock_review / "report.json").read_bytes()[:500])
@@ -297,14 +310,35 @@ def test_an_allowlisted_field_carrying_free_text_is_refused(mock_review, tmp_pat
     assert not (tmp_path / "summary.json").exists()
 
 
-def test_every_incomplete_reason_the_pipeline_writes_can_be_exported(mock_review, tmp_path):
-    import re as _re
+def test_every_incomplete_reason_a_review_can_write_can_be_exported(mock_review, tmp_path):
+    """The reasons come from the writers, not from the allowlist: every completeness counter counted in an Audit, and
+    what assess() writes with every fact wrong and the evidence that brings the last two reasons (a finding waiting for
+    a human, an untriaged tool result), once with egress blocked and once without (a blocked egress makes no context
+    call, so the context view cannot be missing then). Whatever a review can write, the summary exports.
 
-    from mara.audit import INCOMPLETE_COUNTERS
+    The review status's own codes are written out below on purpose, from the ADR rather than from
+    OWN_INCOMPLETE_REASONS: a reason added to the writer must be added there and here."""
+    from dataclasses import replace
 
-    pipeline = (ROOT / "src" / "mara" / "pipeline.py").read_text(encoding="utf-8")
-    written = set(_re.findall(r'incomplete\.append\("([a-z_]+)"\)', pipeline)) | set(INCOMPLETE_COUNTERS)
-    assert len(written) > len(INCOMPLETE_COUNTERS)  # the pattern still finds the pipeline's own codes
-    summary = summary_of(mock_review, tmp_path, "a", review_status="incomplete", overall_score=None,
-                         incomplete_reasons=sorted(written))
-    assert summary["incomplete_reasons"] == sorted(written)
+    from mara.audit import INCOMPLETE_COUNTERS, Audit
+    from mara.review_status import assess
+    from mara.tools.sarif import ToolResult
+    from tests.review_facts import FACTS, GATE, OUTCOME, dim, row
+
+    audit = Audit()
+    for counter in INCOMPLETE_COUNTERS:
+        audit.add(counter, "glm")
+    wrong = replace(FACTS, context_complete=False, required_tools_ran=False, ml_bom_signature=False, context_view_missing=True,
+                    incomplete_counters=tuple(audit.incomplete_reasons()))
+    evidence = ([row("F-1", "B", "Medium", "needs_human")], [ToolResult("semgrep", "r", "warning", "m", "app.py", 1)],
+                [dim("xss", 80.0)], OUTCOME, GATE)
+    written: list[str] = []
+    for facts in (replace(wrong, egress_blocked=True), wrong):
+        written += [r for r in assess(facts, *evidence).incomplete_reasons if r not in written]
+    # every code the review status writes itself (docs/adr/0007-review-status-and-gate.md), and every counter
+    assert set(written) - set(INCOMPLETE_COUNTERS) == {
+        "context_coverage_incomplete", "source_egress_blocked_by_secret_preflight", "required_tool_incomplete",
+        "ml_bom_signature_unverified", "context_view_incomplete", "unresolved_human_review", "unresolved_tool_findings"}
+    assert set(INCOMPLETE_COUNTERS) <= set(written)
+    summary = summary_of(mock_review, tmp_path, "a", review_status="incomplete", overall_score=None, incomplete_reasons=written)
+    assert summary["incomplete_reasons"] == written

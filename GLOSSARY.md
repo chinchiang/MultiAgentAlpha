@@ -107,6 +107,22 @@ _Avoid_: overridden finding (the jury outcome still exists beside it)
 What one review covered: the whole target (full) or the files changed against a base together with the modules related to them (incremental); unknown for a report written before reviews recorded their scope. Scores of reviews with different scopes cannot be compared.
 _Avoid_: mode (the provider mode is a different thing), diff review
 
+**Review status**:
+Whether a review can stand as a conclusion: complete, or incomplete together with its incomplete reasons. An incomplete review has no overall score.
+_Avoid_: run status, success
+
+**Incomplete reason**:
+One thing that keeps a review from standing as a conclusion: coverage or a required tool missing, a model reply that failed, a finding whose final outcome still needs a human, a tool result nobody has triaged. A rejection review is not one.
+_Avoid_: error (an error is one kind of reply outcome), failure
+
+**Gate**:
+Whether a review's result lets the change merge, and when it does not, the gate reasons: the review is incomplete, a blocking finding, or a dimension score below the minimum. A blocked gate is enforced only in the blocking rollout phase, or for one review when the operator asks for it (`--fail-on-gate`); otherwise it is recorded but not enforced, and the report records which.
+_Avoid_: check (a CI check is a different thing), pass/fail
+
+**Blocking finding**:
+A finding whose final outcome is accepted and whose evidence tier and severity meet the gate's blocking rules; while the human queue is tightened, an accepted tier C finding at the severity floor blocks too, since no human will look at it.
+_Avoid_: blocker, critical finding (severity alone does not block)
+
 ## Exports
 
 **Finding detail**:

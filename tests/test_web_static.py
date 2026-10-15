@@ -47,14 +47,13 @@ def _enumerations() -> dict[str, set[str]]:
     from typing import get_args
 
     from mara import progress
-    from mara.audit import INCOMPLETE_COUNTERS
     from mara.config import ModelSpec, RolloutConfig, load_config
     from mara.policy import evaluate_policies
+    from mara.review_status import INCOMPLETE_REASONS
     from mara.schemas import DIMENSIONS, JuryOutcomeValue
     from mara.web.jobs import JobKind
 
     src = ROOT / "src" / "mara"
-    pipeline = (src / "pipeline.py").read_text(encoding="utf-8")
     outcome = (src / "scoring" / "outcome.py").read_text(encoding="utf-8")
     queue = (src / "report" / "human_queue_out.py").read_text(encoding="utf-8")
     web = "".join(p.read_text(encoding="utf-8") for p in (src / "web").glob("*.py"))
@@ -65,8 +64,11 @@ def _enumerations() -> dict[str, set[str]]:
         "stage.": set(progress.STAGES),
         "stage_status.": set(progress.STAGE_STATUSES),
         "outcome.": set(get_args(JuryOutcomeValue)),
-        "reason.": set(re.findall(r'incomplete\.append\("([a-z_]+)"\)', pipeline)) | set(INCOMPLETE_COUNTERS),
-        "hreason.": _literal_values(outcome, r"reasons\.append") | _literal_values(queue, r"reasons\.append") | {"decision_not_usable"},
+        "reason.": set(INCOMPLETE_REASONS),
+        # unresolved_human_review: the queue's fallback reason before docs/adr/0007-review-status-and-gate.md removed it;
+        # reports written before still hold it, and the workbench still names it
+        "hreason.": _literal_values(outcome, r"reasons\.append") | _literal_values(queue, r"reasons\.append")
+                    | {"decision_not_usable", "unresolved_human_review"},
         "error.": errors,
         "provider.": set(get_args(ModelSpec.model_fields["provider"].annotation)),
         "residency.": set(get_args(ModelSpec.model_fields["data_residency"].annotation)),

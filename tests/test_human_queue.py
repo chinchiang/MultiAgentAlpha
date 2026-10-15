@@ -161,6 +161,13 @@ def _tier_c_finding(vec=VEC):
     return f
 
 
+def _blocking(pipe, c):
+    from mara.review_status import assess
+    from tests.review_facts import FACTS, dim
+
+    return assess(FACTS, [c], [], [dim("xss", 80.0)], pipe.outcome_policy, pipe.gate_policy).blocking_reasons
+
+
 def test_tier_c_high_needs_a_human_until_the_queue_tightens(tmp_path, monkeypatch):
     cfg = _score_cfg()
     monkeypatch.chdir(tmp_path)  # no backlog file: not tightened
@@ -174,18 +181,19 @@ def test_tier_c_high_needs_a_human_until_the_queue_tightens(tmp_path, monkeypatc
     (tmp_path / "calib" / "decisions").mkdir(parents=True)
     (tmp_path / "calib" / "decisions" / "backlog.json").write_text(json.dumps({"open": 999}), encoding="utf-8")
     tightened = Pipeline(cfg, out_dir=tmp_path / "out2")
-    assert tightened.queue_tightened and tightened.exclude_tier_c
+    assert tightened.queue_tightened and tightened.outcome_policy.exclude_tier_c
     (c2,) = tightened.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
     assert c2.tier == EvidenceTier.C and c2.accepted and c2.human_reasons == []
     assert build_queue([f], {"F-1": c2}, {}, {}, _votes("F-1"), cfg) == []
     # ...and since nobody will look at it, it blocks the gate instead of passing (tightening never loosens);
-    # tier C is not in block_on_tiers, so before this rule an over-limit backlog let a tier C Critical through
-    assert "C" not in cfg.gate.block_on_tiers and pipe.blocking_reason(c2) is None
-    assert tightened.blocking_reason(c2) == "tier_c_while_tightened"
+    # tier C is not in block_on_tiers, so before this rule an over-limit backlog let a tier C Critical through.
+    # The gate reads the tightening the jury outcome was decided under (one OutcomePolicy per review)
+    assert "C" not in cfg.gate.block_on_tiers
+    assert _blocking(pipe, c2) == {} and _blocking(tightened, c2) == {"F-1": "tier_c_while_tightened"}
     # tighten_exclude_tier_c: false keeps tier C in the queue even while tightened
     cfg.human_queue.tighten_exclude_tier_c = False
     kept = Pipeline(cfg, out_dir=tmp_path / "out3")
-    assert kept.queue_tightened and not kept.exclude_tier_c
+    assert kept.queue_tightened and not kept.outcome_policy.exclude_tier_c
     (c3,) = kept.score([f], {"F-1": {ModelFamily.ANTHROPIC}}, {}, {}, _votes("F-1"), [])
     assert [i.reasons for i in build_queue([f], {"F-1": c3}, {}, {}, _votes("F-1"), cfg)] == [["tier_c_high"]]
 

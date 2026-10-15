@@ -67,13 +67,20 @@ not started, so all three fail today with precise reasons.
 - `rollout:` in `config/mara.yaml`: `phase` (`not_started` | `shadow` | `advisory` | `blocking`),
   `started_on`, `shadow_months` (2), `advisory_months` (3), `baseline_report`.
 - The phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking` (or with
-  `--fail-on-gate`); in `shadow` and `advisory` the result is recorded, the report header says so,
-  and merge is not enforced. The phase is written into the report's bias audit.
+  `--fail-on-gate`). In the other phases (`not_started`, `shadow`, `advisory`) a blocked gate is
+  recorded and the merge is not held, unless `--fail-on-gate` is given for that run. A failed PSIRT
+  hand-off makes the command exit 3 instead, in any phase and whatever the gate. In every phase the
+  CLI and the report header say whether a blocked gate was enforced or only recorded, as the
+  report's `gate_enforced` records it. The phase is written into
+  the report's bias audit; why the gate blocked (`gate_reasons`) and whether it was enforced
+  (`gate_enforced`) are report fields of their own.
 - `scripts/rollout_phase.py`:
   - `status`: phase, days in phase, due date, problems.
   - `baseline --runs <dirs> --out docs/rollout-baseline-<date>.md`: aggregates every `report.json`
     into the baseline the report requires at the end of the shadow phase (findings per review, tier
-    mix, gate would-block rate, human-queue size, token cost, false-positive rate from decisions).
+    mix, the jury outcomes accepted / rejected / dropped / needing a human, gate would-block rate,
+    human-queue size, token cost, false-positive rate from decisions). A report that does not say
+    whether its gate passed counts as blocked.
     A baseline that includes mock-mode reviews says so and cannot support advancing.
   - `advance --to advisory|blocking`: checks time in phase, the baseline report and (for blocking) a
     live calibration that governance check G-9 accepts (front matter `mode: live`, younger than 90

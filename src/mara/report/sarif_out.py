@@ -48,10 +48,13 @@ def to_sarif(report: ReviewReport) -> dict:
         if c is None:
             continue
         q = queued.get(f.id)
-        # the final outcome (docs/adr/0003-human-resolution.md): a human false positive is still emitted, dismissed with
-        # the ruling as its justification, so code scanning records why the alert closed instead of reading it as fixed
-        dismissed = c.resolved_by_human and not c.final_accepted
-        if not c.final_accepted and q is None and not dismissed:
+        # what is emitted follows the final outcome (docs/adr/0007-review-status-and-gate.md), never whether the human
+        # queue is on: an accepted finding; a finding needing a human and a rejected finding under rejection review
+        # (policy P8), both as notes; and a human false positive (docs/adr/0003-human-resolution.md), dismissed with the
+        # ruling as its justification, so code scanning records why the alert closed instead of reading it as fixed
+        outcome = c.final_outcome
+        dismissed = c.resolved_by_human and outcome == "rejected"
+        if outcome not in ("accepted", "needs_human") and not dismissed and not c.in_rejection_review:
             continue
         rule_id = f"MARA/{f.dimension}/{f.cwe}"
         occurrence = occurrence_of[f.id]
@@ -64,7 +67,7 @@ def to_sarif(report: ReviewReport) -> dict:
             "ruleId": rule_id,
             # a finding waiting for a human decision is emitted as a note, never as an error, so code
             # scanning does not show it as confirmed; the decision on the ticket settles it (G-11)
-            "level": "note" if q is not None else LEVEL[c.cvss4_severity],
+            "level": "note" if outcome == "needs_human" or c.in_rejection_review else LEVEL[c.cvss4_severity],
             "rank": round(c.weighted_score * 100, 1),
             "message": {"text": f"[{c.tier.value}] {f.title} (CVSS 4.0 {c.cvss4_score} {c.cvss4_severity}; SSVC {c.ssvc_decision})"},
             # a URI reference: a path with a space or '#' must be percent-encoded to stay one
@@ -80,6 +83,8 @@ def to_sarif(report: ReviewReport) -> dict:
                 "humanQueue": q is not None, "humanQueueKey": None if q is None else q.key,
                 "humanQueueReasons": [] if q is None else q.reasons,
                 "humanDecision": c.human_decision,
+                # why this finding blocks the gate; its level stays, so the code-scanning alert does too
+                **({"blockingReason": c.blocking_reason} if c.blocking_reason else {}),
             },
         }
         if dismissed and c.human_decision is not None:
@@ -97,6 +102,7 @@ def to_sarif(report: ReviewReport) -> dict:
             "results": results,
             "invocations": [{"executionSuccessful": report.review_status == "complete"}],
             "properties": {"overallScore": report.overall_score, "gatePassed": report.gate_passed,
+                           "gateReasons": report.gate_reasons, "gateEnforced": report.gate_enforced,
                            "reviewStatus": report.review_status, "incompleteReasons": report.incomplete_reasons,
                            "families": report.families_used, "biasAudit": report.bias_audit},
         }],

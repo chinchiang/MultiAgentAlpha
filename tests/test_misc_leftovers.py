@@ -15,8 +15,8 @@ from typer.testing import CliRunner
 
 from mara.cli import app
 from mara.config import MaraConfig, load_config
-from mara.report.markdown_out import render_markdown
 from mara.tools import trivy_db as tdb
+from tests.cli_output import plain
 from tests.test_trivy_db import _fake_trivy, _now_iso
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,14 +76,32 @@ def test_report_header_says_when_fail_on_gate_enforced_the_gate(tmp_path):
             "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif")]
     forced = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "forced"), "--fail-on-gate"])
     md = (tmp_path / "forced" / "report.md").read_text(encoding="utf-8")
-    assert forced.exit_code == 2 and "enforced for this run by --fail-on-gate" in md and "recorded, not enforced" not in md
+    header = md.split("\n## ")[0]
+    assert forced.exit_code == 2 and "rollout phase `shadow` (enforced)" in header and "recorded, not enforced" not in md
+    assert "the gate blocked: enforced (exit 2)" in plain(forced.output)
+    # the report records the enforcement (docs/adr/0007-review-status-and-gate.md), and the CLI says why the gate blocked
+    assert json.loads((tmp_path / "forced" / "report.json").read_text(encoding="utf-8"))["gate_enforced"] is True
+    assert "gate reasons: review_incomplete, blocking_tier_and_severity" in plain(forced.output)
     recorded = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "recorded")])
     md = (tmp_path / "recorded" / "report.md").read_text(encoding="utf-8")
-    assert recorded.exit_code == 0 and "recorded, not enforced" in md and "--fail-on-gate" not in md.split("\n## ")[0]
-    report = json.loads((tmp_path / "recorded" / "report.json").read_text(encoding="utf-8"))
-    from mara.schemas import ReviewReport
+    header = md.split("\n## ")[0]
+    assert recorded.exit_code == 0 and "rollout phase `shadow` (recorded, not enforced)" in header and "--fail-on-gate" not in header
+    assert json.loads((tmp_path / "recorded" / "report.json").read_text(encoding="utf-8"))["gate_enforced"] is False
 
-    assert "enforced for this run" in render_markdown(ReviewReport.model_validate(report), fail_on_gate=True)
+
+def test_in_the_blocking_phase_a_blocked_gate_is_enforced_and_says_so(tmp_path):
+    """The CLI and report.md read gate_enforced alone (docs/adr/0007-review-status-and-gate.md), so the blocking phase,
+    which enforces without --fail-on-gate, says so like any other enforced gate; before, it said nothing."""
+    cfg = _shadow_cfg(tmp_path)
+    raw = yaml.safe_load(cfg.read_text(encoding="utf-8"))
+    raw["rollout"]["phase"] = "blocking"
+    cfg.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(cfg),
+                                   "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--out", str(tmp_path / "out")])
+    assert res.exit_code == 2 and "the gate blocked: enforced (exit 2)" in plain(res.output)
+    header = (tmp_path / "out" / "report.md").read_text(encoding="utf-8").split("\n## ")[0]
+    assert "rollout phase `blocking` (enforced)" in header
+    assert json.loads((tmp_path / "out" / "report.json").read_text(encoding="utf-8"))["gate_enforced"] is True
 
 
 # ------------------------------------------------------------------ in-country example

@@ -11,3 +11,5 @@ A decision binds only to the content it was made on: the same target, revision a
 - **Write the human ruling into the jury's fields:** rejected. Calibration and the shadow-phase baseline read `accepted` as the pipeline's own conclusion and must keep doing so, and the AAT would stop counting misses. The readers that should see the human ruling (the gate, report, queue, SARIF, PSIRT) move to the final outcome instead.
 - **Carry decisions across commits** (bind by target, file, CWE and quote, as PSIRT dedupe does): rejected for now. A ruling speaks about the code it was made on, and carrying it forward risks letting a changed, now-real vulnerability through on an old false-positive ruling.
 - **Let a human false positive also clear the tool result at that location:** rejected, because it would bypass the tool triage list and its recorded reasons.
+
+Amended by ADR 0007 (docs/adr/0007-review-status-and-gate.md): the final outcome is expressed by the four-valued `final_outcome` alone, and `final_accepted` and `final_needs_human` are removed. The decision above, to keep the jury outcome untouched beside the final outcome, stands.

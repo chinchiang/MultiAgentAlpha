@@ -159,6 +159,10 @@ class JudgeVote(BaseModel):
 
 
 JuryOutcomeValue = Literal["accepted", "rejected", "dropped", "needs_human"]
+# Why a gate blocks, in the fixed order a report lists them, and the two of them a blocking finding carries
+# (docs/adr/0007-review-status-and-gate.md; mara.review_status writes them)
+GateReason = Literal["review_incomplete", "blocking_tier_and_severity", "tier_c_while_tightened", "dimension_below_minimum"]
+BlockingReason = Literal["blocking_tier_and_severity", "tier_c_while_tightened"]
 
 
 class ConsensusResult(BaseModel):
@@ -188,6 +192,9 @@ class ConsensusResult(BaseModel):
                                         "decision, key, issue, decided_by, decided_at")
     unsupervised_reject_unverified: bool = Field(default=False, description="A rejected finding under rejection review "
                                                  "(policy P8, docs/adr/0005-jury-outcome.md); false in reports written before it")
+    blocking_reason: BlockingReason | None = Field(default=None, description="Why this blocking finding blocks the gate "
+                                        "(docs/adr/0007-review-status-and-gate.md); null on every other finding and in reports "
+                                        "written before it")
 
     @property
     def jury_outcome(self) -> JuryOutcomeValue:
@@ -211,13 +218,10 @@ class ConsensusResult(BaseModel):
         return self.human_decision is not None
 
     @property
-    def final_accepted(self) -> bool:
-        """The final outcome: the human ruling where there is one, the jury outcome otherwise."""
-        return self.human_decision["decision"] == "true_positive" if self.human_decision else self.accepted
-
-    @property
-    def final_needs_human(self) -> bool:
-        return False if self.human_decision else self.needs_human
+    def in_rejection_review(self) -> bool:
+        """A rejected finding no human has ruled on yet, which policy P8 queues for a human look while the jury outcome
+        stays rejected (rejection review, docs/adr/0005-jury-outcome.md)."""
+        return not self.resolved_by_human and self.jury_outcome == "rejected" and self.unsupervised_reject_unverified
 
 
 class DimensionScore(BaseModel):
@@ -289,6 +293,11 @@ class ReviewReport(BaseModel):
     target_id: str = ""
     revision: str = ""
     gate_passed: bool
+    # why the gate blocked, in fixed order; empty in reports written before it (docs/adr/0007-review-status-and-gate.md)
+    gate_reasons: list[GateReason] = Field(default_factory=list)
+    # whether a blocked gate was enforced (rollout phase blocking, or --fail-on-gate); false when the gate passed,
+    # null in reports written before it: unknown, not "not enforced"
+    gate_enforced: bool | None = None
     bias_audit: dict[str, float | int | str | dict]
     psirt: list[dict] = Field(default_factory=list, description="G-12: CRA Article 14 early-warning payloads for accepted tier-A Critical findings")
     human_queue: list[HumanQueueItem] = Field(default_factory=list, description="G-11: findings that need a human decision, with full context")

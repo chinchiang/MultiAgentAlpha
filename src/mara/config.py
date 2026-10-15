@@ -189,6 +189,9 @@ class TrainingConfig(BaseModel):
                                       description="Roles that must each have a valid record for governance check G-13")
 
 
+RolloutPhase = Literal["not_started", "shadow", "advisory", "blocking"]
+
+
 class RolloutConfig(BaseModel):
     """G-10: three-phase rollout (report section 15.4). shadow: the pipeline runs and records, the
     gate is not enforced; advisory: blocking findings are marked, not enforced; blocking: `mara review`
@@ -198,7 +201,7 @@ class RolloutConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    phase: Literal["not_started", "shadow", "advisory", "blocking"] = "not_started"
+    phase: RolloutPhase = "not_started"
     started_on: str = Field(default="", description="YYYY-MM-DD the current phase started")
     shadow_months: int = Field(default=2, ge=1)
     advisory_months: int = Field(default=3, ge=1)

@@ -11,7 +11,7 @@ from rich.table import Table
 from .config import MaraConfig, load_config
 from .pipeline import Pipeline
 from .progress import Progress
-from .report.markdown_out import write_markdown
+from .report.markdown_out import enforcement_wording, write_markdown
 from .report.sarif_out import write_sarif
 from .schemas import DIMENSION_LABELS, ReviewReport
 
@@ -73,21 +73,23 @@ def review(
         progress.finish(ok=False, error=type(e).__name__)
         raise
     progress.finish(ok=True)
-    phase = cfg.rollout.phase
-    if not report.gate_passed and phase != "blocking":
-        # G-10: outside `blocking` the phase records a blocked gate without enforcing it; an explicit
-        # --fail-on-gate overrides that for this run (docs/governance-templates.md), and the message says so
-        if fail_on_gate:
-            console.print(f"rollout phase [bold]{phase}[/bold]: the gate blocked; --fail-on-gate enforces it for this run (exit 2)")
-        else:
-            console.print(f"rollout phase [bold]{phase}[/bold]: the gate would have blocked; result recorded, merge not enforced (G-10)")
+    # an internal hand-off that did not arrive is an operational failure (EU CRA Article 14 clocks may depend on it):
+    # never a green run, and its 3 outranks an enforced gate's 2. The reports are written either way.
+    # G-10: whether a blocked gate is enforced (the blocking phase, or --fail-on-gate) was decided by mara.review_status
+    # and recorded in report.json; the gate's message says which, and the exit code the command ends with
     if psirt_failed:
-        # an internal hand-off that did not arrive is an operational failure (EU CRA Article 14 clocks
-        # may depend on it): never a green run. It outranks the gate's 2; the reports are written.
+        code, why = 3, ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else "")
+    elif report.gate_enforced:
+        code, why = 2, ""
+    else:
+        code, why = 0, ", G-10"
+    if not report.gate_passed:
+        console.print(f"rollout phase [bold]{cfg.rollout.phase}[/bold]: the gate blocked: "
+                      f"{enforcement_wording(bool(report.gate_enforced))} (exit {code}{why})")
+    if psirt_failed:
         console.print("[bold red]PSIRT hand-off failed for at least one finding; see the ledger and retry with --notify-psirt[/bold red]")
-        raise typer.Exit(code=3)
-    if not report.gate_passed and (fail_on_gate or phase == "blocking"):
-        raise typer.Exit(code=2)
+    if code:
+        raise typer.Exit(code=code)
 
 
 def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: Path | None, mock_fixtures: Path | None,
@@ -109,7 +111,7 @@ def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: P
             raise typer.BadParameter(f"{psirt_event}: not a readable JSON event ({type(e).__name__})", param_hint="--psirt-event") from e
     try:
         report = pipe.run(target, sarif_dir=sarif_dir, mode=provider, base_ref=base, calibration_sample=calibration_sample,
-                          psirt_event=event)
+                          psirt_event=event, fail_on_gate=fail_on_gate)
     except WorkspaceInsideTarget as e:
         raise typer.BadParameter(str(e), param_hint="TARGET") from e
     except ValueError as e:
@@ -119,7 +121,7 @@ def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: P
         raise
     out.mkdir(parents=True, exist_ok=True)
     write_sarif(report, out / "report.sarif")
-    write_markdown(report, out / "report.md", fail_on_gate=fail_on_gate)
+    write_markdown(report, out / "report.md")
     (out / "report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
     (out / "pipeline.log").write_text("\n".join(pipe.log) + "\n", encoding="utf-8")
     if cfg.human_queue.enabled:
@@ -148,6 +150,8 @@ def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: P
         t.add_row(DIMENSION_LABELS[d.dimension], str(d.score), str(d.accepted_findings), str(d.rejected_findings),
                   str(d.human_queue), "yes" if d.tool_ran else "no")
     console.print(t)
+    if report.gate_reasons:
+        console.print(f"gate reasons: {', '.join(report.gate_reasons)}")
     console.print(f"[bold]wrote[/bold] {out/'report.sarif'}, {out/'report.md'}, {out/'report.json'}"
                   + (f", {out/'human_queue.md'} ({len(report.human_queue)} item(s))" if cfg.human_queue.enabled else "")
                   + (f", {out/'psirt-notifications.json'} ({len(report.psirt)} PSIRT payload(s))" if cfg.psirt.enabled else ""))

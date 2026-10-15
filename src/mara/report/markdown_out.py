@@ -12,9 +12,16 @@ def _decided(c) -> str:
     return f"decided by human (#{d.get('issue')} by {literal(d.get('decided_by'))}): {d['decision'].replace('_', ' ')}"
 
 
-def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
-    """`fail_on_gate`: `mara review --fail-on-gate` enforces a blocked gate for this run in any rollout phase, so the
-    header must not call it "recorded, not enforced" (G-10; docs/governance-templates.md)."""
+def enforcement_wording(gate_enforced: bool) -> str:
+    """How a blocked gate is worded wherever MARA shows it, report.md and the CLI alike: enforced, or recorded but not
+    enforced (GLOSSARY: Gate). mara.review_status decided which; this only words it."""
+    return "enforced" if gate_enforced else "recorded, not enforced"
+
+
+def render_markdown(r: ReviewReport) -> str:
+    """A blocked gate is enforced in the blocking phase or with `mara review --fail-on-gate`, and only recorded otherwise
+    (G-10; docs/governance-templates.md). The header says which from the report's `gate_enforced` alone, which
+    mara.review_status decided (docs/adr/0007-review-status-and-gate.md), and nothing for a report written before it."""
     cons = {c.finding_id: c for c in r.consensus}
     overall = f"{r.overall_score}/100" if r.overall_score is not None else "unavailable (review incomplete)"
     lines = [
@@ -23,9 +30,9 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
         f"Generated {r.generated_at} · mode `{r.provider_mode}` · families {', '.join(r.families_used)}",
         "",
         f"**Overall score {overall} · gate {'PASSED' if r.gate_passed else 'BLOCKED'}**"
+        + (f" ({literal(', '.join(r.gate_reasons))})" if r.gate_reasons else "")
         + (f" · rollout phase `{r.bias_audit['rollout_phase']}`" if r.bias_audit.get("rollout_phase") else "")
-        + ((" (enforced for this run by --fail-on-gate)" if fail_on_gate else " (recorded, not enforced)")
-           if r.bias_audit.get("rollout_phase") not in (None, "blocking") and not r.gate_passed else ""),
+        + ("" if r.gate_passed or r.gate_enforced is None else f" ({enforcement_wording(r.gate_enforced)})"),
         "",
         f"Review status: **{r.review_status}**; incomplete reasons: {literal(', '.join(r.incomplete_reasons)) or 'none'}",
         "",
@@ -61,6 +68,7 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
             f"- Reachability ({f.reachability}): {literal(f.reachability_argument)}",
             f"- Attacker path: {literal(f.exploit_sketch)}",
             *([f"- Human decision: {_decided(c)}"] if c.resolved_by_human else []),
+            *([f"- Blocks the gate: {literal(c.blocking_reason)}"] if c.blocking_reason else []),
             "",
         ]
     lines += [
@@ -85,11 +93,11 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
             if c.resolved_by_human
             else "provenance unverified"
             if c.tier.value == "D" and not any(p.verified for p in f.provenance)
-            else f"awaiting human decision: {', '.join(c.human_reasons) or 'unresolved_human_review'}"
+            else f"awaiting human decision: {', '.join(c.human_reasons) or 'no reason recorded'}"
             if c.final_outcome == "needs_human"
             else ("skeptic refuted" if c.skeptic_refuted else f"consensus {c.weighted_score} below threshold")
             # rejection review (policy P8, docs/adr/0005-jury-outcome.md): decided by the jury, queued for a human look
-            + (" · rejection review queued" if c.unsupervised_reject_unverified else "")
+            + (" · rejection review queued" if c.in_rejection_review else "")
         )
         lines.append(f"- {f.id} · {literal(f.title)} · {f.source_family.value} · tier {c.tier.value} · {why}")
     lines += ["", "## Human queue", ""]
@@ -138,5 +146,5 @@ def render_markdown(r: ReviewReport, *, fail_on_gate: bool = False) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_markdown(r: ReviewReport, path: Path, *, fail_on_gate: bool = False) -> None:
-    path.write_text(render_markdown(r, fail_on_gate=fail_on_gate), encoding="utf-8")
+def write_markdown(r: ReviewReport, path: Path) -> None:
+    path.write_text(render_markdown(r), encoding="utf-8")

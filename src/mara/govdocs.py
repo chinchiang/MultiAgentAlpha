@@ -22,10 +22,16 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
 
 from .decisions import TrainingRequirement, select
 from .decisions import load as load_decisions
+from .schemas import ConsensusResult, JuryOutcomeValue
+
+JURY_OUTCOMES = get_args(JuryOutcomeValue)  # accepted, rejected, dropped, needs_human
+# how the baseline report names each jury outcome (GLOSSARY.md, Jury outcome)
+JURY_OUTCOME_LABELS: dict[str, str] = {"accepted": "accepted", "rejected": "rejected", "dropped": "dropped",
+                                       "needs_human": "needing a human"}
 
 if TYPE_CHECKING:
     from .config import MaraConfig
@@ -347,15 +353,17 @@ def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None 
     if not n:
         raise ValueError("no report.json files given")
     tiers = {"A": 0, "B": 0, "C": 0, "D": 0}
-    accepted = rejected = queued = blocked = 0
+    # the jury outcome, not the final one: the baseline measures the pipeline (docs/adr/0003-human-resolution.md), and a
+    # finding that is not accepted is rejected, dropped or waiting for a human (docs/adr/0007-review-status-and-gate.md)
+    outcomes = dict.fromkeys(JURY_OUTCOMES, 0)
+    queued = blocked = 0
     tokens_in = tokens_out = 0
     for r in reports:
         for c in r.get("consensus", []):
             tiers[c["tier"]] = tiers.get(c["tier"], 0) + 1
-            accepted += int(c.get("accepted", False))
-            rejected += int(not c.get("accepted", False))
+            outcomes[ConsensusResult.model_validate(c).jury_outcome] += 1
         queued += len(r.get("human_queue", []))
-        blocked += int(not r.get("gate_passed", True))
+        blocked += int(not r.get("gate_passed", False))  # a report that does not say counts as blocked (fail closed)
         audit = r.get("bias_audit", {})
         tokens_in += int(audit.get("input_tokens", 0) or 0)
         tokens_out += int(audit.get("output_tokens", 0) or 0)
@@ -383,8 +391,9 @@ def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None 
     decided = decisions["true_positive"] + decisions["false_positive"]
     return {
         "reviews": n,
-        "findings_per_review": round((accepted + rejected) / n, 2),
-        "accepted_per_review": round(accepted / n, 2),
+        "findings_per_review": round(sum(outcomes.values()) / n, 2),
+        "accepted_per_review": round(outcomes["accepted"] / n, 2),
+        "jury_outcomes": outcomes,
         "tiers": tiers,
         "gate_would_block_rate": round(blocked / n, 3),
         "human_queue_per_review": round(queued / n, 2),
@@ -402,8 +411,10 @@ def render_baseline(metrics: dict, *, date: dt.date, phase_started: str, sources
          f"Shadow phase started {phase_started or 'unknown'}; {metrics['reviews']} review(s) aggregated; "
          f"provider mode(s): {', '.join(metrics['modes'])}.",
          "", "| metric | value |", "|---|---:|",
-         f"| findings per review (accepted + rejected) | {metrics['findings_per_review']} |",
+         f"| findings per review | {metrics['findings_per_review']} |",
          f"| accepted findings per review | {metrics['accepted_per_review']} |",
+         f"| jury outcomes {' / '.join(JURY_OUTCOME_LABELS[o] for o in JURY_OUTCOMES)} | "
+         + " / ".join(str(metrics["jury_outcomes"][k]) for k in JURY_OUTCOMES) + " |",
          f"| evidence tiers A / B / C / D | {metrics['tiers']['A']} / {metrics['tiers']['B']} / {metrics['tiers']['C']} / {metrics['tiers']['D']} |",
          f"| gate would-block rate | {metrics['gate_would_block_rate']} |",
          f"| human-queue items per review | {metrics['human_queue_per_review']} |",

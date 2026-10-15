@@ -366,6 +366,58 @@ def test_a_failed_run_is_failed_not_finished(server, monkeypatch):
     assert res.status == 404 and _error(err) == "no_report"
 
 
+def _finished_review(real, report_file: Path, exit_code: int):
+    """A child that copies `report_file` to its report.json, writes a finished progress record, then exits."""
+    def spawn(argv, **kw):
+        out, progress_file = argv[argv.index("--out") + 1], argv[argv.index("--progress-file") + 1]
+        code = ("import shutil, sys\nfrom pathlib import Path\nfrom mara.progress import Progress\n"
+                "shutil.copyfile(sys.argv[3], Path(sys.argv[1], 'report.json'))\nProgress(Path(sys.argv[2])).finish(ok=True)\n"
+                "sys.exit(int(sys.argv[4]))\n")
+        return real([sys.executable, "-c", code, out, progress_file, str(report_file), str(exit_code)], **kw)
+    return spawn
+
+
+@pytest.mark.parametrize("recorded, exit_code, enforced", [
+    (True, 3, True),    # a failed PSIRT hand-off exits 3, outranking the gate's 2: the report still says it was enforced
+    (False, 0, False),
+    (None, 2, True),    # a report written before gate_enforced: the exit code is all there is
+    (None, 0, False),
+])
+def test_a_run_reads_whether_its_gate_was_enforced_from_the_report(server, mock_report, monkeypatch, tmp_path, recorded,
+                                                                   exit_code, enforced):
+    """The seeded review's report, a valid ReviewReport, with gate_enforced as recorded (null: written before it)."""
+    _, report = mock_report
+    report_file = tmp_path / "report.json"
+    report_file.write_text(report.model_copy(update={"gate_enforced": recorded}).model_dump_json(), encoding="utf-8")
+    monkeypatch.setattr(runs.procs, "spawn", _finished_review(procs.spawn, report_file, exit_code))
+    c = Client(server)
+    res, data, _ = c.request("POST", "/api/runs", body={"target": "fixtures/vuln-sample", "provider": "mock"})
+    assert res.status == 201
+    done = _wait(c, data["run"]["id"])
+    assert done["run"]["status"] == "finished" and done["run"]["exit_code"] == exit_code
+    assert done["run"]["gate_enforced"] is enforced
+
+
+def test_a_report_with_a_gate_code_the_review_status_does_not_write_has_no_report_view(server, mock_report, monkeypatch,
+                                                                                       tmp_path):
+    """gate_reasons holds only the review status's codes (docs/adr/0007-review-status-and-gate.md), so a report with any
+    other code does not validate: the workbench shows the run without a report, while whether its gate was enforced,
+    read from the raw JSON, stays readable."""
+    _, report = mock_report
+    doc = json.loads(report.model_copy(update={"gate_enforced": True}).model_dump_json())
+    doc["gate_reasons"] = ["review_incomplete", "blocked_by_the_owner"]
+    report_file = tmp_path / "report.json"
+    report_file.write_text(json.dumps(doc), encoding="utf-8")
+    monkeypatch.setattr(runs.procs, "spawn", _finished_review(procs.spawn, report_file, 3))
+    c = Client(server)
+    res, data, _ = c.request("POST", "/api/runs", body={"target": "fixtures/vuln-sample", "provider": "mock"})
+    assert res.status == 201
+    done = _wait(c, data["run"]["id"])
+    assert done["run"]["status"] == "finished" and done["run"]["gate_enforced"] is True
+    res, err, _ = c.request("GET", f"/api/runs/{data['run']['id']}/report")
+    assert res.status == 404 and _error(err) == "no_report"
+
+
 # ------------------------------------------------------------------ environment
 
 

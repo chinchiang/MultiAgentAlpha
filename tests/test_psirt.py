@@ -4,7 +4,6 @@ from the environment; policy P6 keeps the trigger narrow."""
 
 import datetime as dt
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -21,6 +20,7 @@ from mara.pipeline import Pipeline  # noqa: E402
 from mara.policy import evaluate_policies  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
 from mara.report.psirt_out import build_notifications, select_psirt_findings, send_psirt, write_psirt  # noqa: E402
+from tests.cli_output import plain  # noqa: E402
 
 PSIRT = {"enabled": True, "webhook_url": "https://psirt.example.internal/intake", "product": "IPC-7000 web console", "shipped": True}
 
@@ -33,14 +33,19 @@ def _mock_cfg(**psirt) -> MaraConfig:
     return MaraConfig.model_validate(raw)
 
 
+def _accept(c):
+    # an accepted jury outcome as scoring writes it (JuryOutcome.consensus_fields): accepted, not needing a human
+    c.accepted, c.needs_human, c.human_reasons = True, False, []
+
+
 def _adjudicate_for_psirt_test(report, cfg):
     count = 0
     for c in report.consensus:
         if c.tier.value == "A" and c.cvss4_severity == "Critical" and count < 3:
-            c.accepted = True
+            _accept(c)
             count += 1
         elif c.tier.value == "B":
-            c.accepted = True
+            _accept(c)
     report.psirt = build_notifications(report, cfg)
     report.bias_audit["psirt_notifications"] = len(report.psirt)
 
@@ -128,8 +133,8 @@ def test_write_and_cli_file_output(shipped_report, tmp_path):
                                   "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--mock-fixtures", str(ROOT / "fixtures" / "mock-responses"),
                                   "--out", str(out)])
     assert res.exit_code == 0, res.output
-    plain = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", res.output)  # without colour codes (FORCE_COLOR on CI runners)
-    assert (out / "psirt-notifications.json").is_file() and "PSIRT payload" in " ".join(plain.split())
+    text = plain(res.output)  # without colour codes (FORCE_COLOR on CI runners)
+    assert (out / "psirt-notifications.json").is_file() and "PSIRT payload" in text
 
 
 def test_policy_p6_keeps_the_trigger_narrow():
@@ -344,27 +349,59 @@ def test_an_unreachable_send_is_recorded_and_does_not_stop_the_others(shipped_re
     assert attempt == {"at": attempt["at"], "status_code": None, "ok": False, "error": "connection_failed"}
 
 
-def test_a_failed_psirt_hand_off_fails_the_cli_run(shipped_report, monkeypatch, tmp_path):
-    """The CLI printed FAILED but exited 0: CI showed green after a CRA hand-off that never arrived."""
+def _review_with_a_failed_hand_off(monkeypatch, tmp_path, *flags: str):
+    """`mara review --notify-psirt` (and `flags`) of the seeded fixture on a config with the PSIRT hand-off on, every
+    send failing. Nothing of the review is stubbed but the send: the hand-off's payload is real, because a trained
+    adjudicator ruled the seeded tier A Critical finding F-0002, which the jury sent to a human, a true positive on a
+    first review of the same content (docs/adr/0003-human-resolution.md), so this review accepts it and the CRA trigger
+    fires. Returns the CLI result, its report and its output as a reader sees it."""
     import yaml
 
     import mara.report.psirt_out as po
-    from mara.pipeline import Pipeline as P
+    from mara.pipeline import Pipeline
+    from tests.test_human_resolution import REGISTER, decide
 
-    _, report = shipped_report
+    home = tmp_path / "mara-home"
+    (home / "training").mkdir(parents=True)
+    (home / "training" / "records.yaml").write_text(REGISTER, encoding="utf-8")
+    monkeypatch.setenv("MARA_HOME", str(home))
+    first = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
+                     out_dir=home / "first").run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif",
+                                                 mode="mock")
+    decide(home, next(i for i in first.human_queue if i.finding_id == "F-0002"), "true_positive")
     raw = yaml.safe_load((ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8"))
     raw["psirt"] = PSIRT
     cfg_path = tmp_path / "mock-psirt.yaml"
     cfg_path.write_text(yaml.safe_dump(raw))
-    monkeypatch.setattr(P, "run", lambda self, *a, **k: report)
-    monkeypatch.setattr(po, "send_psirt", lambda payloads, *a, **k: [
+    monkeypatch.setattr(po, "send_psirt", lambda sent, *a, **k: [
         {"finding_id": p["finding_id"], "dedupe_key": p["dedupe_key"], "skipped": False, "status_code": None, "ok": False,
-         "error": "connection_failed"} for p in payloads])
-    out = tmp_path / "out"
+         "error": "connection_failed"} for p in sent])
     res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(cfg_path),
-                                  "--out", str(out), "--notify-psirt"])
+                                  "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--mock-fixtures",
+                                  str(ROOT / "fixtures" / "mock-responses"), "--out", str(tmp_path / "out"), "--notify-psirt", *flags])
+    report = json.loads((tmp_path / "out" / "report.json").read_text(encoding="utf-8"))
+    assert [p["finding_id"] for p in report["psirt"]] == ["F-0002"], "the human-confirmed finding starts the clock"
+    return res, report, plain(res.output)
+
+
+def test_a_failed_psirt_hand_off_fails_the_cli_run(monkeypatch, tmp_path):
+    """The CLI printed FAILED but exited 0: CI showed green after a CRA hand-off that never arrived. The gate blocked
+    without being enforced (rollout phase not_started), and its message names the exit code the command ends with."""
+    res, report, text = _review_with_a_failed_hand_off(monkeypatch, tmp_path)
     assert res.exit_code == 3, res.output
-    assert "connection_failed FAILED" in res.output and (out / "report.json").is_file(), "the reports are still written"
+    assert "connection_failed FAILED" in res.output, "the failed send is reported"
+    assert not report["gate_passed"] and report["gate_reasons"] and report["gate_enforced"] is False
+    assert "the gate blocked: recorded, not enforced (exit 3: the PSIRT hand-off failed)" in text and "exit 0" not in text
+
+
+def test_an_enforced_gate_with_a_failed_psirt_hand_off_names_the_exit_code_it_gets(monkeypatch, tmp_path):
+    """A failed hand-off exits 3, which outranks an enforced gate's 2; the gate's message must say 3, not 2. The same
+    review, its blocked gate enforced by --fail-on-gate."""
+    res, report, text = _review_with_a_failed_hand_off(monkeypatch, tmp_path, "--fail-on-gate")
+    assert res.exit_code == 3, res.output
+    assert not report["gate_passed"] and report["gate_enforced"] is True
+    assert "the gate blocked: enforced (exit 3: the PSIRT hand-off failed, which outranks the gate)" in text
+    assert "(exit 2)" not in text
 
 
 def test_stage_clock_records_references_and_names_overdue_stages(shipped_report, tmp_path):

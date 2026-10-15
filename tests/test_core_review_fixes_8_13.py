@@ -17,6 +17,7 @@ from mara.config import load_config
 from mara.context.repo_map import RepoContext, fence_safe, import_neighbours
 from mara.pipeline import Pipeline
 from mara.schemas import Finding, ModelFamily, Provenance
+from tests.cli_output import plain
 
 ROOT = Path(__file__).resolve().parents[1]
 VECTOR = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
@@ -111,11 +112,12 @@ def test_forced_gate_outside_blocking_says_it_is_enforced(tmp_path):
     args = ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(cfg),
             "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif")]
     forced = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "forced"), "--fail-on-gate"])
-    text = " ".join(forced.output.split())
-    assert forced.exit_code == 2 and "--fail-on-gate enforces it" in text and "merge not enforced" not in text
+    text = plain(forced.output)
+    assert forced.exit_code == 2 and "the gate blocked: enforced (exit 2)" in text and "recorded, not enforced" not in text
     recorded = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "recorded")])
-    text = " ".join(recorded.output.split())
-    assert recorded.exit_code == 0 and "merge not enforced" in text and "enforces it" not in text
+    text = plain(recorded.output)
+    assert recorded.exit_code == 0 and "the gate blocked: recorded, not enforced (exit 0, G-10)" in text
+    assert "the gate blocked: enforced" not in text
 
 
 # ------------------------------------------------------------------ 12. mara cvss on a bad vector

@@ -222,7 +222,7 @@ class RunRegistry:
             if not finished:
                 progress_mod.close_abandoned(run_dir / "progress.json", "cancelled" if status == "cancelled" else f"exit {code}")
             manifest.update(status=status, exit_code=code, finished_at=procs.now(),
-                            gate_enforced=finished and code == 2, psirt_failed=finished and code == 3)
+                            gate_enforced=finished and _gate_enforced(run_dir, code), psirt_failed=finished and code == 3)
             procs.write_json(run_dir / "run.json", manifest)
             self._procs.pop(run_id, None)
 
@@ -353,3 +353,12 @@ class RunRegistry:
             return None
         p = d / name
         return p if p.is_file() else None
+
+
+def _gate_enforced(run_dir: Path, code: int) -> bool:
+    """Whether the finished review enforced its gate, as its report records it (docs/adr/0007-review-status-and-gate.md):
+    the exit code cannot say, since a failed PSIRT hand-off's 3 outranks the gate's 2. Only a report written before the
+    field leaves the exit code to go by."""
+    report = procs.read_json(run_dir / "report.json") or {}
+    recorded = report.get("gate_enforced")
+    return recorded if isinstance(recorded, bool) else code == 2
