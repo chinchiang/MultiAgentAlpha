@@ -53,7 +53,7 @@ def test_extraction_roles_read_an_empty_reply_as_an_abstention_and_ballots_as_in
     for role, counter in (("reviewer", "reviewer_refusals"), ("context", "context_refusals"), ("skeptic", "skeptic_invalid_items"),
                           ("redteam", "redteam_invalid_items"), ("judge", "judge_invalid_items")):
         # as the agents write them: voided, and a ballot's over the one finding it was asked about
-        asked = {"counts": {"findings": 1}} if ROLES[role].form == "ballot" else {}
+        asked = {"counts": {"findings": 1}} if ROLES[role].role_type == "ballot" else {}
         a = Audit()
         a.record(ReplyRecord.of(empty, role, "glm", voided=True, **asked))
         assert a.incomplete_reasons() == [counter], role

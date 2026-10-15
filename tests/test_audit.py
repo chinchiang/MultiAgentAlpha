@@ -39,7 +39,7 @@ CANARY_ROLES = tuple(role for role, counters in ROLES.items() if counters.canary
 
 def _record(role, kind=exchange.OK, **fields):
     """A record of `role` as its agent writes it; a ballot's is over one finding (tests/reply_records.py)."""
-    if ROLES[role].form == "ballot":
+    if ROLES[role].role_type == "ballot":
         return ballot(role, "glm", 1, kind, **fields)
     return extraction(role, "glm", kind, **fields)
 
