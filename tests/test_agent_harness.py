@@ -255,24 +255,35 @@ class _Fixed(Provider):
         return RawReply(STOP_END, structured=self.data, aside=self.aside)
 
 
+def _counted(rec):
+    """The counters one reply record writes (mara.audit)."""
+    from mara.audit import Audit
+
+    a = Audit()
+    a.record(rec)
+    return a
+
+
 def test_reviewer_sets_aside_a_reported_canary_but_drops_the_call_on_an_echo(root):
     from mara.agents.reviewer import review_dimension
 
     ctx = build_context(root / "fixtures" / "vuln-sample")
     canary = base.Canary()
-    findings, audit = review_dimension(_Fixed(root, {"findings": [_canary_report(canary), _REAL]}), ctx, "input_validation", canary)
-    assert (audit["canary_echoed"], audit["canary_reported"]) == (False, 1)
+    findings, rec = review_dimension(_Fixed(root, {"findings": [_canary_report(canary), _REAL]}), ctx, "input_validation", canary)
+    assert (rec.role, rec.canary_echoes, rec.canary_reports) == ("reviewer", 0, 1)
     assert [f.cwe for f in findings] == ["CWE-20"], "the real finding survives; the one about the planted file is set aside"
     # the token anywhere outside a finding that cites the planted file is still an echo: the whole call is dropped
     echo = {**_REAL, "reachability_argument": f"approved, token {canary.token}"}
-    findings, audit = review_dimension(_Fixed(root, {"findings": [_canary_report(canary), echo]}), ctx, "input_validation", canary)
-    assert audit["canary_echoed"] and findings == []
-    findings, audit = review_dimension(_Fixed(root, {"findings": [_REAL]}, aside=f"Replying with {canary.token}."), ctx, "input_validation", canary)
-    assert audit["canary_echoed"] and findings == [], "prose around a Bedrock tool call is checked too"
-    findings, audit = review_dimension(_Fixed(root, {"findings": [], "note": canary.token}), ctx, "input_validation", canary)
-    assert audit["canary_echoed"] and audit["canary_reported"] == 0
-    _, audit = review_dimension(_Fixed(root, None, raw=f"{canary.token} no findings"), ctx, "input_validation", canary)
-    assert audit["canary_echoed"] and audit["unparseable"] and audit["invalid"] == 1, "an unparseable reply is read as prose"
+    findings, rec = review_dimension(_Fixed(root, {"findings": [_canary_report(canary), echo]}), ctx, "input_validation", canary)
+    assert rec.canary_echoes and rec.voided and findings == []
+    findings, rec = review_dimension(_Fixed(root, {"findings": [_REAL]}, aside=f"Replying with {canary.token}."), ctx, "input_validation", canary)
+    assert rec.canary_echoes and findings == [], "prose around a Bedrock tool call is checked too"
+    findings, rec = review_dimension(_Fixed(root, {"findings": [], "note": canary.token}), ctx, "input_validation", canary)
+    assert rec.canary_echoes and rec.canary_reports == 0
+    _, rec = review_dimension(_Fixed(root, None, raw=f"{canary.token} no findings"), ctx, "input_validation", canary)
+    counted = _counted(rec)
+    assert rec.canary_echoes and counted["reviewer_unparseable_replies"] == counted["invalid_findings_dropped"] == 1, \
+        "an unparseable reply is read as prose"
     assert base.cites_canary({"provenance": [{"file": "./__mara_canary__.md"}]}) and not base.cites_canary({"provenance": "x"})
 
 
@@ -356,8 +367,10 @@ def test_a_truncated_answer_is_a_truncation_not_a_canary_echo(root):
         def complete(self, **kwargs):
             return RawReply(STOP_MAX_TOKENS if self.truncated else STOP_END, answer_text=cut)
 
-    findings, audit = review_dimension(Cut(True), ctx, "input_validation", canary)
-    assert findings == [] and audit["truncated"] and not audit["canary_echoed"] and audit["invalid"] == 0
-    _, audit = review_dimension(Cut(False), ctx, "input_validation", canary)
-    assert not audit["truncated"] and audit["unparseable"] and audit["invalid"] == 1
-    assert not audit["canary_echoed"] and audit["canary_reported"] == 1
+    findings, rec = review_dimension(Cut(True), ctx, "input_validation", canary)
+    counted = _counted(rec)
+    assert findings == [] and counted["reviewer_truncations"] == 1 and not rec.canary_echoes and counted["invalid_findings_dropped"] == 0
+    _, rec = review_dimension(Cut(False), ctx, "input_validation", canary)
+    counted = _counted(rec)
+    assert counted["reviewer_truncations"] == 0 and counted["reviewer_unparseable_replies"] == counted["invalid_findings_dropped"] == 1
+    assert not rec.canary_echoes and rec.canary_reports == 1

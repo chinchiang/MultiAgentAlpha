@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .. import exchange
+from ..audit import ReplyRecord
 from ..context.repo_map import RepoContext
 from ..providers.base import Provider
 from ..schemas import DIMENSION_LABELS, Finding, Provenance
@@ -55,7 +56,7 @@ CONTEXT_DIMENSIONS = ("architecture", "authn_authz")
 
 
 def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canary: base.Canary,
-                     context_view: ContextView | None = None) -> tuple[list[Finding], dict]:
+                     context_view: ContextView | None = None) -> tuple[list[Finding], ReplyRecord]:
     system_extra = base.load_prompt(f"reviewer_{dimension}")
     derived: tuple[exchange.Derived, ...] = ()
     if context_view is not None and dimension in CONTEXT_DIMENSIONS:
@@ -68,17 +69,18 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
     # a finding that cites the planted file reports the injection attempt (resisting it); it is set aside, and
     # only the token anywhere else in the answer counts as an echo
     data, echoed, reported = canary.screen(outcome, ("findings",))
-    # an unparseable reply is invalid output, one per reply (docs/adr/0001-reply-outcome-accounting.md)
-    audit = {**exchange.extraction_flags(outcome), "canary_echoed": echoed, "canary_reported": reported,
-             "input_tokens": outcome.input_tokens, "output_tokens": outcome.output_tokens, "invalid": int(outcome.unparseable),
-             "unverified_quotes": 0}
+
+    def record(invalid: int = 0, unverified: int = 0, voided: bool = False) -> ReplyRecord:
+        return ReplyRecord.of(outcome, "reviewer", provider.family.value, canary_echoes=int(echoed), canary_reports=reported,
+                              invalid_items=invalid, voided=voided, counts={"unverified_quotes": unverified})
+
     if outcome.data is None:
-        return [], audit
+        return [], record(voided=True)
     if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
-        audit["invalid"] += 1
-        return [], audit
-    if audit["canary_echoed"]:
-        return [], audit
+        return [], record(invalid=1, voided=True)
+    if echoed:
+        return [], record(voided=True)
+    invalid = unverified = 0
     findings: list[Finding] = []
     for raw in data.get("findings", []):
         try:
@@ -86,7 +88,7 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
             for p in prov:
                 p.verified = base.verify_quote(ctx, p.file, p.line, p.quote)
             if not all(p.verified for p in prov):
-                audit["unverified_quotes"] += 1
+                unverified += 1
             f = Finding(
                 id="pending", dimension=dimension, title=raw["title"], cwe=raw["cwe"],
                 standard_refs=raw.get("standard_refs", []), provenance=prov, reachability=raw["reachability"],
@@ -96,5 +98,5 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
             )
             findings.append(f)
         except (KeyError, ValueError, TypeError):
-            audit["invalid"] += 1
-    return findings, audit
+            invalid += 1
+    return findings, record(invalid, unverified)

@@ -187,21 +187,10 @@ class Pipeline:
             for dim in self.cfg.dimensions:
                 for name in self.cfg.roles.reviewers:
                     prov = self._p(name)
-                    findings, audit = reviewer.review_dimension(prov, batch, dim, canary, context_view)
-                    fam = prov.family.value
-                    for key, counter in (("refused", "reviewer_refusals"), ("truncated", "reviewer_truncations"),
-                                         ("unparseable", "reviewer_unparseable_replies"), ("errored", "reviewer_errors"),
-                                         ("canary_echoed", "canary_echoes"), ("canary_reported", "canary_reports"),
-                                         ("unverified_quotes", "findings_with_unverified_quotes"), ("invalid", "invalid_findings_dropped")):
-                        self.audit.add(counter, fam, int(audit[key]))
-                    self.audit.add("reviewer_calls", fam)
-                    self.audit["input_tokens"] += audit["input_tokens"]
-                    self.audit["output_tokens"] += audit["output_tokens"]
+                    findings, rec = reviewer.review_dimension(prov, batch, dim, canary, context_view)
+                    self.audit.record(rec)
                     raw.extend(findings)
-                    tags = {"refused": " [REFUSED]", "truncated": " [TRUNCATED]", "errored": " [PROVIDER ERROR]", "canary_echoed": " [CANARY ECHOED]",
-                            "canary_reported": " [CANARY REPORTED]"}
-                    flags = [tag for key, tag in tags.items() if audit[key]]
-                    self._say(f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)" + "".join(flags))
+                    self._say(f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)" + log_tags(rec))
         # assign ids and strip unknown standard references. Ids are content-ordered (file, line,
         # cwe, dimension, title) rather than call-ordered: consecutive ids no longer reveal which
         # findings shared a reviewer call, so the blinded view leaks no grouping (judge.md promises
