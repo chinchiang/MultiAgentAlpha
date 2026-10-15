@@ -67,10 +67,11 @@ not started, so all three fail today with precise reasons.
 - `rollout:` in `config/mara.yaml`: `phase` (`not_started` | `shadow` | `advisory` | `blocking`),
   `started_on`, `shadow_months` (2), `advisory_months` (3), `baseline_report`.
 - The phase changes behaviour: `mara review` exits 2 on a blocked gate only in `blocking` (or with
-  `--fail-on-gate`), and 3 instead, whatever the gate, when a PSIRT hand-off failed; in the other
-  phases (`not_started`, `shadow`, `advisory`) the result is recorded and merge is not enforced. In
-  every phase the CLI and the report header say whether a blocked gate was enforced or only
-  recorded, as the report's `gate_enforced` records it. The phase is written into
+  `--fail-on-gate`). In the other phases (`not_started`, `shadow`, `advisory`) a blocked gate is
+  recorded and the merge is not held, unless `--fail-on-gate` is given for that run. A failed PSIRT
+  hand-off makes the command exit 3 instead, in any phase and whatever the gate. In every phase the
+  CLI and the report header say whether a blocked gate was enforced or only recorded, as the
+  report's `gate_enforced` records it. The phase is written into
   the report's bias audit; why the gate blocked (`gate_reasons`) and whether it was enforced
   (`gate_enforced`) are report fields of their own.
 - `scripts/rollout_phase.py`:
