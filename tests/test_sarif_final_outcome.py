@@ -168,11 +168,20 @@ def _recast(votes, pattern: str):
     return [v.model_copy(update={"verdict": verdict(v)}) for v in votes]
 
 
-def _with_a_fourth_judge(cfg, votes):
-    """The panel with a fourth judge family (mistral), voting as deepseek did. The mock panel never rejects a finding:
-    with the finder's family excused, two judges remain, and any split between them is agreement 0.25, below the
-    threshold, so a human decides; a rejection needs three independent judges, one for and two against (agreement
-    0.5). The same holds for rejection review, P8's look at every rejected finding (docs/adr/0005-jury-outcome.md)."""
+def _with_a_fourth_judge(cfg, votes, finders):
+    """The panel with a fourth judge family (mistral), and the votes Pipeline.run_jury would collect from it: mistral,
+    never a finder here, votes on every finding as one of its other judges did (deepseek where it voted), and a finder's
+    family keeps its discounted self-family vote only while fewer than min_independent_judges families are independent
+    of the finding's finders (run_jury's self-preference rule), so a two-finder finding loses those votes here.
+
+    Why a fourth judge: a finding is rejected only when at least three judge families are independent of all its
+    finders, one voting for it and two against (agreement 0.5). The mock panel never gets there, nor does any panel of
+    three judges that also review (config/mara.yaml's too; docs/adr/0005-jury-outcome.md): one finder leaves two
+    judges, whose split is agreement 0.25, below any threshold P4 allows (0.3), and whose joint "false positive"
+    leaves no model family agreeing, so the finding is tier D and dropped; two or three finders leave too few
+    independent judges for the quorum. Without a rejection there is no rejection review either."""
+    from collections import defaultdict
+
     from mara.config import MaraConfig
     from mara.schemas import ModelFamily
 
@@ -180,18 +189,32 @@ def _with_a_fourth_judge(cfg, votes):
     raw["models"].append({"name": "mock-m", "family": "mistral", "provider": "mock", "model": "mock-mistral",
                           "data_residency": "on_prem"})
     raw["roles"]["judges"].append("mock-m")
-    fourth = [v.model_copy(update={"judge_family": ModelFamily.MISTRAL, "judge_model": "mock-mistral"})
-              for v in votes if v.judge_family == ModelFamily.DEEPSEEK]
-    return MaraConfig.model_validate(raw, context={"skip_policies": True}), [*votes, *fourth]
+    panel = MaraConfig.model_validate(raw, context={"skip_policies": True})
+    judges = {m.family for m in panel.models if m.name in panel.roles.judges}
+    by_finding = defaultdict(list)
+    for v in votes:
+        by_finding[v.finding_id].append(v)
+    cast = []
+    for fid, own in by_finding.items():
+        excused = len(judges - finders[fid]) >= panel.gate.min_independent_judges
+        cast += [v for v in own if not (excused and v.judge_family in finders[fid])]
+        model = next(fam for fam in (ModelFamily.DEEPSEEK, *sorted({v.judge_family for v in own}))
+                     if any(v.judge_family == fam for v in own))
+        cast += [v.model_copy(update={"judge_family": ModelFamily.MISTRAL, "judge_model": "mock-mistral", "self_family": False})
+                 for v in own if v.judge_family == model]
+    return panel, cast
 
 
 def _variants(report, cfg, tmp_path):
-    """Reports scoring really produces: the seeded review's findings, skeptic, red team and tool results scored again by
-    Pipeline.score with the judges' votes re-cast, each finding taking every vote pattern in turn, on the mock panel
-    and on the panel with a fourth judge. Tier, score, votes and jury outcome therefore agree as scoring writes them;
-    no rule of decide() or of tiering is copied here. Every other variant carries usable human rulings, a false
+    """Consensus rows scoring really produces: the seeded review's findings, skeptic, red team and tool results scored
+    again by Pipeline.score with the judges' votes re-cast, each finding taking every vote pattern in turn, on the mock
+    panel and on the panel with a fourth judge. Tier, score, votes and jury outcome therefore agree as scoring writes
+    them; no rule of decide() or of tiering is copied here. Every other variant carries usable human rulings, a false
     positive on every third finding and a true positive on the next (a ruling binds to content, whatever the jury
-    concluded). Each gets the human queue built for it, as the pipeline would."""
+    concluded). Each gets its blocking reasons from assess and the human queue built for it. The report's other
+    fields (review status, incomplete reasons, gate, dimensions, overall score) stay those of the seeded review, and the
+    queue keys are built without the review identity: both writers copy those as they stand, so the comparison does
+    not depend on them."""
     from collections import defaultdict
 
     from mara.context.repo_map import build_context
@@ -206,7 +229,7 @@ def _variants(report, cfg, tmp_path):
     tools = [ToolResult(**t) for t in report.tool_results]
     prefix = build_context(Path(report.target)).repo_prefix
     variants = []
-    for panel, cast in ((cfg, report.votes), _with_a_fourth_judge(cfg, report.votes)):
+    for panel, cast in ((cfg, report.votes), _with_a_fourth_judge(cfg, report.votes, finders)):
         scorer = Pipeline(panel, out_dir=tmp_path)  # its own audit: scoring writes position_flips into it
         by_finding = defaultdict(list)
         for v in cast:
