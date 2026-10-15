@@ -79,11 +79,9 @@ def review(
     if not report.gate_passed:
         # G-10: whether a blocked gate is enforced (the blocking phase, or --fail-on-gate) was decided by
         # mara.review_status and recorded in report.json; the message says which, and the exit code the command ends with
-        if psirt_failed:
-            ends = "exit 3: the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else "")
-        else:
-            ends = "exit 2" if report.gate_enforced else "exit 0, G-10"
-        console.print(f"rollout phase [bold]{cfg.rollout.phase}[/bold]: the gate blocked: {enforcement(bool(report.gate_enforced))} ({ends})")
+        why = {3: ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else ""), 2: "", 0: ", G-10"}
+        console.print(f"rollout phase [bold]{cfg.rollout.phase}[/bold]: the gate blocked: {enforcement(bool(report.gate_enforced))} "
+                      f"(exit {code}{why[code]})")
     if psirt_failed:
         console.print("[bold red]PSIRT hand-off failed for at least one finding; see the ledger and retry with --notify-psirt[/bold red]")
     if code:

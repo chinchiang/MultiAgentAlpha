@@ -19,8 +19,10 @@ def dim(name: str, score: float) -> DimensionScore:
     return DimensionScore(dimension=name, score=score, accepted_findings=0, rejected_findings=0, human_queue=0, tool_ran=True)
 
 
-# the jury's score and votes behind each outcome on a three-family panel of weight 1 (accept threshold 0.6)
-_JURY = {"accepted": (1.0, 3, 0), "rejected": (0.0, 0, 3), "needs_human": (0.5, 1, 1)}
+# the jury's score and votes behind each outcome on three judge families of weight 1, each voting in the forward and
+# the reverse pass (accept threshold 0.6): all for; one for and two against, the only way a finding is rejected
+# (docs/adr/0005-jury-outcome.md); a split that a human decides
+_JURY = {"accepted": (1.0, 6, 0), "rejected": (0.333, 2, 4), "needs_human": (0.5, 3, 3)}
 
 
 def row(fid: str, tier: str, severity: str, outcome: str, decision: str | None = None) -> ConsensusResult:

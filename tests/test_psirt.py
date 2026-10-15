@@ -349,9 +349,11 @@ def test_an_unreachable_send_is_recorded_and_does_not_stop_the_others(shipped_re
     assert attempt == {"at": attempt["at"], "status_code": None, "ok": False, "error": "connection_failed"}
 
 
-def _review_with_a_failed_hand_off(report, monkeypatch, tmp_path):
-    """`mara review --notify-psirt` on a config with the PSIRT hand-off on, where the review gives `report` and every
-    send fails; returns the CLI result and its output without colour codes, on one line."""
+def _review_with_a_failed_hand_off(report, monkeypatch, tmp_path, *flags: str):
+    """`mara review --notify-psirt` (and `flags`) on a config with the PSIRT hand-off on, where the review gives
+    `report` and every send fails; returns the CLI result and its output without colour codes, on one line. The review
+    is stubbed but keeps run()'s contract for --fail-on-gate: in the config's rollout phase (not_started) a blocked gate
+    is enforced exactly when the flag is given (mara.review_status)."""
     import yaml
 
     import mara.report.psirt_out as po
@@ -361,12 +363,13 @@ def _review_with_a_failed_hand_off(report, monkeypatch, tmp_path):
     raw["psirt"] = PSIRT
     cfg_path = tmp_path / "mock-psirt.yaml"
     cfg_path.write_text(yaml.safe_dump(raw))
-    monkeypatch.setattr(P, "run", lambda self, *a, **k: report)
+    monkeypatch.setattr(P, "run", lambda self, *a, fail_on_gate=False, **k: report.model_copy(
+        update={"gate_enforced": fail_on_gate and not report.gate_passed}))
     monkeypatch.setattr(po, "send_psirt", lambda payloads, *a, **k: [
         {"finding_id": p["finding_id"], "dedupe_key": p["dedupe_key"], "skipped": False, "status_code": None, "ok": False,
          "error": "connection_failed"} for p in payloads])
     res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(cfg_path),
-                                  "--out", str(tmp_path / "out"), "--notify-psirt"])
+                                  "--out", str(tmp_path / "out"), "--notify-psirt", *flags])
     return res, " ".join(re.sub(r"\x1b\[[0-9;]*m", "", res.output).split())
 
 
@@ -383,10 +386,10 @@ def test_a_failed_psirt_hand_off_fails_the_cli_run(shipped_report, monkeypatch, 
 
 def test_an_enforced_gate_with_a_failed_psirt_hand_off_names_the_exit_code_it_gets(shipped_report, monkeypatch, tmp_path):
     """A failed hand-off exits 3, which outranks an enforced gate's 2; the gate's message must say 3, not 2. The same
-    review, its blocked gate enforced as --fail-on-gate would have it."""
+    review, its blocked gate enforced by --fail-on-gate."""
     _, report = shipped_report
     assert not report.gate_passed and report.gate_reasons
-    res, text = _review_with_a_failed_hand_off(report.model_copy(update={"gate_enforced": True}), monkeypatch, tmp_path)
+    res, text = _review_with_a_failed_hand_off(report, monkeypatch, tmp_path, "--fail-on-gate")
     assert res.exit_code == 3, res.output
     assert "the gate blocked: enforced (exit 3: the PSIRT hand-off failed, which outranks the gate)" in text
     assert "(exit 2)" not in text

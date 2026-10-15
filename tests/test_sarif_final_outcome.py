@@ -3,6 +3,7 @@
 import hashlib
 import json
 from collections import Counter
+from pathlib import Path
 from urllib.parse import quote
 
 from mara import __version__
@@ -146,90 +147,106 @@ def _without_gate_properties(doc: dict) -> dict:
 
 _DECIDED = {"key": "k", "issue": 1, "decided_by": "alice", "decided_at": "2026-10-01T08:00:00Z"}
 
-
-def _reachable(c: ConsensusResult, f: Finding, policy) -> tuple[str, ...]:
-    """The jury outcomes decide() can give this row under `policy`, from what the row and its finding hold that no vote
-    can change: unverified provenance, a skeptic that abstained, tier C at the severity floor while the queue is not
-    tightened, or a refutation the jury would overrule always need a human; tier D is otherwise dropped; and with the
-    default panel only a tier A finding can be rejected (docs/adr/0005-jury-outcome.md), under rejection review while
-    P8 is in force. Needing a human is always reachable (a missing quorum is enough)."""
-    from mara.scoring.outcome import tier_c_needs_human
-
-    forced = (not all(p.verified for p in f.provenance) or c.skeptic_abstained
-              or (not policy.exclude_tier_c and tier_c_needs_human(c.tier, c.cvss4_severity, policy.tier_c_min_severity))
-              or (c.skeptic_refuted and c.tier.value != "D"))
-    if forced:
-        return ("needs_human",)
-    if c.tier.value == "D":
-        return ("dropped", "needs_human")
-    rejected = (("rejection_review" if not policy.unsupervised_reject_allowed else "rejected"),) if c.tier.value == "A" else ()
-    return ("accepted", *rejected, "needs_human")
+# How the judges of one finding vote, both passes alike unless split: as they did in the seeded review, all for, all
+# against, one family or two for and the rest against, forward for and reverse against, or all asking for a human
+_PATTERNS = ("as_cast", "all_tp", "all_fp", "one_family_tp", "two_families_tp", "split_passes", "needs_human")
 
 
-def _set_state(c: ConsensusResult, outcome: str, decision: str | None) -> None:
-    """Write a jury outcome as JuryOutcome.consensus_fields writes it, with a score and votes that agree with it (a
-    three-family panel of weight 1, accept threshold 0.6), and optionally a usable human ruling on it. Needing a human
-    keeps the row's own reasons, or gets the one a missing quorum gives."""
-    c.accepted, c.needs_human, c.unsupervised_reject_unverified = outcome == "accepted", outcome == "needs_human", False
-    if outcome == "accepted":
-        c.weighted_score, c.votes_tp, c.votes_fp, c.votes_human, c.human_reasons = 1.0, 3, 0, 0, []
-    elif outcome in ("rejected", "rejection_review"):
-        c.weighted_score, c.votes_tp, c.votes_fp, c.votes_human, c.human_reasons = 0.0, 0, 3, 0, []
-        c.unsupervised_reject_unverified = outcome == "rejection_review"
-    elif outcome == "dropped":
-        c.human_reasons = []
-    else:
-        c.human_reasons = c.human_reasons or ["insufficient_independent_judges"]
-    c.human_decision = {"decision": decision, **_DECIDED} if decision else None
+def _recast(votes, pattern: str):
+    """The judge votes on one finding, re-cast to `pattern`."""
+    if pattern == "as_cast":
+        return list(votes)
+    rank = {fam: i for i, fam in enumerate(sorted({v.judge_family.value for v in votes}))}
+
+    def verdict(v) -> str:
+        i = rank[v.judge_family.value]
+        return {"all_tp": "true_positive", "all_fp": "false_positive", "needs_human": "needs_human",
+                "one_family_tp": "true_positive" if i == 0 else "false_positive",
+                "two_families_tp": "true_positive" if i < 2 else "false_positive",
+                "split_passes": "true_positive" if v.pass_id == "forward" else "false_positive"}[pattern]
+
+    return [v.model_copy(update={"verdict": verdict(v)}) for v in votes]
 
 
-def _states(c: ConsensusResult, f: Finding, policy) -> list[tuple[str, str | None]]:
-    """Every state this row can be in: each reachable jury outcome, alone or with a usable human ruling on it."""
-    return [(o, d) for o in _reachable(c, f, policy) for d in (None, "false_positive", "true_positive")]
+def _with_a_fourth_judge(cfg, votes):
+    """The panel with a fourth judge family (mistral), voting as deepseek did. The mock panel never rejects a finding:
+    with the finder's family excused, two judges remain, and any split between them is agreement 0.25, below the
+    threshold, so a human decides; a rejection needs three independent judges, one for and two against (agreement
+    0.5). The same holds for rejection review, P8's look at every rejected finding (docs/adr/0005-jury-outcome.md)."""
+    from mara.config import MaraConfig
+    from mara.schemas import ModelFamily
+
+    raw = cfg.model_dump(mode="json")
+    raw["models"].append({"name": "mock-m", "family": "mistral", "provider": "mock", "model": "mock-mistral",
+                          "data_residency": "on_prem"})
+    raw["roles"]["judges"].append("mock-m")
+    fourth = [v.model_copy(update={"judge_family": ModelFamily.MISTRAL, "judge_model": "mock-mistral"})
+              for v in votes if v.judge_family == ModelFamily.DEEPSEEK]
+    return MaraConfig.model_validate(raw, context={"skip_policies": True}), [*votes, *fourth]
 
 
-def _variants(report, cfg, policy):
-    """The seeded review, once with three hand-made changes and once per rotation of each row's reachable states, so
-    every row passes through every state it can be in; each with the human queue built for it, as the pipeline
-    would."""
+def _variants(report, cfg, tmp_path):
+    """Reports scoring really produces: the seeded review's findings, skeptic, red team and tool results scored again by
+    Pipeline.score with the judges' votes re-cast, each finding taking every vote pattern in turn, on the mock panel
+    and on the panel with a fourth judge. Tier, score, votes and jury outcome therefore agree as scoring writes them;
+    no rule of decide() or of tiering is copied here. Every other variant carries usable human rulings, a false
+    positive on every third finding and a true positive on the next (a ruling binds to content, whatever the jury
+    concluded). Each gets the human queue built for it, as the pipeline would."""
+    from collections import defaultdict
+
+    from mara.context.repo_map import build_context
+    from mara.pipeline import Pipeline
     from mara.report.human_queue_out import build_queue
+    from mara.review_status import assess
+    from mara.tools.sarif import ToolResult
+    from tests.review_facts import FACTS
 
-    hand = report.model_copy(deep=True)
-    by_id = {f.id: f for f in hand.findings}
-    cons = {c.finding_id: c for c in hand.consensus}
-    for fid, (outcome, decision) in (("F-0001", ("rejection_review", None)),  # tier A, voted down
-                                      ("F-0057", ("accepted", "false_positive")),
-                                      ("F-0009", ("needs_human", "true_positive"))):
-        assert (outcome, decision) in _states(cons[fid], by_id[fid], policy), (fid, outcome, decision)
-        _set_state(cons[fid], outcome, decision)
-    variants = [hand]
-    states = {c.finding_id: _states(c, {f.id: f for f in report.findings}[c.finding_id], policy) for c in report.consensus}
-    for k in range(max(len(s) for s in states.values())):
-        v = report.model_copy(deep=True)
-        for i, c in enumerate(v.consensus):
-            own = states[c.finding_id]
-            _set_state(c, *own[(i + k) % len(own)])
-        variants.append(v)
-    for v in variants:
-        v.human_queue = build_queue(v.findings, {c.finding_id: c for c in v.consensus}, {x.finding_id: x for x in v.skeptic},
-                                    {n.finding_id: n for n in v.redteam}, v.votes, cfg)
+    finders = {f.id: set(f.finder_families) for f in report.findings}
+    skeptic, redteam = {v.finding_id: v for v in report.skeptic}, {n.finding_id: n for n in report.redteam}
+    tools = [ToolResult(**t) for t in report.tool_results]
+    prefix = build_context(Path(report.target)).repo_prefix
+    variants = []
+    for panel, cast in ((cfg, report.votes), _with_a_fourth_judge(cfg, report.votes)):
+        scorer = Pipeline(panel, out_dir=tmp_path)  # its own audit: scoring writes position_flips into it
+        by_finding = defaultdict(list)
+        for v in cast:
+            by_finding[v.finding_id].append(v)
+        for k in range(len(_PATTERNS)):
+            votes = [v for i, f in enumerate(report.findings) for v in _recast(by_finding[f.id], _PATTERNS[(i + k) % len(_PATTERNS)])]
+            consensus = scorer.score(report.findings, finders, skeptic, redteam, votes, tools, tool_path_prefix=prefix)
+            if k % 2:
+                for i, c in enumerate(consensus):
+                    ruling = ("false_positive", "true_positive", None)[i % 3]
+                    c.human_decision = {"decision": ruling, **_DECIDED} if ruling else None
+            # as Pipeline.run does: each blocking finding's reason from assess (it reads no review fact for them)
+            blocking = assess(FACTS, consensus, [], report.dimensions, scorer.outcome_policy, scorer.gate_policy).blocking_reasons
+            for c in consensus:
+                c.blocking_reason = blocking.get(c.finding_id)
+            v = report.model_copy(update={"votes": votes, "consensus": consensus})
+            v.human_queue = build_queue(v.findings, {c.finding_id: c for c in consensus}, skeptic, redteam, votes, panel)
+            variants.append(v)
     return variants
 
 
-def test_with_the_human_queue_enabled_code_scanning_sees_what_it_saw_before(mock_report):
+def test_with_the_human_queue_enabled_code_scanning_sees_what_it_saw_before(mock_report, tmp_path):
     pipe, report = mock_report
     assert pipe.cfg.human_queue.enabled
-    variants = _variants(report, pipe.cfg, pipe.outcome_policy)
-    assert "F-0001" in {i.finding_id for i in variants[0].human_queue}, "the rejection under review is queued"
-    seen = {(c.finding_id, c.jury_outcome, (c.human_decision or {}).get("decision")) for v in variants[1:] for c in v.consensus}
-    assert {o for _, o, _ in seen} == {"accepted", "rejected", "dropped", "needs_human"}, "every jury outcome is covered"
+    variants = _variants(report, pipe.cfg, tmp_path)
+    as_cast = {c.finding_id: c.model_dump(exclude={"human_decision", "blocking_reason"}) for c in variants[0].consensus
+               if c.finding_id in {f.id for i, f in enumerate(report.findings) if i % len(_PATTERNS) == 0}}
+    assert as_cast == {c.finding_id: c.model_dump(exclude={"human_decision", "blocking_reason"}) for c in report.consensus
+                       if c.finding_id in as_cast}, "re-scoring the votes as cast gives the seeded review's rows"
+    rows = [c for v in variants for c in v.consensus]
+    assert {c.jury_outcome for c in rows} == {"accepted", "rejected", "dropped", "needs_human"}, "every jury outcome"
+    assert any(c.unsupervised_reject_unverified and not c.resolved_by_human for c in rows), "a rejection under review"
+    assert {(c.human_decision or {}).get("decision") for c in rows} == {None, "false_positive", "true_positive"}
     for v in variants:
         # the whole document, rules, results (levels, messages, fingerprints, properties, suppressions) and run, is
         # what the old to_sarif wrote, apart from the gate properties added on purpose
         assert _without_gate_properties(to_sarif(v)) == _old_to_sarif(v)
-    assert any("blockingReason" in r["properties"] for r in _results(variants[0]).values()), \
-        "the blockingReason that _without_gate_properties strips is in the new output"
-    assert _results(variants[0])["F-0057"]["suppressions"][0]["status"] == "accepted", "the human false positive is dismissed"
+    results = [r for v in variants for r in to_sarif(v)["runs"][0]["results"]]
+    assert any("blockingReason" in r["properties"] for r in results), "the blockingReason that _without_gate_properties strips is there"
+    assert any(r.get("suppressions") for r in results), "a human false positive is dismissed"
 
 
 def test_the_run_says_why_the_gate_blocked_and_each_blocking_result_why_it_blocks(mock_report):
