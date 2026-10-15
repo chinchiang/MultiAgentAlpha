@@ -318,20 +318,23 @@ def _pipe(tmp_path):
 
 
 def test_a_malformed_or_incomplete_reply_is_asked_once_more_but_signals_are_not(tmp_path):
-    from mara.pipeline import _retryable
+    from mara import exchange
+    from mara.audit import ReplyRecord
 
-    assert _retryable(["unexpected_verdict", "incomplete_or_duplicate_response"]) and _retryable(["empty"])
-    for signal in (["refused"], ["canary_echoed"], ["provider_http_error:500"], ["provider_call_failed"], []):
-        assert not _retryable(signal), signal
+    def rec(role="skeptic", kind=exchange.OK, family="glm", **kw):
+        return ReplyRecord(role=role, family=family, kind=kind, **kw)
+
     pipe = _pipe(tmp_path)
-    replies = iter([([], ["unexpected_verdict", "incomplete_or_duplicate_response"], 0), (["v1", "v2"], [], 0)])
-    assert pipe._once_more("skeptic", "glm", lambda: next(replies)) == (["v1", "v2"], [], 0)
+    replies = iter([([], rec(voided=True, invalid_items=1, details=("unexpected_verdict",))), (["v1", "v2"], rec())])
+    assert pipe._once_more(lambda: next(replies)) == (["v1", "v2"], rec())
     assert pipe.audit["skeptic_retries"] == 1 and pipe.audit["skeptic_retries[glm]"] == 1
     calls = []
-    out = pipe._once_more("redteam", "glm", lambda: calls.append(1) or ([], ["canary_echoed"], 0))
-    assert out == ([], ["canary_echoed"], 0) and len(calls) == 1, "an echo is a finding about the model, not noise"
-    replies = iter([([], ["empty"], 0), ([], ["missing_verdict", "incomplete_or_duplicate_response"], 0)])
-    assert pipe._once_more("judge", "gemini", lambda: next(replies))[1] == ["missing_verdict", "incomplete_or_duplicate_response"]
+    echo = rec("redteam", canary_echoes=1, voided=True)
+    assert pipe._once_more(lambda: calls.append(1) or ([], echo)) == ([], echo) and len(calls) == 1, \
+        "an echo is a finding about the model, not noise"
+    second = rec("judge", family="gemini", voided=True, invalid_items=1, details=("missing_verdict",))
+    replies = iter([([], rec("judge", exchange.EMPTY, "gemini", voided=True)), ([], second)])
+    assert pipe._once_more(lambda: next(replies)) == ([], second)
     assert pipe.audit["judge_retries"] == 1, "only one more call; the second answer stands"
 
 
@@ -346,7 +349,13 @@ def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path, monkeypatch)
                 source_family=ModelFamily.ANTHROPIC, source_model="m")
     good = SkepticVerdict(finding_id="F-0001", verdict="stands", reason="r", sanitizer_or_control="none",
                           source_family=ModelFamily.DEEPSEEK, source_model="m")
-    replies = iter([([], ["unexpected_verdict", "incomplete_or_duplicate_response"], 0, 0), ([good], [], 0, 0)])
+    from mara import exchange
+    from mara.audit import ReplyRecord
+
+    def rec(**kw):
+        return ReplyRecord(role="skeptic", family="deepseek", kind=exchange.OK, **kw)
+
+    replies = iter([([], rec(voided=True, invalid_items=1, details=("unexpected_verdict",))), ([good], rec())])
     monkeypatch.setattr(skeptic, "run_skeptic", lambda *a, **k: next(replies))
     verdicts, abstained = pipe.run_skeptics(RepoContext(root=tmp_path), [f], {"F-0001": {ModelFamily.ANTHROPIC}})
     assert verdicts == [good] and not abstained

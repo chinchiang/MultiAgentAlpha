@@ -100,7 +100,9 @@ def _finding():
                    cvss4_vector=VECTOR, model_confidence=0.9, source_family=ModelFamily.ANTHROPIC, source_model="test")
 
 
-def test_parse_items_separates_refusals_from_empty_and_invalid_output():
+def test_parse_items_gives_the_valid_items_and_an_invalid_count_and_no_list_without_one():
+    """How a reply without items counts (a refusal, a truncation, an empty or unparseable body) is mara.audit's rule,
+    read from the outcome kind; parse_items only says whether the answer held a list, and what in it was invalid."""
     from pydantic import BaseModel
 
     class Item(BaseModel):
@@ -109,13 +111,12 @@ def test_parse_items_separates_refusals_from_empty_and_invalid_output():
     def parse(raw):
         return exchange.parse_items(exchange.classify(raw, {}), Item)
 
-    assert parse(RawReply(STOP_REFUSAL)) == ([], ["refused"])
-    assert parse(RawReply(STOP_END, answer_text="  ")) == ([], ["empty"])
-    assert parse(RawReply(STOP_MAX_TOKENS, answer_text='{"items": [')) == ([], ["truncated"])
-    assert parse(RawReply(STOP_END, answer_text="I cannot produce JSON today.")) == ([], ["unparseable"])
-    assert parse(RawReply(STOP_END, answer_text='{"items": "nope"}')) == ([], ["invalid_response_shape"])
-    valid, errors = parse(RawReply(STOP_END, structured={"items": [1, {"a": 1}]}))
-    assert len(valid) == 1 and len(errors) == 1 and errors[0].startswith("invalid_item:")
+    for raw in (RawReply(STOP_REFUSAL), RawReply(STOP_END, answer_text="  "), RawReply(STOP_MAX_TOKENS, answer_text='{"items": ['),
+                RawReply(STOP_END, answer_text="I cannot produce JSON today.")):
+        assert parse(raw) == (None, 0), raw
+    assert parse(RawReply(STOP_END, answer_text='{"items": "nope"}')) == (None, 1), "an answer without the list is one invalid item"
+    valid, invalid = parse(RawReply(STOP_END, structured={"items": [1, {"a": 1}]}))
+    assert len(valid) == 1 and invalid == 1
 
 
 # ------------------------------------------------------------------ control citation verification (#33)
@@ -124,8 +125,8 @@ def test_skeptic_keeps_a_refutation_whose_control_citation_is_in_the_bundle(root
     ctx = RepoContext(root=root, content={"app.py": "import sqlite3\n\n\ndef get(u):\n    return u\n"})
     p = _static(root, {"items": [{"finding_id": "F-1", "verdict": "refuted", "reason": "already parameterised",
                                   "sanitizer_or_control": "app.py:5 uses the parameterised cursor"}]})
-    v, errors, unverified, _ = skeptic.run_skeptic(p, ctx, [_finding()])
-    assert not errors and unverified == 0
+    v, rec = skeptic.run_skeptic(p, ctx, [_finding()])
+    assert not rec.voided and rec.counts["unverified_controls"] == 0 and rec.counts["refuted"] == 1
     assert v[0].verdict == "refuted" and "not verifiable" not in v[0].reason
 
 
@@ -134,8 +135,8 @@ def test_skeptic_downgrades_refutations_without_a_locatable_control_citation(roo
     for cite in ["parameterised query in the data layer", "hardened.py:1 prepared statements"]:
         p = _static(root, {"items": [{"finding_id": "F-1", "verdict": "refuted", "reason": "mitigated",
                                       "sanitizer_or_control": cite}]})
-        v, errors, unverified, _ = skeptic.run_skeptic(p, ctx, [_finding()])
-        assert not errors and unverified == 1, cite
+        v, rec = skeptic.run_skeptic(p, ctx, [_finding()])
+        assert not rec.voided and rec.counts["unverified_controls"] == 1 and rec.counts["refuted"] == 0, cite
         assert v[0].verdict == "weakened" and "control citation not verifiable in bundle" in v[0].reason, cite
 
 

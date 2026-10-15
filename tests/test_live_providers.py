@@ -380,8 +380,8 @@ def test_agent_layer_tells_truncation_refusal_and_unparseable_apart():
     trunc = _oai(lambda req: _chat(TRUNCATED_TEXT, finish_reason="length"))
     refused = _oai(lambda req: _chat("", finish_reason="content_filter"))
     comp = _call(trunc)
-    assert exchange.parse_items(comp, dict) == ([], ["truncated"])  # the budget: neither an abstention nor invalid output
-    assert exchange.parse_items(_call(refused), dict) == ([], ["refused"])  # content_filter is an abstention
+    assert comp.kind == exchange.TRUNCATION and exchange.parse_items(comp, dict) == (None, 0)  # the budget, never invalid output
+    assert _call(refused).kind == exchange.REFUSAL  # content_filter is an abstention
     ctx = RepoContext(root=Path("."))
     canary = agent_base.Canary()
     _, r1 = review_dimension(trunc, ctx, "xss", canary)
@@ -407,7 +407,7 @@ def test_agent_layer_records_provider_failures_as_errors_not_refusals(exc, code)
 
     comp = exchange.call(_Raises(exc), system_extra="", user="u", schema=SCHEMA, role="reviewer:xss")
     assert comp.error == code and not comp.refused and not comp.truncated and comp.data is None and comp.text == ""
-    assert exchange.parse_items(comp, dict) == ([], [code])
+    assert comp.kind == exchange.ERROR and exchange.parse_items(comp, dict) == (None, 0)
     _, rec = review_dimension(_Raises(exc), RepoContext(root=Path(".")), "xss", agent_base.Canary())
     assert (rec.kind, rec.details) == (exchange.ERROR, (code,)), "an error, not a refusal; its code goes to the log only"
 

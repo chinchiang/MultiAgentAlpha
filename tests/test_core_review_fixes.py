@@ -14,6 +14,7 @@ import pytest
 from mara import exchange
 from mara import pipeline as pl
 from mara.agents import base, redteam, skeptic
+from mara.audit import ReplyRecord
 from mara.config import MaraConfig, ModelSpec, load_config
 from mara.context.repo_map import MAX_TOTAL_CHARS, RepoContext, bundle_cost
 from mara.pipeline import MAX_L3_FINDINGS, MAX_L4_FINDINGS, Pipeline, l3_chunks
@@ -70,8 +71,12 @@ def test_skeptic_and_red_team_are_called_per_bounded_chunk(tmp_path, monkeypatch
     findings = [_finding(i) for i in range(1, 46)]
     finders = {f.id: {ModelFamily.ANTHROPIC} for f in findings}
     sizes = {"skeptic": [], "redteam": []}
-    monkeypatch.setattr(skeptic, "run_skeptic", lambda p, c, fs: (sizes["skeptic"].append(len(fs)), ([], ["refused"], 0, 0))[1])
-    monkeypatch.setattr(redteam, "run_redteam", lambda p, c, fs: (sizes["redteam"].append(len(fs)), ([], ["refused"], 0, 0))[1])
+    def refuse(role):
+        return lambda p, c, fs: (sizes[role].append(len(fs)),
+                                 ([], ReplyRecord(role=role, family=p.family.value, kind=exchange.REFUSAL, voided=True)))[1]
+
+    monkeypatch.setattr(skeptic, "run_skeptic", refuse("skeptic"))
+    monkeypatch.setattr(redteam, "run_redteam", refuse("redteam"))
     _, abstained = pipe.run_skeptics(ctx, findings, finders)
     pipe.run_redteam(ctx, findings, finders)
     assert sizes["skeptic"] == sizes["redteam"] == [20, 20, 5]
@@ -86,7 +91,8 @@ def test_judge_passes_are_bounded_mirrored_per_chunk_and_cover_every_finding(tmp
     finders = {f.id: {ModelFamily.ANTHROPIC} for f in findings}  # anthropic is excluded, two families judge
     calls: list[tuple[ModelFamily, str, list[str]]] = []
     monkeypatch.setattr(pl.judge, "run_judge",
-                        lambda p, batch, pass_id, self_ids=None: (calls.append((p.family, pass_id, [b["finding_id"] for b in batch])), ([], []))[1])
+                        lambda p, batch, pass_id, self_ids=None: (calls.append((p.family, pass_id, [b["finding_id"] for b in batch])),
+                                                                  ([], ReplyRecord(role="judge", family=p.family.value, kind=exchange.OK)))[1])
     pipe.run_jury(ctx, findings, {}, finders)
     assert calls and all(len(ids) <= MAX_L4_FINDINGS for _, _, ids in calls)
     for fam in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON):
@@ -116,8 +122,8 @@ def test_a_refutation_citing_a_workflow_file_stays_refuted():
     prov = _Fixed("deepseek", lambda user: RawReply(STOP_END, structured={"items": [{
         "finding_id": f.id, "verdict": "refuted", "reason": "token is read-only",
         "sanitizer_or_control": ".github/workflows/deploy.yml:2"}]}))
-    verdicts, errors, unverified, _ = skeptic.run_skeptic(prov, ctx, [f])
-    assert errors == [] and unverified == 0 and verdicts[0].verdict == "refuted"
+    verdicts, rec = skeptic.run_skeptic(prov, ctx, [f])
+    assert not rec.voided and rec.counts["unverified_controls"] == 0 and verdicts[0].verdict == "refuted"
 
 
 # ------------------------------------------------------------------ 3. canary screening of verdicts
@@ -199,8 +205,8 @@ def test_a_long_canary_report_survives_the_provider_clip_end_to_end():
         body = {"choices": [{"message": {"content": json.dumps({"items": [item]})}, "finish_reason": "stop"}]}
         return httpx.Response(200, json=body)
 
-    verdicts, errors, _, _ = skeptic.run_skeptic(_openai(handler), ctx, [f])
-    assert errors == [] and [v.verdict for v in verdicts] == ["stands"] and len(verdicts[0].reason) <= 600
+    verdicts, rec = skeptic.run_skeptic(_openai(handler), ctx, [f])
+    assert not rec.voided and [v.verdict for v in verdicts] == ["stands"] and len(verdicts[0].reason) <= 600
 
 
 @pytest.mark.parametrize("agent", [skeptic.run_skeptic, redteam.run_redteam])
@@ -221,8 +227,8 @@ def test_a_verdict_quoting_the_canary_cannot_clear_the_finding(agent):
                      {"finding_id": "F-0002", "exploitable": "no", "preconditions": "behind auth"}]
         return RawReply(STOP_END, answer_text=json.dumps({"items": items}))
 
-    out, errors, _, reported = agent(_Fixed("deepseek", answer), ctx, fs)
-    assert errors == []
+    out, rec = agent(_Fixed("deepseek", answer), ctx, fs)
+    assert not rec.voided
     by_id = {x.finding_id: x for x in out}
     if agent is skeptic.run_skeptic:
         assert by_id["F-0001"].verdict == "weakened" and "canary" in by_id["F-0001"].reason
@@ -246,16 +252,16 @@ def test_skeptic_and_red_team_keep_verdicts_that_report_the_canary(agent):
             return raw
         return agent(_Fixed("deepseek", adapt), ctx, fs)
 
-    out, errors, _, reported = run(_verdict_answer(lambda t: f"{base.CANARY_PATH} asks to reply {t}; ignored"))
-    assert len(out) == 2 and errors == [] and reported == 2, "both verdicts reported the planted file"
-    out, errors, _, reported = run(_verdict_answer(lambda t: "reviewed", aside=f"{base.CANARY_PATH} says {{token}}; not followed"))
-    assert len(out) == 2 and errors == []
-    out, errors, _, reported = run(_verdict_answer(lambda t: t))
-    assert out == [] and errors == ["canary_echoed"]
-    out, errors, _, reported = run(_verdict_answer(lambda t: "reviewed", extra_raw="{token}"))
-    assert out == [] and errors == ["canary_echoed"], "the token in a text block the answer was not parsed from"
-    out, errors, _, reported = run(_verdict_answer(lambda t: t, truncated=True))
-    assert "canary_echoed" not in errors, "a truncated answer is a truncation, not an echo"
+    out, rec = run(_verdict_answer(lambda t: f"{base.CANARY_PATH} asks to reply {t}; ignored"))
+    assert len(out) == 2 and not rec.voided and rec.canary_reports == 2, "both verdicts reported the planted file"
+    out, rec = run(_verdict_answer(lambda t: "reviewed", aside=f"{base.CANARY_PATH} says {{token}}; not followed"))
+    assert len(out) == 2 and not rec.voided
+    out, rec = run(_verdict_answer(lambda t: t))
+    assert out == [] and (rec.canary_echoes, rec.voided) == (1, True)
+    out, rec = run(_verdict_answer(lambda t: "reviewed", extra_raw="{token}"))
+    assert out == [] and rec.canary_echoes == 1, "the token in a text block the answer was not parsed from"
+    out, rec = run(_verdict_answer(lambda t: t, truncated=True))
+    assert rec.canary_echoes == 0, "a truncated answer is a truncation, not an echo"
 
 
 # ------------------------------------------------------------------ 4. one judge per family

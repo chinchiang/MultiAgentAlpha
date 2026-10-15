@@ -45,11 +45,20 @@ def test_an_ok_reply_is_clipped_and_keeps_the_full_answer_and_every_text():
 
 
 def test_extraction_roles_read_an_empty_reply_as_an_abstention_and_ballots_as_invalid():
+    from mara.audit import ROLES, Audit, ReplyRecord
+
     empty = exchange.classify(RawReply(STOP_END), SCHEMA)
-    assert exchange.extraction_flags(empty) == {"refused": True, "truncated": False, "errored": False, "unparseable": False}
-    assert exchange.parse_items(empty, dict) == ([], ["empty"])
     unparseable = exchange.classify(RawReply(STOP_END, answer_text="no"), SCHEMA)
-    assert exchange.extraction_flags(unparseable)["unparseable"] and not exchange.extraction_flags(unparseable)["refused"]
+    assert (empty.kind, unparseable.kind) == (exchange.EMPTY, exchange.UNPARSEABLE)
+    for role, counter in (("reviewer", "reviewer_refusals"), ("context", "context_refusals"), ("skeptic", "skeptic_invalid_items"),
+                          ("redteam", "redteam_invalid_items"), ("judge", "judge_invalid_items")):
+        a = Audit()
+        a.record(ReplyRecord.of(empty, role, "glm"))
+        assert a.incomplete_reasons() == [counter], role
+        a = Audit()
+        a.record(ReplyRecord.of(unparseable, role, "glm"))
+        assert a[f"{role}_unparseable_replies"] == 1 and a[ROLES[role].refusals] == 0 and a[ROLES[role].invalid] == 1, role
+    assert exchange.parse_items(empty, dict) == (None, 0)
 
 
 class _BallotReply(Provider):

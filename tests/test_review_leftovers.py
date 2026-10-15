@@ -13,7 +13,9 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
+from mara import exchange
 from mara.agents import skeptic
+from mara.audit import ReplyRecord
 from mara.cli import app
 from mara.config import MaraConfig, load_config
 from mara.context.repo_map import RepoContext
@@ -53,7 +55,8 @@ def test_no_finding_is_left_alone_in_a_judge_chunk(tmp_path, monkeypatch):
     findings = [_finding(i) for i in range(1, 27)]
     calls = []
     monkeypatch.setattr("mara.pipeline.judge.run_judge",
-                        lambda p, batch, pass_id, self_ids=None: (calls.append([b["finding_id"] for b in batch]), ([], []))[1])
+                        lambda p, batch, pass_id, self_ids=None: (calls.append([b["finding_id"] for b in batch]),
+                                                                  ([], ReplyRecord(role="judge", family=p.family.value, kind=exchange.OK)))[1])
     pipe.run_jury(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings, {},
                   {f.id: {ModelFamily.ANTHROPIC} for f in findings})
     assert calls and {len(c) for c in calls} == {13}
@@ -79,8 +82,10 @@ def test_l3_canary_reports_reach_the_bias_audit(tmp_path, monkeypatch):
     f = _finding(1)
     verdict = SkepticVerdict(finding_id=f.id, verdict="stands", reason="r", sanitizer_or_control="", source_family=ModelFamily.NEMOTRON,
                              source_model="m")
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([verdict], [], 0, 1))
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: ([], ["refused"], 0, 1))
+    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: (
+        [verdict], ReplyRecord(role="skeptic", family=p.family.value, kind=exchange.OK, canary_reports=1)))
+    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: (
+        [], ReplyRecord(role="redteam", family=p.family.value, kind=exchange.REFUSAL, canary_reports=1, voided=True)))
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"})
     pipe.run_skeptics(ctx, [f], {f.id: {ModelFamily.ANTHROPIC}})
     pipe.run_redteam(ctx, [f], {f.id: {ModelFamily.ANTHROPIC}})

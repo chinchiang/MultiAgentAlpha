@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from .. import exchange
+from ..audit import ReplyRecord
 from ..context.repo_map import RepoContext
 from ..providers.base import Provider
 from ..schemas import Finding, RedTeamNote
@@ -93,10 +94,11 @@ def strip_exploit_code(text: str) -> tuple[str, bool]:
     return clean, stripped
 
 
-def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -> tuple[list[RedTeamNote], list[str], int, int]:
-    """Returns (notes, errors, exploit_code_stripped, canary_reports)."""
+def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -> tuple[list[RedTeamNote], ReplyRecord | None]:
+    """Returns (notes, the reply record; None when there was nothing to ask). The notes are empty when the reply is
+    voided."""
     if not findings:
-        return [], [], 0, 0
+        return [], None
     view = [
         {
             "finding_id": f.id,
@@ -113,12 +115,18 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
                            ctx=ctx, canary=canary, paths=sorted({p.file for f in findings for p in f.provenance}),
                            derived=(exchange.Derived("findings", view),))
     echoed, tainted = canary.screen_verdicts(outcome)  # same rule as the skeptic's (exchange.Canary.screen_verdicts)
+
+    def record(**fields) -> ReplyRecord:
+        return ReplyRecord.of(outcome, "redteam", provider.family.value, **fields)
+
     if echoed:
-        return [], ["canary_echoed"], 0, 0  # followed the planted instruction: none of its notes counts
-    items, errors = exchange.parse_items(outcome, _RedRaw)
-    errs = base.ballot_errors({f.id for f in findings}, [i.finding_id for i in items], errors, "incomplete_or_duplicate_response")
-    if errs is not None:
-        return [], errs, 0, len(tainted)
+        # followed the planted instruction: none of its notes counts
+        return [], record(canary_echoes=1, voided=True, counts={"findings": len(findings)})
+    items, invalid = exchange.parse_items(outcome, _RedRaw)
+    gaps = base.coverage_gaps({f.id for f in findings}, [i.finding_id for i in items], invalid) if items is not None else ()
+    if items is None or invalid or gaps:
+        return [], record(canary_reports=len(tainted), invalid_items=invalid + len(gaps), voided=True,
+                          counts={"findings": len(findings)}, details=gaps)
     stripped = 0
     out = []
     for i in items:
@@ -130,4 +138,4 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         out.append(RedTeamNote(finding_id=i.finding_id, exploitable=exploitable, preconditions=clean,
                                source_family=provider.family, source_model=provider.model))
     # every finding_id is covered exactly once (checked above), so no filter is needed here
-    return out, errors, stripped, len(tainted)
+    return out, record(canary_reports=len(tainted), counts={"findings": len(findings), "exploit_code_stripped": stripped})

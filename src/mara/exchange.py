@@ -10,6 +10,8 @@ that judges a reply happens here, once, for every family:
   * `call` makes the provider call and maps any exception to a sanitised error code;
   * `Canary` plants the injection canary and screens an Outcome for a canary echo or a canary report;
   * `parse_items` validates a ballot reply's items against a pydantic model;
+
+How each reply outcome counts for a role, an empty reply included, is mara.audit's table, not a rule here.
   * `build_prompt` / `ask` lay a role's prompt out: trusted instructions outside the fences, repository data
     inside <untrusted_repository_data>, derived data inside <derived_data kind=...>.
 
@@ -158,33 +160,22 @@ def call(provider: Provider, *, system_extra: str, user: str, schema: dict, role
     return outcome
 
 
-def extraction_flags(outcome: Outcome) -> dict[str, bool]:
-    """How an extraction role (reviewer, context) reads a reply that produced no items: an empty reply is an
-    abstention, counted with the refusals; an unparseable reply is invalid output."""
-    return {"refused": outcome.refused or outcome.empty, "truncated": outcome.truncated, "errored": outcome.kind == ERROR,
-            "unparseable": outcome.unparseable}
-
-
-def parse_items(outcome: Outcome, model_cls, key: str = "items") -> tuple[list, list[str]]:
-    """Validate a ballot reply (skeptic, red team, judge) against a pydantic model; return (valid, errors).
-
-    A reply without items is one response-level error: the provider code, `refused` (an abstention, never
-    retried), `truncated` (the budget, never charged to the model), `unparseable` or `empty` (invalid output:
-    a ballot cannot abstain by saying nothing)."""
-    if outcome.kind == ERROR:
-        return [], [outcome.error]
+def parse_items(outcome: Outcome, model_cls, key: str = "items") -> tuple[list | None, int]:
+    """Validate a ballot reply (skeptic, red team, judge) against a pydantic model: (the valid items, the number of
+    invalid ones). The items are None when the reply holds no list: a reply of any kind but ok, which mara.audit
+    counts by its kind, or an answer without the list, which is one invalid item."""
     if outcome.kind != OK:
-        return [], [{REFUSAL: "refused", TRUNCATION: "truncated", UNPARSEABLE: "unparseable", EMPTY: "empty"}[outcome.kind]]
+        return None, 0
     data = outcome.data
     if not isinstance(data, dict) or not isinstance(data.get(key), list):
-        return [], ["invalid_response_shape"]
-    valid, errors = [], []
+        return None, 1
+    valid, invalid = [], 0
     for raw in data[key]:
         try:
             valid.append(model_cls.model_validate(raw))
-        except ValidationError as e:
-            errors.append("invalid_item:" + e.errors()[0]["type"])
-    return valid, errors
+        except ValidationError:
+            invalid += 1
+    return valid, invalid
 
 
 # ---------------------------------------------------------------- canary

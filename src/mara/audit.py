@@ -105,10 +105,11 @@ class ReplyRecord:
             raise ValueError(f"{self.role} carries no canary")
 
     @classmethod
-    def of(cls, outcome: Outcome, role: Role, family: str, **fields: Any) -> ReplyRecord:
-        """The record of one classified reply: its kind and tokens come from the outcome, the rest from `fields`."""
+    def of(cls, outcome: Outcome, role: Role, family: str, *, details: tuple[str, ...] = (), **fields: Any) -> ReplyRecord:
+        """The record of one classified reply: its kind, tokens and provider error code come from the outcome, the
+        rest from `fields`."""
         return cls(role=role, family=family, kind=outcome.kind, input_tokens=outcome.input_tokens,
-                   output_tokens=outcome.output_tokens, details=(outcome.error,) if outcome.error else (), **fields)
+                   output_tokens=outcome.output_tokens, details=((outcome.error,) if outcome.error else ()) + details, **fields)
 
 
 def worth_retrying(rec: ReplyRecord) -> bool:

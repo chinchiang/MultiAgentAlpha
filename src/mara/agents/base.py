@@ -12,8 +12,7 @@ from pathlib import Path
 from ..context.repo_map import RepoContext, fence_safe, source_lines
 from ..exchange import CANARY_PATH, COMMON_SYSTEM, PROVIDER_ERROR_RE, Canary, cites_canary, load_prompt
 
-__all__ = ["CANARY_PATH", "COMMON_SYSTEM", "PROVIDER_ERROR_RE", "Canary", "ballot_errors", "cites_canary", "coverage_errors", "load_prompt",
-           "verify_quote"]
+__all__ = ["CANARY_PATH", "COMMON_SYSTEM", "PROVIDER_ERROR_RE", "Canary", "cites_canary", "coverage_gaps", "load_prompt", "verify_quote"]
 
 
 MIN_QUOTE_CHARS = 8  # non-whitespace characters a quote needs, unless it is the whole claimed line
@@ -44,35 +43,17 @@ def verify_quote(ctx: RepoContext, file: str, line: int, quote: str) -> bool:
     return norm in window or norm in fence_safe(window)
 
 
-def coverage_errors(expected: set[str], ids: list[str], errors: list[str]) -> list[str]:
-    """One error per finding a ballot-style reply (skeptic, red team, judge) failed to cover exactly
-    once: a missing, duplicated or unknown finding_id each count as an unusable item.
+def coverage_gaps(expected: set[str], ids: list[str], invalid: int) -> tuple[str, ...]:
+    """One code per finding a ballot reply (skeptic, red team, judge) that held a list failed to cover exactly once:
+    a missing, duplicated or unknown finding_id each count as an invalid item, and any of them voids the reply.
 
-    Without these a well-formed but incomplete reply - `{"items": []}`, one verdict dropped - left
-    the error list holding only the summary marker, which the invalid-output audit does not count:
-    nothing was counted, the run stayed complete and the unchallenged findings could still reach
-    tier B. Only for a reply the model actually gave as a list: a refusal, a provider failure or an
-    unparseable body is already one response-level error and is not multiplied by the batch size
-    (an outage is never charged to the model item by item). Schema-invalid items already count once
-    each and their ids are unknown, so they are subtracted from the missing ones."""
-    if any(not e.startswith("invalid_item:") for e in errors):
-        return []
+    Without these a well-formed but incomplete reply - `{"items": []}`, one verdict dropped - counted nothing, the run
+    stayed complete and the unchallenged findings could still reach tier B. A reply without a list (a refusal, a
+    provider failure, an unparseable body) is counted once by its kind and is not multiplied by the batch size (an
+    outage is never charged to the model item by item). The `invalid` schema-invalid items already count once each
+    and their ids are unknown, so they are subtracted from the missing ones."""
     seen = Counter(ids)
-    missing = max(0, len(expected - set(seen)) - len(errors))
+    missing = max(0, len(expected - set(seen)) - invalid)
     duplicated = sum(n - 1 for i, n in seen.items() if i in expected)
     unexpected = sum(n for i, n in seen.items() if i not in expected)
-    return ["missing_verdict"] * missing + ["duplicate_verdict"] * duplicated + ["unexpected_verdict"] * unexpected
-
-
-def ballot_errors(expected: set[str], ids: list[str], errors: list[str], marker: str) -> list[str] | None:
-    """The one rule every ballot role (skeptic, red team, judge) applies to a validated reply: None when it rules on
-    every expected finding exactly once and has no error; otherwise the errors that void it.
-
-    A bare refusal stays exactly ["refused"] - an abstention, not invalid output - and anything else gets the
-    coverage errors plus `marker`, the summary that the whole reply was discarded."""
-    counts = Counter(ids)
-    if set(counts) == expected and all(n == 1 for n in counts.values()) and not errors:
-        return None
-    if errors == ["refused"]:
-        return errors
-    return errors + coverage_errors(expected, ids, errors) + [marker]
+    return ("missing_verdict",) * missing + ("duplicate_verdict",) * duplicated + ("unexpected_verdict",) * unexpected

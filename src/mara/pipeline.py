@@ -13,11 +13,12 @@ from collections.abc import Callable
 from dataclasses import asdict
 from functools import partial
 from pathlib import Path
+from typing import TypeVar
 
 from . import exchange
 from .agents import base, context_agent, judge, redteam, reviewer, skeptic
 from .agents.context_agent import ContextView
-from .audit import Audit, log_tags
+from .audit import Audit, ReplyRecord, log_tags, worth_retrying
 from .bias.blinding import blinded_batches
 from .bias.diversity import pairwise_family_agreement, pick_independent
 from .config import MaraConfig
@@ -47,13 +48,7 @@ from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
 from .tools.sarif import ToolResult
 from .workspace import check_outside, resolve
 
-# error vocabulary of the agent layer, response-level codes that are not invalid output: "refused" (an abstention),
-# an echo, the budget (a truncation is never charged to the model, docs/adr/0001-reply-outcome-accounting.md) and the
-# summary markers the agents append when a reply was discarded as a whole. Provider failures are not invalid output
-# either (exchange.is_provider_error); they are counted as <role>_errors.
-_ERROR_MARKERS = frozenset({"refused", "canary_echoed", "truncated", "incomplete_or_duplicate_response",
-                            "incomplete_or_duplicate_judge_response"})
-
+T = TypeVar("T")
 
 # L3/L4 calls are bounded like the reviewer calls: the skeptic and red team read the evidence files of
 # every finding they get, the judges one blinded view per finding. Unbatched, one model's whole share of
@@ -102,19 +97,6 @@ def l4_chunks(order: list) -> list[list]:
         out.append(order[start:end])
         start = end
     return out
-
-
-def _retryable(errors: list[str]) -> bool:
-    """A reply the agent rejected as malformed, cut off or not covering every finding exactly once: worth one
-    more call (GLM as skeptic answered four verdicts for three findings on one call and exactly three on the
-    next, 2026-10-08). Refusals and canary echoes are signals, never retried; providers retry their own failures, and
-    any other exception in a provider (provider_call_failed:<type>) is a bug a second call would only repeat."""
-    return bool(errors) and not any(e in ("refused", "canary_echoed") or exchange.is_provider_error(e) for e in errors)
-
-
-def _count_invalid(errors: list[str]) -> int:
-    """Unusable items only: empty responses, bad shapes, per-item schema failures - never a failed call."""
-    return sum(1 for x in errors if x not in _ERROR_MARKERS and not exchange.is_provider_error(x))
 
 
 class Pipeline:
@@ -230,31 +212,24 @@ class Pipeline:
                 finders[match.id].add(f.source_family)
         return kept, finders
 
-    def _once_more(self, role: str, fam: str, call: Callable[[], tuple]) -> tuple:
-        """`call()` -> (items, errors, ...); called once more when it kept nothing and _retryable(errors). Only
-        the answer used counts toward completeness; the discarded attempt is recorded as <role>_retries. The
-        retry depends on whether the reply was well-formed, never on what it concluded."""
-        out = call()
-        if not out[0] and _retryable(out[1]):
-            self.audit.add(f"{role}_retries", fam)
-            self._say(f"L3/L4: {role} {fam} reply rejected ({', '.join(sorted(set(out[1])))}); asked once more")
-            out = call()
-        return out
+    def _once_more(self, call: Callable[[], tuple[list[T], ReplyRecord | None]]) -> tuple[list[T], ReplyRecord | None]:
+        """`call()` -> (items, reply record), called once more when the reply is worth it (mara.audit.worth_retrying).
+        Only the answer used counts; the discarded attempt is recorded as <role>_retries, and the answer used is
+        counted by the caller."""
+        out, rec = call()
+        if rec is not None and worth_retrying(rec):
+            self.audit.retried(rec)
+            why = ", ".join(sorted(set(rec.details))) or rec.kind
+            self._say(f"L3/L4: {rec.role} {rec.family} reply rejected ({why}); asked once more")
+            out, rec = call()
+        return out, rec
 
-    def _count_ballot(self, role: str, fam: str, errors: list[str], canary_reports: int | None = None) -> int:
-        """The audit of one ballot round (skeptic, red team, judge) from the error codes of the answer used: refusals
-        (abstentions), provider failures, invalid items, truncations, unparseable replies and - for the roles that
-        read the repository and carry a canary - canary echoes and reports. Returns the refusals."""
-        refusals = errors.count("refused")
-        self.audit.add(f"{role}_refusals", fam, refusals)
-        self.audit.add(f"{role}_errors", fam, sum(exchange.is_provider_error(e) for e in errors))
-        self.audit.add(f"{role}_invalid_items", fam, _count_invalid(errors))
-        self.audit.add(f"{role}_truncations", fam, errors.count("truncated"))
-        self.audit.add(f"{role}_unparseable_replies", fam, errors.count("unparseable"))
-        if canary_reports is not None:
-            self.audit.add(f"{role}_canary_echoes", fam, errors.count("canary_echoed"))
-            self.audit.add(f"{role}_canary_reports", fam, canary_reports)
-        return refusals
+    def _count(self, rec: ReplyRecord | None) -> str:
+        """Count the reply used (mara.audit); its log tags."""
+        if rec is None:
+            return ""
+        self.audit.record(rec)
+        return log_tags(rec)
 
     # ------------------------------------------------------------------ L3
     def run_skeptics(
@@ -272,12 +247,9 @@ class Pipeline:
         abstained: set[str] = set()
         for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
             fam = self._p(name).family.value
-            self.audit.add("skeptic_calls", fam)
-            self.audit[f"skeptic_items[{fam}]"] += len(fs)
-            v, errors, unverified, reported = self._once_more("skeptic", fam, partial(skeptic.run_skeptic, self._p(name), ctx, fs))
-            refusals = self._count_ballot("skeptic", fam, errors, reported)
-            self.audit.add("skeptic_unverified_controls", fam, unverified)
-            self.audit.add("skeptic_refuted", fam, sum(x.verdict == "refuted" for x in v))
+            v, rec = self._once_more(partial(skeptic.run_skeptic, self._p(name), ctx, fs))
+            tags = self._count(rec)
+            unverified = rec.counts.get("unverified_controls", 0) if rec else 0
             if not v:
                 # no usable verdict for this group - a refusal, a provider failure, or a reply the
                 # agent rejected (unparseable, schema-invalid, or not covering every finding exactly
@@ -288,7 +260,7 @@ class Pipeline:
             self._say(
                 f"L3: skeptic {fam} judged {len(fs)} → {sum(x.verdict == 'refuted' for x in v)} refuted"
                 + (f", {unverified} unverifiable control citation(s) downgraded" if unverified else "")
-                + (" [REFUSED]" if refusals else "")
+                + tags
             )
         return verdicts, frozenset(abstained)
 
@@ -303,15 +275,12 @@ class Pipeline:
         notes: list[RedTeamNote] = []
         for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
             fam = self._p(name).family.value
-            self.audit.add("redteam_calls", fam)
-            self.audit[f"redteam_items[{fam}]"] += len(fs)
-            n, errors, stripped, reported = self._once_more("redteam", fam, partial(redteam.run_redteam, self._p(name), ctx, fs))
-            refusals = self._count_ballot("redteam", fam, errors, reported)
-            self.audit.add("redteam_exploit_code_stripped", fam, stripped)
+            n, rec = self._once_more(partial(redteam.run_redteam, self._p(name), ctx, fs))
+            tags = self._count(rec)
+            stripped = rec.counts.get("exploit_code_stripped", 0) if rec else 0
             notes.extend(n)
             self._say(f"L3: red team {fam} probed {len(fs)} → {sum(x.exploitable == 'yes' for x in n)} exploitable"
-                      + (f", {stripped} preconditions had exploit code removed" if stripped else "")
-                      + (" [REFUSED]" if refusals else ""))
+                      + (f", {stripped} preconditions had exploit code removed" if stripped else "") + tags)
         return notes
 
     # ------------------------------------------------------------------ L4
@@ -342,20 +311,20 @@ class Pipeline:
             self.audit["self_family_fallback_votes"] += len(self_ids)
             if not eligible:
                 continue
-            self.audit[f"judge_items[{fam}]"] += len(eligible)
             # one seeded order over all eligible findings, cut into bounded chunks; each chunk's reverse
             # pass is that chunk mirrored, so every finding is still seen in two mirrored positions
             order, _ = blinded_batches(eligible, skeptic_by_id, ctx.content_hash + prov.family.value)
             for fwd in l4_chunks(order):
                 rev = list(reversed(fwd))
-                self.audit.add("judge_calls", fam, 2)
-                v1, e1 = self._once_more("judge", fam, partial(judge.run_judge, prov, fwd, "forward", self_ids))
-                v2, e2 = self._once_more("judge", fam, partial(judge.run_judge, prov, rev, "reverse", self_ids))
-                refusals = self._count_ballot("judge", fam, e1 + e2)
+                v1, r1 = self._once_more(partial(judge.run_judge, prov, fwd, "forward", self_ids))
+                v2, r2 = self._once_more(partial(judge.run_judge, prov, rev, "reverse", self_ids))
+                tags = log_tags(*(r for r in (r1, r2) if r is not None))
+                self._count(r1)
+                self._count(r2)
                 votes.extend(v1 + v2)
                 self._say(
                     f"L4: judge {fam}: {len(fwd)} finding(s) ({len(self_ids & {b['finding_id'] for b in fwd})} self-family)"
-                    f" × 2 passes → {len(v1) + len(v2)} votes" + (" [REFUSED]" if refusals else "")
+                    f" × 2 passes → {len(v1) + len(v2)} votes" + tags
                 )
         return votes
 

@@ -8,7 +8,7 @@ import pytest
 from mara import exchange
 from mara.audit import INCOMPLETE_COUNTERS, ROLES, Audit, ReplyRecord, by_family, log_tags, worth_retrying
 from mara.config import load_config
-from mara.pipeline import Pipeline, _count_invalid, _retryable
+from mara.pipeline import Pipeline
 from mara.providers.base import Provider
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,10 +71,12 @@ def test_the_incomplete_counters_are_the_old_ones_in_their_old_order_and_the_con
 def test_a_failed_call_is_never_invalid_output_and_never_retried():
     for code in ("provider_http_error:503", "provider_connection_failed", "provider_call_failed:KeyError"):
         assert exchange.is_provider_error(code)
-        assert _count_invalid([code, "incomplete_or_duplicate_response"]) == 0
-        assert not _retryable([code, "incomplete_or_duplicate_response"]), "a bug in a provider would only repeat"
-    assert not exchange.is_provider_error("invalid_item:missing") and _count_invalid(["invalid_item:missing"]) == 1
-    assert _retryable(["unparseable", "incomplete_or_duplicate_response"])
+        rec = ReplyRecord.of(exchange.Outcome(exchange.ERROR, error=code), "skeptic", "glm", voided=True)
+        a = Audit()
+        a.record(rec)
+        assert (a["skeptic_errors"], a["skeptic_invalid_items"], rec.details) == (1, 0, (code,))
+        assert not worth_retrying(rec), "a bug in a provider would only repeat"
+    assert not exchange.is_provider_error("invalid_item:missing")
 
 
 class _FailRole(Provider):

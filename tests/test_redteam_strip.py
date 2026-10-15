@@ -83,8 +83,8 @@ def test_run_redteam_strips_code_and_counts(monkeypatch):
     ctx = SimpleNamespace(summary=lambda: "s", content={}, complete=True, bundle=lambda paths=None: "")
     findings = [SimpleNamespace(id="F1", title="t1", cwe="CWE-94", exploit_sketch=None, provenance=[]),
                 SimpleNamespace(id="F2", title="t2", cwe="CWE-79", exploit_sketch=None, provenance=[])]
-    notes, errors, stripped, _ = redteam.run_redteam(_provider(), ctx, findings)  # type: ignore[arg-type]
-    assert errors == [] and stripped == 1
+    notes, rec = redteam.run_redteam(_provider(), ctx, findings)  # type: ignore[arg-type]
+    assert not rec.voided and rec.counts["exploit_code_stripped"] == 1
     by_id = {n.finding_id: n for n in notes}
     assert by_id["F1"].preconditions == "Attacker must control the template.\nNo authentication needed."
     assert by_id["F2"].preconditions == "No authentication needed."
@@ -95,8 +95,8 @@ def test_run_redteam_all_code_preconditions_become_the_placeholder(monkeypatch):
     monkeypatch.setattr(redteam.exchange, "call", lambda *a, **k: _redteam_response([item]))
     ctx = SimpleNamespace(summary=lambda: "s", content={}, complete=True, bundle=lambda paths=None: "")
     f = SimpleNamespace(id="F1", title="t", cwe="CWE-94", exploit_sketch=None, provenance=[])
-    notes, errors, stripped, _ = redteam.run_redteam(_provider(), ctx, [f])  # type: ignore[arg-type]
-    assert stripped == 1 and errors == []
+    notes, rec = redteam.run_redteam(_provider(), ctx, [f])  # type: ignore[arg-type]
+    assert rec.counts["exploit_code_stripped"] == 1 and not rec.voided
     assert notes[0].preconditions == redteam.EXPLOIT_STRIP_PLACEHOLDER
     assert notes[0].source_family == ModelFamily.MOCK
 
@@ -106,6 +106,8 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
     report is incomplete (the same fail-closed treatment as reviewer refusals or canary echoes)."""
     import json as jsonlib
 
+    from mara import exchange
+    from mara.audit import ReplyRecord
     from mara.config import load_config
     from mara.pipeline import Pipeline
     from mara.providers.base import Provider
@@ -131,7 +133,8 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
     (tmp_path / "app.py").write_text("unsafe()\n")
     pipe.providers = {n: Reply(p.spec) for n, p in pipe.providers.items()}
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: ([], [], 1, 0))
+    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: ([], ReplyRecord(
+        role="redteam", family=p.family.value, kind=exchange.OK, counts={"findings": len(fs), "exploit_code_stripped": 1})))
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["redteam_exploit_code_stripped"] == 1
     assert "redteam_exploit_code_stripped" in report.incomplete_reasons
