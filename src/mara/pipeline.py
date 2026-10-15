@@ -224,12 +224,12 @@ class Pipeline:
             out, rec = call()
         return out, rec
 
-    def _count(self, rec: ReplyRecord | None) -> str:
-        """Count the reply used (mara.audit); its log tags."""
-        if rec is None:
-            return ""
-        self.audit.record(rec)
-        return log_tags(rec)
+    def _count(self, *recs: ReplyRecord | None) -> str:
+        """Count the replies used (mara.audit); their log tags, each tag once."""
+        used = [rec for rec in recs if rec is not None]
+        for rec in used:
+            self.audit.record(rec)
+        return log_tags(*used)
 
     # ------------------------------------------------------------------ L3
     def run_skeptics(
@@ -318,9 +318,7 @@ class Pipeline:
                 rev = list(reversed(fwd))
                 v1, r1 = self._once_more(partial(judge.run_judge, prov, fwd, "forward", self_ids))
                 v2, r2 = self._once_more(partial(judge.run_judge, prov, rev, "reverse", self_ids))
-                tags = log_tags(*(r for r in (r1, r2) if r is not None))
-                self._count(r1)
-                self._count(r2)
+                tags = self._count(r1, r2)
                 votes.extend(v1 + v2)
                 self._say(
                     f"L4: judge {fam}: {len(fwd)} finding(s) ({len(self_ids & {b['finding_id'] for b in fwd})} self-family)"
