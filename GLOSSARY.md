@@ -56,7 +56,7 @@ A reply that ended normally but is not the structured answer asked for; invalid 
 _Avoid_: truncated, malformed
 
 **Empty reply**:
-A reply that ended normally with no text; read by role (abstention for extraction roles, invalid output for ballot roles).
+A reply that ended normally with no answer text (an aside may still hold some); read by role (abstention for extraction roles, invalid output for ballot roles).
 
 **Refusal**:
 A reply the vendor or model marked as declining to answer; counted as an abstention, separate from invalid output.
