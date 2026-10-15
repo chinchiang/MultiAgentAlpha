@@ -112,7 +112,8 @@ def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: l
         # the config requires at least one dimension (MaraConfig.dimensions); a review that scored nothing has no score
         raise ValueError("a review needs at least one dimension to score")
     reasons = _incomplete_reasons(facts, consensus, tool_results)
-    blocking = _blocking_reasons(consensus, outcome_policy, gate_policy)
+    # the blocking findings and why each blocks: they depend on no fact of the review, only on the rows and the policies
+    blocking = {c.finding_id: why for c in consensus if (why := _blocking_reason(c, outcome_policy, gate_policy))}
     applies: dict[str, bool] = {REVIEW_INCOMPLETE: bool(reasons), **dict.fromkeys(blocking.values(), True),
                                 DIMENSION_BELOW_MINIMUM: any(d.score < gate_policy.min_dimension_score for d in dimensions)}
     gate_reasons = tuple(code for code in GATE_REASONS if applies.get(code))
@@ -122,13 +123,6 @@ def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: l
                       gate_enforced=bool(gate_reasons) and (facts.rollout_phase == "blocking" or facts.fail_on_gate), overall_score=overall,
                       blocking_reasons=blocking,
                       tier_c_blocked_while_tightened=sum(why == TIER_C_WHILE_TIGHTENED for why in blocking.values()))
-
-
-def _blocking_reasons(consensus: list[ConsensusResult], outcome_policy: OutcomePolicy,
-                      gate_policy: GatePolicy) -> dict[str, BlockingReason]:
-    """The blocking findings among `consensus` and why each blocks (finding id -> reason). assess reads these; they
-    depend on no fact of the review, only on the rows and the two policies."""
-    return {c.finding_id: why for c in consensus if (why := _blocking_reason(c, outcome_policy, gate_policy))}
 
 
 def _blocking_reason(c: ConsensusResult, outcome_policy: OutcomePolicy, gate_policy: GatePolicy) -> BlockingReason | None:

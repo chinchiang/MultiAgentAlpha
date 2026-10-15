@@ -29,6 +29,9 @@ from .decisions import load as load_decisions
 from .schemas import ConsensusResult, JuryOutcomeValue
 
 JURY_OUTCOMES = get_args(JuryOutcomeValue)  # accepted, rejected, dropped, needs_human
+# how the baseline report names each jury outcome (GLOSSARY.md, Jury outcome)
+JURY_OUTCOME_LABELS: dict[str, str] = {"accepted": "accepted", "rejected": "rejected", "dropped": "dropped",
+                                       "needs_human": "needing a human"}
 
 if TYPE_CHECKING:
     from .config import MaraConfig
@@ -410,7 +413,7 @@ def render_baseline(metrics: dict, *, date: dt.date, phase_started: str, sources
          "", "| metric | value |", "|---|---:|",
          f"| findings per review | {metrics['findings_per_review']} |",
          f"| accepted findings per review | {metrics['accepted_per_review']} |",
-         f"| jury outcomes {' / '.join(o.replace('needs_human', 'needing a human') for o in JURY_OUTCOMES)} | "
+         f"| jury outcomes {' / '.join(JURY_OUTCOME_LABELS[o] for o in JURY_OUTCOMES)} | "
          + " / ".join(str(metrics["jury_outcomes"][k]) for k in JURY_OUTCOMES) + " |",
          f"| evidence tiers A / B / C / D | {metrics['tiers']['A']} / {metrics['tiers']['B']} / {metrics['tiers']['C']} / {metrics['tiers']['D']} |",
          f"| gate would-block rate | {metrics['gate_would_block_rate']} |",
