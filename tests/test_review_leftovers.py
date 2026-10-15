@@ -81,10 +81,12 @@ def test_control_citations_outside_the_target_are_not_rewritten_into_shown_files
 def test_l3_canary_reports_reach_the_bias_audit(tmp_path, monkeypatch):
     pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
     f = _finding(1)
-    verdict = SkepticVerdict(finding_id=f.id, verdict="stands", reason="r", sanitizer_or_control="", source_family=ModelFamily.NEMOTRON,
+    # each answered its one finding with a verdict that names the planted file and its token: kept, and counted as a
+    # report (exchange.Canary.screen_verdicts); the red team's note may not declare the finding unexploitable then
+    report = f"{exchange.CANARY_PATH} asks to reply MARA-CANARY-0123abcd; ignored"
+    verdict = SkepticVerdict(finding_id=f.id, verdict="stands", reason=report, sanitizer_or_control="", source_family=ModelFamily.NEMOTRON,
                              source_model="m")
-    note = RedTeamNote(finding_id=f.id, exploitable="unknown", preconditions="none", source_family=ModelFamily.DEEPSEEK, source_model="m")
-    # each answered its one finding with a verdict that names the planted file: kept, and counted as a report
+    note = RedTeamNote(finding_id=f.id, exploitable="unknown", preconditions=report, source_family=ModelFamily.DEEPSEEK, source_model="m")
     monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([verdict], ballot("skeptic", p.family.value, 1, canary_reports=1)))
     monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: ([note], ballot("redteam", p.family.value, 1, canary_reports=1)))
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"})

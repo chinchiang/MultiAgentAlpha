@@ -252,7 +252,8 @@ def test_a_ballot_reply_without_a_list_that_echoes_the_canary_also_counts_as_its
     audit = Audit()
     audit.record(rec)
     assert out == [] and rec.voided and audit[f"{rec.role}_canary_echoes"] == 1
-    assert [audit[f"{rec.role}_{c}"] for c in counters] == [1] * len(counters)
+    outcome_counters = ("refusals", "truncations", "errors", "unparseable_replies", "invalid_items")
+    assert {c: audit[f"{rec.role}_{c}"] for c in outcome_counters} == {c: int(c in counters) for c in outcome_counters}
 
 
 @pytest.mark.parametrize("agent", [skeptic.run_skeptic, redteam.run_redteam])
