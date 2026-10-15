@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from .exchange import EMPTY, ERROR, KINDS, REFUSAL, TRUNCATION, UNPARSEABLE, Outcome
+from .exchange import EMPTY, ERROR, KINDS, REFUSAL, TRUNCATION, UNPARSEABLE, Kind, Outcome
 
 Role = Literal["reviewer", "context", "skeptic", "redteam", "judge"]
 
@@ -82,7 +82,7 @@ class ReplyRecord:
 
     role: Role
     family: str
-    kind: str
+    kind: Kind
     canary_echoes: int = 0
     canary_reports: int = 0
     invalid_items: int = 0

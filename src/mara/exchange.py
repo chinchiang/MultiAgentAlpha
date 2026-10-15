@@ -30,7 +30,7 @@ import traceback
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, Final, Literal, get_args
 
 from pydantic import ValidationError
 
@@ -45,8 +45,14 @@ from .providers.base import STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply, c
 #    skeptic_items, redteam_items and judge_items have totals (docs/adr/0008-reply-accounting.md)
 EXCHANGE_VERSION = 5
 
-OK, TRUNCATION, UNPARSEABLE, EMPTY, REFUSAL, ERROR = "ok", "truncation", "unparseable", "empty", "refusal", "error"
-KINDS = (OK, TRUNCATION, UNPARSEABLE, EMPTY, REFUSAL, ERROR)
+Kind = Literal["ok", "truncation", "unparseable", "empty", "refusal", "error"]  # a reply outcome's kind (GLOSSARY.md)
+KINDS: tuple[Kind, ...] = get_args(Kind)
+OK: Final[Kind] = "ok"
+TRUNCATION: Final[Kind] = "truncation"
+UNPARSEABLE: Final[Kind] = "unparseable"
+EMPTY: Final[Kind] = "empty"
+REFUSAL: Final[Kind] = "refusal"
+ERROR: Final[Kind] = "error"
 
 PROVIDER_ERROR_RE = re.compile(r"provider_[a-z_]+(?::\d{3})?")  # the codes the providers raise, nothing else
 _CALL_FAILED_RE = re.compile(r"provider_call_failed:[A-Za-z_][A-Za-z0-9_]*")  # call()'s code for any other exception
@@ -74,7 +80,7 @@ class Outcome:
     canary screen). `text` is everything the model wrote, answer and aside together; `aside` is the part around
     the answer."""
 
-    kind: str
+    kind: Kind
     data: Any = None
     full_data: Any = None
     text: str = ""
