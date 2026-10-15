@@ -97,8 +97,8 @@ def _member(spec: dict[str, Any], served: dict[str, Any] | None, audit: dict[str
             *, configured_member: bool) -> dict[str, Any]:
     failures = {k: _num(audit, f"{k}[{fam}]") for k in _FAILURES[role]}
     # a report of EXCHANGE_VERSION 4 counted the context agent's echoes in the reviewers' canary_echoes
-    echo_key = ROLES[prefix].canary_echoes
-    echoes = _num(audit, f"{echo_key}[{fam}]") if echo_key else 0
+    canary = ROLES[prefix].canary
+    echoes = _num(audit, f"{canary.echoes}[{fam}]") if canary else 0
     return {
         "name": spec.get("name"),
         "family": fam,
