@@ -65,7 +65,10 @@ def _enumerations() -> dict[str, set[str]]:
         "stage_status.": set(progress.STAGE_STATUSES),
         "outcome.": set(get_args(JuryOutcomeValue)),
         "reason.": set(INCOMPLETE_REASONS),
-        "hreason.": _literal_values(outcome, r"reasons\.append") | _literal_values(queue, r"reasons\.append") | {"decision_not_usable"},
+        # unresolved_human_review: the queue's fallback reason before docs/adr/0007-review-status-and-gate.md removed it;
+        # reports written before still hold it, and the workbench still names it
+        "hreason.": _literal_values(outcome, r"reasons\.append") | _literal_values(queue, r"reasons\.append")
+                    | {"decision_not_usable", "unresolved_human_review"},
         "error.": errors,
         "provider.": set(get_args(ModelSpec.model_fields["provider"].annotation)),
         "residency.": set(get_args(ModelSpec.model_fields["data_residency"].annotation)),

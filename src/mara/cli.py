@@ -11,7 +11,7 @@ from rich.table import Table
 from .config import MaraConfig, load_config
 from .pipeline import Pipeline
 from .progress import Progress
-from .report.markdown_out import enforcement, write_markdown
+from .report.markdown_out import enforcement_wording, write_markdown
 from .report.sarif_out import write_sarif
 from .schemas import DIMENSION_LABELS, ReviewReport
 
@@ -75,13 +75,17 @@ def review(
     progress.finish(ok=True)
     # an internal hand-off that did not arrive is an operational failure (EU CRA Article 14 clocks may depend on it):
     # never a green run, and its 3 outranks an enforced gate's 2. The reports are written either way.
-    code = 3 if psirt_failed else 2 if report.gate_enforced else 0
+    # G-10: whether a blocked gate is enforced (the blocking phase, or --fail-on-gate) was decided by mara.review_status
+    # and recorded in report.json; the gate's message says which, and the exit code the command ends with
+    if psirt_failed:
+        code, why = 3, ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else "")
+    elif report.gate_enforced:
+        code, why = 2, ""
+    else:
+        code, why = 0, ", G-10"
     if not report.gate_passed:
-        # G-10: whether a blocked gate is enforced (the blocking phase, or --fail-on-gate) was decided by
-        # mara.review_status and recorded in report.json; the message says which, and the exit code the command ends with
-        why = {3: ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else ""), 2: "", 0: ", G-10"}
-        console.print(f"rollout phase [bold]{cfg.rollout.phase}[/bold]: the gate blocked: {enforcement(bool(report.gate_enforced))} "
-                      f"(exit {code}{why[code]})")
+        console.print(f"rollout phase [bold]{cfg.rollout.phase}[/bold]: the gate blocked: "
+                      f"{enforcement_wording(bool(report.gate_enforced))} (exit {code}{why})")
     if psirt_failed:
         console.print("[bold red]PSIRT hand-off failed for at least one finding; see the ledger and retry with --notify-psirt[/bold red]")
     if code:

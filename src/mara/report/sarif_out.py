@@ -54,8 +54,7 @@ def to_sarif(report: ReviewReport) -> dict:
         # ruling as its justification, so code scanning records why the alert closed instead of reading it as fixed
         outcome = c.final_outcome
         dismissed = c.resolved_by_human and outcome == "rejected"
-        in_rejection_review = not c.resolved_by_human and outcome == "rejected" and c.unsupervised_reject_unverified
-        if outcome not in ("accepted", "needs_human") and not dismissed and not in_rejection_review:
+        if outcome not in ("accepted", "needs_human") and not dismissed and not c.in_rejection_review:
             continue
         rule_id = f"MARA/{f.dimension}/{f.cwe}"
         occurrence = occurrence_of[f.id]
@@ -68,7 +67,7 @@ def to_sarif(report: ReviewReport) -> dict:
             "ruleId": rule_id,
             # a finding waiting for a human decision is emitted as a note, never as an error, so code
             # scanning does not show it as confirmed; the decision on the ticket settles it (G-11)
-            "level": "note" if outcome == "needs_human" or in_rejection_review else LEVEL[c.cvss4_severity],
+            "level": "note" if outcome == "needs_human" or c.in_rejection_review else LEVEL[c.cvss4_severity],
             "rank": round(c.weighted_score * 100, 1),
             "message": {"text": f"[{c.tier.value}] {f.title} (CVSS 4.0 {c.cvss4_score} {c.cvss4_severity}; SSVC {c.ssvc_decision})"},
             # a URI reference: a path with a space or '#' must be percent-encoded to stay one

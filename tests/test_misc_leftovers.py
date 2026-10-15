@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 from mara.cli import app
 from mara.config import MaraConfig, load_config
 from mara.tools import trivy_db as tdb
+from tests.cli_output import plain
 from tests.test_trivy_db import _fake_trivy, _now_iso
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,10 +78,10 @@ def test_report_header_says_when_fail_on_gate_enforced_the_gate(tmp_path):
     md = (tmp_path / "forced" / "report.md").read_text(encoding="utf-8")
     header = md.split("\n## ")[0]
     assert forced.exit_code == 2 and "rollout phase `shadow` (enforced)" in header and "recorded, not enforced" not in md
-    assert "the gate blocked: enforced (exit 2)" in _plain(forced.output)
+    assert "the gate blocked: enforced (exit 2)" in plain(forced.output)
     # the report records the enforcement (docs/adr/0007-review-status-and-gate.md), and the CLI says why the gate blocked
     assert json.loads((tmp_path / "forced" / "report.json").read_text(encoding="utf-8"))["gate_enforced"] is True
-    assert "gate reasons: review_incomplete, blocking_tier_and_severity" in _plain(forced.output)
+    assert "gate reasons: review_incomplete, blocking_tier_and_severity" in plain(forced.output)
     recorded = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "recorded")])
     md = (tmp_path / "recorded" / "report.md").read_text(encoding="utf-8")
     header = md.split("\n## ")[0]
@@ -97,17 +98,10 @@ def test_in_the_blocking_phase_a_blocked_gate_is_enforced_and_says_so(tmp_path):
     cfg.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
     res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(cfg),
                                    "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--out", str(tmp_path / "out")])
-    assert res.exit_code == 2 and "the gate blocked: enforced (exit 2)" in _plain(res.output)
+    assert res.exit_code == 2 and "the gate blocked: enforced (exit 2)" in plain(res.output)
     header = (tmp_path / "out" / "report.md").read_text(encoding="utf-8").split("\n## ")[0]
     assert "rollout phase `blocking` (enforced)" in header
     assert json.loads((tmp_path / "out" / "report.json").read_text(encoding="utf-8"))["gate_enforced"] is True
-
-
-def _plain(output: str) -> str:
-    """CLI output without rich's colour codes, which CI renders (GITHUB_ACTIONS), and with lines unwrapped."""
-    import re
-
-    return " ".join(re.sub(r"\x1b\[[0-9;]*m", "", output).split())
 
 
 # ------------------------------------------------------------------ in-country example

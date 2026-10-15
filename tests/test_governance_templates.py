@@ -342,18 +342,18 @@ def test_governance_rows_are_decidable_now():
     assert all(r.status != gc.MANUAL for r in gc.run_all(ROOT, ROOT / "config" / "mara.yaml", TODAY))
 
 
-def _baseline_row(fid: str, tier: str, *, accepted: bool = False, needs_human: bool = False) -> dict:
-    return {"finding_id": fid, "weighted_score": 0.5, "votes_tp": 1, "votes_fp": 1, "votes_human": 0, "families_agreeing": [],
-            "tool_corroborated": False, "skeptic_refuted": False, "position_consistent": True, "tier": tier, "cvss4_score": 5.0,
-            "cvss4_severity": "Medium", "ssvc_decision": "Track", "accepted": accepted, "needs_human": needs_human,
-            "human_reasons": ["insufficient_independent_judges"] if needs_human else []}
+def _baseline_row(fid: str, tier: str, outcome: str) -> dict:
+    """A consensus row as report.json holds it, in a state scoring produces (tests/review_facts.row)."""
+    from tests.review_facts import row
+
+    return row(fid, tier, "Medium", outcome).model_dump(mode="json")
 
 
 def test_the_baseline_counts_each_jury_outcome_and_a_report_without_a_gate_as_blocked(tmp_path):
     """docs/adr/0007-review-status-and-gate.md: rejected counts rejected findings only; dropped and needing-a-human
     findings are counted apart, not as rejected. A report that does not say whether its gate passed fails closed."""
-    rows = [_baseline_row("F-1", "A", accepted=True), _baseline_row("F-2", "B"), _baseline_row("F-3", "D"),
-            _baseline_row("F-4", "D"), _baseline_row("F-5", "C", needs_human=True)]
+    rows = [_baseline_row("F-1", "A", "accepted"), _baseline_row("F-2", "A", "rejected"), _baseline_row("F-3", "D", "dropped"),
+            _baseline_row("F-4", "D", "dropped"), _baseline_row("F-5", "C", "needs_human")]
     (tmp_path / "a.json").write_text(json.dumps({"consensus": rows, "gate_passed": True}), encoding="utf-8")
     (tmp_path / "b.json").write_text(json.dumps({"consensus": []}), encoding="utf-8")
     m = govdocs.baseline_metrics([tmp_path / "a.json", tmp_path / "b.json"])

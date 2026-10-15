@@ -4,6 +4,7 @@ import hashlib
 import json
 from collections import Counter
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import quote
 
 from mara import __version__
@@ -205,10 +206,16 @@ def _with_a_fourth_judge(cfg, votes, finders):
     return panel, cast
 
 
-def _variants(report, cfg, tmp_path):
+class _Variant(NamedTuple):
+    report: ReviewReport
+    panel: str  # mock, four judges, or four judges with P8 unlocked
+    patterns: dict[str, str]  # finding id -> the vote pattern it was re-cast to
+
+
+def _variants(report, cfg, tmp_path) -> list[_Variant]:
     """Consensus rows scoring really produces: the seeded review's findings, skeptic, red team and tool results scored
     again by Pipeline.score with the judges' votes re-cast, each finding taking every vote pattern in turn, on the mock
-    panel and on the panel with a fourth judge. Tier, score, votes and jury outcome therefore agree as scoring writes
+    panel, on the panel with a fourth judge, and on that panel with P8 unlocked. Tier, score, votes and jury outcome therefore agree as scoring writes
     them; no rule of decide() or of tiering is copied here. Every other variant carries usable human rulings, a false
     positive on every third finding and a true positive on the next (a ruling binds to content, whatever the jury
     concluded). Each gets its blocking reasons from assess and the human queue built for it. The report's other
@@ -220,34 +227,38 @@ def _variants(report, cfg, tmp_path):
     from mara.context.repo_map import build_context
     from mara.pipeline import Pipeline
     from mara.report.human_queue_out import build_queue
-    from mara.review_status import assess
+    from mara.review_status import blocking_reasons
     from mara.tools.sarif import ToolResult
-    from tests.review_facts import FACTS
 
     finders = {f.id: set(f.finder_families) for f in report.findings}
     skeptic, redteam = {v.finding_id: v for v in report.skeptic}, {n.finding_id: n for n in report.redteam}
     tools = [ToolResult(**t) for t in report.tool_results]
     prefix = build_context(Path(report.target)).repo_prefix
+    four, four_cast = _with_a_fourth_judge(cfg, report.votes, finders)
+    # P8 unlocked (a passing Alternative Annotator Test): a rejection is then left to the jury, not under review
+    unlocked = four.model_copy(update={"gate": four.gate.model_copy(update={"unsupervised_reject_allowed": True})})
     variants = []
-    for panel, cast in ((cfg, report.votes), _with_a_fourth_judge(cfg, report.votes, finders)):
+    for name, panel, cast in (("mock", cfg, report.votes), ("four judges", four, four_cast),
+                              ("four judges, P8 unlocked", unlocked, four_cast)):
         scorer = Pipeline(panel, out_dir=tmp_path)  # its own audit: scoring writes position_flips into it
         by_finding = defaultdict(list)
         for v in cast:
             by_finding[v.finding_id].append(v)
         for k in range(len(_PATTERNS)):
-            votes = [v for i, f in enumerate(report.findings) for v in _recast(by_finding[f.id], _PATTERNS[(i + k) % len(_PATTERNS)])]
+            patterns = {f.id: _PATTERNS[(i + k) % len(_PATTERNS)] for i, f in enumerate(report.findings)}
+            votes = [v for f in report.findings for v in _recast(by_finding[f.id], patterns[f.id])]
             consensus = scorer.score(report.findings, finders, skeptic, redteam, votes, tools, tool_path_prefix=prefix)
             if k % 2:
                 for i, c in enumerate(consensus):
                     ruling = ("false_positive", "true_positive", None)[i % 3]
                     c.human_decision = {"decision": ruling, **_DECIDED} if ruling else None
-            # as Pipeline.run does: each blocking finding's reason from assess (it reads no review fact for them)
-            blocking = assess(FACTS, consensus, [], report.dimensions, scorer.outcome_policy, scorer.gate_policy).blocking_reasons
+            # as Pipeline.run writes them from its assessment
+            blocking = blocking_reasons(consensus, scorer.outcome_policy, scorer.gate_policy)
             for c in consensus:
                 c.blocking_reason = blocking.get(c.finding_id)
             v = report.model_copy(update={"votes": votes, "consensus": consensus})
             v.human_queue = build_queue(v.findings, {c.finding_id: c for c in consensus}, skeptic, redteam, votes, panel)
-            variants.append(v)
+            variants.append(_Variant(v, name, patterns))
     return variants
 
 
@@ -255,21 +266,35 @@ def test_with_the_human_queue_enabled_code_scanning_sees_what_it_saw_before(mock
     pipe, report = mock_report
     assert pipe.cfg.human_queue.enabled
     variants = _variants(report, pipe.cfg, tmp_path)
-    as_cast = {c.finding_id: c.model_dump(exclude={"human_decision", "blocking_reason"}) for c in variants[0].consensus
-               if c.finding_id in {f.id for i, f in enumerate(report.findings) if i % len(_PATTERNS) == 0}}
-    assert as_cast == {c.finding_id: c.model_dump(exclude={"human_decision", "blocking_reason"}) for c in report.consensus
-                       if c.finding_id in as_cast}, "re-scoring the votes as cast gives the seeded review's rows"
-    rows = [c for v in variants for c in v.consensus]
+    seeded = {c.finding_id: c.model_dump(exclude={"human_decision", "blocking_reason"}) for c in report.consensus}
+    as_cast = {c.finding_id: c.model_dump(exclude={"human_decision", "blocking_reason"}) for v in variants if v.panel == "mock"
+               for c in v.report.consensus if v.patterns[c.finding_id] == "as_cast"}
+    assert as_cast == seeded, "re-scoring every finding's votes as cast gives the seeded review's rows"
+    rows = [c for v in variants for c in v.report.consensus]
     assert {c.jury_outcome for c in rows} == {"accepted", "rejected", "dropped", "needs_human"}, "every jury outcome"
-    assert any(c.unsupervised_reject_unverified and not c.resolved_by_human for c in rows), "a rejection under review"
+    assert any(c.in_rejection_review for c in rows), "a rejection under review"
+    assert any(c.jury_outcome == "rejected" and not c.in_rejection_review and not c.resolved_by_human for c in rows), \
+        "a rejection left to the jury (P8 unlocked), which code scanning does not see"
     assert {(c.human_decision or {}).get("decision") for c in rows} == {None, "false_positive", "true_positive"}
     for v in variants:
         # the whole document, rules, results (levels, messages, fingerprints, properties, suppressions) and run, is
         # what the old to_sarif wrote, apart from the gate properties added on purpose
-        assert _without_gate_properties(to_sarif(v)) == _old_to_sarif(v)
-    results = [r for v in variants for r in to_sarif(v)["runs"][0]["results"]]
+        assert _without_gate_properties(to_sarif(v.report)) == _old_to_sarif(v.report), v.panel
+    results = [r for v in variants for r in to_sarif(v.report)["runs"][0]["results"]]
     assert any("blockingReason" in r["properties"] for r in results), "the blockingReason that _without_gate_properties strips is there"
     assert any(r.get("suppressions") for r in results), "a human false positive is dismissed"
+
+
+def test_a_rejection_under_review_is_a_note_even_when_the_human_queue_is_disabled(mock_report, tmp_path):
+    """Like a finding needing a human: P8's look at a rejected finding is the finding's state, not the queue's."""
+    pipe, report = mock_report
+    under_review = 0
+    for v in _variants(report, pipe.cfg, tmp_path):
+        waiting = {c.finding_id for c in v.report.consensus if c.in_rejection_review}
+        results = _results(v.report.model_copy(update={"human_queue": []}))
+        assert waiting <= set(results) and {results[fid]["level"] for fid in waiting} <= {"note"}, v.panel
+        under_review += len(waiting)
+    assert under_review, "the four-judge variants hold rejections under review"
 
 
 def test_the_run_says_why_the_gate_blocked_and_each_blocking_result_why_it_blocks(mock_report):

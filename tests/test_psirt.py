@@ -4,7 +4,6 @@ from the environment; policy P6 keeps the trigger narrow."""
 
 import datetime as dt
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -21,6 +20,7 @@ from mara.pipeline import Pipeline  # noqa: E402
 from mara.policy import evaluate_policies  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
 from mara.report.psirt_out import build_notifications, select_psirt_findings, send_psirt, write_psirt  # noqa: E402
+from tests.cli_output import plain  # noqa: E402
 
 PSIRT = {"enabled": True, "webhook_url": "https://psirt.example.internal/intake", "product": "IPC-7000 web console", "shipped": True}
 
@@ -133,8 +133,8 @@ def test_write_and_cli_file_output(shipped_report, tmp_path):
                                   "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--mock-fixtures", str(ROOT / "fixtures" / "mock-responses"),
                                   "--out", str(out)])
     assert res.exit_code == 0, res.output
-    plain = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", res.output)  # without colour codes (FORCE_COLOR on CI runners)
-    assert (out / "psirt-notifications.json").is_file() and "PSIRT payload" in " ".join(plain.split())
+    text = plain(res.output)  # without colour codes (FORCE_COLOR on CI runners)
+    assert (out / "psirt-notifications.json").is_file() and "PSIRT payload" in text
 
 
 def test_policy_p6_keeps_the_trigger_narrow():
@@ -349,48 +349,48 @@ def test_an_unreachable_send_is_recorded_and_does_not_stop_the_others(shipped_re
     assert attempt == {"at": attempt["at"], "status_code": None, "ok": False, "error": "connection_failed"}
 
 
-def _review_with_a_failed_hand_off(report, monkeypatch, tmp_path, *flags: str):
-    """`mara review --notify-psirt` (and `flags`) on a config with the PSIRT hand-off on, where the review gives
-    `report` and every send fails; returns the CLI result and its output without colour codes, on one line. The review
-    is stubbed but keeps run()'s contract for --fail-on-gate: in the config's rollout phase (not_started) a blocked gate
-    is enforced exactly when the flag is given (mara.review_status)."""
+def _review_with_a_failed_hand_off(payloads, monkeypatch, tmp_path, *flags: str):
+    """`mara review --notify-psirt` (and `flags`) of the seeded fixture on a config with the PSIRT hand-off on, every
+    send failing. The review runs for real, its gate decided by mara.review_status; only the hand-off's payloads are
+    given, since the mock review accepts no tier A Critical finding of its own. Returns the CLI result, its report and
+    its output as a reader sees it."""
     import yaml
 
     import mara.report.psirt_out as po
-    from mara.pipeline import Pipeline as P
 
     raw = yaml.safe_load((ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8"))
     raw["psirt"] = PSIRT
     cfg_path = tmp_path / "mock-psirt.yaml"
     cfg_path.write_text(yaml.safe_dump(raw))
-    monkeypatch.setattr(P, "run", lambda self, *a, fail_on_gate=False, **k: report.model_copy(
-        update={"gate_enforced": fail_on_gate and not report.gate_passed}))
-    monkeypatch.setattr(po, "send_psirt", lambda payloads, *a, **k: [
+    monkeypatch.setattr(po, "build_notifications", lambda report, cfg, *a, **k: payloads)
+    monkeypatch.setattr(po, "send_psirt", lambda sent, *a, **k: [
         {"finding_id": p["finding_id"], "dedupe_key": p["dedupe_key"], "skipped": False, "status_code": None, "ok": False,
-         "error": "connection_failed"} for p in payloads])
+         "error": "connection_failed"} for p in sent])
     res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(cfg_path),
-                                  "--out", str(tmp_path / "out"), "--notify-psirt", *flags])
-    return res, " ".join(re.sub(r"\x1b\[[0-9;]*m", "", res.output).split())
+                                  "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--mock-fixtures",
+                                  str(ROOT / "fixtures" / "mock-responses"), "--out", str(tmp_path / "out"), "--notify-psirt", *flags])
+    report = json.loads((tmp_path / "out" / "report.json").read_text(encoding="utf-8"))
+    return res, report, plain(res.output)
 
 
 def test_a_failed_psirt_hand_off_fails_the_cli_run(shipped_report, monkeypatch, tmp_path):
     """The CLI printed FAILED but exited 0: CI showed green after a CRA hand-off that never arrived. The gate blocked
     without being enforced (rollout phase not_started), and its message names the exit code the command ends with."""
-    _, report = shipped_report
-    assert not report.gate_passed and report.gate_reasons and report.gate_enforced is False
-    res, text = _review_with_a_failed_hand_off(report, monkeypatch, tmp_path)
+    _, shipped = shipped_report
+    res, report, text = _review_with_a_failed_hand_off(shipped.psirt, monkeypatch, tmp_path)
     assert res.exit_code == 3, res.output
-    assert "connection_failed FAILED" in res.output and (tmp_path / "out" / "report.json").is_file(), "the reports are still written"
+    assert "connection_failed FAILED" in res.output, "the reports are still written"
+    assert not report["gate_passed"] and report["gate_reasons"] and report["gate_enforced"] is False
     assert "the gate blocked: recorded, not enforced (exit 3: the PSIRT hand-off failed)" in text and "exit 0" not in text
 
 
 def test_an_enforced_gate_with_a_failed_psirt_hand_off_names_the_exit_code_it_gets(shipped_report, monkeypatch, tmp_path):
     """A failed hand-off exits 3, which outranks an enforced gate's 2; the gate's message must say 3, not 2. The same
     review, its blocked gate enforced by --fail-on-gate."""
-    _, report = shipped_report
-    assert not report.gate_passed and report.gate_reasons
-    res, text = _review_with_a_failed_hand_off(report, monkeypatch, tmp_path, "--fail-on-gate")
+    _, shipped = shipped_report
+    res, report, text = _review_with_a_failed_hand_off(shipped.psirt, monkeypatch, tmp_path, "--fail-on-gate")
     assert res.exit_code == 3, res.output
+    assert not report["gate_passed"] and report["gate_enforced"] is True
     assert "the gate blocked: enforced (exit 3: the PSIRT hand-off failed, which outranks the gate)" in text
     assert "(exit 2)" not in text
 

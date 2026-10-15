@@ -71,8 +71,9 @@ def test_every_incomplete_reason_in_the_order_reviews_have_always_written_them()
 
 
 def test_an_accepted_finding_at_a_blocking_tier_and_severity_blocks_on_its_final_outcome():
-    # rejected by the jury (tier A: corroborated by a tool, voted down); a human true positive on a waiting finding;
-    # a human false positive on an accepted one; and tier C, which is not a blocking tier, accepted by a human
+    # rejected by the jury (tier A: corroborated by a tool, voted down by a four-judge panel); a human true positive on a
+    # waiting finding; a human false positive on an accepted one; and tier C, which is not a blocking tier, accepted by
+    # a human
     rows = [row("F-1", "A", "High", "accepted"), row("F-2", "A", "Medium", "accepted"), row("F-3", "A", "Critical", "rejected"),
             row("F-4", "B", "Critical", "needs_human", decision="true_positive"),
             row("F-5", "A", "Critical", "accepted", decision="false_positive"),
@@ -85,7 +86,7 @@ def test_an_accepted_finding_at_a_blocking_tier_and_severity_blocks_on_its_final
 def test_while_the_queue_is_tightened_an_accepted_tier_c_finding_at_the_severity_floor_blocks():
     """Tightening (G-11) stops queueing such findings, so nobody looks at them; they block instead of passing on one
     family's word and the jury. Tightening may cut human work, it never lets more through."""
-    rows = [row("F-1", "C", "High", "accepted"), row("F-2", "C", "Medium", "accepted"), row("F-3", "C", "Critical", "rejected")]
+    rows = [row("F-1", "C", "High", "accepted"), row("F-2", "C", "Medium", "accepted"), row("F-3", "D", "Critical", "dropped")]
     tightened = replace(OUTCOME, exclude_tier_c=True)
     a = assess(FACTS, rows, [], [dim("xss", 80.0)], tightened, GATE)
     assert a.blocking_reasons == {"F-1": "tier_c_while_tightened"} and a.tier_c_blocked_while_tightened == 1
@@ -189,7 +190,7 @@ def _row_states():
         for outcome in (("dropped", "needs_human") if tier == "D" else ("accepted", "rejected", "needs_human")):
             for severity in ("Low", "High", "Critical", "Unknown"):
                 for decision in (None, "true_positive", "false_positive"):
-                    yield row("F-1", tier, severity, "rejected" if outcome == "dropped" else outcome, decision)
+                    yield row("F-1", tier, severity, outcome, decision)
 
 
 def test_the_new_rules_agree_with_the_old_on_every_combination_of_facts():
@@ -271,3 +272,31 @@ def test_a_row_waiting_for_a_human_without_a_recorded_reason_says_so(mock_report
     row.human_reasons = []
     line = next(x for x in render_markdown(report).splitlines() if x.startswith(f"- {row.finding_id} · "))
     assert line.endswith("awaiting human decision: no reason recorded")
+
+
+def test_the_pipeline_writes_the_tier_c_blocks_assess_counts_into_the_audit(root, tmp_path, monkeypatch):
+    """docs/adr/0007-review-status-and-gate.md: run() writes the counts assess returns into the audit. The seeded review,
+    with both judges of F-0050 calling it a true positive: scoring makes it an accepted tier C finding of Low severity,
+    which the queue's tier-C floor (set to Low here) would send to a human, but the queue is tightened over its backlog,
+    so nobody looks at it and it blocks."""
+    import json
+
+    from mara.config import load_config
+    from mara.pipeline import Pipeline
+
+    cfg = load_config(root / "config" / "mara.mock.yaml")
+    cfg = cfg.model_copy(update={"human_queue": cfg.human_queue.model_copy(update={"queue_tier_c_min_severity": "Low"})})
+    monkeypatch.setenv("MARA_HOME", str(tmp_path))
+    backlog = tmp_path / cfg.human_queue.backlog_file
+    backlog.parent.mkdir(parents=True)
+    backlog.write_text(json.dumps({"open": cfg.human_queue.backlog_limit + 1}), encoding="utf-8")
+    pipe = Pipeline(cfg, mock_fixtures=str(root / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
+    assert pipe.queue_tightened and pipe.outcome_policy.exclude_tier_c
+    cast = pipe.run_jury
+    monkeypatch.setattr(pipe, "run_jury", lambda *a: [v.model_copy(update={"verdict": "true_positive"}) if v.finding_id == "F-0050"
+                                                      else v for v in cast(*a)])
+    report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", mode="mock")
+    row = next(c for c in report.consensus if c.finding_id == "F-0050")
+    assert (row.tier.value, row.cvss4_severity, row.jury_outcome) == ("C", "Low", "accepted")
+    assert row.blocking_reason == "tier_c_while_tightened" and "tier_c_while_tightened" in report.gate_reasons
+    assert report.bias_audit["tier_c_blocked_while_tightened"] == 1

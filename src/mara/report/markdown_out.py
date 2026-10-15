@@ -12,7 +12,7 @@ def _decided(c) -> str:
     return f"decided by human (#{d.get('issue')} by {literal(d.get('decided_by'))}): {d['decision'].replace('_', ' ')}"
 
 
-def enforcement(gate_enforced: bool) -> str:
+def enforcement_wording(gate_enforced: bool) -> str:
     """How a blocked gate is worded wherever MARA shows it, report.md and the CLI alike: enforced, or recorded but not
     enforced (GLOSSARY: Gate). mara.review_status decided which; this only words it."""
     return "enforced" if gate_enforced else "recorded, not enforced"
@@ -32,7 +32,7 @@ def render_markdown(r: ReviewReport) -> str:
         f"**Overall score {overall} · gate {'PASSED' if r.gate_passed else 'BLOCKED'}**"
         + (f" ({literal(', '.join(r.gate_reasons))})" if r.gate_reasons else "")
         + (f" · rollout phase `{r.bias_audit['rollout_phase']}`" if r.bias_audit.get("rollout_phase") else "")
-        + ("" if r.gate_passed or r.gate_enforced is None else f" ({enforcement(r.gate_enforced)})"),
+        + ("" if r.gate_passed or r.gate_enforced is None else f" ({enforcement_wording(r.gate_enforced)})"),
         "",
         f"Review status: **{r.review_status}**; incomplete reasons: {literal(', '.join(r.incomplete_reasons)) or 'none'}",
         "",
@@ -97,7 +97,7 @@ def render_markdown(r: ReviewReport) -> str:
             if c.final_outcome == "needs_human"
             else ("skeptic refuted" if c.skeptic_refuted else f"consensus {c.weighted_score} below threshold")
             # rejection review (policy P8, docs/adr/0005-jury-outcome.md): decided by the jury, queued for a human look
-            + (" · rejection review queued" if c.unsupervised_reject_unverified else "")
+            + (" · rejection review queued" if c.in_rejection_review else "")
         )
         lines.append(f"- {f.id} · {literal(f.title)} · {f.source_family.value} · tier {c.tier.value} · {why}")
     lines += ["", "## Human queue", ""]

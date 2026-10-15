@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Literal
 
 from .audit import INCOMPLETE_COUNTERS
 from .identity import norm_path
-from .schemas import ConsensusResult, DimensionScore
+from .schemas import BlockingReason, ConsensusResult, DimensionScore, GateReason
 from .scoring.outcome import OutcomePolicy, tier_c_needs_human
 from .tools.runner import ToolRun
 from .tools.sarif import ToolResult
 
 if TYPE_CHECKING:
-    from .config import MaraConfig
+    from .config import MaraConfig, RolloutPhase
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ class ReviewFacts:
     ml_bom_signature: bool | None  # cosign verified the ML-BOM signature; None when the config does not require one
     context_view_missing: bool  # a context role is configured and produced no view
     incomplete_counters: tuple[str, ...]  # the audit counters that make the review incomplete (Audit.incomplete_reasons)
-    rollout_phase: str  # G-10: not_started, shadow, advisory or blocking
+    rollout_phase: RolloutPhase  # G-10
     fail_on_gate: bool  # `mara review --fail-on-gate`: enforce a blocked gate for this review in any phase
 
 
@@ -76,28 +76,34 @@ class Assessment:
     review_status: Literal["complete", "incomplete"]
     incomplete_reasons: tuple[str, ...]
     gate_passed: bool
-    gate_reasons: tuple[str, ...]
+    gate_reasons: tuple[GateReason, ...]
     gate_enforced: bool
     overall_score: float | None  # null when the review is incomplete
-    blocking_reasons: dict[str, str]  # finding id -> why that blocking finding blocks
+    blocking_reasons: dict[str, BlockingReason]  # finding id -> why that blocking finding blocks
     tier_c_blocked_while_tightened: int
 
 
-# The incomplete reasons this module writes itself, in the order a review writes them; the audit's INCOMPLETE_COUNTERS
-# come after the first three. Together they are INCOMPLETE_REASONS, every incomplete reason, which the score summary's
-# allowlist imports (docs/adr/0004-score-summary.md).
-OWN_INCOMPLETE_REASONS = ("context_coverage_incomplete", "source_egress_blocked_by_secret_preflight", "required_tool_incomplete",
-                          "ml_bom_signature_unverified", "context_view_incomplete", "unresolved_human_review",
-                          "unresolved_tool_findings")
+# The incomplete reasons this module writes itself, and OWN_INCOMPLETE_REASONS the order a review writes them in; the
+# audit's INCOMPLETE_COUNTERS come after the first three. Together they are INCOMPLETE_REASONS, every incomplete reason,
+# which the score summary's allowlist imports (docs/adr/0004-score-summary.md).
+CONTEXT_COVERAGE_INCOMPLETE = "context_coverage_incomplete"
+SOURCE_EGRESS_BLOCKED = "source_egress_blocked_by_secret_preflight"
+REQUIRED_TOOL_INCOMPLETE = "required_tool_incomplete"
+ML_BOM_SIGNATURE_UNVERIFIED = "ml_bom_signature_unverified"
+CONTEXT_VIEW_INCOMPLETE = "context_view_incomplete"
+UNRESOLVED_HUMAN_REVIEW = "unresolved_human_review"
+UNRESOLVED_TOOL_FINDINGS = "unresolved_tool_findings"
+OWN_INCOMPLETE_REASONS = (CONTEXT_COVERAGE_INCOMPLETE, SOURCE_EGRESS_BLOCKED, REQUIRED_TOOL_INCOMPLETE, ML_BOM_SIGNATURE_UNVERIFIED,
+                          CONTEXT_VIEW_INCOMPLETE, UNRESOLVED_HUMAN_REVIEW, UNRESOLVED_TOOL_FINDINGS)
 INCOMPLETE_REASONS = frozenset(OWN_INCOMPLETE_REASONS) | frozenset(INCOMPLETE_COUNTERS)
 
-# The gate reasons, and GATE_REASONS their fixed order in a report. The two finding codes are also each blocking
-# finding's blocking_reason.
-REVIEW_INCOMPLETE = "review_incomplete"
-BLOCKING_TIER_AND_SEVERITY = "blocking_tier_and_severity"
-TIER_C_WHILE_TIGHTENED = "tier_c_while_tightened"
-DIMENSION_BELOW_MINIMUM = "dimension_below_minimum"
-GATE_REASONS = (REVIEW_INCOMPLETE, BLOCKING_TIER_AND_SEVERITY, TIER_C_WHILE_TIGHTENED, DIMENSION_BELOW_MINIMUM)
+# The gate reasons (schemas.GateReason), and GATE_REASONS their fixed order in a report. The two finding codes are also
+# each blocking finding's blocking_reason (schemas.BlockingReason).
+REVIEW_INCOMPLETE: GateReason = "review_incomplete"
+BLOCKING_TIER_AND_SEVERITY: BlockingReason = "blocking_tier_and_severity"
+TIER_C_WHILE_TIGHTENED: BlockingReason = "tier_c_while_tightened"
+DIMENSION_BELOW_MINIMUM: GateReason = "dimension_below_minimum"
+GATE_REASONS: tuple[GateReason, ...] = (REVIEW_INCOMPLETE, BLOCKING_TIER_AND_SEVERITY, TIER_C_WHILE_TIGHTENED, DIMENSION_BELOW_MINIMUM)
 
 
 def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: list[ToolResult], dimensions: list[DimensionScore],
@@ -106,8 +112,8 @@ def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: l
         # the config requires at least one dimension (MaraConfig.dimensions); a review that scored nothing has no score
         raise ValueError("a review needs at least one dimension to score")
     reasons = _incomplete_reasons(facts, consensus, tool_results)
-    blocking = {c.finding_id: why for c in consensus if (why := _blocking_reason(c, outcome_policy, gate_policy))}
-    applies = {REVIEW_INCOMPLETE: bool(reasons), **dict.fromkeys(blocking.values(), True),
+    blocking = blocking_reasons(consensus, outcome_policy, gate_policy)
+    applies: dict[str, bool] = {REVIEW_INCOMPLETE: bool(reasons), **dict.fromkeys(blocking.values(), True),
                DIMENSION_BELOW_MINIMUM: any(d.score < gate_policy.min_dimension_score for d in dimensions)}
     gate_reasons = tuple(code for code in GATE_REASONS if applies.get(code))
     overall = None if reasons else round(sum(d.score for d in dimensions) / len(dimensions), 1)
@@ -118,7 +124,14 @@ def assess(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: l
                       tier_c_blocked_while_tightened=sum(why == TIER_C_WHILE_TIGHTENED for why in blocking.values()))
 
 
-def _blocking_reason(c: ConsensusResult, outcome_policy: OutcomePolicy, gate_policy: GatePolicy) -> str | None:
+def blocking_reasons(consensus: list[ConsensusResult], outcome_policy: OutcomePolicy,
+                     gate_policy: GatePolicy) -> dict[str, BlockingReason]:
+    """The blocking finding among `consensus` and why each blocks (finding id -> reason). assess reads these; they
+    depend on no fact of the review, only on the rows and the two policies."""
+    return {c.finding_id: why for c in consensus if (why := _blocking_reason(c, outcome_policy, gate_policy))}
+
+
+def _blocking_reason(c: ConsensusResult, outcome_policy: OutcomePolicy, gate_policy: GatePolicy) -> BlockingReason | None:
     """Why a finding blocks the gate, or None. Only a finding whose final outcome is accepted blocks (a human ruling
     outranks the jury): at a tier and severity the gate blocks on, or, while the human queue is tightened and no
     longer queues tier C at the severity floor (tighten_exclude_tier_c), such a tier C finding, so it does not pass on
@@ -136,20 +149,20 @@ def _blocking_reason(c: ConsensusResult, outcome_policy: OutcomePolicy, gate_pol
 def _incomplete_reasons(facts: ReviewFacts, consensus: list[ConsensusResult], tool_results: list[ToolResult]) -> tuple[str, ...]:
     out = []
     if not facts.context_complete:
-        out.append("context_coverage_incomplete")
+        out.append(CONTEXT_COVERAGE_INCOMPLETE)
     if facts.egress_blocked:
-        out.append("source_egress_blocked_by_secret_preflight")
+        out.append(SOURCE_EGRESS_BLOCKED)
     if not facts.required_tools_ran:
-        out.append("required_tool_incomplete")
+        out.append(REQUIRED_TOOL_INCOMPLETE)
     out.extend(facts.incomplete_counters)
     if facts.ml_bom_signature is False:
-        out.append("ml_bom_signature_unverified")
+        out.append(ML_BOM_SIGNATURE_UNVERIFIED)
     if facts.context_view_missing and not facts.egress_blocked:  # no context call is made when egress is blocked
-        out.append("context_view_incomplete")
+        out.append(CONTEXT_VIEW_INCOMPLETE)
     if any(c.final_outcome == "needs_human" for c in consensus):
-        out.append("unresolved_human_review")
+        out.append(UNRESOLVED_HUMAN_REVIEW)
     # Tool evidence remains visible independently of model output. A model's silence or rejection never clears an
     # unsuppressed tool result.
     if any(t.level in {"error", "warning"} for t in tool_results):
-        out.append("unresolved_tool_findings")
+        out.append(UNRESOLVED_TOOL_FINDINGS)
     return tuple(out)
