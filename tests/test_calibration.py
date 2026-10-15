@@ -142,6 +142,16 @@ def test_a_context_canary_echo_does_not_reach_the_reviewer_canary_rate():
     assert a["context_canary_echoes[anthropic]"] == 1 and "context_canary_echoes" in a.incomplete_reasons()
 
 
+def test_the_families_measured_are_the_ones_that_reviewed():
+    """Calibration reads the per-family counters through mara.audit.by_family: a family that only ran the context agent
+    or judged, or a pair of families, is not a reviewer that missed every label."""
+    import calibrate
+
+    rep = {"findings": [], "bias_audit": {"reviewer_calls[anthropic]": 3, "reviewer_calls[glm]": 0, "context_calls[gemini]": 1,
+                                          "judge_calls[deepseek]": 2, "judge_agreement[anthropic~deepseek]": 0.5}}
+    stats, families = calibrate.family_metrics([("s", rep, [{"file": "a.py", "line": 1, "cwe": "CWE-89"}])])
+    assert families == ["anthropic"] and set(stats) == {"anthropic"}
+
 def test_refutation_rates_are_per_finder_family():
     import calibrate
 

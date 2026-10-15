@@ -386,7 +386,7 @@ def test_an_answer_of_the_wrong_shape_is_voided_as_one_invalid_item(root):
     ctx = build_context(root / "fixtures" / "vuln-sample")
     provider = _Fixed(root, {"findings": "none"})
     findings, rec = review_dimension(provider, ctx, "input_validation", base.Canary())
-    assert findings == [] and rec == extraction("reviewer", provider.family.value, malformed=True)
+    assert findings == [] and rec == extraction("reviewer", provider.family.value, wrong_shape=True)
     provider = _Fixed(root, None, raw="[]")
     view, recs = context_agent.run_context_agent(provider, ctx)
-    assert view is None and recs == [extraction("context", provider.family.value, malformed=True)]
+    assert view is None and recs == [extraction("context", provider.family.value, wrong_shape=True)]

@@ -32,24 +32,24 @@ def _check_reply(kind: str, fields: dict) -> None:
         raise ValueError("a failed call carries no tokens")
 
 
-def extraction(role: Role, family: str, kind: str = OK, *, malformed: bool = False, counts: dict[str, int] | None = None,
+def extraction(role: Role, family: str, kind: str = OK, *, wrong_shape: bool = False, counts: dict[str, int] | None = None,
                details: tuple[str, ...] = (), **fields) -> ReplyRecord:
-    """A reviewer's or the context agent's record. `malformed`: an ok reply whose answer is not the object asked for,
+    """A reviewer's or the context agent's record. `wrong_shape`: an ok reply whose answer is not the object asked for,
     voided as one invalid item; `invalid_items` are the items an ok reply the agent used could not read."""
     if ROLES[role].form != "extraction":
         raise ValueError(f"{role} is a ballot role")
     _check_reply(kind, fields)
     echoed = bool(fields.get("canary_echoes"))
-    if malformed and kind != OK:
+    if wrong_shape and kind != OK:
         raise ValueError("only an ok reply has an answer of the wrong shape")
     # the context agent stops at an echo before it reads the answer's shape; the reviewer reads the shape first
     # (agents.context_agent, agents.reviewer)
-    if malformed and echoed and role == "context":
+    if wrong_shape and echoed and role == "context":
         raise ValueError("the context agent's echo record holds no invalid items")
-    if fields.get("invalid_items") and (malformed or kind != OK or echoed):
+    if fields.get("invalid_items") and (wrong_shape or kind != OK or echoed):
         raise ValueError("only an ok reply the agent used has items it could not read")
-    voided = kind != OK or echoed or malformed
-    return ReplyRecord(role=role, family=family, kind=kind, voided=voided, invalid_items=int(malformed),
+    voided = kind != OK or echoed or wrong_shape
+    return ReplyRecord(role=role, family=family, kind=kind, voided=voided, invalid_items=int(wrong_shape),
                        details=_provider_code(kind) + details, counts={**dict.fromkeys(_COUNTS[role], 0), **(counts or {})},
                        **fields)
 
