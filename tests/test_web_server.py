@@ -474,3 +474,22 @@ def test_the_context_row_shows_the_context_agents_canary_echoes_and_the_reviewer
     report = ReviewReport.model_construct(bias_audit=dict(a), provider_manifest=[])
     panel = {g["role"]: g["members"] for g in views.roles(manifest, report)}
     assert [m["canary_echoes"] for m in panel["context"]] == [1] and [m["canary_echoes"] for m in panel["reviewers"]] == [0]
+
+
+def test_a_family_the_audit_counts_but_the_manifest_does_not_name_is_shown_as_unconfigured():
+    """A family whose reviewers were called shows on the reviewers' row even when the manifest does not list it."""
+    from mara import exchange
+    from mara.audit import Audit
+    from mara.web import views
+    from tests.reply_records import extraction
+
+    a = Audit()
+    a.record(extraction("reviewer", "anthropic"))
+    a.record(extraction("reviewer", "glm"))
+    a.record(extraction("reviewer", "glm", exchange.REFUSAL))
+    a.record(extraction("context", "gemini"))
+    manifest = {"models": [{"name": "a", "family": "anthropic"}], "roles": {"context": "a", "reviewers": ["a"]}}
+    report = ReviewReport.model_construct(bias_audit=dict(a), provider_manifest=[])
+    reviewers = next(g["members"] for g in views.roles(manifest, report) if g["role"] == "reviewers")
+    assert [(m["family"], m["configured"], m["calls"]) for m in reviewers] == [("anthropic", True, 1), ("glm", False, 2)]
+    assert reviewers[1]["failures"]["reviewer_refusals"] == 1

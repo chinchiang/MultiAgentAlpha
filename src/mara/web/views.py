@@ -11,16 +11,16 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any
 
-from ..audit import INCOMPLETE_COUNTERS, ROLES, Role
+from ..audit import INCOMPLETE_COUNTERS, ROLES, Role, by_family
 from ..schemas import DIMENSION_LABELS, SEVERITY_ORDER, ConsensusResult, ReviewReport
 
 OUTCOMES = ("accepted", "rejected", "dropped", "needs_human")
 
-# role key in the run manifest -> the role in mara.audit.ROLES, which names its counters ("<prefix>_calls[<family>]" and so on)
-ROLE_PREFIXES: dict[str, Role] = {"context": "context", "reviewers": "reviewer", "skeptic": "skeptic", "redteam": "redteam",
-                                  "judges": "judge"}
+# role key in the run manifest -> the role whose counters mara.audit.ROLES names
+AUDIT_ROLES: dict[str, Role] = {"context": "context", "reviewers": "reviewer", "skeptic": "skeptic", "redteam": "redteam",
+                                "judges": "judge"}
 ROLE_ORDER = ("context", "reviewers", "skeptic", "redteam", "judges")
-_FAILURES = {role: (ROLES[p].refusals, ROLES[p].truncations, ROLES[p].errors, ROLES[p].invalid) for role, p in ROLE_PREFIXES.items()}
+_FAILURES = {role: (ROLES[r].refusals, ROLES[r].truncations, ROLES[r].errors, ROLES[r].invalid) for role, r in AUDIT_ROLES.items()}
 
 
 def _num(audit: dict[str, Any], key: str) -> int:
@@ -71,34 +71,36 @@ def roles(manifest: dict[str, Any], report: ReviewReport | None) -> list[dict[st
     if not configured and report:
         names = [p.get("name") for p in report.provider_manifest]
         configured = {"reviewers": names, "judges": names}
+    by_fam = by_family(audit)
     out = []
     for role in ROLE_ORDER:
         names = configured.get(role) or []
         names = [names] if isinstance(names, str) else list(names)
-        prefix = ROLE_PREFIXES[role]
+        audit_role = AUDIT_ROLES[role]
+        calls = ROLES[audit_role].calls
         members = []
         families_seen = set()
         for name in [n for n in names if n]:
             spec = models.get(name, {"name": name})
             fam = str(spec.get("family") or "")
             families_seen.add(fam)
-            members.append(_member(spec, served.get(name), audit, role, prefix, fam, configured_member=True))
-        for key in sorted(k for k in audit if k.startswith(f"{prefix}_calls[")):
-            fam = key[len(prefix) + len("_calls["):-1]
-            if fam not in families_seen and _num(audit, key):
-                spec = next((m for m in models.values() if m.get("family") == fam), {"name": fam, "family": fam})
-                members.append(_member(spec, served.get(spec.get("name")), audit, role, prefix, fam, configured_member=False))
+            members.append(_member(spec, served.get(name), by_fam.get(fam, {}), role, audit_role, fam, configured_member=True))
+        # a family the audit counts calls for although the manifest does not name it for this role
+        for fam in sorted(f for f, counters in by_fam.items() if f not in families_seen and counters.get(calls)):
+            spec = next((m for m in models.values() if m.get("family") == fam), {"name": fam, "family": fam})
+            members.append(_member(spec, served.get(spec.get("name")), by_fam[fam], role, audit_role, fam, configured_member=False))
         if members:
             out.append({"role": role, "members": members})
     return out
 
 
-def _member(spec: dict[str, Any], served: dict[str, Any] | None, audit: dict[str, Any], role: str, prefix: Role, fam: str,
+def _member(spec: dict[str, Any], served: dict[str, Any] | None, counters: dict[str, Any], role: str, audit_role: Role, fam: str,
             *, configured_member: bool) -> dict[str, Any]:
-    failures = {k: _num(audit, f"{k}[{fam}]") for k in _FAILURES[role]}
+    """One family's row for a role; `counters` are that family's counters (mara.audit.by_family)."""
+    failures = {k: _num(counters, k) for k in _FAILURES[role]}
     # a report of EXCHANGE_VERSION 4 counted the context agent's echoes in the reviewers' canary_echoes
-    canary = ROLES[prefix].canary
-    echoes = _num(audit, f"{canary.echoes}[{fam}]") if canary else 0
+    canary = ROLES[audit_role].canary
+    echoes = _num(counters, canary.echoes) if canary else 0
     return {
         "name": spec.get("name"),
         "family": fam,
@@ -107,7 +109,7 @@ def _member(spec: dict[str, Any], served: dict[str, Any] | None, audit: dict[str
         "data_residency": spec.get("data_residency"),
         "endpoint_host": spec.get("endpoint_host"),
         "served_models": list((served or {}).get("served_models") or []),
-        "calls": _num(audit, f"{prefix}_calls[{fam}]"),
+        "calls": _num(counters, ROLES[audit_role].calls),
         "failures": failures,
         "canary_echoes": echoes,
         "configured": configured_member,
@@ -118,7 +120,7 @@ def budget(manifest: dict[str, Any], report: ReviewReport | None, progress: dict
     """What the run used. MARA has no configured quota, so these are counts, not shares of a limit; tokens are
     recorded for the context and reviewer calls only (the ballot roles do not report them)."""
     audit: dict[str, Any] = dict(report.bias_audit) if report else {}
-    calls = {role: _num(audit, f"{prefix}_calls") for role, prefix in ROLE_PREFIXES.items()}
+    calls = {role: _num(audit, ROLES[r].calls) for role, r in AUDIT_ROLES.items()}
     started = (progress or {}).get("started_at") or manifest.get("started_at")
     finished = (progress or {}).get("finished_at") or manifest.get("finished_at")
     return {
