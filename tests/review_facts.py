@@ -20,22 +20,19 @@ def dim(name: str, score: float) -> DimensionScore:
 
 
 def row(fid: str, tier: str, severity: str, outcome: str, decision: str | None = None) -> ConsensusResult:
-    """A consensus row as Pipeline.score writes one: the jury outcome as JuryOutcome.consensus_fields writes it, with
-    the score, votes, agreeing families, tool corroboration and independent judges that lead to it at that tier, and
-    optionally a usable human decision on it. `outcome` is the jury outcome (accepted, rejected, dropped, needs_human).
+    """A consensus row for assess and the readers of its results, consistent in what they read: the tier, the
+    severity, the jury outcome as JuryOutcome.consensus_fields writes it (accepted or needing a human, never both; a
+    reason whenever it needs a human; the P8 flag on a rejection under OUTCOME, where unsupervised rejection is not
+    allowed), and optionally a usable human decision on it. `outcome` is the jury outcome (accepted, rejected, dropped,
+    needs_human).
 
-      accepted     two independent judges, both for in both passes (4/0, score 1.0); tier A adds the tool's
-                   corroboration, B and C have no tool (C: the finding is not shown reachable)
-      rejected     three independent judges, one for and two against (2/4, score 0.3333; a fourth judge family is
-                   needed, docs/adr/0005-jury-outcome.md), at tier A with the tool; under OUTCOME's P8 (unsupervised
-                   rejection not allowed) it is under rejection review
-      dropped      tier D: two judges, both against (0/4)
-      needs_human  too few independent judges, the finders voting at a discount, all for (6/0); at tier D the
-                   provenance is unverified instead
-
-    Scoring reaches each of these at the tiers named; a rejection at B or C, or acceptance at D, is not, and only the
-    exhaustive comparison in tests/test_review_status.py feeds such rows, on purpose. assess reads only the tier,
-    severity, outcome and decision."""
+    The score, votes, agreeing families, tool corroboration and independent judges are illustrative, roughly the
+    signals behind such an outcome (a rejection at tier A: tool corroboration and three independent judges, one for),
+    not what Pipeline.score would write for the row: scoring, for one, also counts the finders' family as agreeing
+    whenever the score reaches the threshold. A test that reads those fields needs rows scoring produced (as
+    tests/test_sarif_final_outcome.py rescores them), not these. Which outcomes scoring reaches at which tier depends on
+    the panel (docs/adr/0005-jury-outcome.md); the exhaustive comparison in tests/test_review_status.py feeds every
+    combination on purpose."""
     human = {"decision": decision, "key": "k", "issue": 1, "decided_by": "alice", "decided_at": "2026-10-01T08:00:00Z"}
     tool = tier == "A"
     if outcome == "accepted":

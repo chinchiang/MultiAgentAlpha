@@ -71,7 +71,7 @@ def test_every_incomplete_reason_in_the_order_reviews_have_always_written_them()
 
 
 def test_an_accepted_finding_at_a_blocking_tier_and_severity_blocks_on_its_final_outcome():
-    # rejected by the jury (tier A: corroborated by a tool, voted down by a four-judge panel); a human true positive on a
+    # rejected by the jury (tier A: corroborated by a tool, voted down by three independent judges); a human true positive on a
     # waiting finding; a human false positive on an accepted one; and tier C, which is not a blocking tier, accepted by
     # a human
     rows = [row("F-1", "A", "High", "accepted"), row("F-2", "A", "Medium", "accepted"), row("F-3", "A", "Critical", "rejected"),

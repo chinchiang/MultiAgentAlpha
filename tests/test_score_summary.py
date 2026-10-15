@@ -116,6 +116,19 @@ def live_copy(mock_review: Path, tmp_path: Path, drop: tuple[str, ...] = (), **c
     return path
 
 
+def test_a_report_with_a_gate_code_the_review_status_does_not_write_is_refused(mock_review, tmp_path):
+    """gate_reasons and each row's blocking_reason hold only the review status's codes (docs/adr/0007-review-status-and-
+    gate.md), so a report holding any other code does not validate, and the summary of it is refused although the
+    summary exports neither field (docs/adr/0004-score-summary.md: a report that does not validate produces nothing)."""
+    report = json.loads((mock_review / "report.json").read_text(encoding="utf-8"))
+    rows = [{**c, "blocking_reason": "blocked_by_the_owner"} if i == 0 else c for i, c in enumerate(report["consensus"])]
+    for bad in (live_copy(mock_review, tmp_path, gate_reasons=["review_incomplete", "blocked_by_the_owner"]),
+                live_copy(mock_review, tmp_path, consensus=rows)):
+        res = export(bad, tmp_path / "summary.json")
+        assert res.exit_code != 0 and "not a valid MARA review report" in plain(res.output), plain(res.output)
+        assert not (tmp_path / "summary.json").exists()
+
+
 def test_a_report_that_does_not_validate_is_refused(mock_review, tmp_path):
     truncated = tmp_path / "truncated.json"
     truncated.write_bytes((mock_review / "report.json").read_bytes()[:500])

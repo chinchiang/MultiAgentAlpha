@@ -343,7 +343,8 @@ def test_governance_rows_are_decidable_now():
 
 
 def _baseline_row(fid: str, tier: str, outcome: str) -> dict:
-    """A consensus row as report.json holds it, in a state scoring produces (tests/review_facts.row)."""
+    """A consensus row as report.json holds it (tests/review_facts.row); the baseline reads its tier and jury outcome,
+    which the row holds consistently."""
     from tests.review_facts import row
 
     return row(fid, tier, "Medium", outcome).model_dump(mode="json")
