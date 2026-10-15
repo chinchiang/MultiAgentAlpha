@@ -115,7 +115,7 @@ def test_forced_gate_outside_blocking_says_it_is_enforced(tmp_path):
     assert forced.exit_code == 2 and "the gate blocked: enforced (exit 2)" in text and "recorded, not enforced" not in text
     recorded = CliRunner().invoke(app, [*args, "--out", str(tmp_path / "recorded")])
     text = " ".join(recorded.output.split())
-    assert recorded.exit_code == 0 and "the gate blocked: recorded, not enforced (G-10)" in text
+    assert recorded.exit_code == 0 and "the gate blocked: recorded, not enforced (exit 0, G-10)" in text
     assert "the gate blocked: enforced" not in text
 
 

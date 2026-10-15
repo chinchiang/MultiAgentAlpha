@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..review_status import enforcement
 from ..schemas import DIMENSION_LABELS, ReviewReport
 from .escaping import code, literal
 from .sarif_out import tier_counts
@@ -11,6 +10,12 @@ from .sarif_out import tier_counts
 def _decided(c) -> str:
     d = c.human_decision
     return f"decided by human (#{d.get('issue')} by {literal(d.get('decided_by'))}): {d['decision'].replace('_', ' ')}"
+
+
+def enforcement(gate_enforced: bool) -> str:
+    """How a blocked gate is worded wherever MARA shows it, report.md and the CLI alike: enforced, or recorded but not
+    enforced (GLOSSARY: Gate). mara.review_status decided which; this only words it."""
+    return "enforced" if gate_enforced else "recorded, not enforced"
 
 
 def render_markdown(r: ReviewReport) -> str:

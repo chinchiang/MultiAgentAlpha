@@ -26,10 +26,11 @@ _JURY = {"accepted": (1.0, 3, 0), "rejected": (0.0, 0, 3), "needs_human": (0.5, 
 def row(fid: str, tier: str, severity: str, outcome: str, decision: str | None = None) -> ConsensusResult:
     """A consensus row with its jury outcome written as JuryOutcome.consensus_fields writes it (accepted or needing a
     human, never both; a reason whenever it needs a human), a score and votes that agree with it, and optionally a usable
-    human decision on it. Whether scoring can reach that outcome at that tier depends on the panel and the tightening:
-    the examples in tests/test_review_status.py use only rows that scoring reaches with the policy each one passes to assess (a tier B finding
-    is never rejected by the default panel, docs/adr/0005-jury-outcome.md; tier C at the severity floor is accepted only
-    while the queue is tightened). assess itself reads only the tier, severity, outcome and decision."""
+    human decision on it. Whether scoring can reach that outcome at that tier depends on the panel and the tightening, so
+    a test that means a reachable row picks one for the policy it passes (a tier B finding is never rejected by the
+    default panel, docs/adr/0005-jury-outcome.md; tier C at the severity floor is accepted only while the queue is
+    tightened); the exhaustive comparison in tests/test_review_status.py feeds every row on purpose. assess itself
+    reads only the tier, severity, outcome and decision."""
     human = {"decision": decision, "key": "k", "issue": 1, "decided_by": "alice", "decided_at": "2026-10-01T08:00:00Z"}
     score, tp, fp = _JURY[outcome]
     return ConsensusResult(finding_id=fid, weighted_score=score, votes_tp=tp, votes_fp=fp, votes_human=0, families_agreeing=[],

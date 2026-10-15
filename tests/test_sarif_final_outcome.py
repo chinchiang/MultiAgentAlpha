@@ -29,10 +29,11 @@ def test_a_finding_needing_a_human_is_a_note_even_when_the_human_queue_is_disabl
 
 
 # ---------------------------------------------------------------- the old writer, kept as the reference
-# LEVEL, content_fingerprint and to_sarif exactly as origin/main had them before ADR 0007 (comments included), renamed,
-# with ConsensusResult.final_accepted as it was. Only what is not SARIF's own stays current: the identity rules
-# (norm_path, norm_cwe; mara.identity) and the version. An intended change to what SARIF writes is either one of the
-# properties _without_gate_properties strips, or it replaces this reference.
+# LEVEL, content_fingerprint and to_sarif exactly as main had them before ADR 0007 (ce58fee, comments included),
+# renamed, with ConsensusResult.final_accepted as it was. Only what is not SARIF's own stays current: the identity rules
+# (norm_path, norm_cwe; mara.identity), the version, and what the report models read (ConsensusResult.resolved_by_human
+# and its fields, Finding). An intended change to what SARIF writes is either one of the properties
+# _without_gate_properties strips, or it replaces this reference.
 
 
 def _old_final_accepted(c: ConsensusResult) -> bool:  # ConsensusResult.final_accepted before ADR 0007
@@ -146,35 +147,68 @@ def _without_gate_properties(doc: dict) -> dict:
 _DECIDED = {"key": "k", "issue": 1, "decided_by": "alice", "decided_at": "2026-10-01T08:00:00Z"}
 
 
-def _set_state(c: ConsensusResult, state: str) -> None:
-    """Write one of the states a consensus row holds, its jury outcome as scoring writes it (rejected is dropped at
-    tier D), a rejection under review (P8), or a usable human ruling on the row as scored. Only a rejected finding is
-    ever under rejection review (decide(), docs/adr/0005-jury-outcome.md): at tier D the state is a plain drop."""
-    if state in ("accepted", "rejected", "rejection_review"):
-        c.accepted, c.needs_human, c.human_reasons = state == "accepted", False, []
-        c.unsupervised_reject_unverified = state == "rejection_review" and c.tier.value != "D"
-    elif state in ("false_positive", "true_positive"):
-        c.human_decision = {"decision": state, **_DECIDED}
+def _reachable(c: ConsensusResult, f: Finding, policy) -> tuple[str, ...]:
+    """The jury outcomes decide() can give this row under `policy`, from what the row and its finding hold that no vote
+    can change: unverified provenance, a skeptic that abstained, tier C at the severity floor while the queue is not
+    tightened, or a refutation the jury would overrule always need a human; tier D is otherwise dropped; and with the
+    default panel only a tier A finding can be rejected (docs/adr/0005-jury-outcome.md), under rejection review while
+    P8 is in force. Needing a human is always reachable (a missing quorum is enough)."""
+    from mara.scoring.outcome import tier_c_needs_human
+
+    forced = (not all(p.verified for p in f.provenance) or c.skeptic_abstained
+              or (not policy.exclude_tier_c and tier_c_needs_human(c.tier, c.cvss4_severity, policy.tier_c_min_severity))
+              or (c.skeptic_refuted and c.tier.value != "D"))
+    if forced:
+        return ("needs_human",)
+    if c.tier.value == "D":
+        return ("dropped", "needs_human")
+    rejected = (("rejection_review" if not policy.unsupervised_reject_allowed else "rejected"),) if c.tier.value == "A" else ()
+    return ("accepted", *rejected, "needs_human")
 
 
-_STATES = ("as_scored", "accepted", "rejected", "rejection_review", "false_positive", "true_positive")
+def _set_state(c: ConsensusResult, outcome: str, decision: str | None) -> None:
+    """Write a jury outcome as JuryOutcome.consensus_fields writes it, with a score and votes that agree with it (a
+    three-family panel of weight 1, accept threshold 0.6), and optionally a usable human ruling on it. Needing a human
+    keeps the row's own reasons, or gets the one a missing quorum gives."""
+    c.accepted, c.needs_human, c.unsupervised_reject_unverified = outcome == "accepted", outcome == "needs_human", False
+    if outcome == "accepted":
+        c.weighted_score, c.votes_tp, c.votes_fp, c.votes_human, c.human_reasons = 1.0, 3, 0, 0, []
+    elif outcome in ("rejected", "rejection_review"):
+        c.weighted_score, c.votes_tp, c.votes_fp, c.votes_human, c.human_reasons = 0.0, 0, 3, 0, []
+        c.unsupervised_reject_unverified = outcome == "rejection_review"
+    elif outcome == "dropped":
+        c.human_reasons = []
+    else:
+        c.human_reasons = c.human_reasons or ["insufficient_independent_judges"]
+    c.human_decision = {"decision": decision, **_DECIDED} if decision else None
 
 
-def _variants(report, cfg):
-    """The seeded review, once with three hand-made changes and once per rotation of _STATES over its rows, so every
-    row passes through every state; each with the human queue built for it, as the pipeline would."""
+def _states(c: ConsensusResult, f: Finding, policy) -> list[tuple[str, str | None]]:
+    """Every state this row can be in: each reachable jury outcome, alone or with a usable human ruling on it."""
+    return [(o, d) for o in _reachable(c, f, policy) for d in (None, "false_positive", "true_positive")]
+
+
+def _variants(report, cfg, policy):
+    """The seeded review, once with three hand-made changes and once per rotation of each row's reachable states, so
+    every row passes through every state it can be in; each with the human queue built for it, as the pipeline
+    would."""
     from mara.report.human_queue_out import build_queue
 
     hand = report.model_copy(deep=True)
+    by_id = {f.id: f for f in hand.findings}
     cons = {c.finding_id: c for c in hand.consensus}
-    _set_state(cons["F-0016"], "rejection_review")
-    _set_state(cons["F-0057"], "false_positive")  # on an accepted finding
-    _set_state(cons["F-0009"], "true_positive")  # on a waiting one
+    for fid, (outcome, decision) in (("F-0001", ("rejection_review", None)),  # tier A, voted down
+                                      ("F-0057", ("accepted", "false_positive")),
+                                      ("F-0009", ("needs_human", "true_positive"))):
+        assert (outcome, decision) in _states(cons[fid], by_id[fid], policy), (fid, outcome, decision)
+        _set_state(cons[fid], outcome, decision)
     variants = [hand]
-    for k in range(len(_STATES)):
+    states = {c.finding_id: _states(c, {f.id: f for f in report.findings}[c.finding_id], policy) for c in report.consensus}
+    for k in range(max(len(s) for s in states.values())):
         v = report.model_copy(deep=True)
         for i, c in enumerate(v.consensus):
-            _set_state(c, _STATES[(i + k) % len(_STATES)])
+            own = states[c.finding_id]
+            _set_state(c, *own[(i + k) % len(own)])
         variants.append(v)
     for v in variants:
         v.human_queue = build_queue(v.findings, {c.finding_id: c for c in v.consensus}, {x.finding_id: x for x in v.skeptic},
@@ -185,8 +219,10 @@ def _variants(report, cfg):
 def test_with_the_human_queue_enabled_code_scanning_sees_what_it_saw_before(mock_report):
     pipe, report = mock_report
     assert pipe.cfg.human_queue.enabled
-    variants = _variants(report, pipe.cfg)
-    assert "F-0016" in {i.finding_id for i in variants[0].human_queue}
+    variants = _variants(report, pipe.cfg, pipe.outcome_policy)
+    assert "F-0001" in {i.finding_id for i in variants[0].human_queue}, "the rejection under review is queued"
+    seen = {(c.finding_id, c.jury_outcome, (c.human_decision or {}).get("decision")) for v in variants[1:] for c in v.consensus}
+    assert {o for _, o, _ in seen} == {"accepted", "rejected", "dropped", "needs_human"}, "every jury outcome is covered"
     for v in variants:
         # the whole document, rules, results (levels, messages, fingerprints, properties, suppressions) and run, is
         # what the old to_sarif wrote, apart from the gate properties added on purpose

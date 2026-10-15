@@ -153,11 +153,3 @@ def _incomplete_reasons(facts: ReviewFacts, consensus: list[ConsensusResult], to
     if any(t.level in {"error", "warning"} for t in tool_results):
         out.append("unresolved_tool_findings")
     return tuple(out)
-
-
-def enforcement(gate_enforced: bool | None) -> str:
-    """How every reader words a blocked gate (the CLI and report.md alike): "enforced", or "recorded, not enforced"
-    (GLOSSARY: Gate), from the report's gate_enforced alone. A report written before that field says nothing ("")."""
-    if gate_enforced is None:
-        return ""
-    return "enforced" if gate_enforced else "recorded, not enforced"
