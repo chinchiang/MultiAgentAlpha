@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..review_status import enforcement
 from ..schemas import DIMENSION_LABELS, ReviewReport
 from .escaping import code, literal
 from .sarif_out import tier_counts
@@ -10,10 +11,6 @@ from .sarif_out import tier_counts
 def _decided(c) -> str:
     d = c.human_decision
     return f"decided by human (#{d.get('issue')} by {literal(d.get('decided_by'))}): {d['decision'].replace('_', ' ')}"
-
-
-# whether a blocked gate was enforced, as the report records it; a report written before gate_enforced says nothing
-_ENFORCEMENT = {True: " (enforced)", False: " (recorded, not enforced)", None: ""}
 
 
 def render_markdown(r: ReviewReport) -> str:
@@ -30,7 +27,7 @@ def render_markdown(r: ReviewReport) -> str:
         f"**Overall score {overall} · gate {'PASSED' if r.gate_passed else 'BLOCKED'}**"
         + (f" ({literal(', '.join(r.gate_reasons))})" if r.gate_reasons else "")
         + (f" · rollout phase `{r.bias_audit['rollout_phase']}`" if r.bias_audit.get("rollout_phase") else "")
-        + ("" if r.gate_passed else _ENFORCEMENT[r.gate_enforced]),
+        + ("" if r.gate_passed or r.gate_enforced is None else f" ({enforcement(r.gate_enforced)})"),
         "",
         f"Review status: **{r.review_status}**; incomplete reasons: {literal(', '.join(r.incomplete_reasons)) or 'none'}",
         "",

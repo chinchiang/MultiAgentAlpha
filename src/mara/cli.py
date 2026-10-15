@@ -13,6 +13,7 @@ from .pipeline import Pipeline
 from .progress import Progress
 from .report.markdown_out import write_markdown
 from .report.sarif_out import write_sarif
+from .review_status import enforcement
 from .schemas import DIMENSION_LABELS, ReviewReport
 
 app = typer.Typer(add_completion=False, help="MARA - Multi-Agent Review Architecture")
@@ -73,20 +74,20 @@ def review(
         progress.finish(ok=False, error=type(e).__name__)
         raise
     progress.finish(ok=True)
-    phase = cfg.rollout.phase
     if not report.gate_passed:
         # G-10: whether a blocked gate is enforced (the blocking phase, or --fail-on-gate) was decided by
-        # mara.review_status and recorded in report.json; the message only says which
-        if report.gate_enforced:
-            console.print(f"rollout phase [bold]{phase}[/bold]: the gate blocked and is enforced (exit 2)")
+        # mara.review_status and recorded in report.json; the message only says which, and how the command exits
+        if not report.gate_enforced:
+            exits = "(G-10)"
         else:
-            console.print(f"rollout phase [bold]{phase}[/bold]: the gate would have blocked; result recorded, merge not enforced (G-10)")
+            exits = "(exit 3: the PSIRT hand-off failed, which outranks the gate)" if psirt_failed else "(exit 2)"
+        console.print(f"rollout phase [bold]{cfg.rollout.phase}[/bold]: the gate blocked: {enforcement(report.gate_enforced)} {exits}")
     if psirt_failed:
         # an internal hand-off that did not arrive is an operational failure (EU CRA Article 14 clocks
         # may depend on it): never a green run. It outranks the gate's 2; the reports are written.
         console.print("[bold red]PSIRT hand-off failed for at least one finding; see the ledger and retry with --notify-psirt[/bold red]")
         raise typer.Exit(code=3)
-    if report.gate_enforced:  # decided by mara.review_status and recorded in report.json
+    if report.gate_enforced:
         raise typer.Exit(code=2)
 
 

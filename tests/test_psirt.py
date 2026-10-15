@@ -372,6 +372,31 @@ def test_a_failed_psirt_hand_off_fails_the_cli_run(shipped_report, monkeypatch, 
     assert "connection_failed FAILED" in res.output and (out / "report.json").is_file(), "the reports are still written"
 
 
+def test_an_enforced_gate_with_a_failed_psirt_hand_off_names_the_exit_code_it_gets(shipped_report, monkeypatch, tmp_path):
+    """A failed hand-off exits 3, which outranks an enforced gate's 2; the gate's message must say 3, not 2."""
+    import yaml
+
+    import mara.report.psirt_out as po
+    from mara.pipeline import Pipeline as P
+
+    _, report = shipped_report
+    blocked = report.model_copy(update={"gate_passed": False, "gate_enforced": True})
+    raw = yaml.safe_load((ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8"))
+    raw["psirt"] = PSIRT
+    cfg_path = tmp_path / "mock-psirt.yaml"
+    cfg_path.write_text(yaml.safe_dump(raw))
+    monkeypatch.setattr(P, "run", lambda self, *a, **k: blocked)
+    monkeypatch.setattr(po, "send_psirt", lambda payloads, *a, **k: [
+        {"finding_id": p["finding_id"], "dedupe_key": p["dedupe_key"], "skipped": False, "status_code": None, "ok": False,
+         "error": "connection_failed"} for p in payloads])
+    res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(cfg_path),
+                                  "--out", str(tmp_path / "out"), "--notify-psirt"])
+    text = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", res.output).split())
+    assert res.exit_code == 3, res.output
+    assert "the gate blocked: enforced (exit 3: the PSIRT hand-off failed, which outranks the gate)" in text
+    assert "(exit 2)" not in text
+
+
 def test_stage_clock_records_references_and_names_overdue_stages(shipped_report, tmp_path):
     cfg, report = shipped_report
     t0 = dt.datetime(2026, 9, 14, 0, 0, tzinfo=dt.UTC)

@@ -299,14 +299,18 @@ def test_an_allowlisted_field_carrying_free_text_is_refused(mock_review, tmp_pat
 
 def test_every_incomplete_reason_a_review_can_write_can_be_exported(mock_review, tmp_path):
     """The reasons come from the writers, not from the allowlist: every completeness counter counted in an Audit, and
-    what assess() writes with every fact wrong, once with egress blocked and once without (a blocked egress makes no
-    context call, so the context view cannot be missing then). Whatever a review can write, the summary exports."""
+    what assess() writes with every fact wrong and the evidence that brings the last two reasons (a finding waiting for
+    a human, an untriaged tool result), once with egress blocked and once without (a blocked egress makes no context
+    call, so the context view cannot be missing then). Whatever a review can write, the summary exports.
+
+    The review status's own codes are written out below on purpose, from the ADR rather than from
+    OWN_INCOMPLETE_REASONS: a reason added to the writer must be added there and here."""
     from dataclasses import replace
 
     from mara.audit import INCOMPLETE_COUNTERS, Audit
     from mara.review_status import assess
     from mara.tools.sarif import ToolResult
-    from tests.test_review_status import FACTS, GATE, OUTCOME, dim, row
+    from tests.review_facts import FACTS, GATE, OUTCOME, dim, row
 
     audit = Audit()
     for counter in INCOMPLETE_COUNTERS:

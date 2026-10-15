@@ -162,13 +162,10 @@ def _tier_c_finding(vec=VEC):
 
 
 def _blocking(pipe, c):
-    from mara.review_status import ReviewFacts, assess
-    from mara.schemas import DimensionScore
+    from mara.review_status import assess
+    from tests.review_facts import FACTS, dim
 
-    facts = ReviewFacts(context_complete=True, egress_blocked=False, required_tools_ran=True, ml_bom_signature=None,
-                        context_view_missing=False, incomplete_counters=(), rollout_phase="shadow", fail_on_gate=False)
-    dims = [DimensionScore(dimension="xss", score=80.0, accepted_findings=1, rejected_findings=0, human_queue=0, tool_ran=True)]
-    return assess(facts, [c], [], dims, pipe.outcome_policy, pipe.gate_policy).blocking_reasons
+    return assess(FACTS, [c], [], [dim("xss", 80.0)], pipe.outcome_policy, pipe.gate_policy).blocking_reasons
 
 
 def test_tier_c_high_needs_a_human_until_the_queue_tightens(tmp_path, monkeypatch):
