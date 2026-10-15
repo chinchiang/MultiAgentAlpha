@@ -114,7 +114,7 @@ class ReplyRecord:
 
 def worth_retrying(rec: ReplyRecord) -> bool:
     """A ballot reply voided as unparseable, empty, cut off, holding invalid items or not covering every finding exactly
-    once is worth one more call.
+    once is worth one more exchange.
     A refusal and a canary echo are signals, never retried; providers retry their own failures, and any other
     exception in a provider is a bug a second call would only repeat. The retry depends on whether the reply was
     well-formed, never on what it concluded."""
@@ -146,7 +146,7 @@ class Audit(defaultdict[str, Any]):
         self[f"{key}[{family}]"] += n
 
     def record(self, rec: ReplyRecord) -> None:
-        """Count one reply: the call, how its outcome kind counts for its role, its canary echoes and reports, its
+        """Count one reply: its exchange, how its outcome kind counts for its role, its canary echoes and reports, its
         invalid items and its own counts. Every counter of the role is written, 0 when nothing was counted."""
         c, fam, kind = ROLES[rec.role], rec.family, rec.kind
         # an unparseable reply, and a ballot's empty one, is invalid output: one per reply
