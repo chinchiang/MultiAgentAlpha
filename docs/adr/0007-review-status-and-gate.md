@@ -12,7 +12,7 @@ The gate now records its reasons. The report gains `gate_reasons`, a list in fix
 
 - `report.md`: next to the gate, and on each blocking finding;
 - SARIF: as properties of the run and of each blocking result. A result's level does not change, because changing it would change the code-scanning alert;
-- the CLI: next to the gate.
+- the CLI: on its own line under the table whose title shows the gate, since a terminal wraps a long title.
 
 The score summary does not export them. `blocking_tier_and_severity` says that at least one accepted tier A or B finding of High or Critical severity exists, which is the kind of information ADR 0004 keeps from crossing the border; whether to export gate reasons is for the owner and legal to decide.
 
@@ -22,7 +22,7 @@ The gate also records whether it was enforced. The rule was derived three times:
 - false when it blocked without being enforced, and false when it passed, since nothing was held back;
 - null in a report written before the field, meaning unknown rather than "not enforced".
 
-The CLI's exit code and the markdown header read it, SARIF carries it as the run property `gateEnforced` beside `gatePassed`, and the workbench reads it, falling back to the exit code only when it is null. The score summary does not export `gate_enforced`; ADR 0004 adds a field to the allowlist only on purpose, and nobody has asked for this one. The CLI and the header word a blocked gate the same way in every phase, the blocking phase included: "enforced" or "recorded, not enforced" (`report.markdown_out.enforcement`; the review status module decides, it does not word). Reading the field alone, neither can say whether the blocking phase or `--fail-on-gate` enforced it. The CLI adds the exit code the command actually ends with: 2 for an enforced gate, 0 for one only recorded, and 3 whenever a PSIRT hand-off failed, since that outranks the gate.
+The CLI's exit code and the markdown header read it, SARIF carries it as the run property `gateEnforced` beside `gatePassed`, and the workbench reads it, falling back to the exit code only when it is null. The score summary does not export `gate_enforced`; ADR 0004 adds a field to the allowlist only on purpose, and nobody has asked for this one. The CLI and the header word a blocked gate the same way in every phase, the blocking phase included: "enforced" or "recorded, not enforced" (`report.markdown_out.enforcement_wording`; the review status module decides, it does not word). Reading the field alone, neither can say whether the blocking phase or `--fail-on-gate` enforced it. The CLI adds the exit code the command actually ends with: 2 for an enforced gate, 0 for one only recorded, and 3 whenever a PSIRT hand-off failed, since that outranks the gate.
 
 The final outcome has one encoding. `ConsensusResult.final_accepted` and `final_needs_human` are removed. Every reader now compares the four-valued `final_outcome`: the gate, the incomplete reason for unresolved human review, SARIF and the PSIRT hand-off. This amends docs/adr/0003-human-resolution.md only in how the final outcome is expressed; the jury outcome is still kept untouched beside it. SARIF decides from the final outcome which findings it emits:
 
