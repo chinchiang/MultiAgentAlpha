@@ -78,7 +78,7 @@ INCOMPLETE_COUNTERS = tuple(name for counters in ROLES.values() for name in coun
 class ReplyRecord:
     """What one exchange's reply counts for: its role and family, the reply outcome kind (exchange.KINDS), its canary
     echoes and reports, the invalid items it held, whether it was voided as a whole, the role's own counts under the
-    local names ROLES declares, its tokens, and detail codes only the log reads."""
+    local names ROLES declares, its tokens, and log codes only the log reads."""
 
     role: Role
     family: str
@@ -90,7 +90,7 @@ class ReplyRecord:
     counts: Mapping[str, int] = field(default_factory=dict)
     input_tokens: int = 0
     output_tokens: int = 0
-    details: tuple[str, ...] = ()
+    log_codes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.role not in ROLES:
@@ -105,16 +105,16 @@ class ReplyRecord:
             raise ValueError(f"{self.role} carries no canary")
 
     @classmethod
-    def of(cls, outcome: Outcome, role: Role, family: str, *, details: tuple[str, ...] = (), **fields: Any) -> ReplyRecord:
+    def of(cls, outcome: Outcome, role: Role, family: str, *, log_codes: tuple[str, ...] = (), **fields: Any) -> ReplyRecord:
         """The record of one classified reply: its kind, tokens and provider error code come from the outcome, the
         rest from `fields`."""
         return cls(role=role, family=family, kind=outcome.kind, input_tokens=outcome.input_tokens,
-                   output_tokens=outcome.output_tokens, details=((outcome.error,) if outcome.error else ()) + details, **fields)
+                   output_tokens=outcome.output_tokens, log_codes=((outcome.error,) if outcome.error else ()) + log_codes, **fields)
 
 
 def worth_retrying(rec: ReplyRecord) -> bool:
     """A ballot reply voided as unparseable, empty, cut off, holding invalid items or not covering every finding exactly
-    once is worth one more call.
+    once is worth one more exchange.
     A refusal and a canary echo are signals, never retried; providers retry their own failures, and any other
     exception in a provider is a bug a second call would only repeat. The retry depends on whether the reply was
     well-formed, never on what it concluded."""
@@ -146,7 +146,7 @@ class Audit(defaultdict[str, Any]):
         self[f"{key}[{family}]"] += n
 
     def record(self, rec: ReplyRecord) -> None:
-        """Count one reply: the call, how its outcome kind counts for its role, its canary echoes and reports, its
+        """Count one reply: its exchange, how its outcome kind counts for its role, its canary echoes and reports, its
         invalid items and its own counts. Every counter of the role is written, 0 when nothing was counted."""
         c, fam, kind = ROLES[rec.role], rec.family, rec.kind
         # an unparseable reply, and a ballot's empty one, is invalid output: one per reply

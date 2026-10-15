@@ -219,17 +219,17 @@ class Pipeline:
         out, rec = call()
         if rec is not None and worth_retrying(rec):
             self.audit.retried(rec)
-            why = ", ".join(sorted(set(rec.details))) or rec.kind
+            why = ", ".join(sorted(set(rec.log_codes))) or rec.kind
             self._say(f"L3/L4: {rec.role} {rec.family} reply rejected ({why}); asked once more")
             out, rec = call()
         return out, rec
 
-    def _count(self, rec: ReplyRecord | None) -> str:
-        """Count the reply used (mara.audit); its log tags."""
-        if rec is None:
-            return ""
-        self.audit.record(rec)
-        return log_tags(rec)
+    def _count_and_tag(self, *recs: ReplyRecord | None) -> str:
+        """Count the replies used (mara.audit) and give their log tags, each tag once."""
+        used = [rec for rec in recs if rec is not None]
+        for rec in used:
+            self.audit.record(rec)
+        return log_tags(*used)
 
     # ------------------------------------------------------------------ L3
     def run_skeptics(
@@ -248,7 +248,7 @@ class Pipeline:
         for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
             fam = self._p(name).family.value
             v, rec = self._once_more(partial(skeptic.run_skeptic, self._p(name), ctx, fs))
-            tags = self._count(rec)
+            tags = self._count_and_tag(rec)
             unverified = rec.counts.get("unverified_controls", 0) if rec else 0
             if not v:
                 # no usable verdict for this group - a refusal, a provider failure, or a reply the
@@ -276,7 +276,7 @@ class Pipeline:
         for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
             fam = self._p(name).family.value
             n, rec = self._once_more(partial(redteam.run_redteam, self._p(name), ctx, fs))
-            tags = self._count(rec)
+            tags = self._count_and_tag(rec)
             stripped = rec.counts.get("exploit_code_stripped", 0) if rec else 0
             notes.extend(n)
             self._say(f"L3: red team {fam} probed {len(fs)} → {sum(x.exploitable == 'yes' for x in n)} exploitable"
@@ -318,9 +318,7 @@ class Pipeline:
                 rev = list(reversed(fwd))
                 v1, r1 = self._once_more(partial(judge.run_judge, prov, fwd, "forward", self_ids))
                 v2, r2 = self._once_more(partial(judge.run_judge, prov, rev, "reverse", self_ids))
-                tags = log_tags(*(r for r in (r1, r2) if r is not None))
-                self._count(r1)
-                self._count(r2)
+                tags = self._count_and_tag(r1, r2)
                 votes.extend(v1 + v2)
                 self._say(
                     f"L4: judge {fam}: {len(fwd)} finding(s) ({len(self_ids & {b['finding_id'] for b in fwd})} self-family)"

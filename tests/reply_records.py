@@ -20,7 +20,7 @@ _COUNTS: dict[Role, tuple[str, ...]] = {"reviewer": ("unverified_quotes",), "con
 
 
 def _provider_code(kind: str) -> tuple[str, ...]:
-    """The detail code exchange.call gives the reply: the provider's code for an error, none otherwise."""
+    """The log code exchange.call gives the reply: the provider's code for an error, none otherwise."""
     return (PROVIDER_ERROR,) if kind == ERROR else ()
 
 
@@ -33,7 +33,7 @@ def _check_reply(kind: str, fields: dict) -> None:
 
 
 def extraction(role: Role, family: str, kind: str = OK, *, wrong_shape: bool = False, counts: dict[str, int] | None = None,
-               details: tuple[str, ...] = (), **fields) -> ReplyRecord:
+               log_codes: tuple[str, ...] = (), **fields) -> ReplyRecord:
     """A reviewer's or the context agent's record. `wrong_shape`: an ok reply whose answer is not the object asked for,
     voided as one invalid item; `invalid_items` are the items an ok reply the agent used could not read."""
     if ROLES[role].form != "extraction":
@@ -50,12 +50,12 @@ def extraction(role: Role, family: str, kind: str = OK, *, wrong_shape: bool = F
         raise ValueError("only an ok reply the agent used has items it could not read")
     voided = kind != OK or echoed or wrong_shape
     return ReplyRecord(role=role, family=family, kind=kind, voided=voided, invalid_items=int(wrong_shape),
-                       details=_provider_code(kind) + details, counts={**dict.fromkeys(_COUNTS[role], 0), **(counts or {})},
+                       log_codes=_provider_code(kind) + log_codes, counts={**dict.fromkeys(_COUNTS[role], 0), **(counts or {})},
                        **fields)
 
 
 def ballot(role: Role, family: str, findings: int, kind: str = OK, *, missing: int = 0, pass_id: PassId = "forward",
-           counts: dict[str, int] | None = None, details: tuple[str, ...] = (), **fields) -> ReplyRecord:
+           counts: dict[str, int] | None = None, log_codes: tuple[str, ...] = (), **fields) -> ReplyRecord:
     """A skeptic's, red team's or judge's record for one call over `findings` findings. `missing`: the findings an ok
     reply ruled on not at all, each an invalid item that voids it."""
     if ROLES[role].form != "ballot":
@@ -72,4 +72,4 @@ def ballot(role: Role, family: str, findings: int, kind: str = OK, *, missing: i
     own = {} if voided else dict.fromkeys(_COUNTS[role], 0)
     return ReplyRecord(role=role, family=family, kind=kind, voided=voided, invalid_items=missing,
                        counts={"findings": asked, **own, **(counts or {})},
-                       details=_provider_code(kind) + details + ("missing_verdict",) * missing, **fields)
+                       log_codes=_provider_code(kind) + log_codes + ("missing_verdict",) * missing, **fields)

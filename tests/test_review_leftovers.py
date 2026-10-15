@@ -63,6 +63,27 @@ def test_no_finding_is_left_alone_in_a_judge_chunk(tmp_path, monkeypatch):
     assert calls and {len(c) for c in calls} == {13}
 
 
+
+def test_the_judge_log_line_names_each_tag_of_its_two_passes_once(tmp_path, monkeypatch):
+    """The forward and reverse pass of one chunk share a log line: a tag either pass carries is named once, in the
+    order mara.audit.log_tags gives."""
+    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
+    findings = [_finding(i) for i in range(1, 3)]
+    kinds = {"forward": exchange.TRUNCATION, "reverse": exchange.REFUSAL}
+    monkeypatch.setattr("mara.pipeline.judge.run_judge",
+                        lambda p, batch, pass_id, self_ids=None: ([], ballot("judge", p.family.value, len(batch), kinds[pass_id],
+                                                                             pass_id=pass_id)))
+    pipe.run_jury(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings, {},
+                  {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+    judge_lines = [line for line in pipe.log if line.startswith("L4: judge ")]
+    assert judge_lines and all(line.endswith("votes [REFUSED] [TRUNCATED]") for line in judge_lines), judge_lines
+    kinds["forward"] = exchange.REFUSAL
+    pipe.log.clear()
+    pipe.run_jury(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings, {},
+                  {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+    judge_lines = [line for line in pipe.log if line.startswith("L4: judge ")]
+    assert judge_lines and all(line.endswith("votes [REFUSED]") for line in judge_lines), judge_lines
+
 # ------------------------------------------------------------------ control citations outside the target
 
 def test_control_citations_outside_the_target_are_not_rewritten_into_shown_files():

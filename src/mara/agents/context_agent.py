@@ -92,7 +92,7 @@ class ContextView(BaseModel):
 MAX_ITEMS_PER_KIND = 12  # the schema's per-call limit, kept for the merged view: the reviewer prompt stays bounded
 
 def run_context_agent(provider: Provider, ctx: RepoContext) -> tuple[ContextView | None, list[ReplyRecord]]:
-    """Returns (view, the reply record of every call made); view is None when no trustworthy view could be produced.
+    """Returns (view, the reply record of every exchange); view is None when no trustworthy view could be produced.
 
     One call per bundle batch (RepoContext.batches, the bound every reviewer request has): the whole
     bundle in one request - up to MAX_REPOSITORY_CHARS - failed as a provider error on any repository

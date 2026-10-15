@@ -47,7 +47,7 @@ def run_judge(provider: Provider, batch: list[dict], pass_id: PassId,
     items, invalid, gaps = base.ballot_items(outcome, _JudgeRaw, set(order))
     if items is None:
         return [], ReplyRecord.of(outcome, "judge", provider.family.value, invalid_items=invalid, voided=True, counts=findings,
-                                  details=gaps)
+                                  log_codes=gaps)
     votes = []
     for i in items:
         # every finding_id of the batch is covered exactly once (checked above), so no lookup guard is needed
