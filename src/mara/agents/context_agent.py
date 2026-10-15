@@ -128,9 +128,7 @@ def _context_call(provider: Provider, ctx: RepoContext) -> tuple[list[ContextIte
                                  '"data_stores": [...]} following the schema.')
     data, echoed, reported = canary.screen(outcome, tuple(key for _, key in _KIND_BY_KEY))
 
-    def record(invalid: int = 0, unverified: int = 0, voided: bool = False) -> ReplyRecord:
-        return ReplyRecord.of(outcome, "context", provider.family.value, canary_echoes=int(echoed), canary_reports=reported,
-                              invalid_items=invalid, voided=voided, counts={"unverified": unverified})
+    record = base.extraction_recorder(outcome, "context", provider.family.value, echoed, reported, unverified_as="unverified")
 
     if outcome.data is None or echoed:
         return None, record(voided=True)
