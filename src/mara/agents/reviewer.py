@@ -70,9 +70,7 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
     # only the token anywhere else in the answer counts as an echo
     data, echoed, reported = canary.screen(outcome, ("findings",))
 
-    def record(invalid: int = 0, unverified: int = 0, voided: bool = False) -> ReplyRecord:
-        return ReplyRecord.of(outcome, "reviewer", provider.family.value, canary_echoes=int(echoed), canary_reports=reported,
-                              invalid_items=invalid, voided=voided, counts={"unverified_quotes": unverified})
+    record = base.extraction_recorder(outcome, "reviewer", provider.family.value, echoed, reported, unverified_as="unverified_quotes")
 
     if outcome.data is None:
         return [], record(voided=True)
