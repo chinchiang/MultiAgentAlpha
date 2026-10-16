@@ -39,4 +39,13 @@ vulnerabilities:
   # The thirteen PyJWT entries scoped to tools/semgrep-requirements.txt were removed on 2026-10-03:
   # semgrep 1.179.0 relaxed the pyjwt[crypto]~=2.13.0 pin, the closure relocked to pyjwt 2.15.1, and the
   # fixed releases (2.14.0 / 2.15.0) cover every advisory. See tools/osv-semgrep.toml.
+  - id: CVE-2026-59951
+    paths: ["tools/semgrep-requirements.txt"]
+    statement: >-
+      mcp 1.29.0 in the semgrep closure (GHSA-84m7-p3x7-pcfv, published 2026-10-14): unbounded session
+      accumulation in the StreamableHTTP transport, fixed in mcp 1.30.0. semgrep 1.179.0 through 1.181.0
+      (the newest release, checked 2026-10-16) pin mcp==1.29.0, so relocking cannot reach the fix. MARA runs
+      semgrep scan only and never starts semgrep's MCP server. Mirrors tools/osv-semgrep.toml; re-check at
+      a semgrep release that relaxes the pin.
+    expired_at: 2026-12-31
 misconfigurations: []

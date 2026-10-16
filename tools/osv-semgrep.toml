@@ -8,3 +8,12 @@
 # 2.15.1 (relocked 2026-10-03), and every exception was removed instead of renewed — the advisories'
 # fixed releases (2.14.0 / 2.15.0) are all in the closure. Keep this file exception-free: a new advisory
 # that relocking cannot fix gets a dated entry with a reason, and the fix is to bump semgrep and relock.
+#
+# One such entry since 2026-10-16: semgrep 1.179.0 through 1.181.0 (the newest release, checked that day)
+# pin mcp==1.29.0, so the closure cannot take the fixed mcp 1.30.0. Remove it, instead of renewing it, at
+# the semgrep release that relaxes the pin, and relock.
+
+[[IgnoredVulns]]
+id = "CVE-2026-59951"
+ignoreUntil = 2026-12-31
+reason = "MCP Python SDK unbounded session accumulation in the StreamableHTTP transport (GHSA-84m7-p3x7-pcfv, CVSS 4.0 VA:L); fixed in mcp 1.30.0, but semgrep 1.179.0-1.181.0 pin mcp==1.29.0 so the closure cannot take it. MARA runs semgrep scan only and never starts semgrep's MCP server, so the transport is not reached. Re-check at a semgrep release that relaxes the pin."
