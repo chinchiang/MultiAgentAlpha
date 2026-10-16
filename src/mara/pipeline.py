@@ -249,7 +249,7 @@ class Pipeline:
             fam = self._p(name).family.value
             v, rec = self._once_more(partial(skeptic.run_skeptic, self._p(name), ctx, fs))
             tags = self._count_and_tag(rec)
-            unverified = rec.counts.get("unverified_controls", 0) if rec else 0
+            unverified = rec.count("unverified_controls") if rec else 0
             if not v:
                 # no usable verdict for this group - a refusal, a provider failure, or a reply the
                 # agent rejected (unparseable, schema-invalid, or not covering every finding exactly
@@ -277,7 +277,7 @@ class Pipeline:
             fam = self._p(name).family.value
             n, rec = self._once_more(partial(redteam.run_redteam, self._p(name), ctx, fs))
             tags = self._count_and_tag(rec)
-            stripped = rec.counts.get("exploit_code_stripped", 0) if rec else 0
+            stripped = rec.count("exploit_code_stripped") if rec else 0
             notes.extend(n)
             self._say(f"L3: red team {fam} probed {len(fs)} → {sum(x.exploitable == 'yes' for x in n)} exploitable"
                       + (f", {stripped} preconditions had exploit code removed" if stripped else "") + tags)

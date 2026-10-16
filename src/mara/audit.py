@@ -111,6 +111,13 @@ class ReplyRecord:
         if counters.canary is None and (self.canary_echoes or self.canary_reports):
             raise ValueError(f"{self.role} carries no canary")
 
+    def count(self, local: str) -> int:
+        """The role's own count under a local name ROLES declares for it, 0 when the reply did not write it (a voided
+        ballot reply writes only its findings); a name the table does not declare is an error, not 0."""
+        if local not in ROLES[self.role].local:
+            raise ValueError(f"{self.role} declares no count {local}; its counts are {tuple(ROLES[self.role].local)}")
+        return self.counts.get(local, 0)
+
     @classmethod
     def of(cls, outcome: Outcome, role: Role, family: str, *, log_codes: tuple[str, ...] = (), **fields: Any) -> ReplyRecord:
         """The record of one classified reply: its kind, tokens and provider error code come from the outcome, the
