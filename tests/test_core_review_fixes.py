@@ -12,17 +12,16 @@ import httpx
 import pytest
 
 from mara import exchange
-from mara import pipeline as pl
 from mara.agents import base, redteam, skeptic
 from mara.audit import Audit
-from mara.config import MaraConfig, ModelSpec, load_config
+from mara.ballot_round import MAX_L3_FINDINGS, MAX_L4_FINDINGS, l3_chunks
+from mara.config import MaraConfig, ModelSpec
 from mara.context.repo_map import MAX_TOTAL_CHARS, RepoContext, bundle_cost
-from mara.pipeline import MAX_L3_FINDINGS, MAX_L4_FINDINGS, Pipeline, l3_chunks
 from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 from mara.providers.gemini_provider import MAX_TOKENS as GEMINI_MAX_TOKENS
 from mara.providers.gemini_provider import GeminiProvider
 from mara.schemas import Finding, ModelFamily, Provenance
-from tests.reply_records import ballot
+from tests.fake_panel import REFUSAL, Panel
 
 ROOT = Path(__file__).resolve().parents[1]
 VECTOR = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
@@ -66,43 +65,30 @@ def test_l3_chunks_bound_findings_and_evidence_size_and_count_a_shared_file_once
     assert len(chunks) > 1
 
 
-def test_skeptic_and_red_team_are_called_per_bounded_chunk(tmp_path, monkeypatch):
-    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
+def test_skeptic_and_red_team_are_called_per_bounded_chunk(tmp_path):
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"})
     findings = [_finding(i) for i in range(1, 46)]
-    finders = {f.id: {ModelFamily.ANTHROPIC} for f in findings}
-    sizes = {"skeptic": [], "redteam": []}
-    def refuse(role):
-        return lambda p, c, fs: (sizes[role].append(len(fs)), ([], ballot(role, p.family.value, len(fs), exchange.REFUSAL)))[1]
-
-    monkeypatch.setattr(skeptic, "run_skeptic", refuse("skeptic"))
-    monkeypatch.setattr(redteam, "run_redteam", refuse("redteam"))
-    _, abstained = pipe.run_skeptics(ctx, findings, finders)
-    pipe.run_redteam(ctx, findings, finders)
-    assert sizes["skeptic"] == sizes["redteam"] == [20, 20, 5]
-    assert pipe.audit["skeptic_calls"] == pipe.audit["redteam_calls"] == 3
-    assert abstained == {f.id for f in findings}, "every chunk without a verdict leaves its findings unchallenged"
+    panel = Panel().always("skeptic", REFUSAL).always("redteam", REFUSAL)
+    ballots = panel.run(ctx, findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+    assert [len(ex.finding_ids) for ex in panel.asked("skeptic")] == [len(ex.finding_ids) for ex in panel.asked("redteam")] == [20, 20, 5]
+    assert panel.audit["skeptic_calls"] == panel.audit["redteam_calls"] == 3
+    assert ballots.skeptic_abstained == {f.id for f in findings}, "every chunk without a verdict leaves its findings unchallenged"
 
 
-def test_judge_passes_are_bounded_mirrored_per_chunk_and_cover_every_finding(tmp_path, monkeypatch):
-    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
+def test_judge_passes_are_bounded_mirrored_per_chunk_and_cover_every_finding(tmp_path):
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h")
     findings = [_finding(i) for i in range(1, 61)]
-    finders = {f.id: {ModelFamily.ANTHROPIC} for f in findings}  # anthropic is excluded, two families judge
-    calls: list[tuple[ModelFamily, str, list[str]]] = []
-    monkeypatch.setattr(pl.judge, "run_judge",
-                        lambda p, batch, pass_id, self_ids=None: (calls.append((p.family, pass_id, [b["finding_id"] for b in batch])),
-                                                                  ([], ballot("judge", p.family.value, len(batch), exchange.REFUSAL,
-                                                                              pass_id=pass_id)))[1])
-    pipe.run_jury(ctx, findings, {}, finders)
-    assert calls and all(len(ids) <= MAX_L4_FINDINGS for _, _, ids in calls)
+    panel = Panel().always("judge", REFUSAL)
+    panel.run(ctx, findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})  # anthropic is excluded, two families judge
+    calls = panel.asked("judge")
+    assert calls and all(len(ex.finding_ids) <= MAX_L4_FINDINGS for ex in calls)
     for fam in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON):
-        mine = [(pid, ids) for f, pid, ids in calls if f == fam]
-        assert [pid for pid, _ in mine] == ["forward", "reverse"] * 3
-        for (_, fwd), (_, rev) in zip(mine[::2], mine[1::2], strict=True):
-            assert rev == list(reversed(fwd))
-        assert sorted(i for pid, ids in mine if pid == "forward" for i in ids) == sorted(f.id for f in findings)
-    assert pipe.audit["judge_calls"] == len(calls) == 12
+        mine = panel.asked("judge", fam)
+        assert [ex.pass_id for ex in mine] == ["forward", "reverse"] * 3
+        for fwd, rev in zip(mine[::2], mine[1::2], strict=True):
+            assert rev.finding_ids == list(reversed(fwd.finding_ids))
+        assert sorted(i for ex in mine if ex.pass_id == "forward" for i in ex.finding_ids) == sorted(f.id for f in findings)
+    assert panel.audit["judge_calls"] == len(calls) == 12
 
 
 # ------------------------------------------------------------------ 2. dotfile control citations

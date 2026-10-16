@@ -9,20 +9,16 @@ import datetime as dt
 import hashlib
 import json
 from collections import Counter, defaultdict
-from collections.abc import Callable
 from dataclasses import asdict
-from functools import partial
 from pathlib import Path
-from typing import TypeVar
 
-from . import exchange
-from .agents import base, context_agent, judge, redteam, reviewer, skeptic
+from . import ballot_round, exchange
+from .agents import base, context_agent, reviewer
 from .agents.context_agent import ContextView
-from .audit import Audit, ReplyRecord, log_tags, worth_retrying
-from .bias.blinding import blinded_batches
-from .bias.diversity import pairwise_family_agreement, pick_independent
+from .audit import Audit, log_tags
+from .bias.diversity import pairwise_family_agreement
 from .config import MaraConfig
-from .context.repo_map import MAX_TOTAL_CHARS, RepoContext, build_context, bundle_cost, restrict_to_increment
+from .context.repo_map import RepoContext, build_context, restrict_to_increment
 from .identity import NEAR_LINES, norm_cwe, norm_path
 from .progress import Progress
 from .providers import make_provider
@@ -47,56 +43,6 @@ from .scoring.tiers import assign_tier, ssvc_decision
 from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
 from .tools.sarif import ToolResult
 from .workspace import check_outside, resolve
-
-T = TypeVar("T")
-
-# L3/L4 calls are bounded like the reviewer calls: the skeptic and red team read the evidence files of
-# every finding they get, the judges one blinded view per finding. Unbatched, one model's whole share of
-# a large review went into one request, overflowed its window or output budget, and left every one of
-# those findings unchallenged.
-MAX_L3_FINDINGS = 20  # findings per skeptic / red-team call
-MAX_L4_FINDINGS = 25  # findings per judge pass
-
-
-def l3_chunks(ctx: RepoContext, findings: list[Finding]) -> list[list[Finding]]:
-    """Consecutive runs of `findings` whose evidence files fit one request (MAX_TOTAL_CHARS, the reviewer
-    bound) and that hold at most MAX_L3_FINDINGS findings. A file shared by several findings is counted
-    once per chunk; a finding whose own files exceed the bound still gets a chunk of its own."""
-    chunks: list[list[Finding]] = []
-    cur: list[Finding] = []
-    files: set[str] = set()
-    size = 0
-    for f in findings:
-        own = {p.file for p in f.provenance if p.file in ctx.content}
-        new = own - files
-        cost = sum(bundle_cost(rel, ctx.content[rel]) for rel in new)
-        if cur and (len(cur) >= MAX_L3_FINDINGS or size + cost > MAX_TOTAL_CHARS):
-            chunks.append(cur)
-            cur, files, size = [], set(), 0
-            new = own
-            cost = sum(bundle_cost(rel, ctx.content[rel]) for rel in new)
-        cur.append(f)
-        files |= new
-        size += cost
-    if cur:
-        chunks.append(cur)
-    return chunks
-
-
-def l4_chunks(order: list) -> list[list]:
-    """`order` cut into the fewest judge chunks of at most MAX_L4_FINDINGS, of near-equal size. Fixed slices of
-    25 left 26 findings as 25 + 1, and a one-finding chunk's reverse pass is its forward pass: that finding was
-    judged twice in the same position, so position bias could never show for it."""
-    if not order:
-        return []
-    n = -(-len(order) // MAX_L4_FINDINGS)
-    size, extra = divmod(len(order), n)
-    out, start = [], 0
-    for i in range(n):
-        end = start + size + (1 if i < extra else 0)
-        out.append(order[start:end])
-        start = end
-    return out
 
 
 class Pipeline:
@@ -211,120 +157,6 @@ class Pipeline:
             else:
                 finders[match.id].add(f.source_family)
         return kept, finders
-
-    def _once_more(self, call: Callable[[], tuple[list[T], ReplyRecord | None]]) -> tuple[list[T], ReplyRecord | None]:
-        """`call()` -> (items, reply record), called once more when the reply is worth it (mara.audit.worth_retrying).
-        Only the answer used counts; the discarded attempt is recorded as <role>_retries, and the answer used is
-        counted by the caller."""
-        out, rec = call()
-        if rec is not None and worth_retrying(rec):
-            self.audit.retried(rec)
-            why = ", ".join(sorted(set(rec.log_codes))) or rec.kind
-            self._say(f"L3/L4: {rec.role} {rec.family} reply rejected ({why}); asked once more")
-            out, rec = call()
-        return out, rec
-
-    def _count_and_tag(self, *recs: ReplyRecord | None) -> str:
-        """Count the replies used (mara.audit) and give their log tags, each tag once."""
-        used = [rec for rec in recs if rec is not None]
-        for rec in used:
-            self.audit.record(rec)
-        return log_tags(*used)
-
-    # ------------------------------------------------------------------ L3
-    def run_skeptics(
-        self, ctx: RepoContext, findings: list[Finding], finders: dict[str, set[ModelFamily]]
-    ) -> tuple[list[SkepticVerdict], frozenset[str]]:
-        groups: dict[str, list[Finding]] = defaultdict(list)
-        for f in findings:
-            # the skeptic must not share a family with ANY finder of this finding
-            spec, independent = pick_independent(self.cfg, self.cfg.roles.skeptic, finders[f.id])
-            if not independent:
-                self.audit["skeptic_same_family"] += 1
-                self._say(f"L3: no skeptic outside the finder families of {f.id}; {spec.family.value} reviews it")
-            groups[spec.name].append(f)
-        verdicts: list[SkepticVerdict] = []
-        abstained: set[str] = set()
-        for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
-            fam = self._p(name).family.value
-            v, rec = self._once_more(partial(skeptic.run_skeptic, self._p(name), ctx, fs))
-            tags = self._count_and_tag(rec)
-            unverified = rec.count("unverified_controls") if rec else 0
-            if not v:
-                # no usable verdict for this group - a refusal, a provider failure, or a reply the
-                # agent rejected (unparseable, schema-invalid, or not covering every finding exactly
-                # once): the findings went unchallenged, so none of them may reach tier B on the
-                # skeptic's strength, and the counters above keep the run incomplete
-                abstained.update(f.id for f in fs)
-            verdicts.extend(v)
-            self._say(
-                f"L3: skeptic {fam} judged {len(fs)} → {sum(x.verdict == 'refuted' for x in v)} refuted"
-                + (f", {unverified} unverifiable control citation(s) downgraded" if unverified else "")
-                + tags
-            )
-        return verdicts, frozenset(abstained)
-
-    def run_redteam(self, ctx: RepoContext, findings: list[Finding], finders: dict[str, set[ModelFamily]]) -> list[RedTeamNote]:
-        groups: dict[str, list[Finding]] = defaultdict(list)
-        for f in findings:
-            spec, independent = pick_independent(self.cfg, self.cfg.roles.redteam, finders[f.id])
-            if not independent:
-                self.audit["redteam_same_family"] += 1
-                self._say(f"L3: no red team outside the finder families of {f.id}; {spec.family.value} reviews it")
-            groups[spec.name].append(f)
-        notes: list[RedTeamNote] = []
-        for name, fs in ((n, chunk) for n, group in groups.items() for chunk in l3_chunks(ctx, group)):
-            fam = self._p(name).family.value
-            n, rec = self._once_more(partial(redteam.run_redteam, self._p(name), ctx, fs))
-            tags = self._count_and_tag(rec)
-            stripped = rec.count("exploit_code_stripped") if rec else 0
-            notes.extend(n)
-            self._say(f"L3: red team {fam} probed {len(fs)} → {sum(x.exploitable == 'yes' for x in n)} exploitable"
-                      + (f", {stripped} preconditions had exploit code removed" if stripped else "") + tags)
-        return notes
-
-    # ------------------------------------------------------------------ L4
-    def run_jury(
-        self, ctx: RepoContext, findings: list[Finding], skeptic_by_id: dict[str, SkepticVerdict], finders: dict[str, set[ModelFamily]]
-    ) -> list[JudgeVote]:
-        votes: list[JudgeVote] = []
-        judge_fams = [self._p(n).family for n in self.cfg.roles.judges]
-        min_ind = self.cfg.gate.min_independent_judges
-
-        def independent(f: Finding) -> int:
-            return sum(1 for fam in judge_fams if fam not in finders[f.id])
-
-        for name in self.cfg.roles.judges:
-            prov = self._p(name)
-            fam = prov.family.value
-            # anti self-preference: a family never judges a finding it (co-)produced, unless too few
-            # independent families remain, in which case it votes with a discounted weight (self_family).
-            eligible, self_ids = [], set()
-            for f in findings:
-                if prov.family not in finders[f.id]:
-                    eligible.append(f)
-                elif independent(f) < min_ind:
-                    eligible.append(f)
-                    self_ids.add(f.id)
-                else:
-                    self.audit["self_preference_exclusions"] += 1
-            self.audit["self_family_fallback_votes"] += len(self_ids)
-            if not eligible:
-                continue
-            # one seeded order over all eligible findings, cut into bounded chunks; each chunk's reverse
-            # pass is that chunk mirrored, so every finding is still seen in two mirrored positions
-            order, _ = blinded_batches(eligible, skeptic_by_id, ctx.content_hash + prov.family.value)
-            for fwd in l4_chunks(order):
-                rev = list(reversed(fwd))
-                v1, r1 = self._once_more(partial(judge.run_judge, prov, fwd, "forward", self_ids))
-                v2, r2 = self._once_more(partial(judge.run_judge, prov, rev, "reverse", self_ids))
-                tags = self._count_and_tag(r1, r2)
-                votes.extend(v1 + v2)
-                self._say(
-                    f"L4: judge {fam}: {len(fwd)} finding(s) ({len(self_ids & {b['finding_id'] for b in fwd})} self-family)"
-                    f" × 2 passes → {len(v1) + len(v2)} votes" + tags
-                )
-        return votes
 
     # ------------------------------------------------------------------ L5
     def score(
@@ -517,20 +349,11 @@ class Pipeline:
         findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
         self.audit["findings_raw"] = len(raw)
         self.audit["findings_deduped"] = len(findings)
-        prog.begin("skeptic")
-        sk, abstained_ids = self.run_skeptics(ctx, findings, finders)
-        sk_by_id = {v.finding_id: v for v in sk}
-        survivors = [f for f in findings if sk_by_id.get(f.id, None) is None or sk_by_id[f.id].verdict != "refuted"]
-        prog.done("skeptic", f"{len(sk)} verdict(s) on {len(findings)} finding(s), {len(findings) - len(survivors)} refuted")
-        prog.begin("redteam")
-        rt = self.run_redteam(ctx, survivors, finders)
-        rt_by_id = {n.finding_id: n for n in rt}
-        prog.done("redteam", f"{len(rt)} note(s), {sum(n.exploitable == 'yes' for n in rt)} exploitable")
-        prog.begin("jury")
-        votes = self.run_jury(ctx, findings, sk_by_id, finders)
-        prog.done("jury", f"{len(votes)} vote(s) over the forward and reverse passes")
+        ballots = ballot_round.run(ctx, findings, finders, cfg=self.cfg, providers=self.providers, audit=self.audit,
+                                   say=self._say, progress=prog)
+        sk_by_id, rt_by_id, votes = ballots.skeptic, ballots.redteam, ballots.votes
         prog.begin("scoring")
-        consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=abstained_ids,
+        consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=ballots.skeptic_abstained,
                                tool_path_prefix=ctx.repo_prefix)
         # repository + path below its top level for a committed git target (repo_map.target_identity),
         # so CI, every clone and every calibration run name the same target the same way
@@ -573,8 +396,8 @@ class Pipeline:
             provider_mode=mode,
             families_used=sorted({m.family.value for m in self.cfg.models}),
             findings=findings,
-            skeptic=sk,
-            redteam=rt,
+            skeptic=list(sk_by_id.values()),
+            redteam=list(rt_by_id.values()),
             review_status=assessment.review_status,
             incomplete_reasons=list(assessment.incomplete_reasons),
             review_scope="incremental" if base_ref else "full",

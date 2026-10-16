@@ -10,7 +10,6 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from mara import exchange
 from mara.agents import base, judge
 from mara.config import ModelSpec, load_config
 from mara.context.repo_map import RepoContext, build_context
@@ -22,7 +21,7 @@ from mara.report.psirt_out import legal_deadlines
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
 from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
-from tests.reply_records import ballot
+from tests.fake_panel import REFUSAL, Panel
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -366,25 +365,20 @@ def test_truncated_reviewer_replies_block_the_gate(tmp_path, monkeypatch):
     assert "reviewer_truncations" in report.incomplete_reasons
 
 
-def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_path, monkeypatch):
-    pipe, f = pipeline(tmp_path), finding()
-    seen = []
-    def answer(role):
-        return lambda p, ctx, fs: (seen.append((role, p.family)), ([], ballot(role, p.family.value, len(fs), exchange.REFUSAL)))[1]
+def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_path):
+    f = finding()
+    panel = Panel().always("skeptic", REFUSAL).always("redteam", REFUSAL)
 
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", answer("skeptic"))
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", answer("redteam"))
+    def l3_seats():
+        return [(ex.role, ex.family) for ex in panel.exchanges if ex.role in ("skeptic", "redteam")]
+
     # the configured skeptic (nemotron) and red team (deepseek) both found it: only anthropic is independent
-    two = {f.id: {ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
-    pipe.run_skeptics(RepoContext(root=tmp_path), [f], two)
-    pipe.run_redteam(RepoContext(root=tmp_path), [f], two)
-    assert seen == [("skeptic", ModelFamily.ANTHROPIC), ("redteam", ModelFamily.ANTHROPIC)]
-    assert not pipe.audit["skeptic_same_family"] and not pipe.audit["redteam_same_family"]
-    every = {f.id: {ModelFamily.ANTHROPIC, ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
-    pipe.run_skeptics(RepoContext(root=tmp_path), [f], every)
-    pipe.run_redteam(RepoContext(root=tmp_path), [f], every)
-    assert pipe.audit["skeptic_same_family"] == 1 and pipe.audit["redteam_same_family"] == 1
-    assert any("no skeptic outside the finder families" in line for line in pipe.log)
+    panel.run(RepoContext(root=tmp_path), [f], {f.id: {ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}})
+    assert l3_seats() == [("skeptic", ModelFamily.ANTHROPIC), ("redteam", ModelFamily.ANTHROPIC)]
+    assert not panel.audit["skeptic_same_family"] and not panel.audit["redteam_same_family"]
+    panel.run(RepoContext(root=tmp_path), [f], {f.id: {ModelFamily.ANTHROPIC, ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}})
+    assert panel.audit["skeptic_same_family"] == 1 and panel.audit["redteam_same_family"] == 1
+    assert any("no skeptic outside the finder families" in line for line in panel.log)
 
 
 def test_missing_config_is_a_usage_error_not_a_traceback(tmp_path, monkeypatch):
@@ -406,7 +400,7 @@ def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path, monkeypat
     pipe = pipeline(tmp_path)
     (tmp_path / "app.py").write_text("unsafe()")
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([], ballot("skeptic", p.family.value, len(fs), exchange.REFUSAL)))
+    Panel.seated_in(pipe).always("skeptic", REFUSAL)
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["skeptic_refusals"] == report.bias_audit["skeptic_calls"] >= 1
     assert report.bias_audit["skeptic_invalid_items"] == 0
@@ -419,8 +413,7 @@ def test_judge_refusal_is_counted_separately_from_invalid_output(tmp_path, monke
     pipe = pipeline(tmp_path)
     (tmp_path / "app.py").write_text("unsafe()")
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    monkeypatch.setattr("mara.pipeline.judge.run_judge", lambda p, batch, pass_id, self_ids=None: (
-        [], ballot("judge", p.family.value, len(batch), exchange.REFUSAL, pass_id=pass_id)))
+    Panel.seated_in(pipe).always("judge", REFUSAL)
     report = pipe.run(tmp_path, mode="mock")
     # every judge call refused: 3 families x 2 chunks (30 findings, MAX_L4_FINDINGS per pass) x 2 passes
     assert report.bias_audit["judge_refusals"] == report.bias_audit["judge_calls"] == 12

@@ -125,7 +125,36 @@ def check_g1(root: Path, today: dt.date | None = None) -> CheckResult:
                        "需要：PSO 核定後在 front matter 填 `status: approved`、`approved_by`、`approved_on`、`review_by`")
 
 
-REVERSE_PASS_RE = re.compile(r'run_judge(?:\(|,\s*)prov,\s*rev,\s*"reverse"')
+def _jury_passes(cfg) -> dict[str, dict[str, dict[str, int]]]:
+    """Each judge family's passes when the ballot round runs over `cfg`'s panel on two findings no judge family found:
+    pass id -> each finding's presentation order. Every model answers as the mock provider in its label-driven mode,
+    which rules on any finding for any family, so no model is called."""
+    import tempfile
+    from collections import defaultdict
+
+    from mara import ballot_round
+    from mara.audit import Audit
+    from mara.context.repo_map import RepoContext
+    from mara.progress import Progress
+    from mara.providers.mock import MockProvider
+    from mara.schemas import Finding, ModelFamily, Provenance
+
+    findings = [Finding(id=f"F-000{i}", dimension="xss", title=f"t{i}", cwe="CWE-79", provenance=[Provenance(file="a.py", line=i, quote="abc")],
+                        reachability_argument="r", exploit_sketch="e",
+                        cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N", model_confidence=0.9,
+                        source_family=ModelFamily("anthropic"), source_model="m") for i in (1, 2)]
+    with tempfile.TemporaryDirectory() as target:
+        (Path(target) / "labels.json").write_text('{"labels": []}', encoding="utf-8")
+        providers = {m.name: MockProvider(m) for m in cfg.models}
+        for prov in providers.values():
+            prov.bind_target(target)
+        ballots = ballot_round.run(RepoContext(root=Path(target), content={"a.py": "abc\nabc\n"}, content_hash="g2"), findings,
+                                   {f.id: set() for f in findings}, cfg=cfg, providers=providers, audit=Audit(),
+                                   say=lambda _: None, progress=Progress())
+    passes: dict[str, dict[str, dict[str, int]]] = defaultdict(lambda: defaultdict(dict))
+    for v in ballots.votes:
+        passes[v.judge_family.value][v.pass_id][v.finding_id] = v.presentation_order
+    return passes
 
 
 def _shown(path: Path, root: Path) -> str:
@@ -148,18 +177,24 @@ def check_g2(root: Path, config_path: Path) -> CheckResult:
         problems.append(f"reviewer 家族數 {len(rev)} < 3")
     if len(jud) < 3:
         problems.append(f"judge 家族數 {len(jud)} < 3")
-    pipeline = (root / "src/mara/pipeline.py").read_text(encoding="utf-8")
-    config_src = (root / "src/mara/config.py").read_text(encoding="utf-8")
-    # a direct call or a deferred one (partial(judge.run_judge, prov, rev, "reverse", ...) for the one-retry wrapper)
-    if REVERSE_PASS_RE.search(pipeline):
-        evidence.append("`src/mara/pipeline.py` 對每個 judge 執行 forward 與 reverse 兩個 pass")
+    # the ballot round itself, run over this config's panel: every judge family rules on every finding in a forward pass
+    # and a reverse pass that presents the findings in mirrored order
+    passes = _jury_passes(cfg)
+    unmirrored = sorted(fam for fam in jud if set(passes.get(fam, {})) != {"forward", "reverse"}
+                        or set(passes[fam]["forward"]) != {"F-0001", "F-0002"}
+                        or any(passes[fam]["reverse"].get(i) != 1 - o for i, o in passes[fam]["forward"].items()))
+    if unmirrored:
+        problems.append(f"judge 家族 {unmirrored} 沒有對每個 finding 各投 forward 與順序鏡像的 reverse 一票")
     else:
-        problems.append("pipeline.py 找不到 reverse pass 的呼叫")
-    flags = re.findall(r"(skip_reverse|reverse_pass|single_pass|disable_reverse)\w*", pipeline + config_src)
+        evidence.append("`mara.ballot_round.run` 讓每個 judge 家族對每個 finding 各投 forward 與 reverse 一票，兩個 pass 的順序互為鏡像"
+                        "（以 mock provider 代答，不呼叫模型）")
+    ballot_src = (root / "src/mara/ballot_round.py").read_text(encoding="utf-8")
+    config_src = (root / "src/mara/config.py").read_text(encoding="utf-8")
+    flags = re.findall(r"(skip_reverse|reverse_pass|single_pass|disable_reverse)\w*", ballot_src + config_src)
     if flags:
         problems.append(f"存在可關閉反序 pass 的旗標：{sorted(set(flags))}")
     else:
-        evidence.append("pipeline.py 與 config.py 無任何可關閉反序 pass 的旗標")
+        evidence.append("ballot_round.py 與 config.py 無任何可關閉反序 pass 的旗標")
     f = Finding(id="F-0001", dimension="xss", title="t", cwe="CWE-79", provenance=[Provenance(file="a.py", line=1, quote="abc")],
                 reachability_argument="r", exploit_sketch="e", cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
                 model_confidence=0.9, source_family=ModelFamily("anthropic"), source_model="m")

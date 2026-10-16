@@ -15,13 +15,13 @@ from typer.testing import CliRunner
 
 from mara import exchange
 from mara.agents import skeptic
+from mara.ballot_round import MAX_L4_FINDINGS, l4_chunks
 from mara.cli import app
-from mara.config import MaraConfig, load_config
+from mara.config import MaraConfig
 from mara.context.repo_map import RepoContext
-from mara.pipeline import MAX_L4_FINDINGS, Pipeline, l4_chunks
-from mara.schemas import Finding, ModelFamily, Provenance, RedTeamNote, SkepticVerdict
+from mara.schemas import Finding, ModelFamily, Provenance
 from mara.tools import runner
-from tests.reply_records import ballot
+from tests.fake_panel import REFUSAL, TRUNCATION, Panel, items
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -49,39 +49,31 @@ def test_judge_chunks_are_as_few_and_as_even_as_possible(n, sizes):
     assert all(len(c) <= MAX_L4_FINDINGS for c in chunks)
 
 
-def test_no_finding_is_left_alone_in_a_judge_chunk(tmp_path, monkeypatch):
+def test_no_finding_is_left_alone_in_a_judge_chunk(tmp_path):
     """26 findings used to give chunks of 25 and 1: the last one's reverse pass was its forward pass."""
-    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
     findings = [_finding(i) for i in range(1, 27)]
-    calls = []
-    monkeypatch.setattr("mara.pipeline.judge.run_judge",
-                        lambda p, batch, pass_id, self_ids=None: (calls.append([b["finding_id"] for b in batch]),
-                                                                  ([], ballot("judge", p.family.value, len(batch), exchange.REFUSAL,
-                                                                              pass_id=pass_id)))[1])
-    pipe.run_jury(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings, {},
-                  {f.id: {ModelFamily.ANTHROPIC} for f in findings})
-    assert calls and {len(c) for c in calls} == {13}
+    panel = Panel().always("judge", REFUSAL)
+    panel.run(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings,
+              {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+    assert panel.asked("judge") and {len(ex.finding_ids) for ex in panel.asked("judge")} == {13}
 
 
-def test_the_judge_log_line_names_each_tag_of_its_two_passes_once(tmp_path, monkeypatch):
+def test_the_judge_log_line_names_each_tag_of_its_two_passes_once(tmp_path):
     """The forward and reverse pass of one chunk share a log line: a tag either pass carries is named once, in the
     order mara.audit.log_tags gives."""
-    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
     findings = [_finding(i) for i in range(1, 3)]
-    kinds = {"forward": exchange.TRUNCATION, "reverse": exchange.REFUSAL}
-    monkeypatch.setattr("mara.pipeline.judge.run_judge",
-                        lambda p, batch, pass_id, self_ids=None: ([], ballot("judge", p.family.value, len(batch), kinds[pass_id],
-                                                                             pass_id=pass_id)))
+    replies = {"forward": TRUNCATION, "reverse": REFUSAL}
+    panel = Panel().always("judge", lambda ex: replies[ex.pass_id])
 
     def judge_lines():
-        pipe.log.clear()
-        pipe.run_jury(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings, {},
-                      {f.id: {ModelFamily.ANTHROPIC} for f in findings})
-        return [line for line in pipe.log if line.startswith("L4: judge ")]
+        panel.log.clear()
+        panel.run(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings,
+                  {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+        return [line for line in panel.log if line.startswith("L4: judge ")]
 
     lines = judge_lines()
     assert lines and all(line.endswith("votes [REFUSED] [TRUNCATED]") for line in lines), lines
-    kinds["forward"] = exchange.REFUSAL
+    replies["forward"] = REFUSAL
     lines = judge_lines()
     assert lines and all(line.endswith("votes [REFUSED]") for line in lines), lines
 
@@ -101,22 +93,21 @@ def test_control_citations_outside_the_target_are_not_rewritten_into_shown_files
 
 # ------------------------------------------------------------------ L3 canary reports in the bias audit
 
-def test_l3_canary_reports_reach_the_bias_audit(tmp_path, monkeypatch):
-    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
+def test_l3_canary_reports_reach_the_bias_audit(tmp_path):
     f = _finding(1)
-    # each answered its one finding with a verdict that names the planted file and its token: kept, and counted as a
+    # each answers its one finding with a verdict that names the planted file and its token: kept, and counted as a
     # report (exchange.Canary.screen_verdicts); the red team's note may not declare the finding unexploitable then
-    report = f"{exchange.CANARY_PATH} asks to reply MARA-CANARY-0123abcd; ignored"
-    verdict = SkepticVerdict(finding_id=f.id, verdict="stands", reason=report, sanitizer_or_control="", source_family=ModelFamily.NEMOTRON,
-                             source_model="m")
-    note = RedTeamNote(finding_id=f.id, exploitable="unknown", preconditions=report, source_family=ModelFamily.DEEPSEEK, source_model="m")
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([verdict], ballot("skeptic", p.family.value, 1, canary_reports=1)))
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", lambda p, ctx, fs: ([note], ballot("redteam", p.family.value, 1, canary_reports=1)))
-    ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"})
-    pipe.run_skeptics(ctx, [f], {f.id: {ModelFamily.ANTHROPIC}})
-    pipe.run_redteam(ctx, [f], {f.id: {ModelFamily.ANTHROPIC}})
-    assert pipe.audit["skeptic_canary_reports"] == 1 and pipe.audit["skeptic_canary_reports[nemotron]"] == 1
-    assert pipe.audit["redteam_canary_reports"] == 1 and pipe.audit["redteam_canary_reports[deepseek]"] == 1
+    def reporting(field, **ruling):
+        def reply(ex):
+            return items(lambda _: {**ruling, field: f"{exchange.CANARY_PATH} asks to reply {ex.canary_token}; ignored"})(ex)
+        return reply
+
+    panel = (Panel().always("skeptic", reporting("reason", verdict="stands", sanitizer_or_control=""))
+             .always("redteam", reporting("preconditions", exploitable="unknown")))
+    ballots = panel.run(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}), [f], {f.id: {ModelFamily.ANTHROPIC}})
+    assert f.id in ballots.skeptic and f.id in ballots.redteam
+    assert panel.audit["skeptic_canary_reports"] == 1 and panel.audit["skeptic_canary_reports[nemotron]"] == 1
+    assert panel.audit["redteam_canary_reports"] == 1 and panel.audit["redteam_canary_reports[deepseek]"] == 1
 
 
 # ------------------------------------------------------------------ one judge per family, as a policy

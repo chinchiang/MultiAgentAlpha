@@ -170,10 +170,10 @@ def _recast(votes, pattern: str):
 
 
 def _with_a_fourth_judge(cfg, votes, finders):
-    """The panel with a fourth judge family (mistral), and the votes Pipeline.run_jury would collect from it: mistral,
+    """The panel with a fourth judge family (mistral), and the votes the ballot round's jury would collect from it: mistral,
     never a finder here, votes on every finding as one of its other judges did (deepseek where it voted), and a finder's
     family keeps its discounted self-family vote only while fewer than min_independent_judges families are independent
-    of the finding's finders (run_jury's self-preference rule), so a two-finder finding loses those votes here.
+    of the finding's finders (mara.ballot_round's self-preference rule), so a two-finder finding loses those votes here.
 
     Why a fourth judge: a finding is rejected only when at least three judge families are independent of all its
     finders, one voting for it and two against (agreement 0.5). The mock panel never gets there, nor does any panel of

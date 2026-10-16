@@ -292,9 +292,15 @@ def test_the_pipeline_writes_the_tier_c_blocks_assess_counts_into_the_audit(root
     backlog.write_text(json.dumps({"open": cfg.human_queue.backlog_limit + 1}), encoding="utf-8")
     pipe = Pipeline(cfg, mock_fixtures=str(root / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
     assert pipe.queue_tightened and pipe.outcome_policy.exclude_tier_c
-    cast = pipe.run_jury
-    monkeypatch.setattr(pipe, "run_jury", lambda *a: [v.model_copy(update={"verdict": "true_positive"}) if v.finding_id == "F-0050"
-                                                      else v for v in cast(*a)])
+    from tests.fake_panel import Panel
+
+    def f_0050_true_positive(ex):
+        # the mock judges' own reply, with every vote on F-0050 a true positive
+        reply = ex.as_provider()
+        votes = [{**v, "verdict": "true_positive"} if v["finding_id"] == "F-0050" else v for v in reply.structured["items"]]
+        return replace(reply, structured={"items": votes})
+
+    Panel.seated_in(pipe).always("judge", f_0050_true_positive)
     report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", mode="mock")
     row = next(c for c in report.consensus if c.finding_id == "F-0050")
     assert (row.tier.value, row.cvss4_severity, row.jury_outcome) == ("C", "Low", "accepted")

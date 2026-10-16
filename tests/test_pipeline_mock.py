@@ -318,49 +318,47 @@ def test_a_deleted_file_does_not_make_every_incremental_review_incomplete(tmp_pa
 
 # ------------------------------------------------------------------ one retry for a rejected L3/L4 reply
 
-def _pipe(tmp_path):
-    from pathlib import Path
+def _finding(i: int = 1) -> Finding:
+    return Finding(id=f"F-{i:04d}", dimension="xss", title="t", cwe="CWE-79", provenance=[Provenance(file="a.py", line=1, quote="print(name)")],
+                   reachability="reachable", reachability_argument="r", exploit_sketch="e",
+                   cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N", model_confidence=0.5,
+                   source_family=ModelFamily.ANTHROPIC, source_model="m")
 
-    from mara.config import load_config
-    from mara.pipeline import Pipeline
 
-    root = Path(__file__).resolve().parents[1]
-    return Pipeline(load_config(root / "config" / "mara.mock.yaml"), out_dir=tmp_path)
+def _ctx(tmp_path):
+    from mara.context.repo_map import RepoContext
+
+    return RepoContext(root=tmp_path, content={"a.py": "print(name)\n"}, content_hash="h")
 
 
 def test_an_unparseable_or_incomplete_reply_is_asked_once_more_but_signals_are_not(tmp_path):
-    from mara import exchange
-    from tests.reply_records import ballot
+    from tests.fake_panel import EMPTY, Panel, echo, items
 
-    pipe = _pipe(tmp_path)
-    replies = iter([([], ballot("skeptic", "glm", 2, missing=1)), (["v1", "v2"], ballot("skeptic", "glm", 2))])
-    assert pipe._once_more(lambda: next(replies)) == (["v1", "v2"], ballot("skeptic", "glm", 2))
-    assert pipe.audit["skeptic_retries"] == 1 and pipe.audit["skeptic_retries[glm]"] == 1
-    calls = []
-    echo = ballot("redteam", "glm", 1, canary_echoes=1)
-    assert pipe._once_more(lambda: calls.append(1) or ([], echo)) == ([], echo) and len(calls) == 1, \
-        "an echo is a finding about the model, not noise"
-    second = ballot("judge", "gemini", 1, missing=1)
-    replies = iter([([], ballot("judge", "gemini", 1, exchange.EMPTY)), ([], second)])
-    assert pipe._once_more(lambda: next(replies)) == ([], second)
-    assert pipe.audit["judge_retries"] == 1, "only one more call; the second answer stands"
+    findings = [_finding(1), _finding(2)]
+    def stands(drop=0):
+        return items(lambda _: {"verdict": "stands", "reason": "r", "sanitizer_or_control": ""}, drop=drop)
+
+    true_positive = items(lambda _: {"verdict": "true_positive", "severity_band": "High", "reason": "r"}, drop=1)
+    # the skeptic (nemotron) leaves a finding out, then rules on both; the red team (deepseek) echoes the canary; the
+    # deepseek judge's forward pass is empty, then leaves a finding out
+    panel = (Panel().queue("skeptic", stands(drop=1), stands())
+             .queue("redteam", echo).queue("judge", EMPTY, true_positive, family=ModelFamily.DEEPSEEK))
+    ballots = panel.run(_ctx(tmp_path), findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+    assert len(panel.asked("skeptic")) == 2 and set(ballots.skeptic) == {"F-0001", "F-0002"}
+    assert panel.audit["skeptic_retries"] == 1 and panel.audit["skeptic_retries[nemotron]"] == 1
+    assert len(panel.asked("redteam")) == 1 and panel.audit["redteam_retries"] == 0, "an echo is a finding about the model, not noise"
+    assert [ex.pass_id for ex in panel.asked("judge", ModelFamily.DEEPSEEK)] == ["forward", "forward", "reverse"]
+    assert panel.audit["judge_retries"] == 1, "only one more call; the second answer stands"
+    assert not [v for v in ballots.votes if v.judge_family == ModelFamily.DEEPSEEK and v.pass_id == "forward"]
 
 
-def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path, monkeypatch):
-    from mara.agents import skeptic
-    from mara.context.repo_map import RepoContext
+def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path):
+    from tests.fake_panel import Panel, items
 
-    pipe = _pipe(tmp_path)
-    f = Finding(id="F-0001", dimension="xss", title="t", cwe="CWE-79", provenance=[Provenance(file="a.py", line=1, quote="print(name)")],
-                reachability="reachable", reachability_argument="r", exploit_sketch="e",
-                cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N", model_confidence=0.5,
-                source_family=ModelFamily.ANTHROPIC, source_model="m")
-    good = SkepticVerdict(finding_id="F-0001", verdict="stands", reason="r", sanitizer_or_control="none",
-                          source_family=ModelFamily.DEEPSEEK, source_model="m")
-    from tests.reply_records import ballot
-
-    replies = iter([([], ballot("skeptic", "deepseek", 1, missing=1)), ([good], ballot("skeptic", "deepseek", 1))])
-    monkeypatch.setattr(skeptic, "run_skeptic", lambda *a, **k: next(replies))
-    verdicts, abstained = pipe.run_skeptics(RepoContext(root=tmp_path), [f], {"F-0001": {ModelFamily.ANTHROPIC}})
-    assert verdicts == [good] and not abstained
-    assert pipe.audit["skeptic_invalid_items"] == 0 and pipe.audit["skeptic_retries"] == 1
+    f = _finding()
+    # no verdict at all, then the mock skeptic's own
+    panel = Panel().queue("skeptic", items(lambda _: {}, drop=1))
+    ballots = panel.run(_ctx(tmp_path), [f], {f.id: {ModelFamily.ANTHROPIC}})
+    assert list(ballots.skeptic) == [f.id] and ballots.skeptic[f.id].source_family == ModelFamily.NEMOTRON
+    assert not ballots.skeptic_abstained
+    assert panel.audit["skeptic_invalid_items"] == 0 and panel.audit["skeptic_retries"] == 1
