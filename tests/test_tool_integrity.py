@@ -146,7 +146,7 @@ def test_cosign_verifies_the_signature_and_a_failure_blocks_the_review(tmp_path,
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
     assert "ml_bom_signature_unverified" in report.incomplete_reasons
-    assert report.bias_audit["ml_bom_signature"].startswith("failed:")
+    assert report.ml_bom_signature.startswith("failed:") and "ml_bom_signature" not in report.bias_audit
 
 
 # ------------------------------------------------------------------ Scorecard

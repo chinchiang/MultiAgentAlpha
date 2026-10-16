@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from mara.config import MaraConfig, load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
 from mara.report.human_queue_out import build_queue, queue_key, render_human_queue, tightening  # noqa: E402
+from mara.report.markdown_out import render_markdown  # noqa: E402
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, ReviewReport, SkepticVerdict  # noqa: E402
 from mara.scoring.outcome import OutcomePolicy  # noqa: E402
 from tests import scored_rows  # noqa: E402
@@ -101,9 +102,9 @@ def test_pipeline_reads_backlog_and_records_tightening(cfg, tmp_path, monkeypatc
     (tmp_path / "calib" / "decisions" / "backlog.json").write_text(json.dumps({"open": 99}))
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
-    assert report.bias_audit["human_queue_tightened"] == 1 and report.bias_audit["human_queue_backlog"] == 99
-    assert report.bias_audit["human_alpha_threshold"] > cfg.gate.human_threshold_alpha
-    assert "human_queue_size" in report.bias_audit and "## Human queue" in render_human_queue(report) or True
+    t = report.human_queue_tightening
+    assert t is not None and t.tightened and t.backlog == 99 and t.alpha_threshold > cfg.gate.human_threshold_alpha
+    assert f"Queue tightening: tightened (backlog 99, agreement threshold {t.alpha_threshold})" in render_markdown(report)
     md = render_human_queue(report)
     assert md.startswith("# Human queue")
 

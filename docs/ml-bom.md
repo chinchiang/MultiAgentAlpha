@@ -100,8 +100,8 @@ hashing a directory and when they appear in a BOM, so a BOM cannot bless a pickl
 ## 4. What the review records
 
 The pipeline reads the BOM at start-up and writes one entry per self-hosted model into the report's
-bias audit (`ml_bom`: model id, status, component name and version, digest); `report.md` shows it
-under "Model provenance". A report therefore states which weights, by hash, produced it once the
+`ml_bom` (model id, status, component name and version, digest), and with `require_signature` the
+verification result into its `ml_bom_signature`; `report.md` shows both under "Model provenance". A report therefore states which weights, by hash, produced it once the
 BOM is complete, and says `pending` until then.
 
 ## 5. Why the entries are pending here

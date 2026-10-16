@@ -71,9 +71,9 @@ not started, so all three fail today with precise reasons.
   recorded and the merge is not held, unless `--fail-on-gate` is given for that run. A failed PSIRT
   hand-off makes the command exit 3 instead, in any phase and whatever the gate. In every phase the
   CLI and the report header say whether a blocked gate was enforced or only recorded, as the
-  report's `gate_enforced` records it. The phase is written into
-  the report's bias audit; why the gate blocked (`gate_reasons`) and whether it was enforced
-  (`gate_enforced`) are report fields of their own.
+  report's `gate_enforced` records it. The phase is the report's
+  `rollout_phase`; why the gate blocked (`gate_reasons`) and whether it was enforced
+  (`gate_enforced`) are report fields of their own too.
 - `scripts/rollout_phase.py`:
   - `status`: phase, days in phase, due date, problems.
   - `baseline --runs <dirs> --out docs/rollout-baseline-<date>.md`: aggregates every `report.json`

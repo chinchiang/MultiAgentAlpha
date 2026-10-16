@@ -674,7 +674,7 @@ def test_nonempty_model_bom_does_not_crash_completed_report(tmp_path, monkeypatc
     pipe.ml_bom_status = {"selfhosted": SimpleNamespace(model_id="example", status="pending", component_name="x", component_version="1", digest="")}
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [])
     report = pipe.run(tmp_path, mode="mock")
-    assert report.bias_audit["ml_bom"]["selfhosted"]["status"] == "pending"
+    assert report.ml_bom["selfhosted"].status == "pending"
     assert any("ML-BOM" in line for line in pipe.log)
 
 

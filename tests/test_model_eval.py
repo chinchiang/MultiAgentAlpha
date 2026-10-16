@@ -265,7 +265,7 @@ def test_pipeline_records_model_eval_status(tmp_path, monkeypatch):
     cfg = load_config(ROOT / "config" / "mara.mock.yaml")
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
-    assert report.bias_audit["model_eval"] == {} and "## Model red-team evaluation" in render_markdown(report)
+    assert report.model_eval == {} and "## Model red-team evaluation" in render_markdown(report)
     assert me.family_eval_status(ROOT, ["deepseek"]) == {"deepseek": {"date": None, "mode": None, "status": "none"}}
 
 

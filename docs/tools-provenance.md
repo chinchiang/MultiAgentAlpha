@@ -47,7 +47,7 @@
 | semgrep | **無**（2026-09-13 起）：規則來自 lock 固定的 `.mara-tools/semgrep-rules` 本地目錄，runner 與 `scripts/semgrep_ci.py` 一律 `--metrics=off --disable-version-check`，環境變數 `SEMGREP_ENABLE_VERSION_CHECK=0`、`SEMGREP_SEND_METRICS=off`，且不用 `--config auto`（auto 強制開啟 metrics 並把專案識別送到 semgrep.dev，違反政策 P5）。`MARA_SEMGREP_CONFIG` 可覆寫（例如明確指定 `p/default` 才會使用需連 semgrep.dev 的登錄集） | 正常；規則未安裝時 runner 不再退回 `p/default`，直接記錄 semgrep 為未執行（審查維持未完成），不會在使用者不知情下連線 semgrep.dev |
 | csp-evaluator | **無**（2026-10-01 起）：CSP 政策由 `src/mara/tools/csp_eval.py` 的 extractor 從原始碼樹本地抽取（HTML meta、`Content-Security-Policy` 指派字串、Apache／Nginx 設定行；上限 400 個政策、單檔 512 KB），經 stdin JSON 餵給 driver，由鎖定的 tarball 在本機 node 上評分，不連任何網路 | 正常；node ≥ 18 不存在時 runner 記為未執行（exit 127）、套件未安裝記 exit 66 |
 
-runner 對每個工具記錄「pinned <版本>」或「exit <code>, no SARIF produced: <stderr 尾>」，報告的 `tools_ran` 只列真正產出 SARIF 的工具。
+runner 對每個工具記錄「pinned <版本>」或「exit <code>, no SARIF produced: <stderr 尾>」，報告的 `tool_health` 記錄每個工具是否產出 SARIF，`report.md` 的「Tools that ran」只列真正產出 SARIF 的工具。
 
 ## 3b. CI 中的 semgrep 與 osv-scanner（2026-09-13）
 
