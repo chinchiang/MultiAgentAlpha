@@ -3,7 +3,6 @@
 import json
 import subprocess
 import sys
-from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,8 +10,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara.config import load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
-from mara.schemas import ConsensusResult, EvidenceTier  # noqa: E402
-from mara.scoring.outcome import OutcomePolicy, OutcomeSignals, decide  # noqa: E402
+from tests import scored_rows  # noqa: E402
 
 
 def test_label_driven_mock_and_calibrate(root, tmp_path):
@@ -216,33 +214,25 @@ def _finding(i, cwe="CWE-79"):
     return {"id": f"F-{i}", "cwe": cwe, "provenance": [{"file": "app.py", "line": i * 10}]}
 
 
-def _row(i, **signals):
-    """The consensus row Pipeline.score() writes for F-i, as report.json holds it: the jury outcome comes from decide()."""
-    s = replace(OutcomeSignals(tier=EvidenceTier.B, score=1.0, severity="High", provenance_verified=True, skeptic_refuted=False,
-                               skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=1.0, votes_tp=6, votes_fp=0,
-                               votes_human=0, position_consistent=True), **signals)
-    policy = OutcomePolicy(accept_threshold=0.6, alpha_threshold=0.4, exclude_tier_c=False, tier_c_min_severity="High",
-                           unsupervised_reject_allowed=False)
-    return ConsensusResult(finding_id=f"F-{i}", weighted_score=s.score, votes_tp=s.votes_tp, votes_fp=s.votes_fp,
-                           votes_human=s.votes_human, families_agreeing=[], tool_corroborated=s.tier == EvidenceTier.A,
-                           skeptic_refuted=s.skeptic_refuted, agreement_proxy=s.alpha,
-                           position_consistent=s.position_consistent, tier=s.tier, cvss4_score=8.7, cvss4_severity=s.severity,
-                           ssvc_decision="Attend", **decide(s, policy).consensus_fields()).model_dump(mode="json")
+def _row(i, state):
+    """The consensus row jury scoring writes for F-i in `state` (tests/scored_rows.py), as report.json holds it."""
+    return scored_rows.row(state, f"F-{i}").model_dump(mode="json")
 
 
 def _rejected(i):
-    """A rejected finding, the rejection P8 unlocks: a tool corroborates it (tier A) and only the finder's family confirmed it.
-    On the three-family panel tier A is the only tier the jury can reject (docs/adr/0005-jury-outcome.md)."""
-    return _row(i, tier=EvidenceTier.A, score=0.2, votes_tp=2, votes_fp=4, alpha=0.5)
+    """A rejected finding, the rejection P8 unlocks: a tool corroborates it (tier A) and one of three independent judge
+    families confirmed it. Only tier A can be rejected, and only with a fourth judge family on the mock panel
+    (docs/adr/0005-jury-outcome.md)."""
+    return _row(i, "rejected")
 
 
 def _accepted(i):
-    return _row(i)
+    return _row(i, "accepted")
 
 
 def _dropped(i):
     """A dropped finding: every family called it a false positive, so it is tier D, out on the evidence rather than the vote."""
-    return _row(i, tier=EvidenceTier.D, score=0.0, votes_tp=0, votes_fp=6)
+    return _row(i, "dropped")
 
 
 def test_aat_agreement_is_tested_against_chance_and_needs_ten_items():

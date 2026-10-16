@@ -2,11 +2,11 @@ import pytest
 
 from mara.bias.blinding import blind_finding, blinded_batches
 from mara.config import MaraConfig
-from mara.pipeline import _agreement_proxy
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
 from mara.scoring.consensus import krippendorff_alpha_nominal, weighted_consensus
 from mara.scoring.idcheck import check_finding_refs
 from mara.scoring.tiers import assign_tier, ssvc_decision
+from tests import scored_rows
 
 
 def _finding(i=1, fam=ModelFamily.ANTHROPIC, refs=None):
@@ -62,18 +62,25 @@ def test_idcheck_strips_nonexistent_refs():
     assert not ref.unknown_cwe
 
 
-def _proxy_vote(fam, verdict):
-    return JudgeVote(finding_id="F-0001", verdict=verdict, severity_band="High", reason="r", judge_family=fam,
-                     judge_model="m", presentation_order=0, pass_id="forward")
+def _scoring(findings, votes):
+    """Jury scoring of `findings`, found by anthropic, on `votes` and no other ballot, on the mock panel."""
+    return scored_rows.score(findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings}, votes)
+
+
+def _both_passes(fid, fam, verdict, reverse=None):
+    return [JudgeVote(finding_id=fid, verdict=v, severity_band="High", reason="r", judge_family=fam, judge_model="m",
+                      presentation_order=0, pass_id=pass_id) for pass_id, v in (("forward", verdict), ("reverse", reverse or verdict))]
 
 
 def test_agreement_proxy_is_undefined_for_a_single_rater_family():
     # one family voting consistently is not "perfect agreement": quorum still gates the finding
-    assert _agreement_proxy([_proxy_vote(ModelFamily.DEEPSEEK, "true_positive"), _proxy_vote(ModelFamily.DEEPSEEK, "true_positive")]) is None
-    assert _agreement_proxy([_proxy_vote(ModelFamily.DEEPSEEK, "true_positive"), _proxy_vote(ModelFamily.DEEPSEEK, "false_positive")]) is None
-    two = [_proxy_vote(ModelFamily.DEEPSEEK, "true_positive"), _proxy_vote(ModelFamily.DEEPSEEK, "true_positive"),
-           _proxy_vote(ModelFamily.NEMOTRON, "true_positive"), _proxy_vote(ModelFamily.NEMOTRON, "true_positive")]
-    assert _agreement_proxy(two) == 1.0
+    def proxy(votes):
+        return _scoring([_finding()], votes).rows[0].agreement_proxy
+
+    assert proxy(_both_passes("F-0001", ModelFamily.DEEPSEEK, "true_positive")) is None
+    assert proxy(_both_passes("F-0001", ModelFamily.DEEPSEEK, "true_positive", reverse="false_positive")) is None
+    two = _both_passes("F-0001", ModelFamily.DEEPSEEK, "true_positive") + _both_passes("F-0001", ModelFamily.NEMOTRON, "true_positive")
+    assert proxy(two) == 1.0
 
 
 def _vote(fam, verdict, pass_id, self_family=False):
@@ -106,25 +113,21 @@ def test_krippendorff_alpha_known_values():
 def test_corpus_alpha_counts_each_family_once_not_once_per_pass():
     """Two self-consistent families that always disagree: alpha is -0.5. Fed both passes of each family
     as separate raters it read -0.17, a family's agreement with itself counted as inter-family agreement."""
-    from mara.pipeline import _alpha_units
-    from mara.schemas import JudgeVote
-
-    def v(fid, fam, pass_id, verdict):
-        return JudgeVote(finding_id=fid, verdict=verdict, severity_band="High", reason="r", judge_family=fam,
-                         judge_model="m", presentation_order=0, pass_id=pass_id)
-
     fs = [_finding(1), _finding(2)]
-    votes = [v(f.id, fam, p, verdict) for f in fs for fam, verdict in ((ModelFamily.DEEPSEEK, "true_positive"),
-                                                                         (ModelFamily.NEMOTRON, "false_positive"))
-             for p in ("forward", "reverse")]
-    units = _alpha_units(fs, votes)
-    assert units == {"F-0001": ["true_positive", "false_positive"], "F-0002": ["true_positive", "false_positive"]}
-    assert krippendorff_alpha_nominal(units) == -0.5
+    votes = [v for f in fs for v in _both_passes(f.id, ModelFamily.DEEPSEEK, "true_positive") + _both_passes(f.id, ModelFamily.NEMOTRON, "false_positive")]
+    assert _scoring(fs, votes).global_alpha == -0.5
+    # and each pair of families' agreement, which calibration reads back from the audit (judge_agreement[a~b])
+    assert _scoring(fs, votes).family_agreement == {"deepseek~nemotron": 0.0}
     assert krippendorff_alpha_nominal({f.id: [x.verdict for x in votes if x.finding_id == f.id] for f in fs}) == -0.1667
-    # a family whose two passes disagree has no single label for that finding
-    flip = [x if not (x.judge_family == ModelFamily.NEMOTRON and x.pass_id == "reverse" and x.finding_id == "F-0001")
-            else x.model_copy(update={"verdict": "true_positive"}) for x in votes]
-    assert _alpha_units(fs, flip)["F-0001"] == ["true_positive"]
+    # a family whose two passes disagree has no single label for that finding: nemotron's split passes on F-0001 leave
+    # deepseek's label alone there (alpha 0.0); kept as nemotron's forward label alpha would read -0.25, as its
+    # reverse one 0.4444
+    fs = [_finding(1), _finding(2), _finding(3)]
+    split = (_both_passes("F-0001", ModelFamily.DEEPSEEK, "true_positive")
+             + _both_passes("F-0001", ModelFamily.NEMOTRON, "false_positive", reverse="true_positive")
+             + _both_passes("F-0002", ModelFamily.DEEPSEEK, "true_positive") + _both_passes("F-0002", ModelFamily.NEMOTRON, "false_positive")
+             + _both_passes("F-0003", ModelFamily.DEEPSEEK, "false_positive") + _both_passes("F-0003", ModelFamily.NEMOTRON, "false_positive"))
+    assert _scoring(fs, split).global_alpha == 0.0
 
 
 def test_tier_rules():

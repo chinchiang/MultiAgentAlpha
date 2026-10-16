@@ -28,9 +28,9 @@ def row(fid: str, tier: str, severity: str, outcome: str, decision: str | None =
 
     The score, votes, agreeing families, tool corroboration and independent judges are illustrative, roughly the
     signals behind such an outcome (a rejection at tier A: tool corroboration and three independent judges, one for),
-    not what Pipeline.score would write for the row: scoring, for one, also counts the finders' family as agreeing
-    whenever the score reaches the threshold. A test that reads those fields needs rows scoring produced (as
-    tests/test_sarif_final_outcome.py rescores them), not these. Which outcomes scoring reaches at which tier depends on
+    not what jury scoring (mara.scoring.jury) writes for the row: scoring, for one, also counts the finders' family as agreeing
+    whenever the score reaches the threshold. A test that reads those fields needs rows scoring produced
+    (tests/scored_rows.py, or rescored as tests/test_sarif_final_outcome.py does), not these. Which outcomes scoring reaches at which tier depends on
     the panel (docs/adr/0005-jury-outcome.md); the exhaustive comparison in tests/test_review_status.py feeds every
     combination on purpose."""
     human = {"decision": decision, "key": "k", "issue": 1, "decided_by": "alice", "decided_at": "2026-10-01T08:00:00Z"}

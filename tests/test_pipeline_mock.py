@@ -5,6 +5,7 @@ import pytest
 from mara.report.markdown_out import render_markdown
 from mara.report.sarif_out import to_sarif
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, SkepticVerdict
+from tests import scored_rows
 
 SEEDED = {  # (dimension, cwe, file) that must be accepted
     ("vulnerabilities", "CWE-89", "app.py"),
@@ -51,10 +52,9 @@ def test_fabricated_quote_is_rejected_as_tier_d(mock_report):
     assert cons[fake.id].skeptic_refuted
 
 
-def test_refuted_finding_the_jury_overrode_goes_to_human(mock_report):
+def test_refuted_finding_the_jury_overrode_goes_to_human():
     """assessment #37: a skeptic-refuted finding with high jury consensus must not re-enter the
     blocking logic; it is forced to the human queue instead of being accepted."""
-    pipe, _ = mock_report
     f = Finding(
         id="F-9001", dimension="vulnerabilities", title="SQL injection in search", cwe="CWE-89",
         provenance=[Provenance(file="app.py", line=32, quote="cursor.execute(q)", verified=True)],
@@ -73,7 +73,7 @@ def test_refuted_finding_the_jury_overrode_goes_to_human(mock_report):
     sk = SkepticVerdict(finding_id="F-9001", verdict="refuted", reason="query is parameterised",
                         sanitizer_or_control="app.py:41 prepared statements",
                         source_family=ModelFamily.MOCK, source_model="mock-skeptic")
-    cons = pipe.score([f], {f.id: {ModelFamily.MOCK}}, {"F-9001": sk}, {}, votes, [])[0]
+    (cons,) = scored_rows.score([f], {f.id: {ModelFamily.MOCK}}, votes, skeptic={"F-9001": sk}).rows
     assert cons.skeptic_refuted
     assert cons.tier != EvidenceTier.D  # the jury did override the refutation
     assert cons.needs_human and not cons.accepted
@@ -92,8 +92,8 @@ def test_tool_corroboration_yields_tier_a(mock_report):
 def test_tool_corroboration_respects_tool_dimensions():
     # csp-evaluator emits results without CWEs; without the dimension guard such a result would
     # corroborate any finding within +-3 lines, whatever the dimension
-    from mara.pipeline import _tool_corroborates
     from mara.tools.sarif import ToolResult
+    from tests.scored_rows import tool_corroborated
 
     result = ToolResult(tool="csp-evaluator", rule_id="csp.test", level="error", message="weak CSP",
                         file="static/index.html", line=5, cwe=None, cwes=[])
@@ -106,8 +106,8 @@ def test_tool_corroboration_respects_tool_dimensions():
                        model_confidence=0.9, source_family=ModelFamily.MOCK, source_model="m",
                        finder_families=[ModelFamily.MOCK])
 
-    assert _tool_corroborates(finding("csp", "CWE-1021"), [result])
-    assert not _tool_corroborates(finding("xss", "CWE-79"), [result])
+    assert tool_corroborated(finding("csp", "CWE-1021"), [result])
+    assert not tool_corroborated(finding("xss", "CWE-79"), [result])
 
 
 def test_multi_family_agreement_without_tool_yields_tier_b(mock_report):

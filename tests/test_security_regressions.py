@@ -22,6 +22,7 @@ from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenan
 from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
 from tests.fake_panel import REFUSAL, Panel
+from tests.scored_rows import MOCK, policy, score, tool_corroborated
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -303,38 +304,38 @@ def test_l3_agents_carry_a_canary_and_an_echo_voids_their_verdicts(tmp_path, rol
 def test_tool_corroboration_needs_the_same_file_and_a_blocking_level():
     """A bare suffix match let a tool hit in services/billing/main.py corroborate a finding in main.py
     and promote it to tier A; a note-level result corroborated as strongly as an error."""
-    from mara.pipeline import _tool_corroborates
-
     f = finding().model_copy(update={"provenance": [Provenance(file="main.py", line=10, quote="unsafe()", verified=True)]})
 
     def hit(file, level="error"):
         return [ToolResult("semgrep", "sql", level, "SQL injection", file, 11, "CWE-89")]
 
-    assert _tool_corroborates(f, hit("main.py")) and _tool_corroborates(f, hit("./main.py"))
-    assert not _tool_corroborates(f, hit("services/billing/main.py")), "another file with the same name"
-    assert not _tool_corroborates(f, hit("main.py", level="note")), "a note is information, not evidence"
+    assert tool_corroborated(f, hit("main.py")) and tool_corroborated(f, hit("./main.py"))
+    assert not tool_corroborated(f, hit("services/billing/main.py")), "another file with the same name"
+    assert not tool_corroborated(f, hit("main.py", level="note")), "a note is information, not evidence"
     # a tool that ran from the repository top level reports the target's own prefix (pre-recorded zizmor)
-    assert _tool_corroborates(f, hit("fixtures/vuln-sample/main.py"), "fixtures/vuln-sample")
-    assert not _tool_corroborates(f, hit("other/vuln-sample/main.py"), "fixtures/vuln-sample")
+    assert tool_corroborated(f, hit("fixtures/vuln-sample/main.py"), "fixtures/vuln-sample")
+    assert not tool_corroborated(f, hit("other/vuln-sample/main.py"), "fixtures/vuln-sample")
 
 
-def test_quorum_requires_two_independent_families_and_both_passes(tmp_path):
-    pipe, f = pipeline(tmp_path), finding()
+def test_quorum_requires_two_independent_families_and_both_passes():
+    f = finding()
     finders = {f.id: {ModelFamily.ANTHROPIC}}
     one = [vote(ModelFamily.DEEPSEEK)]
-    c = pipe.score([f], finders, {}, {}, one, [])[0]
+    (c,) = score([f], finders, one).rows
     assert not c.accepted and c.needs_human and c.independent_judges == 0
+    (lone,) = score([f], finders, [vote(ModelFamily.DEEPSEEK, pass_id) for pass_id in ("forward", "reverse")]).rows
+    assert lone.independent_judges == 1 and lone.needs_human and "insufficient_independent_judges" in lone.human_reasons
     full = [vote(fam, pass_id) for fam in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON) for pass_id in ("forward", "reverse")]
-    accepted = pipe.score([f], finders, {}, {}, full, [])[0]
+    (accepted,) = score([f], finders, full).rows
     assert accepted.accepted and accepted.independent_judges == 2
-    repeated = pipe.score([f], finders, {}, {}, full + [full[0]] * 100, [])[0]
+    (repeated,) = score([f], finders, full + [full[0]] * 100).rows
     assert not repeated.accepted and repeated.needs_human
     # an invalid vector cannot reach scoring: Finding rejects it at the model boundary
     # (test_invalid_cvss_is_rejected_at_model_boundary); one smuggled past validation fails loudly, never as "Unknown"
     from mara.scoring import cvss4
 
     with pytest.raises(cvss4.CVSS4Error):
-        pipe.score([f.model_copy(update={"cvss4_vector": "CVSS:4.0/invalid"})], finders, {}, {}, full, [])
+        score([f.model_copy(update={"cvss4_vector": "CVSS:4.0/invalid"})], finders, full)
 
 
 def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path, monkeypatch):
@@ -643,12 +644,12 @@ def test_p8_reads_its_evidence_from_the_workspace(tmp_path, monkeypatch):
     assert p8().passed
 
 
-def test_one_verified_quote_cannot_launder_an_invalid_primary_location(tmp_path):
-    pipe, f = pipeline(tmp_path), finding()
+def test_one_verified_quote_cannot_launder_an_invalid_primary_location():
+    f = finding()
     bad = Provenance(file="../outside.py", line=999, quote="fabricated", verified=False)
     f = f.model_copy(update={"provenance": [bad, *f.provenance]})
     votes = [vote(family, pass_id) for family in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON) for pass_id in ("forward", "reverse")]
-    c = pipe.score([f], {f.id: {ModelFamily.ANTHROPIC}}, {}, {}, votes, [])[0]
+    (c,) = score([f], {f.id: {ModelFamily.ANTHROPIC}}, votes).rows
     assert not c.accepted and c.needs_human and c.tier.value == "D"
     assert "unverified_provenance" in c.human_reasons
 
@@ -677,13 +678,12 @@ def test_nonempty_model_bom_does_not_crash_completed_report(tmp_path, monkeypatc
     assert any("ML-BOM" in line for line in pipe.log)
 
 
-def test_human_queue_uses_effective_decision_without_recalculating_threshold(tmp_path):
-    pipe, f = pipeline(tmp_path), finding()
-    pipe.outcome_policy = dataclasses.replace(pipe.outcome_policy, alpha_threshold=1.0)
+def test_human_queue_uses_effective_decision_without_recalculating_threshold():
+    f = finding()
     votes = [vote(fam, pass_id, verdict) for fam, verdict in [(ModelFamily.DEEPSEEK, "true_positive"),
              (ModelFamily.NEMOTRON, "false_positive")] for pass_id in ("forward", "reverse")]
-    result = pipe.score([f], {f.id: {ModelFamily.ANTHROPIC}}, {}, {}, votes, [])[0]
-    queued = build_queue([f], {f.id: result}, {}, {}, votes, pipe.cfg)
+    (result,) = score([f], {f.id: {ModelFamily.ANTHROPIC}}, votes, outcome_policy=dataclasses.replace(policy(), alpha_threshold=1.0)).rows
+    queued = build_queue([f], {f.id: result}, {}, {}, votes, MOCK)
     assert result.needs_human and len(queued) == 1 and "agreement_below_threshold" in queued[0].reasons
 
 
