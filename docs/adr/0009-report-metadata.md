@@ -7,7 +7,7 @@
 - the rollout phase;
 - the latest model red-team evaluation per family.
 
-Three more echoed what the report holds elsewhere: `tools_ran`, `tool_results_ingested`, and `ml_bom_signature`, which records whether the BOM signature verified. Nothing read the `self.audit` copies. The readers fished the report's copies out by string:
+Two more echoed what the report holds elsewhere, `tools_ran` and `tool_results_ingested`; and `ml_bom_signature` held the BOM signature check's result as text, of which the review status keeps only whether it verified. Nothing read the `self.audit` copies. The readers fished the report's copies out by string:
 - the markdown header, its ML-BOM and model-evaluation sections, and the audit list, which printed every key and skipped only the two nested ones;
 - the workbench's budget and run metadata;
 - a template test that read the rollout phase from the raw JSON.
@@ -32,9 +32,11 @@ Each has a default: null or empty means "not recorded" in a report written befor
 A report written before this change is read into the fields. A `ReviewReport` validator, run before the fields are read, moves each old key out of `bias_audit` into its field:
 - it reads a backlog recorded as `"unknown"` as null;
 - it builds the queue tightening only when all three of its keys are there, and guesses nothing from part of them;
+- it reads an old value that does not have its field's shape, such as a rollout phase no config knows or an ML-BOM entry without a model id, as not recorded rather than failing the report, which the workbench and the score summary would then refuse altogether;
+- it keeps a field the report already has over an old key beside it;
 - it drops the counts and `tools_ran`.
 
-An old report and a new one therefore read alike, and every reader has one path. The validator also runs when the pipeline builds the report, so metadata that reached the audit by mistake would land in its field too. Every reader that reads `report.json` through `ReviewReport` goes through it, the score summary and the workbench among them, and the markdown and SARIF writers are given a `ReviewReport`. `scripts/calibrate.py` and the shadow-phase baseline read the raw JSON, but only for counts, statistics, `exchange_version` and the human queue, none of which moves.
+An old report and a new one therefore read alike, and every reader has one path. The validator also runs when the pipeline builds the report, but finds nothing to move there: the pipeline writes no old key into its audit, and passes or sets the fields itself. Every reader that reads `report.json` through `ReviewReport` goes through it, the score summary and the workbench among them, and the markdown and SARIF writers are given a `ReviewReport`. `scripts/calibrate.py` and the shadow-phase baseline read the raw JSON, but only for counts, statistics, `exchange_version` and the human queue, none of which moves.
 
 What the readers show:
 - `report.md`: the header reads the rollout phase field, and the ML-BOM and model-evaluation sections read their fields, with the BOM signature on a line of its own. The human queue section gains a line with the queue tightening. The deterministic-tool section names the tools that ran and how many results they gave. The audit list prints the bias audit as it now is.

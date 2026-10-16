@@ -215,7 +215,7 @@ class ModelEvalThresholds(BaseModel):
 
 class ModelEvalConfig(BaseModel):
     """G-8: quarterly garak + CyberSecEval 4 (prompt injection, false refusal rate) evaluation of
-    every model family, with thresholds that feed the calibration weights and the bias audit.
+    every model family, with thresholds that feed the calibration weights and the review report.
     The thresholds are initial values to be revised after the first live run."""
 
     model_config = ConfigDict(extra="forbid")

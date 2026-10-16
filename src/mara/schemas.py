@@ -8,9 +8,9 @@ cannot buy credibility at the judge layer.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_validator, model_validator
 
 DIMENSIONS: list[str] = [
     "architecture",
@@ -303,6 +303,18 @@ class ModelEvalStatus(BaseModel):
 # them (human_queue_size, psirt_notifications, tool_results_ingested) and tools_ran are read from the report's own lists
 LEGACY_METADATA = ("human_queue_size", "human_queue_backlog", "human_queue_tightened", "human_alpha_threshold", "psirt_notifications",
                    "ml_bom", "ml_bom_signature", "rollout_phase", "model_eval", "tool_results_ingested", "tools_ran")
+# the shape an old value must have to be read into its field; one of another shape reads as not recorded
+_LEGACY_SHAPES: dict[str, TypeAdapter[Any]] = {"rollout_phase": TypeAdapter(RolloutPhase), "ml_bom": TypeAdapter(dict[str, MlBomEntry]),
+                  "ml_bom_signature": TypeAdapter(str), "model_eval": TypeAdapter(dict[str, ModelEvalStatus]),
+                  "human_queue_tightening": TypeAdapter(QueueTightening)}
+
+
+def _fits(field: str, value) -> bool:
+    try:
+        _LEGACY_SHAPES[field].validate_python(value)
+    except ValidationError:
+        return False
+    return True
 
 
 class ReviewReport(BaseModel):
@@ -350,7 +362,8 @@ class ReviewReport(BaseModel):
     def _metadata_out_of_the_bias_audit(cls, data):
         """A report written before docs/adr/0009-report-metadata.md held its metadata in bias_audit: read it into the
         fields and out of the audit, so an old report and a new one read alike. The counts and tools_ran are dropped,
-        since the report's own lists give them; a backlog recorded as "unknown" is None."""
+        since the report's own lists give them; a backlog recorded as "unknown" is None, and an old value that does not
+        have its field's shape reads as not recorded rather than failing the report."""
         if not isinstance(data, dict) or not isinstance(data.get("bias_audit"), dict):
             return data
         audit = dict(data["bias_audit"])
@@ -359,11 +372,12 @@ class ReviewReport(BaseModel):
             return data
         data = {**data, "bias_audit": audit}
         for key in ("rollout_phase", "ml_bom", "ml_bom_signature", "model_eval"):
-            if key in legacy:
-                data.setdefault(key, legacy[key])
-        if {"human_queue_backlog", "human_queue_tightened", "human_alpha_threshold"} <= legacy.keys():
+            if key in legacy and key not in data and _fits(key, legacy[key]):
+                data[key] = legacy[key]
+        if {"human_queue_backlog", "human_queue_tightened", "human_alpha_threshold"} <= legacy.keys() and "human_queue_tightening" not in data:
             backlog = legacy["human_queue_backlog"]
-            data.setdefault("human_queue_tightening", {"backlog": None if backlog == "unknown" else backlog,
-                                                       "tightened": bool(legacy["human_queue_tightened"]),
-                                                       "alpha_threshold": legacy["human_alpha_threshold"]})
+            tightening = {"backlog": None if backlog == "unknown" else backlog, "tightened": bool(legacy["human_queue_tightened"]),
+                          "alpha_threshold": legacy["human_alpha_threshold"]}
+            if _fits("human_queue_tightening", tightening):
+                data["human_queue_tightening"] = tightening
         return data

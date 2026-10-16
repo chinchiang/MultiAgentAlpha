@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from mara.schemas import LEGACY_METADATA, ReviewReport
+from mara.schemas import LEGACY_METADATA, MlBomEntry, ModelEvalStatus, ReviewReport
 
 
 def _as_written_before(report: ReviewReport, *, signature: str | None = None) -> dict:
@@ -43,6 +43,44 @@ def test_a_report_written_before_reads_as_the_same_report(mock_report):
     old = _as_written_before(report)
     assert set(LEGACY_METADATA) - {"ml_bom_signature"} <= set(old["bias_audit"])
     assert ReviewReport.model_validate(old) == report
+
+
+def _with_metadata(report: ReviewReport) -> ReviewReport:
+    """`report` with every metadata field holding something: a self-hosted model the BOM knows, and one family's
+    red-team evaluation, under the shadow phase."""
+    return report.model_copy(update={
+        "rollout_phase": "shadow",
+        "ml_bom": {"glm-reviewer": MlBomEntry(model_id="glm-4.7", status="complete", component="glm", version="4.7", sha256="a" * 64),
+                   "local": MlBomEntry(model_id="local-1", status="pending")},
+        "model_eval": {"glm": ModelEvalStatus(date="2026-10-01", mode="live", status="pass"), "gemini": ModelEvalStatus()},
+    })
+
+
+def test_a_report_written_before_with_every_metadata_recorded_reads_as_the_same_report(mock_report):
+    _, report = mock_report
+    report = _with_metadata(report)
+    assert ReviewReport.model_validate(_as_written_before(report, signature="verified")) == report.model_copy(
+        update={"ml_bom_signature": "verified"})
+
+
+@pytest.mark.parametrize("key, value", [
+    ("rollout_phase", "beta"),
+    ("ml_bom", {"glm-reviewer": {"status": "complete"}}),  # no model id
+    ("model_eval", {"glm": "pass"}),
+    ("ml_bom_signature", 5),
+    ("human_queue_backlog", "lots"),
+    ("human_alpha_threshold", "high"),
+])
+def test_an_old_value_of_another_shape_reads_as_not_recorded(mock_report, key, value):
+    """The workbench refuses a report that does not validate, so one odd old value must not cost the run its report."""
+    _, report = mock_report
+    old = _as_written_before(_with_metadata(report), signature="verified")
+    old["bias_audit"][key] = value
+    read = ReviewReport.model_validate(old)
+    not_recorded = {"rollout_phase": None, "ml_bom": {}, "model_eval": {}, "ml_bom_signature": None,
+                    "human_queue_backlog": None, "human_alpha_threshold": None}[key]
+    field = "human_queue_tightening" if key.startswith("human_") else key
+    assert getattr(read, field) == not_recorded and not set(LEGACY_METADATA) & set(read.bias_audit)
 
 
 @pytest.mark.parametrize("backlog", [None, 99])
@@ -93,3 +131,24 @@ def test_the_workbench_shows_no_queue_without_a_report():
 
     b = budget({}, None, None)
     assert (b["human_queue_backlog"], b["human_queue_tightened"], b["human_queue_size"], b["tool_results_ingested"]) == (None, False, 0, 0)
+
+
+def test_a_report_that_has_the_field_keeps_it_over_an_old_key(mock_report):
+    _, report = mock_report
+    both = report.model_dump(mode="json")
+    both["rollout_phase"] = "blocking"
+    both["bias_audit"]["rollout_phase"] = "shadow"
+    read = ReviewReport.model_validate(both)
+    assert read.rollout_phase == "blocking" and "rollout_phase" not in read.bias_audit
+
+
+def test_report_md_names_each_tool_that_ran_once(mock_report):
+    """A live review given pre-recorded SARIF runs gitleaks again (docs/adr/0007-review-status-and-gate.md), so a tool can
+    have two health entries."""
+    from mara.report.markdown_out import render_markdown
+
+    _, report = mock_report
+    health = [{"tool": "gitleaks", "ran": True, "note": "pre-recorded"}, {"tool": "gitleaks", "ran": True, "note": "re-run"},
+              {"tool": "semgrep", "ran": False, "note": "missing"}]
+    md = render_markdown(report.model_copy(update={"tool_health": health}))
+    assert f"Tools that ran: gitleaks · {len(report.tool_results)} result(s)" in md.splitlines()

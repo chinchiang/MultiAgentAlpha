@@ -104,7 +104,7 @@ def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: P
     pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out, progress=progress)
     event = None
     if psirt_event:
-        # read before the review, and handed to it: the notifications are built once, so the bias audit counts these
+        # read before the review, and handed to it: the notifications are built once, and the report's psirt holds these
         try:
             event = json.loads(psirt_event.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:

@@ -76,7 +76,7 @@ def render_markdown(r: ReviewReport) -> str:
         "",
         "These findings remain unresolved until explicitly triaged; model silence does not clear them.",
         "",
-        f"Tools that ran: {', '.join(sorted(t['tool'] for t in r.tool_health if t.get('ran'))) or 'none'} · {len(r.tool_results)} result(s)",
+        f"Tools that ran: {', '.join(sorted({t['tool'] for t in r.tool_health if t.get('ran')})) or 'none'} · {len(r.tool_results)} result(s)",
         "",
     ]
     for tr in r.tool_results:

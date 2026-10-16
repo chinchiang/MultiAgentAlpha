@@ -47,7 +47,7 @@ class Pipeline:
         self.progress = progress if progress is not None else Progress()
         self.out_dir = out_dir or resolve("out")  # the workspace, like `mara review --out`
         self.providers: dict[str, Provider] = {m.name: make_provider(m, mock_fixtures) for m in cfg.models}
-        # Counters (default 0) plus a few labels and nested tables; becomes the report's bias_audit
+        # Counters (default 0) and the jury's statistics; becomes the report's bias_audit (GLOSSARY.md: bias audit)
         self.audit = Audit()
         self.log: list[str] = []
         # G-11: the human queue tightens when its ticket backlog is over the limit (never loosens)

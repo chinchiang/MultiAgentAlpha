@@ -44,9 +44,9 @@ Records expire after `validity_days` (365) and are invalidated by a new curricul
   SSVC gives the action (Track, Track*, Attend, Act). Report section 11.1.
 - The bias audit at the end of every `report.md` is the integrity record of the run:
   `pairwise_family_agreement` (high agreement can mean correlated errors, not more evidence),
-  `dropped_unverified_provenance`, canary hits (prompt-injection attempts through the code),
-  `human_queue_*` and `human_alpha_threshold`, `psirt_notifications`, `ml_bom` status. Report
-  chapter 13; `src/mara/bias/`.
+  `dropped_unverified_provenance`, canary hits (prompt-injection attempts through the code). The
+  human queue's tightening and the ML-BOM status are report metadata beside it: `report.md` shows
+  them in its human queue and model provenance sections. Report chapter 13; `src/mara/bias/`.
 - Exercise: open `out/report.md` from `mara review fixtures/vuln-sample --provider mock …` and
   explain three findings by tier, one rejected finding by reason, and every bias-audit line.
 

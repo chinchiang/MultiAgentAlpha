@@ -144,7 +144,11 @@ _Avoid_: blocker, critical finding (severity alone does not block)
 
 **Bias audit**:
 The report's counts and statistics of how the review went: every exchange's reply outcomes and canary echoes by role and family, what the pipeline dropped, merged or excluded on the way, the jury's agreement and position flips, and the exchange version the counts follow. It holds no report metadata: the rollout phase, the human queue's tightening and the ML-BOM and model-evaluation status are fields of the report of their own.
-_Avoid_: audit alone (the Alternative Annotator Test and the governance checks are audits too), metadata
+_Avoid_: audit alone (the Alternative Annotator Test and the governance checks are audits too), report metadata (the rest of the report)
+
+**Report metadata**:
+What a report records about the circumstances of its review rather than about how the review went: the rollout phase, the human queue's tightening, the ML-BOM status and signature, and the model families' red-team evaluations. Each is a field of the report of its own, none is in the bias audit, and a report written before a value was recorded reads it as not recorded.
+_Avoid_: bias audit, config (the config is what was asked for; the metadata are what was in force)
 
 ## Exports
 
