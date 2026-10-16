@@ -70,6 +70,15 @@ def test_a_count_the_table_does_not_declare_is_refused():
     assert set(ROLES) - set(CANARY_ROLES) == {"judge"}, "a judge sees no bundle, so it gets no canary"
 
 
+
+def test_a_count_is_read_by_a_name_the_table_declares():
+    """The pipeline read the skeptic's and red team's own counts with dict.get, so a misspelt name read 0 unnoticed."""
+    rec = ballot("skeptic", "glm", 2, counts={"refuted": 1})
+    assert (rec.count("refuted"), rec.count("unverified_controls"), rec.count("findings")) == (1, 0, 2)
+    assert ballot("skeptic", "glm", 2, exchange.UNPARSEABLE).count("refuted") == 0, "a voided reply wrote no counts of its own"
+    with pytest.raises(ValueError, match="declares no count"):
+        rec.count("unverified_control")
+
 def test_only_the_extraction_roles_count_their_tokens():
     a = Audit()
     a.record(extraction("reviewer", "glm", input_tokens=5, output_tokens=2))
