@@ -47,6 +47,10 @@ A role that produces new items from repository data (reviewer, context); an empt
 A role that rules on given findings one by one (skeptic, red team, judge); an empty reply from it is invalid output, since a ballot cannot abstain.
 _Avoid_: verdict role
 
+**Ballot round**:
+The part of a review in which every ballot role rules on the deduplicated findings: the skeptic, then the red team on the findings the skeptic did not refute, then each judge in a forward and a mirrored reverse pass. A voided reply worth it is asked once more. Its result, the ballots (the skeptic's verdicts, the red team's notes and the judges' votes), is what the jury outcome is scored from.
+_Avoid_: L3/L4 (layer numbers, not a concept), jury round (the jury is the judges alone)
+
 **Truncation**:
 A reply the vendor stopped at the output limit; a budget problem, never charged to the model, and never evidence of a canary echo.
 _Avoid_: cut-off for unparseable replies
@@ -66,7 +70,7 @@ _Avoid_: block, rejection
 
 **Decision**:
 One adjudicator's ruling, true positive or false positive, on one human-queue key (人工裁決). A well-formed decision is one whose record is internally consistent, whoever made it and whatever it is later compared with.
-_Avoid_: adjudication, label (a label is a calibration sample's answer key), verdict (a judge's vote)
+_Avoid_: adjudication, label (a label is a calibration sample's answer key), verdict (a skeptic's or judge's ruling on one finding)
 
 **Adjudicator**:
 The person who made a decision, named by the decision event on the ticket.

@@ -5,7 +5,7 @@
 ```
 請依報告第十部的 G-1 到 G-13，寫 scripts/governance_check.py，對本 repo 與其設定做可自動判定的檢查；無法自動判定的項目輸出「需人工確認」並說明需要什麼證據。至少涵蓋：
 
-- G-2：config 中家族數 ≥ 3、judges 家族數 ≥ 3、reverse pass 未被關閉（檢查 pipeline 是否有停用旗標）、judge 視圖不含分數（對 bias/blinding.py 的輸出做結構檢查）。
+- G-2：config 中家族數 ≥ 3、judges 家族數 ≥ 3、reverse pass 未被關閉（以 mock provider 對 config 的 panel 執行 ballot round，確認每個 judge 家族對每個 finding 各投恰好一張 forward 與一張順序鏡像的 reverse 票，且 MaraConfig 沒有可停用它的欄位）、judge 視圖不含分數（對 bias/blinding.py 的輸出做結構檢查）。
 - G-3：所有非 mock 模型的 data_residency 為 on_prem 或 vendor_api_zdr；無 fable/mythos 模型。
 - G-5、G-7：tools/versions.lock 存在且每個工具有 SHA-256；若有 ML-BOM（CycloneDX）檔，檢查其中列出每個自架權重的雜湊。
 - G-6：.github/workflows/*.yml 中所有 uses: 為 40 字元 SHA；無 pull_request_target；頂層 permissions 為空或只讀。

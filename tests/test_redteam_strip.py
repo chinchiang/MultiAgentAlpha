@@ -115,9 +115,8 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
     import json as jsonlib
 
     from mara.pipeline import Pipeline
-    from mara.schemas import RedTeamNote
     from mara.tools.runner import ToolRun
-    from tests.reply_records import ballot
+    from tests.fake_panel import Panel, items
 
     root = Path(__file__).resolve().parents[1]
     vector = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
@@ -139,13 +138,9 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
     (tmp_path / "app.py").write_text("unsafe()\n")
     pipe.providers = {n: Reply(p.spec) for n, p in pipe.providers.items()}
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    def stripped_once(p, ctx, fs):
-        # a note for every finding, the first one's preconditions stripped of exploit code
-        notes = [RedTeamNote(finding_id=f.id, exploitable="conditional", preconditions=redteam.EXPLOIT_STRIP_PLACEHOLDER if i == 0 else "none",
-                             source_family=p.family, source_model=p.model) for i, f in enumerate(fs)]
-        return notes, ballot("redteam", p.family.value, len(fs), counts={"exploit_code_stripped": 1})
-
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", stripped_once)
+    # a note for every finding, the first one's preconditions a shell command
+    Panel.seated_in(pipe).always("redteam", items(lambda i: {"exploitable": "conditional",
+                                                             "preconditions": "$ curl http://target/x" if i == "F-0001" else "none"}))
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["redteam_exploit_code_stripped"] == 1
     assert "redteam_exploit_code_stripped" in report.incomplete_reasons
