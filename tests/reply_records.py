@@ -9,7 +9,7 @@ reports."""
 from __future__ import annotations
 
 from mara.audit import ROLES, ReplyRecord, Role
-from mara.exchange import ERROR, OK, TRUNCATION
+from mara.exchange import ERROR, OK, TRUNCATION, Kind
 from mara.schemas import PassId
 
 PROVIDER_ERROR = "provider_http_error:503"  # what exchange.call gives a failed call
@@ -19,12 +19,12 @@ _COUNTS: dict[Role, tuple[str, ...]] = {"reviewer": ("unverified_quotes",), "con
                                         "skeptic": ("unverified_controls", "refuted"), "redteam": ("exploit_code_stripped",), "judge": ()}
 
 
-def _provider_code(kind: str) -> tuple[str, ...]:
+def _provider_code(kind: Kind) -> tuple[str, ...]:
     """The log code exchange.call gives the reply: the provider's code for an error, none otherwise."""
     return (PROVIDER_ERROR,) if kind == ERROR else ()
 
 
-def _check_reply(kind: str, fields: dict) -> None:
+def _check_reply(kind: Kind, fields: dict) -> None:
     # a truncation is never an echo (exchange.Canary), and a failed call has no text to echo and no usage
     if fields.get("canary_echoes") and kind in (TRUNCATION, ERROR):
         raise ValueError(f"a reply of kind {kind} carries no canary echo")
@@ -32,7 +32,7 @@ def _check_reply(kind: str, fields: dict) -> None:
         raise ValueError("a failed call carries no tokens")
 
 
-def extraction(role: Role, family: str, kind: str = OK, *, wrong_shape: bool = False, counts: dict[str, int] | None = None,
+def extraction(role: Role, family: str, kind: Kind = OK, *, wrong_shape: bool = False, counts: dict[str, int] | None = None,
                log_codes: tuple[str, ...] = (), **fields) -> ReplyRecord:
     """A reviewer's or the context agent's record. `wrong_shape`: an ok reply whose answer is not the object asked for,
     voided as one invalid item; `invalid_items` are the items an ok reply the agent used could not read."""
@@ -54,7 +54,7 @@ def extraction(role: Role, family: str, kind: str = OK, *, wrong_shape: bool = F
                        **fields)
 
 
-def ballot(role: Role, family: str, findings: int, kind: str = OK, *, missing: int = 0, pass_id: PassId = "forward",
+def ballot(role: Role, family: str, findings: int, kind: Kind = OK, *, missing: int = 0, pass_id: PassId = "forward",
            counts: dict[str, int] | None = None, log_codes: tuple[str, ...] = (), **fields) -> ReplyRecord:
     """A skeptic's, red team's or judge's record for one call over `findings` findings. `missing`: the findings an ok
     reply ruled on not at all, each an invalid item that voids it."""
