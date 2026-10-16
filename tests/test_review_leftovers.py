@@ -63,7 +63,6 @@ def test_no_finding_is_left_alone_in_a_judge_chunk(tmp_path, monkeypatch):
     assert calls and {len(c) for c in calls} == {13}
 
 
-
 def test_the_judge_log_line_names_each_tag_of_its_two_passes_once(tmp_path, monkeypatch):
     """The forward and reverse pass of one chunk share a log line: a tag either pass carries is named once, in the
     order mara.audit.log_tags gives."""
@@ -73,16 +72,19 @@ def test_the_judge_log_line_names_each_tag_of_its_two_passes_once(tmp_path, monk
     monkeypatch.setattr("mara.pipeline.judge.run_judge",
                         lambda p, batch, pass_id, self_ids=None: ([], ballot("judge", p.family.value, len(batch), kinds[pass_id],
                                                                              pass_id=pass_id)))
-    pipe.run_jury(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings, {},
-                  {f.id: {ModelFamily.ANTHROPIC} for f in findings})
-    judge_lines = [line for line in pipe.log if line.startswith("L4: judge ")]
-    assert judge_lines and all(line.endswith("votes [REFUSED] [TRUNCATED]") for line in judge_lines), judge_lines
+
+    def judge_lines():
+        pipe.log.clear()
+        pipe.run_jury(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings, {},
+                      {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+        return [line for line in pipe.log if line.startswith("L4: judge ")]
+
+    lines = judge_lines()
+    assert lines and all(line.endswith("votes [REFUSED] [TRUNCATED]") for line in lines), lines
     kinds["forward"] = exchange.REFUSAL
-    pipe.log.clear()
-    pipe.run_jury(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings, {},
-                  {f.id: {ModelFamily.ANTHROPIC} for f in findings})
-    judge_lines = [line for line in pipe.log if line.startswith("L4: judge ")]
-    assert judge_lines and all(line.endswith("votes [REFUSED]") for line in judge_lines), judge_lines
+    lines = judge_lines()
+    assert lines and all(line.endswith("votes [REFUSED]") for line in lines), lines
+
 
 # ------------------------------------------------------------------ control citations outside the target
 
