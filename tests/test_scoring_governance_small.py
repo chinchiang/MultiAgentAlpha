@@ -16,13 +16,14 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara import govdocs  # noqa: E402
 from mara import model_eval as me  # noqa: E402
+from mara.ballot_round import Ballots  # noqa: E402
 from mara.config import MaraConfig  # noqa: E402
-from mara.pipeline import Pipeline  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
-from mara.schemas import ConsensusResult, EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, ReviewReport  # noqa: E402
+from mara.schemas import Finding, JudgeVote, ModelFamily, Provenance, ReviewReport  # noqa: E402
+from mara.scoring import jury  # noqa: E402
 from mara.scoring.consensus import weighted_consensus  # noqa: E402
 from mara.scoring.dimension_score import score_dimension  # noqa: E402
-from mara.scoring.outcome import OutcomePolicy, OutcomeSignals, decide  # noqa: E402
+from tests import scored_rows  # noqa: E402
 
 VEC = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
 ANTHROPIC = {"provider": "anthropic", "model": "claude-opus-5", "data_residency": "vendor_api_zdr"}
@@ -66,7 +67,9 @@ def test_a_judge_votes_with_its_own_weight_not_a_same_family_reviewers(tmp_path,
     votes = [_vote(ModelFamily.ANTHROPIC, p, "true_positive") for p in ("forward", "reverse")] + \
             [_vote(ModelFamily.DEEPSEEK, p, "false_positive") for p in ("forward", "reverse")] + \
             [_vote(ModelFamily.NEMOTRON, p, "true_positive") for p in ("forward", "reverse")]
-    (c,) = Pipeline(cfg, out_dir=tmp_path / "out").score([_finding()], {"F-1": {ModelFamily.NEMOTRON}}, {}, {}, votes, [])
+    ballots = Ballots(skeptic={}, unchallenged=frozenset(), redteam={}, votes=votes)
+    (c,) = jury.score([_finding()], {"F-1": {ModelFamily.NEMOTRON}}, ballots, [], jury=jury.Jury.from_config(cfg),
+                      policy=scored_rows.policy(cfg)).rows
     flagged = [v.model_copy(update={"self_family": v.judge_family == ModelFamily.NEMOTRON}) for v in votes]
     expected = weighted_consensus(flagged, {ModelFamily.ANTHROPIC: 2.0, ModelFamily.DEEPSEEK: 1.0, ModelFamily.NEMOTRON: 1.0},
                                   cfg.gate.self_judge_discount)[0]
@@ -77,11 +80,8 @@ def test_a_judge_votes_with_its_own_weight_not_a_same_family_reviewers(tmp_path,
 
 
 def _awaiting():
-    # tier C: every family confirmed it but reachability went unargued; at Critical it needs a human (Pipeline.score())
-    return ConsensusResult(finding_id="F-1", weighted_score=1.0, votes_tp=6, votes_fp=0, votes_human=0, families_agreeing=[],
-                           tool_corroborated=False, skeptic_refuted=False, position_consistent=True, tier=EvidenceTier.C,
-                           cvss4_score=9.3, cvss4_severity="Critical", ssvc_decision="Act", accepted=False,
-                           needs_human=True, human_reasons=["tier_c_high"])
+    # tier C: confirmed, but its reachability went unargued; at Critical it needs a human
+    return scored_rows.row("tier_c", severity="Critical")
 
 
 def test_a_finding_awaiting_a_human_is_not_counted_or_explained_as_rejected():
@@ -95,18 +95,9 @@ def test_a_finding_awaiting_a_human_is_not_counted_or_explained_as_rejected():
 
 
 def _under_rejection_review():
-    """A rejected finding with policy P8 in force, as Pipeline.score() writes it (docs/adr/0005-jury-outcome.md)."""
-    # tier A: a tool corroborates it and only the finder's family confirmed it (Pipeline.score() on the three-family panel)
-    s = OutcomeSignals(tier=EvidenceTier.A, score=0.2, severity="High", provenance_verified=True, skeptic_refuted=False,
-                       skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=0.5, votes_tp=2, votes_fp=4,
-                       votes_human=0, position_consistent=True)
-    policy = OutcomePolicy(accept_threshold=0.6, alpha_threshold=0.4, exclude_tier_c=False, tier_c_min_severity="High",
-                           unsupervised_reject_allowed=False)
-    return ConsensusResult(finding_id="F-1", weighted_score=s.score, votes_tp=s.votes_tp, votes_fp=s.votes_fp, votes_human=0,
-                           families_agreeing=[ModelFamily.ANTHROPIC, ModelFamily.TOOL], tool_corroborated=True, skeptic_refuted=False,
-                           position_consistent=True, tier=s.tier, cvss4_score=8.7, cvss4_severity="High", ssvc_decision="Attend",
-                           agreement_proxy=s.alpha,
-                           **decide(s, policy).consensus_fields())
+    """A rejected finding while policy P8 does not allow unsupervised rejection (docs/adr/0005-jury-outcome.md): tier A, a
+    tool corroborates it and one of three independent judge families confirms it, so the jury needs a fourth judge."""
+    return scored_rows.row("rejected")
 
 
 def _report_of(c):
@@ -125,7 +116,7 @@ def test_the_report_says_a_rejection_is_under_review_until_a_human_rules_on_it()
     c = _under_rejection_review()
     _, report = _report_of(c)
     line = next(x for x in render_markdown(report).splitlines() if x.startswith("- F-1 · t ·"))
-    assert line.endswith("· consensus 0.2 below threshold · rejection review queued")
+    assert line.endswith("· consensus 0.3333 below threshold · rejection review queued")
     ruled = c.model_copy(update={"human_decision": {"decision": "false_positive", "key": "k", "issue": 7, "decided_by": "alice",
                                                     "decided_at": "2026-10-14T00:00:00Z"}})
     _, report = _report_of(ruled)

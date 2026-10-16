@@ -183,14 +183,10 @@ def _with_a_fourth_judge(cfg, votes, finders):
     independent judges for the quorum. Without a rejection there is no rejection review either."""
     from collections import defaultdict
 
-    from mara.config import MaraConfig
     from mara.schemas import ModelFamily
+    from tests.scored_rows import four_judges
 
-    raw = cfg.model_dump(mode="json")
-    raw["models"].append({"name": "mock-m", "family": "mistral", "provider": "mock", "model": "mock-mistral",
-                          "data_residency": "on_prem"})
-    raw["roles"]["judges"].append("mock-m")
-    panel = MaraConfig.model_validate(raw, context={"skip_policies": True})
+    panel = four_judges(cfg)
     judges = {m.family for m in panel.models if m.name in panel.roles.judges}
     by_finding = defaultdict(list)
     for v in votes:
@@ -212,9 +208,9 @@ class _Variant(NamedTuple):
     patterns: dict[str, str]  # finding id -> the vote pattern it was re-cast to
 
 
-def _variants(report, cfg, tmp_path) -> list[_Variant]:
+def _variants(report, cfg) -> list[_Variant]:
     """Consensus rows scoring really produces: the seeded review's findings, skeptic, red team and tool results scored
-    again by Pipeline.score with the judges' votes re-cast, each finding taking every vote pattern in turn, on the mock
+    again by jury scoring (mara.scoring.jury) with the judges' votes re-cast, each finding taking every vote pattern in turn, on the mock
     panel, on the panel with a fourth judge, and on that panel with P8 unlocked. Tier, score, votes and jury outcome therefore agree as scoring writes
     them; no rule of decide() or of tiering is copied here. Every other variant carries usable human rulings, a false
     positive on every third finding and a true positive on the next (a ruling binds to content, whatever the jury
@@ -224,12 +220,14 @@ def _variants(report, cfg, tmp_path) -> list[_Variant]:
     not depend on them."""
     from collections import defaultdict
 
+    from mara.ballot_round import Ballots
     from mara.context.repo_map import build_context
-    from mara.pipeline import Pipeline
     from mara.report.human_queue_out import build_queue
-    from mara.review_status import assess
+    from mara.review_status import GatePolicy, assess
+    from mara.scoring import jury
     from mara.tools.sarif import ToolResult
     from tests.review_facts import FACTS
+    from tests.scored_rows import policy
 
     finders = {f.id: set(f.finder_families) for f in report.findings}
     skeptic, redteam = {v.finding_id: v for v in report.skeptic}, {n.finding_id: n for n in report.redteam}
@@ -241,20 +239,22 @@ def _variants(report, cfg, tmp_path) -> list[_Variant]:
     variants = []
     for name, panel, cast in (("mock", cfg, report.votes), ("four judges", four, four_cast),
                               ("four judges, P8 unlocked", unlocked, four_cast)):
-        scorer = Pipeline(panel, out_dir=tmp_path)  # its own audit: scoring writes position_flips into it
+        scorer, outcome_policy, gate_policy = jury.Jury.from_config(panel), policy(panel), GatePolicy.from_config(panel)
         by_finding = defaultdict(list)
         for v in cast:
             by_finding[v.finding_id].append(v)
         for k in range(len(_PATTERNS)):
             patterns = {f.id: _PATTERNS[(i + k) % len(_PATTERNS)] for i, f in enumerate(report.findings)}
             votes = [v for f in report.findings for v in _recast(by_finding[f.id], patterns[f.id])]
-            consensus = scorer.score(report.findings, finders, skeptic, redteam, votes, tools, tool_path_prefix=prefix)
+            ballots = Ballots(skeptic=skeptic, unchallenged=frozenset(), redteam=redteam, votes=votes)
+            consensus = jury.score(report.findings, finders, ballots, tools, jury=scorer, policy=outcome_policy,
+                                   tool_path_prefix=prefix).rows
             if k % 2:
                 for i, c in enumerate(consensus):
                     ruling = ("false_positive", "true_positive", None)[i % 3]
                     c.human_decision = {"decision": ruling, **_DECIDED} if ruling else None
             # as Pipeline.run writes them from its assessment; the blocking reasons depend on no fact of the review
-            blocking = assess(FACTS, consensus, tools, report.dimensions, scorer.outcome_policy, scorer.gate_policy).blocking_reasons
+            blocking = assess(FACTS, consensus, tools, report.dimensions, outcome_policy, gate_policy).blocking_reasons
             for c in consensus:
                 c.blocking_reason = blocking.get(c.finding_id)
             v = report.model_copy(update={"votes": votes, "consensus": consensus})
@@ -263,10 +263,10 @@ def _variants(report, cfg, tmp_path) -> list[_Variant]:
     return variants
 
 
-def test_with_the_human_queue_enabled_code_scanning_sees_what_it_saw_before(mock_report, tmp_path):
+def test_with_the_human_queue_enabled_code_scanning_sees_what_it_saw_before(mock_report):
     pipe, report = mock_report
     assert pipe.cfg.human_queue.enabled
-    variants = _variants(report, pipe.cfg, tmp_path)
+    variants = _variants(report, pipe.cfg)
     seeded = {c.finding_id: c.model_dump(exclude={"human_decision", "blocking_reason"}) for c in report.consensus}
     as_cast = {c.finding_id: c.model_dump(exclude={"human_decision", "blocking_reason"}) for v in variants if v.panel == "mock"
                for c in v.report.consensus if v.patterns[c.finding_id] == "as_cast"}
@@ -286,11 +286,11 @@ def test_with_the_human_queue_enabled_code_scanning_sees_what_it_saw_before(mock
     assert any(r.get("suppressions") for r in results), "a human false positive is dismissed"
 
 
-def test_a_rejection_under_review_is_a_note_even_when_the_human_queue_is_disabled(mock_report, tmp_path):
+def test_a_rejection_under_review_is_a_note_even_when_the_human_queue_is_disabled(mock_report):
     """Like a finding needing a human: P8's look at a rejected finding is the finding's state, not the queue's."""
     pipe, report = mock_report
     under_review = 0
-    for v in _variants(report, pipe.cfg, tmp_path):
+    for v in _variants(report, pipe.cfg):
         waiting = {c.finding_id for c in v.report.consensus if c.in_rejection_review}
         results = _results(v.report.model_copy(update={"human_queue": []}))
         assert waiting <= set(results) and {results[fid]["level"] for fid in waiting} <= {"note"}, v.panel

@@ -84,6 +84,14 @@ _Avoid_: matching decision, applied decision
 A well-formed, bound decision with no contradicting decision on its key, made by a trained adjudicator whenever training is required; the only kind of decision that counts as ground truth (calibration labels, the Alternative Annotator Test, false-positive rates). A decision that is well-formed but not usable still answers its ticket: no new ticket is filed for its key.
 _Avoid_: valid decision (ambiguous between well-formed and usable)
 
+**Jury**:
+The judges of a review as their votes are counted: one judge family each, the weight each family's vote carries, the discount on a vote from a family among the finding's finders, and how many families independent of its finders a finding needs for a quorum.
+_Avoid_: panel (the panel is every model the config names, reviewers included), judges (the judges are the models; the jury is how their votes count)
+
+**Jury signals**:
+What the pipeline measures about one finding before it concludes anything: its evidence tier, weighted score and CVSS severity, whether its provenance is verified, whether the skeptic refuted it or left it unchallenged, whether enough independent judges voted, whether every judge family gave both passes, and their agreement and position consistency. They come from the finding's ballots, its finders, the tool results and the jury; the jury outcome is decided from them alone.
+_Avoid_: consensus (the weighted score is one of them), votes (the votes are one input)
+
 **Jury outcome**:
 What the pipeline itself concluded about a finding from the judges, skeptic, tools and evidence tier: accepted, rejected, dropped, or needing a human.
 _Avoid_: consensus (the weighted score is one input to it), verdict

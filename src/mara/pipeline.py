@@ -8,7 +8,6 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-from collections import Counter, defaultdict
 from dataclasses import asdict
 from pathlib import Path
 
@@ -16,32 +15,24 @@ from . import ballot_round, exchange
 from .agents import base, context_agent, reviewer
 from .agents.context_agent import ContextView
 from .audit import Audit, log_tags
-from .bias.diversity import pairwise_family_agreement
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
-from .identity import NEAR_LINES, norm_cwe, norm_path
+from .identity import norm_path
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
 from .review_status import GatePolicy, ReviewFacts, assess, secret_preflight
 from .schemas import (
-    SEVERITY_ORDER,
     ConsensusResult,
     Finding,
-    JudgeVote,
     ModelFamily,
-    RedTeamNote,
     ReviewReport,
-    SkepticVerdict,
 )
-from .scoring import cvss4
-from .scoring.consensus import krippendorff_alpha_nominal, weighted_consensus
+from .scoring import jury
 from .scoring.dimension_score import score_dimension
 from .scoring.idcheck import check_finding_refs
-from .scoring.outcome import OutcomePolicy, OutcomeSignals, decide
-from .scoring.tiers import assign_tier, ssvc_decision
+from .scoring.outcome import OutcomePolicy
 from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
-from .tools.sarif import ToolResult
 from .workspace import check_outside, resolve
 
 
@@ -65,6 +56,7 @@ class Pipeline:
         # (docs/adr/0007-review-status-and-gate.md)
         self.outcome_policy = OutcomePolicy.from_config(cfg, alpha_threshold=alpha_threshold, exclude_tier_c=exclude_tier_c)
         self.gate_policy = GatePolicy.from_config(cfg)
+        self.jury = jury.Jury.from_config(cfg)
         from .mlbom import status_for_config
 
         self.ml_bom_status = status_for_config(cfg)
@@ -157,96 +149,6 @@ class Pipeline:
             else:
                 finders[match.id].add(f.source_family)
         return kept, finders
-
-    # ------------------------------------------------------------------ L5
-    def score(
-        self,
-        findings: list[Finding],
-        finders: dict[str, set[ModelFamily]],
-        skeptic_by_id: dict[str, SkepticVerdict],
-        red_by_id: dict[str, RedTeamNote],
-        votes: list[JudgeVote],
-        tool_results: list[ToolResult],
-        skeptic_abstained_ids: frozenset[str] = frozenset(),
-        tool_path_prefix: str = "",
-    ) -> list[ConsensusResult]:
-        # a family's vote carries its judge's weight (P3: one judge per family), not that of whichever
-        # same-family model happens to be listed last - a reviewer-only model used to replace it
-        spec = {m.name: m for m in self.cfg.models}
-        weights = {spec[n].family: spec[n].weight for n in self.cfg.roles.judges}
-        by_finding: dict[str, list[JudgeVote]] = defaultdict(list)
-        for v in votes:
-            by_finding[v.finding_id].append(v)
-        policy = self.outcome_policy
-        results: list[ConsensusResult] = []
-        flips = 0
-        for f in findings:
-            raw_votes = by_finding.get(f.id, [])
-            counts = Counter((v.judge_family, v.pass_id) for v in raw_votes)
-            configured = {self._p(n).family for n in self.cfg.roles.judges}
-            valid_families = {fam for fam in configured if counts[(fam, "forward")] == counts[(fam, "reverse")] == 1}
-            fv = [v.model_copy(update={"self_family": v.judge_family in finders[f.id]}) for v in raw_votes if v.judge_family in valid_families]
-            independent = valid_families - finders[f.id]
-            quorum_ok = len(independent) >= self.cfg.gate.min_independent_judges
-
-            score, tp, fp, human, agreeing, consistent = weighted_consensus(fv, weights, self.cfg.gate.self_judge_discount)
-            flips += int(not consistent and bool(fv))
-            alpha = _agreement_proxy(fv)
-            sk = skeptic_by_id.get(f.id)
-            refuted = bool(sk and sk.verdict == "refuted")
-            abstained = f.id in skeptic_abstained_ids
-            prov_ok = bool(f.provenance) and all(p.verified for p in f.provenance)
-            corroborated = _tool_corroborates(f, tool_results, tool_path_prefix)
-            fams = set(agreeing) | (finders[f.id] if score >= self.cfg.gate.accept_threshold else set())
-            if corroborated:
-                fams.add(ModelFamily.TOOL)
-            tier = assign_tier(
-                provenance_verified=prov_ok,
-                tool_corroborated=corroborated,
-                families_agreeing=sorted(fams, key=lambda x: x.value),
-                skeptic_refuted=refuted,
-                skeptic_abstained=abstained,
-                reachability=f.reachability,
-                consensus_score=score,
-                accept_threshold=self.cfg.gate.accept_threshold,
-            )
-            # every Finding's vector was fully parsed and scored when it was built (schemas.Finding._cvss): a model
-            # finding with an invalid vector is dropped at L2 as an invalid item, so scoring here cannot fail
-            num = cvss4.score(f.cvss4_vector)
-            sev = cvss4.severity(num)
-            # Keep mathematical CVSS severity separate from the jury's operational opinion.
-            family_bands = [max((v.severity_band for v in fv if v.judge_family == fam), key=SEVERITY_ORDER.index) for fam in valid_families]
-            operational = sorted(family_bands, key=SEVERITY_ORDER.index)[len(family_bands) // 2] if family_bands else None
-            rt = red_by_id.get(f.id)
-            ssvc = ssvc_decision(severity=sev, exploitable=rt.exploitable if rt else "unknown", tier=tier)
-            outcome = decide(OutcomeSignals(tier=tier, score=score, severity=sev, provenance_verified=prov_ok, skeptic_refuted=refuted,
-                                            skeptic_abstained=abstained, quorum_ok=quorum_ok, passes_complete=len(fv) == len(raw_votes),
-                                            alpha=alpha, votes_tp=tp, votes_fp=fp, votes_human=human, position_consistent=consistent),
-                             policy)
-            results.append(
-                ConsensusResult(
-                    finding_id=f.id,
-                    weighted_score=score,
-                    votes_tp=tp,
-                    votes_fp=fp,
-                    votes_human=human,
-                    families_agreeing=sorted(fams, key=lambda x: x.value),
-                    tool_corroborated=corroborated,
-                    skeptic_refuted=refuted,
-                    skeptic_abstained=abstained,
-                    position_consistent=consistent,
-                    tier=tier,
-                    cvss4_score=num,
-                    cvss4_severity=sev,
-                    ssvc_decision=ssvc,
-                    **outcome.consensus_fields(),
-                    independent_judges=len(independent),
-                    agreement_proxy=alpha,
-                    operational_severity=operational,
-                )
-            )
-        self.audit["position_flips"] = flips
-        return results
 
     def apply_decisions(self, findings: list[Finding], consensus: list[ConsensusResult], *, target_id: str, revision: str,
                         context_hash: str) -> None:
@@ -353,8 +255,10 @@ class Pipeline:
                                    say=self._say, progress=prog)
         sk_by_id, rt_by_id, votes = ballots.skeptic, ballots.redteam, ballots.votes
         prog.begin("scoring")
-        consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=ballots.unchallenged,
-                               tool_path_prefix=ctx.repo_prefix)
+        scoring = jury.score(findings, finders, ballots, tool_results, jury=self.jury, policy=self.outcome_policy,
+                             tool_path_prefix=ctx.repo_prefix)
+        self.audit["position_flips"] = scoring.position_flips
+        consensus = scoring.rows
         # repository + path below its top level for a committed git target (repo_map.target_identity),
         # so CI, every clone and every calibration run name the same target the same way
         target_id = hashlib.sha256(ctx.identity.encode()).hexdigest()
@@ -382,9 +286,8 @@ class Pipeline:
             c.blocking_reason = assessment.blocking_reasons.get(c.finding_id)
         if assessment.tier_c_blocked_while_tightened:
             self.audit["tier_c_blocked_while_tightened"] = assessment.tier_c_blocked_while_tightened
-        global_alpha = krippendorff_alpha_nominal(_alpha_units(findings, votes))
-        self.audit["global_krippendorff_alpha"] = global_alpha if global_alpha is not None else "n/a"
-        for k, v in pairwise_family_agreement(votes).items():
+        self.audit["global_krippendorff_alpha"] = scoring.global_alpha if scoring.global_alpha is not None else "n/a"
+        for k, v in scoring.family_agreement.items():
             self.audit[f"judge_agreement[{k}]"] = v
         self.audit["tool_results_ingested"] = len(tool_results)
         self.audit["tools_ran"] = ",".join(sorted(tools_ran)) or "none"
@@ -483,26 +386,6 @@ class Pipeline:
         return report
 
 
-def _agreement_proxy(votes: list[JudgeVote]) -> float | None:
-    """Agreement among judges on one finding, treating each (judge, pass) as a rater over the
-    two-unit set {this finding forward, this finding reverse} is degenerate; instead we report
-    the simple share of the modal verdict as a bounded proxy when alpha is undefined."""
-    if len(votes) < 2:
-        return None
-    from collections import Counter
-
-    # Exactly one family-level verdict; split passes are an explicit abstention.
-    per_family = defaultdict(set)
-    for v in votes:
-        per_family[v.judge_family].add(v.verdict)
-    if len(per_family) < 2:
-        # a single rater family agreeing with itself is not "perfect agreement": undefined, like
-        # alpha with fewer than two raters; quorum reasons still gate the acceptance
-        return None
-    c = Counter(next(iter(values)) if len(values) == 1 else "needs_human" for values in per_family.values())
-    modal = c.most_common(1)[0][1]
-    return round((modal / len(per_family) - 1 / 3) / (1 - 1 / 3), 3)  # chance-corrected for 3 categories
-
 
 def calibration_answer_key(target: Path) -> list[dict]:
     """The seeded-secret labels (CWE-798) of a calibration sample, for the secret-preflight exemption.
@@ -523,51 +406,3 @@ def calibration_answer_key(target: Path) -> list[dict]:
     if not is_calibration_answer_key("labels.json", text):
         raise ValueError(f"--calibration-sample: {path} is not a calibration answer key")
     return [lab for lab in json.loads(text)["labels"] if str(lab.get("cwe", "")).upper() == "CWE-798"]
-
-
-def _alpha_units(findings: list[Finding], votes: list[JudgeVote]) -> dict[str, list[str]]:
-    """Krippendorff units for the corpus alpha: one label per judge family per finding, the verdict
-    both of its passes gave. The forward and reverse passes are the same rater seen twice (they exist
-    to measure position bias, counted as position_flips); counted as two raters, a family's
-    agreement with itself passed for agreement between families (two self-consistent families that
-    always disagree scored -0.17 instead of -0.5). A family whose passes differ has no single label
-    for that finding and is missing there, which alpha allows."""
-    by_finding: dict[str, dict[ModelFamily, list[JudgeVote]]] = defaultdict(lambda: defaultdict(list))
-    for v in votes:
-        by_finding[v.finding_id][v.judge_family].append(v)
-    units: dict[str, list[str]] = {}
-    for f in findings:
-        labels: list[str] = []
-        for vs in by_finding[f.id].values():
-            passes = {v.pass_id: v.verdict for v in vs}
-            if len(vs) == 2 and set(passes) == {"forward", "reverse"} and passes["forward"] == passes["reverse"]:
-                labels.append(passes["forward"])
-        units[f.id] = labels
-    return units
-
-
-def _tool_corroborates(f: Finding, tool_results: list[ToolResult], prefix: str = "") -> bool:
-    """A tool result corroborates a finding (tier A) only on the same file, within +-3 lines, with a
-    matching CWE (or none), from a tool that scans the finding's dimension, at level error or
-    warning - the levels that also block as unresolved tool findings; a note is information.
-
-    Same file means the exact path. Tools that ran from the repository top level report paths
-    below it (pre-recorded zizmor: fixtures/vuln-sample/.github/workflows/deploy.yml), so a path
-    that is exactly `prefix/<finding path>` also matches, prefix being the target's own path below
-    the top level. A bare suffix match did not: `main.py` matched `services/billing/main.py`, and a
-    tool hit in another file promoted a single-family finding to tier A."""
-    for t in tool_results:
-        # a tool only corroborates findings in the dimensions it scans for (TOOL_DIMENSIONS):
-        # csp-evaluator emits results without CWEs, and without this guard any such result would
-        # corroborate any finding that happens to sit within +-3 lines
-        if f.dimension not in TOOL_DIMENSIONS.get(t.tool, []) or t.level not in ("error", "warning"):
-            continue
-        tf = norm_path(t.file)
-        for p in f.provenance:
-            pf = norm_path(p.file)
-            same_file = tf == pf or (bool(prefix) and tf == f"{prefix}/{pf}")
-            if same_file and abs(t.line - p.line) <= NEAR_LINES:
-                cwes = {norm_cwe(c) for c in (t.cwes or ([t.cwe] if t.cwe else []))}
-                if not cwes or norm_cwe(f.cwe) in cwes:
-                    return True
-    return False

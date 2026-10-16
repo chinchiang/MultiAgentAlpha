@@ -2,9 +2,11 @@
 
 import pytest
 
+from mara.ballot_round import Ballots
 from mara.report.markdown_out import render_markdown
 from mara.report.sarif_out import to_sarif
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, SkepticVerdict
+from mara.scoring import jury
 
 SEEDED = {  # (dimension, cwe, file) that must be accepted
     ("vulnerabilities", "CWE-89", "app.py"),
@@ -73,7 +75,8 @@ def test_refuted_finding_the_jury_overrode_goes_to_human(mock_report):
     sk = SkepticVerdict(finding_id="F-9001", verdict="refuted", reason="query is parameterised",
                         sanitizer_or_control="app.py:41 prepared statements",
                         source_family=ModelFamily.MOCK, source_model="mock-skeptic")
-    cons = pipe.score([f], {f.id: {ModelFamily.MOCK}}, {"F-9001": sk}, {}, votes, [])[0]
+    ballots = Ballots(skeptic={"F-9001": sk}, unchallenged=frozenset(), redteam={}, votes=votes)
+    (cons,) = jury.score([f], {f.id: {ModelFamily.MOCK}}, ballots, [], jury=pipe.jury, policy=pipe.outcome_policy).rows
     assert cons.skeptic_refuted
     assert cons.tier != EvidenceTier.D  # the jury did override the refutation
     assert cons.needs_human and not cons.accepted
@@ -92,8 +95,8 @@ def test_tool_corroboration_yields_tier_a(mock_report):
 def test_tool_corroboration_respects_tool_dimensions():
     # csp-evaluator emits results without CWEs; without the dimension guard such a result would
     # corroborate any finding within +-3 lines, whatever the dimension
-    from mara.pipeline import _tool_corroborates
     from mara.tools.sarif import ToolResult
+    from tests.scored_rows import tool_corroborated
 
     result = ToolResult(tool="csp-evaluator", rule_id="csp.test", level="error", message="weak CSP",
                         file="static/index.html", line=5, cwe=None, cwes=[])
@@ -106,8 +109,8 @@ def test_tool_corroboration_respects_tool_dimensions():
                        model_confidence=0.9, source_family=ModelFamily.MOCK, source_model="m",
                        finder_families=[ModelFamily.MOCK])
 
-    assert _tool_corroborates(finding("csp", "CWE-1021"), [result])
-    assert not _tool_corroborates(finding("xss", "CWE-79"), [result])
+    assert tool_corroborated(finding("csp", "CWE-1021"), [result])
+    assert not tool_corroborated(finding("xss", "CWE-79"), [result])
 
 
 def test_multi_family_agreement_without_tool_yields_tier_b(mock_report):
