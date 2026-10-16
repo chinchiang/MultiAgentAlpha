@@ -73,7 +73,7 @@ def score(findings: list[Finding], finders: dict[str, set[ModelFamily]], ballots
         independent = valid_families - finders[f.id]
         quorum_ok = len(independent) >= jury.min_independent_judges
 
-        score, tp, fp, human, agreeing, consistent = weighted_consensus(fv, jury.weights, jury.self_judge_discount)
+        weighted, tp, fp, human, agreeing, consistent = weighted_consensus(fv, jury.weights, jury.self_judge_discount)
         flips += int(not consistent and bool(fv))
         alpha = _agreement_proxy(fv)
         sk = ballots.skeptic.get(f.id)
@@ -81,7 +81,7 @@ def score(findings: list[Finding], finders: dict[str, set[ModelFamily]], ballots
         unchallenged = f.id in ballots.unchallenged
         prov_ok = bool(f.provenance) and all(p.verified for p in f.provenance)
         corroborated = _tool_corroborates(f, tool_results, tool_path_prefix)
-        fams = set(agreeing) | (finders[f.id] if score >= policy.accept_threshold else set())
+        fams = set(agreeing) | (finders[f.id] if weighted >= policy.accept_threshold else set())
         if corroborated:
             fams.add(ModelFamily.TOOL)
         tier = assign_tier(
@@ -91,7 +91,7 @@ def score(findings: list[Finding], finders: dict[str, set[ModelFamily]], ballots
             skeptic_refuted=refuted,
             skeptic_abstained=unchallenged,
             reachability=f.reachability,
-            consensus_score=score,
+            consensus_score=weighted,
             accept_threshold=policy.accept_threshold,
         )
         # every Finding's vector was fully parsed and scored when it was built (schemas.Finding._cvss): a model
@@ -103,14 +103,14 @@ def score(findings: list[Finding], finders: dict[str, set[ModelFamily]], ballots
         operational = sorted(family_bands, key=SEVERITY_ORDER.index)[len(family_bands) // 2] if family_bands else None
         rt = ballots.redteam.get(f.id)
         ssvc = ssvc_decision(severity=sev, exploitable=rt.exploitable if rt else "unknown", tier=tier)
-        outcome = decide(OutcomeSignals(tier=tier, score=score, severity=sev, provenance_verified=prov_ok, skeptic_refuted=refuted,
+        outcome = decide(OutcomeSignals(tier=tier, score=weighted, severity=sev, provenance_verified=prov_ok, skeptic_refuted=refuted,
                                         skeptic_abstained=unchallenged, quorum_ok=quorum_ok, passes_complete=len(fv) == len(raw_votes),
                                         alpha=alpha, votes_tp=tp, votes_fp=fp, votes_human=human, position_consistent=consistent),
                          policy)
         rows.append(
             ConsensusResult(
                 finding_id=f.id,
-                weighted_score=score,
+                weighted_score=weighted,
                 votes_tp=tp,
                 votes_fp=fp,
                 votes_human=human,
@@ -140,7 +140,7 @@ def _agreement_proxy(votes: list[JudgeVote]) -> float | None:
     if len(votes) < 2:
         return None
 
-    # Exactly one family-level verdict; split passes are an explicit abstention.
+    # one verdict per family: a family whose two passes differ counts as sending the finding to a human
     per_family = defaultdict(set)
     for v in votes:
         per_family[v.judge_family].add(v.verdict)

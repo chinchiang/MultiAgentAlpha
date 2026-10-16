@@ -13,13 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from mara.ballot_round import Ballots  # noqa: E402
 from mara.config import MaraConfig, load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
 from mara.report.human_queue_out import build_queue, queue_key, render_human_queue, tightening  # noqa: E402
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, ReviewReport, SkepticVerdict  # noqa: E402
-from mara.scoring import jury  # noqa: E402
 from mara.scoring.outcome import OutcomePolicy  # noqa: E402
+from tests import scored_rows  # noqa: E402
 from tests.scored_rows import row  # noqa: E402
 
 VEC = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"  # 9.3, Critical
@@ -31,10 +30,6 @@ def _finding(fid, line, cwe="CWE-89", vec=VEC):
                    provenance=[Provenance(file="app.py", line=line, quote="abc")],
                    reachability_argument="r", exploit_sketch="e", cvss4_vector=vec, model_confidence=0.9,
                    source_family=ModelFamily.ANTHROPIC, source_model="m", finder_families=[ModelFamily.ANTHROPIC])
-
-
-def _policy(cfg, *, exclude_tier_c=False):
-    return OutcomePolicy.from_config(cfg, alpha_threshold=cfg.gate.human_threshold_alpha, exclude_tier_c=exclude_tier_c)
 
 
 def _vote(fid, fam, pass_id, verdict):
@@ -53,7 +48,7 @@ def test_selection_reasons_and_full_context(cfg):
         return {"F-1": row("all_needs_human", "F-1", outcome_policy=policy), "F-2": row("split", "F-2", outcome_policy=policy),
                 "F-3": row("tier_c", "F-3", outcome_policy=policy), "F-4": row("accepted", "F-4", outcome_policy=policy)}
 
-    cons = rows(_policy(cfg))
+    cons = rows(scored_rows.policy(cfg))
     sk = {"F-1": SkepticVerdict(finding_id="F-1", verdict="weakened", reason="maybe", sanitizer_or_control="", source_family=ModelFamily.NEMOTRON, source_model="n")}
     votes = [_vote("F-1", ModelFamily.DEEPSEEK, "forward", "needs_human"), _vote("F-1", ModelFamily.DEEPSEEK, "reverse", "needs_human")]
     items = {i.finding_id: i for i in build_queue(fs, cons, sk, {}, votes, cfg)}
@@ -62,7 +57,7 @@ def test_selection_reasons_and_full_context(cfg):
     assert items["F-1"].skeptic["verdict"] == "weakened" and len(items["F-1"].judge_votes) == 2 and items["F-1"].judge_votes[0]["family"] == "deepseek"
     assert items["F-1"].key == queue_key("app.py", 10, "CWE-89") == queue_key("./app.py", 10, "cwe-89")
     # tier C is left to the jury while tightened; the other reasons stay
-    tightened = {i.finding_id for i in build_queue(fs, rows(_policy(cfg, exclude_tier_c=True)), sk, {}, votes, cfg)}
+    tightened = {i.finding_id for i in build_queue(fs, rows(scored_rows.policy(cfg, exclude_tier_c=True)), sk, {}, votes, cfg)}
     assert tightened == {"F-1", "F-2"}
 
 
@@ -73,12 +68,12 @@ def test_rejected_non_d_findings_are_queued_until_p8_allows_silence(cfg):
         return {"F-1": row("rejected", "F-1", outcome_policy=policy), "F-2": row("dropped", "F-2", outcome_policy=policy),
                 "F-3": row("rejected", "F-3", outcome_policy=policy)}
 
-    items = {i.finding_id: i for i in build_queue(fs, rows(_policy(cfg)), {}, {}, [], cfg)}
+    items = {i.finding_id: i for i in build_queue(fs, rows(scored_rows.policy(cfg)), {}, {}, [], cfg)}
     assert items["F-1"].reasons == ["unsupervised_reject_unverified"] and items["F-3"].reasons == ["unsupervised_reject_unverified"]
     assert "F-2" not in items  # a dropped finding (tier D) is not a rejection
     cfg_true = cfg.model_copy(deep=True)
     cfg_true.gate.unsupervised_reject_allowed = True
-    assert build_queue(fs, rows(_policy(cfg_true)), {}, {}, [], cfg_true) == []
+    assert build_queue(fs, rows(scored_rows.policy(cfg_true)), {}, {}, [], cfg_true) == []
 
 
 def test_rejection_review_follows_what_the_row_records_not_the_config_the_queue_is_built_with(cfg):
@@ -86,7 +81,7 @@ def test_rejection_review_follows_what_the_row_records_not_the_config_the_queue_
     A rejection recorded without it (P8 allowed when it was scored) is not queued under a stricter config."""
     allowed = cfg.model_copy(deep=True)
     allowed.gate.unsupervised_reject_allowed = True
-    rejected = row("rejected", "F-1", outcome_policy=_policy(allowed))
+    rejected = row("rejected", "F-1", outcome_policy=scored_rows.policy(allowed))
     assert rejected.jury_outcome == "rejected" and not rejected.unsupervised_reject_unverified
     assert not cfg.gate.unsupervised_reject_allowed
     assert build_queue([_finding("F-1", 10)], {"F-1": rejected}, {}, {}, [], cfg) == []
@@ -149,8 +144,7 @@ def _under(cfg, backlog):
 
 
 def _scored(cfg, policy, f):
-    ballots = Ballots(skeptic={}, unchallenged=frozenset(), redteam={}, votes=_votes(f.id))
-    (c,) = jury.score([f], {f.id: {ModelFamily.ANTHROPIC}}, ballots, [], jury=jury.Jury.from_config(cfg), policy=policy).rows
+    (c,) = scored_rows.score([f], {f.id: {ModelFamily.ANTHROPIC}}, _votes(f.id), cfg=cfg, outcome_policy=policy).rows
     return c
 
 
@@ -530,7 +524,7 @@ def test_report_and_governance_g11(tmp_path):
                    {"name": "d", "family": "deepseek", "provider": "mock", "model": "m", "data_residency": "on_prem"},
                    {"name": "n", "family": "nemotron", "provider": "mock", "model": "m", "data_residency": "on_prem"}],
         "roles": {"reviewers": ["a", "d", "n"], "skeptic": "n", "redteam": "d", "judges": ["a", "d", "n"]}, "human_queue": {"enabled": False}})))
-    assert build_queue([_finding("F-1", 1)], {"F-1": row("all_needs_human", "F-1", outcome_policy=_policy(cfg))}, {}, {}, [], cfg) == []
+    assert build_queue([_finding("F-1", 1)], {"F-1": row("all_needs_human", "F-1", outcome_policy=scored_rows.policy(cfg))}, {}, {}, [], cfg) == []
     r = ReviewReport(target="t", generated_at="2026-09-12T00:00:00+00:00", provider_mode="mock", families_used=[], findings=[], skeptic=[], redteam=[],
                      votes=[], consensus=[], dimensions=[], overall_score=0, gate_passed=True, bias_audit={})
     assert "_Empty._" in render_human_queue(r)

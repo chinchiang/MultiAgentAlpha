@@ -184,9 +184,9 @@ def _with_a_fourth_judge(cfg, votes, finders):
     from collections import defaultdict
 
     from mara.schemas import ModelFamily
-    from tests.scored_rows import four_judges
+    from tests.scored_rows import four_judge_panel
 
-    panel = four_judges(cfg)
+    panel = four_judge_panel(cfg)
     judges = {m.family for m in panel.models if m.name in panel.roles.judges}
     by_finding = defaultdict(list)
     for v in votes:
@@ -220,14 +220,12 @@ def _variants(report, cfg) -> list[_Variant]:
     not depend on them."""
     from collections import defaultdict
 
-    from mara.ballot_round import Ballots
     from mara.context.repo_map import build_context
     from mara.report.human_queue_out import build_queue
     from mara.review_status import GatePolicy, assess
-    from mara.scoring import jury
     from mara.tools.sarif import ToolResult
     from tests.review_facts import FACTS
-    from tests.scored_rows import policy
+    from tests.scored_rows import policy, score
 
     finders = {f.id: set(f.finder_families) for f in report.findings}
     skeptic, redteam = {v.finding_id: v for v in report.skeptic}, {n.finding_id: n for n in report.redteam}
@@ -239,16 +237,15 @@ def _variants(report, cfg) -> list[_Variant]:
     variants = []
     for name, panel, cast in (("mock", cfg, report.votes), ("four judges", four, four_cast),
                               ("four judges, P8 unlocked", unlocked, four_cast)):
-        scorer, outcome_policy, gate_policy = jury.Jury.from_config(panel), policy(panel), GatePolicy.from_config(panel)
+        outcome_policy, gate_policy = policy(panel), GatePolicy.from_config(panel)
         by_finding = defaultdict(list)
         for v in cast:
             by_finding[v.finding_id].append(v)
         for k in range(len(_PATTERNS)):
             patterns = {f.id: _PATTERNS[(i + k) % len(_PATTERNS)] for i, f in enumerate(report.findings)}
             votes = [v for f in report.findings for v in _recast(by_finding[f.id], patterns[f.id])]
-            ballots = Ballots(skeptic=skeptic, unchallenged=frozenset(), redteam=redteam, votes=votes)
-            consensus = jury.score(report.findings, finders, ballots, tools, jury=scorer, policy=outcome_policy,
-                                   tool_path_prefix=prefix).rows
+            consensus = score(report.findings, finders, votes, cfg=panel, outcome_policy=outcome_policy, skeptic=skeptic,
+                              redteam=redteam, tool_results=tools, tool_path_prefix=prefix).rows
             if k % 2:
                 for i, c in enumerate(consensus):
                     ruling = ("false_positive", "true_positive", None)[i % 3]

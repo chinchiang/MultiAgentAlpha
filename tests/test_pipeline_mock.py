@@ -2,11 +2,10 @@
 
 import pytest
 
-from mara.ballot_round import Ballots
 from mara.report.markdown_out import render_markdown
 from mara.report.sarif_out import to_sarif
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, SkepticVerdict
-from mara.scoring import jury
+from tests import scored_rows
 
 SEEDED = {  # (dimension, cwe, file) that must be accepted
     ("vulnerabilities", "CWE-89", "app.py"),
@@ -53,10 +52,9 @@ def test_fabricated_quote_is_rejected_as_tier_d(mock_report):
     assert cons[fake.id].skeptic_refuted
 
 
-def test_refuted_finding_the_jury_overrode_goes_to_human(mock_report):
+def test_refuted_finding_the_jury_overrode_goes_to_human():
     """assessment #37: a skeptic-refuted finding with high jury consensus must not re-enter the
     blocking logic; it is forced to the human queue instead of being accepted."""
-    pipe, _ = mock_report
     f = Finding(
         id="F-9001", dimension="vulnerabilities", title="SQL injection in search", cwe="CWE-89",
         provenance=[Provenance(file="app.py", line=32, quote="cursor.execute(q)", verified=True)],
@@ -75,8 +73,7 @@ def test_refuted_finding_the_jury_overrode_goes_to_human(mock_report):
     sk = SkepticVerdict(finding_id="F-9001", verdict="refuted", reason="query is parameterised",
                         sanitizer_or_control="app.py:41 prepared statements",
                         source_family=ModelFamily.MOCK, source_model="mock-skeptic")
-    ballots = Ballots(skeptic={"F-9001": sk}, unchallenged=frozenset(), redteam={}, votes=votes)
-    (cons,) = jury.score([f], {f.id: {ModelFamily.MOCK}}, ballots, [], jury=pipe.jury, policy=pipe.outcome_policy).rows
+    (cons,) = scored_rows.score([f], {f.id: {ModelFamily.MOCK}}, votes, skeptic={"F-9001": sk}).rows
     assert cons.skeptic_refuted
     assert cons.tier != EvidenceTier.D  # the jury did override the refutation
     assert cons.needs_human and not cons.accepted

@@ -16,11 +16,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara import govdocs  # noqa: E402
 from mara import model_eval as me  # noqa: E402
-from mara.ballot_round import Ballots  # noqa: E402
 from mara.config import MaraConfig  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
 from mara.schemas import Finding, JudgeVote, ModelFamily, Provenance, ReviewReport  # noqa: E402
-from mara.scoring import jury  # noqa: E402
 from mara.scoring.consensus import weighted_consensus  # noqa: E402
 from mara.scoring.dimension_score import score_dimension  # noqa: E402
 from tests import scored_rows  # noqa: E402
@@ -55,10 +53,9 @@ def _vote(fam, pass_id, verdict):
 # ---------------------------------------------------------------- weights
 
 
-def test_a_judge_votes_with_its_own_weight_not_a_same_family_reviewers(tmp_path, monkeypatch):
+def test_a_judge_votes_with_its_own_weight_not_a_same_family_reviewers():
     """weights were {family: weight} over every model: a reviewer-only model of the judge's family,
     listed later, replaced the judge's calibrated weight. (P3 already keeps judges to one per family.)"""
-    monkeypatch.chdir(tmp_path)
     cfg = _cfg([{"name": "a", "family": "anthropic", "weight": 2.0, **ANTHROPIC},
                 {"name": "d", "family": "deepseek", **DEEPSEEK},
                 {"name": "n", "family": "nemotron", **NEMOTRON},
@@ -67,9 +64,7 @@ def test_a_judge_votes_with_its_own_weight_not_a_same_family_reviewers(tmp_path,
     votes = [_vote(ModelFamily.ANTHROPIC, p, "true_positive") for p in ("forward", "reverse")] + \
             [_vote(ModelFamily.DEEPSEEK, p, "false_positive") for p in ("forward", "reverse")] + \
             [_vote(ModelFamily.NEMOTRON, p, "true_positive") for p in ("forward", "reverse")]
-    ballots = Ballots(skeptic={}, unchallenged=frozenset(), redteam={}, votes=votes)
-    (c,) = jury.score([_finding()], {"F-1": {ModelFamily.NEMOTRON}}, ballots, [], jury=jury.Jury.from_config(cfg),
-                      policy=scored_rows.policy(cfg)).rows
+    (c,) = scored_rows.score([_finding()], {"F-1": {ModelFamily.NEMOTRON}}, votes, cfg=cfg).rows
     flagged = [v.model_copy(update={"self_family": v.judge_family == ModelFamily.NEMOTRON}) for v in votes]
     expected = weighted_consensus(flagged, {ModelFamily.ANTHROPIC: 2.0, ModelFamily.DEEPSEEK: 1.0, ModelFamily.NEMOTRON: 1.0},
                                   cfg.gate.self_judge_discount)[0]

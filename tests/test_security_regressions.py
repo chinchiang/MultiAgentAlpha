@@ -11,7 +11,6 @@ import yaml
 from pydantic import ValidationError
 
 from mara.agents import base, judge
-from mara.ballot_round import Ballots
 from mara.config import ModelSpec, load_config
 from mara.context.repo_map import RepoContext, build_context
 from mara.pipeline import Pipeline
@@ -20,11 +19,10 @@ from mara.report.human_queue_out import build_queue, queue_key
 from mara.report.markdown_out import render_markdown
 from mara.report.psirt_out import legal_deadlines
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
-from mara.scoring import jury
 from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
 from tests.fake_panel import REFUSAL, Panel
-from tests.scored_rows import MOCK, policy, tool_corroborated
+from tests.scored_rows import MOCK, policy, score, tool_corroborated
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -43,13 +41,6 @@ class Reply(Provider):
 
 def pipeline(tmp_path):
     return Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
-
-
-def scored(f, finders, votes, *, outcome_policy=None):
-    """`f`'s consensus row as jury scoring writes it on the mock jury, from `votes` and no other ballot."""
-    ballots = Ballots(skeptic={}, unchallenged=frozenset(), redteam={}, votes=votes)
-    (row,) = jury.score([f], finders, ballots, [], jury=jury.Jury.from_config(MOCK), policy=outcome_policy or policy()).rows
-    return row
 
 
 def finding():
@@ -330,21 +321,21 @@ def test_quorum_requires_two_independent_families_and_both_passes():
     f = finding()
     finders = {f.id: {ModelFamily.ANTHROPIC}}
     one = [vote(ModelFamily.DEEPSEEK)]
-    c = scored(f, finders, one)
+    (c,) = score([f], finders, one).rows
     assert not c.accepted and c.needs_human and c.independent_judges == 0
-    lone = scored(f, finders, [vote(ModelFamily.DEEPSEEK, pass_id) for pass_id in ("forward", "reverse")])
+    (lone,) = score([f], finders, [vote(ModelFamily.DEEPSEEK, pass_id) for pass_id in ("forward", "reverse")]).rows
     assert lone.independent_judges == 1 and lone.needs_human and "insufficient_independent_judges" in lone.human_reasons
     full = [vote(fam, pass_id) for fam in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON) for pass_id in ("forward", "reverse")]
-    accepted = scored(f, finders, full)
+    (accepted,) = score([f], finders, full).rows
     assert accepted.accepted and accepted.independent_judges == 2
-    repeated = scored(f, finders, full + [full[0]] * 100)
+    (repeated,) = score([f], finders, full + [full[0]] * 100).rows
     assert not repeated.accepted and repeated.needs_human
     # an invalid vector cannot reach scoring: Finding rejects it at the model boundary
     # (test_invalid_cvss_is_rejected_at_model_boundary); one smuggled past validation fails loudly, never as "Unknown"
     from mara.scoring import cvss4
 
     with pytest.raises(cvss4.CVSS4Error):
-        scored(f.model_copy(update={"cvss4_vector": "CVSS:4.0/invalid"}), finders, full)
+        score([f.model_copy(update={"cvss4_vector": "CVSS:4.0/invalid"})], finders, full)
 
 
 def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path, monkeypatch):
@@ -658,7 +649,7 @@ def test_one_verified_quote_cannot_launder_an_invalid_primary_location():
     bad = Provenance(file="../outside.py", line=999, quote="fabricated", verified=False)
     f = f.model_copy(update={"provenance": [bad, *f.provenance]})
     votes = [vote(family, pass_id) for family in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON) for pass_id in ("forward", "reverse")]
-    c = scored(f, {f.id: {ModelFamily.ANTHROPIC}}, votes)
+    (c,) = score([f], {f.id: {ModelFamily.ANTHROPIC}}, votes).rows
     assert not c.accepted and c.needs_human and c.tier.value == "D"
     assert "unverified_provenance" in c.human_reasons
 
@@ -691,7 +682,7 @@ def test_human_queue_uses_effective_decision_without_recalculating_threshold():
     f = finding()
     votes = [vote(fam, pass_id, verdict) for fam, verdict in [(ModelFamily.DEEPSEEK, "true_positive"),
              (ModelFamily.NEMOTRON, "false_positive")] for pass_id in ("forward", "reverse")]
-    result = scored(f, {f.id: {ModelFamily.ANTHROPIC}}, votes, outcome_policy=dataclasses.replace(policy(), alpha_threshold=1.0))
+    (result,) = score([f], {f.id: {ModelFamily.ANTHROPIC}}, votes, outcome_policy=dataclasses.replace(policy(), alpha_threshold=1.0)).rows
     queued = build_queue([f], {f.id: result}, {}, {}, votes, MOCK)
     assert result.needs_human and len(queued) == 1 and "agreement_below_threshold" in queued[0].reasons
 

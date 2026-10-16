@@ -3,10 +3,10 @@ import pytest
 from mara.bias.blinding import blind_finding, blinded_batches
 from mara.config import MaraConfig
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
-from mara.scoring import jury
 from mara.scoring.consensus import krippendorff_alpha_nominal, weighted_consensus
 from mara.scoring.idcheck import check_finding_refs
 from mara.scoring.tiers import assign_tier, ssvc_decision
+from tests import scored_rows
 
 
 def _finding(i=1, fam=ModelFamily.ANTHROPIC, refs=None):
@@ -63,13 +63,8 @@ def test_idcheck_strips_nonexistent_refs():
 
 
 def _scoring(findings, votes):
-    """Jury scoring of `findings`, found by anthropic, on `votes` and no other ballot, by the mock jury."""
-    from mara.ballot_round import Ballots
-    from tests.scored_rows import MOCK, policy
-
-    ballots = Ballots(skeptic={}, unchallenged=frozenset(), redteam={}, votes=votes)
-    return jury.score(findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings}, ballots, [], jury=jury.Jury.from_config(MOCK),
-                      policy=policy())
+    """Jury scoring of `findings`, found by anthropic, on `votes` and no other ballot, on the mock panel."""
+    return scored_rows.score(findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings}, votes)
 
 
 def _both_passes(fid, fam, verdict, reverse=None):

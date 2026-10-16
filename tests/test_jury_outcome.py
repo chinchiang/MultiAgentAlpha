@@ -18,7 +18,8 @@ from tests import scored_rows  # noqa: E402
 POLICY = OutcomePolicy(accept_threshold=0.6, alpha_threshold=0.4, exclude_tier_c=False, tier_c_min_severity="High",
                        unsupervised_reject_allowed=False)
 
-# Signals jury scoring produces (tests/scored_rows.py scores the rows these stand for): a tier B finding three families
+# Illustrative signals for decide() alone, not the values jury scoring writes (tests/scored_rows.py has the scored rows,
+# and its own numbers: four votes for, not six, and a rejection scored 0.3333, not 0.2): a tier B finding the families
 # confirmed in both passes ...
 SUPPORTED = OutcomeSignals(tier=EvidenceTier.B, score=1.0, severity="High", provenance_verified=True, skeptic_refuted=False,
                            skeptic_abstained=False, quorum_ok=True, passes_complete=True, alpha=1.0, votes_tp=6, votes_fp=0,
@@ -122,7 +123,7 @@ def test_the_policy_is_the_config_in_force_with_the_alpha_threshold_and_tier_c_e
 
 # ---------------------------------------------------------------- persisted in report.json and read back
 
-P8_ALLOWED = replace(scored_rows.policy(scored_rows.FOUR_JUDGES), unsupervised_reject_allowed=True)
+P8_ALLOWED = replace(scored_rows.policy(scored_rows.FOUR_JUDGE_PANEL), unsupervised_reject_allowed=True)
 
 # a case: the scored state (tests/scored_rows.py), the policy it is scored under (the config's when None), its jury outcome
 ROUND_TRIP = {
