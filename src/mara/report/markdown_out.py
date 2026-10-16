@@ -31,7 +31,7 @@ def render_markdown(r: ReviewReport) -> str:
         "",
         f"**Overall score {overall} · gate {'PASSED' if r.gate_passed else 'BLOCKED'}**"
         + (f" ({literal(', '.join(r.gate_reasons))})" if r.gate_reasons else "")
-        + (f" · rollout phase `{r.bias_audit['rollout_phase']}`" if r.bias_audit.get("rollout_phase") else "")
+        + (f" · rollout phase `{r.rollout_phase}`" if r.rollout_phase else "")
         + ("" if r.gate_passed or r.gate_enforced is None else f" ({enforcement_wording(r.gate_enforced)})"),
         "",
         f"Review status: **{r.review_status}**; incomplete reasons: {literal(', '.join(r.incomplete_reasons)) or 'none'}",
@@ -76,6 +76,8 @@ def render_markdown(r: ReviewReport) -> str:
         "",
         "These findings remain unresolved until explicitly triaged; model silence does not clear them.",
         "",
+        f"Tools that ran: {', '.join(sorted(t['tool'] for t in r.tool_health if t.get('ran'))) or 'none'} · {len(r.tool_results)} result(s)",
+        "",
     ]
     for tr in r.tool_results:
         lines.append(
@@ -107,6 +109,10 @@ def render_markdown(r: ReviewReport) -> str:
             lines.append(f"- {it.finding_id} · {literal(it.title)} · {', '.join(it.reasons)} · tier {it.tier} · {it.cvss4_severity} · key `{it.key}`")
     else:
         lines.append("_Empty._")
+    if (t := r.human_queue_tightening) is not None:
+        backlog = "unknown" if t.backlog is None else t.backlog
+        state = "tightened" if t.tightened else "not tightened"
+        lines += ["", f"Queue tightening: {state} (backlog {backlog}, agreement threshold {t.alpha_threshold})"]
     if r.psirt:
         first = r.psirt[0]
         lines += [
@@ -123,25 +129,23 @@ def render_markdown(r: ReviewReport) -> str:
                 f"- {n['finding_id']} · {literal(n['title'])} · {n['cwe']} · CVSS {cv['score']} {cv['severity']} · tier {n['evidence_tier']}"
                 f" · exploitable: {n['exploitable']} · {code(str(loc['file']) + ':' + str(loc['line']))}"
             )
-    ml_bom = r.bias_audit.get("ml_bom")
     lines += ["", "## Model provenance (ML-BOM, G-7)", ""]
-    if isinstance(ml_bom, dict) and ml_bom:
-        for name, v in ml_bom.items():
-            detail = f" {v['component']}@{v['version']} sha256 {v['sha256'][:12]}" if v.get("status") == "complete" else ""
-            lines.append(f"- {name} ({code(v['model_id'])}): {v['status']}{detail}")
+    if r.ml_bom:
+        for name, b in r.ml_bom.items():
+            detail = f" {b.component}@{b.version} sha256 {b.sha256[:12]}" if b.status == "complete" else ""
+            lines.append(f"- {name} ({code(b.model_id)}): {b.status}{detail}")
     else:
         lines.append("_No self-hosted model in this configuration._")
-    me = r.bias_audit.get("model_eval")
+    if r.ml_bom_signature is not None:
+        lines.append(f"- BOM signature: {literal(r.ml_bom_signature)}")
     lines += ["", "## Model red-team evaluation (garak / CyberSecEval, G-8)", ""]
-    if isinstance(me, dict) and me:
-        for fam, v in me.items():
-            lines.append(f"- {fam}: {v.get('status', 'none')}" + (f" ({v['date']}, {v['mode']})" if v.get("date") else " (no evaluation recorded)"))
+    if r.model_eval:
+        for fam, e in r.model_eval.items():
+            lines.append(f"- {fam}: {e.status}" + (f" ({e.date}, {e.mode})" if e.date else " (no evaluation recorded)"))
     else:
         lines.append("_No non-mock model family in this configuration._")
     lines += ["", "## Bias and integrity audit", ""]
     for k, v in r.bias_audit.items():
-        if k in ("ml_bom", "model_eval"):
-            continue
         lines.append(f"- {k}: {v}")
     return "\n".join(lines) + "\n"
 

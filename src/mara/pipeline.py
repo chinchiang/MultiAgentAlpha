@@ -25,7 +25,10 @@ from .review_status import GatePolicy, ReviewFacts, assess, secret_preflight
 from .schemas import (
     ConsensusResult,
     Finding,
+    MlBomEntry,
+    ModelEvalStatus,
     ModelFamily,
+    QueueTightening,
     ReviewReport,
 )
 from .scoring import jury
@@ -270,12 +273,13 @@ class Pipeline:
             dims.append(score_dimension(d, findings, cons_by_id, tool_ran))
         required_tools = {t for t, ds in TOOL_DIMENSIONS.items() if set(ds) & set(self.cfg.dimensions)}
         signed: bool | None = None
+        signature: str | None = None  # the report's ml_bom_signature
         if self.cfg.ml_bom.require_signature:
             # P7 checked offline that the bundle belongs to the BOM; here cosign verifies the signature and its signer
             from .mlbom import verify_signature
 
             signed, why = verify_signature(self.cfg)
-            self.audit["ml_bom_signature"] = "verified" if signed else f"failed: {why}"
+            signature = "verified" if signed else f"failed: {why}"
         facts = ReviewFacts(context_complete=ctx.complete, egress_blocked=egress.blocked,
                             required_tools_ran=required_tools <= tools_ran and all(r.ran for r in tool_runs), ml_bom_signature=signed,
                             context_view_missing=bool(self.cfg.roles.context) and context_view is None,
@@ -289,8 +293,6 @@ class Pipeline:
         self.audit["global_krippendorff_alpha"] = scoring.global_alpha if scoring.global_alpha is not None else "n/a"
         for k, v in scoring.family_agreement.items():
             self.audit[f"judge_agreement[{k}]"] = v
-        self.audit["tool_results_ingested"] = len(tool_results)
-        self.audit["tools_ran"] = ",".join(sorted(tools_ran)) or "none"
         prog.done("scoring", f"review {assessment.review_status}, gate {'passed' if assessment.gate_passed else 'blocked'}")
         prog.begin("report")
         report = ReviewReport(
@@ -321,6 +323,10 @@ class Pipeline:
             gate_enforced=assessment.gate_enforced,
             # the accounting the counts above follow (docs/adr/0001-reply-outcome-accounting.md)
             bias_audit={**self.audit, "exchange_version": exchange.EXCHANGE_VERSION},
+            rollout_phase=self.cfg.rollout.phase,
+            human_queue_tightening=QueueTightening(backlog=self.backlog, tightened=self.queue_tightened,
+                                                   alpha_threshold=self.outcome_policy.alpha_threshold),
+            ml_bom_signature=signature,
         )
         # G-11: the human queue as an object with full context; decisions come back through calib/decisions
         from .report.human_queue_out import build_queue
@@ -336,15 +342,6 @@ class Pipeline:
             revision=ctx.revision,
             context_hash=ctx.content_hash,
         )
-        queue_audit: dict[str, float | int | str] = {
-            "human_queue_size": len(report.human_queue),
-            "human_queue_backlog": self.backlog if self.backlog is not None else "unknown",
-            "human_queue_tightened": int(self.queue_tightened),
-            "human_alpha_threshold": self.outcome_policy.alpha_threshold,
-        }
-        for k, qv in queue_audit.items():
-            self.audit[k] = qv
-            report.bias_audit[k] = qv
         self._say(
             f"L5: human queue: {len(report.human_queue)} item(s)"
             + (
@@ -358,17 +355,11 @@ class Pipeline:
         from .report.psirt_out import build_notifications
 
         report.psirt = build_notifications(report, self.cfg, event=psirt_event)  # built once: the count below is these
-        self.audit["psirt_notifications"] = len(report.psirt)
-        report.bias_audit["psirt_notifications"] = len(report.psirt)
         # G-7: which self-hosted weights the report was produced with, as the ML-BOM knows them
-        ml_bom = {
-            n: {"model_id": st.model_id, "status": st.status, "component": st.component_name, "version": st.component_version, "sha256": st.digest}
+        report.ml_bom = {
+            n: MlBomEntry(model_id=st.model_id, status=st.status, component=st.component_name, version=st.component_version, sha256=st.digest)
             for n, st in self.ml_bom_status.items()
         }
-        self.audit["ml_bom"] = ml_bom
-        report.bias_audit["ml_bom"] = ml_bom
-        self.audit["rollout_phase"] = self.cfg.rollout.phase
-        report.bias_audit["rollout_phase"] = self.cfg.rollout.phase
         # G-8: latest red-team evaluation verdict per family (garak / CyberSecEval), 'none' until one has run
         from .model_eval import family_eval_status
 
@@ -376,11 +367,10 @@ class Pipeline:
         # directory, which may be the repository under review
         from .workspace import root as workspace_root
 
-        me = family_eval_status(workspace_root(), sorted({m.family.value for m in self.cfg.models if m.provider != "mock"}))
-        self.audit["model_eval"] = me
-        report.bias_audit["model_eval"] = me
-        if ml_bom:
-            self._say("L0: ML-BOM: " + ", ".join(f"{n} {v['status']}" for n, v in ml_bom.items()))
+        evaluated = sorted({m.family.value for m in self.cfg.models if m.provider != "mock"})
+        report.model_eval = {fam: ModelEvalStatus(**v) for fam, v in family_eval_status(workspace_root(), evaluated).items()}
+        if report.ml_bom:
+            self._say("L0: ML-BOM: " + ", ".join(f"{n} {v.status}" for n, v in report.ml_bom.items()))
         self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")
         prog.done("report", f"{len(report.human_queue)} human-queue item(s), {len(report.psirt)} PSIRT payload(s)")
         return report

@@ -108,6 +108,10 @@ _Avoid_: rejected finding
 The human look at every rejected finding that policy P8 requires until the Alternative Annotator Test passes. The finding enters the human queue, its jury outcome stays rejected, and the review is not incomplete because of it.
 _Avoid_: needing a human (that outcome is undecided; a rejection under review is decided)
 
+**Queue tightening**:
+What the human queue does while its ticket backlog is over the limit: the agreement a finding needs to avoid a human rises, and tier C findings are left to the jury unless the config keeps them queued. Fewer findings reach a human, and those tier C ones block the gate instead. It never loosens on its own.
+_Avoid_: throttling, backpressure
+
 **Final outcome**:
 A finding's outcome once human decisions are taken into account: the ruling of a usable decision where one exists, the jury outcome otherwise. It takes the jury outcome's values; a true-positive ruling makes it accepted, a false-positive ruling rejected.
 _Avoid_: override result
@@ -137,6 +141,10 @@ _Avoid_: check (a CI check is a different thing), pass/fail
 **Blocking finding**:
 A finding whose final outcome is accepted and whose evidence tier and severity meet the gate's blocking rules; while the human queue is tightened, an accepted tier C finding at the severity floor blocks too, since no human will look at it.
 _Avoid_: blocker, critical finding (severity alone does not block)
+
+**Bias audit**:
+The report's counts and statistics of how the review went: every exchange's reply outcomes and canary echoes by role and family, what the pipeline dropped, merged or excluded on the way, the jury's agreement and position flips, and the exchange version the counts follow. It holds no report metadata: the rollout phase, the human queue's tightening and the ML-BOM and model-evaluation status are fields of the report of their own.
+_Avoid_: audit alone (the Alternative Annotator Test and the governance checks are audits too), metadata
 
 ## Exports
 

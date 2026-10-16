@@ -10,7 +10,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
-from .schemas import DIMENSIONS, SEVERITY_ORDER, EvidenceTier, ModelFamily
+from .schemas import DIMENSIONS, SEVERITY_ORDER, EvidenceTier, ModelFamily, RolloutPhase
 
 
 class ModelSpec(BaseModel):
@@ -187,9 +187,6 @@ class TrainingConfig(BaseModel):
     require_trained_adjudicator: bool = Field(default=True, description="Calibration applies only decisions by trained adjudicators")
     required_roles: list[str] = Field(default_factory=lambda: ["developer", "security", "adjudicator"],
                                       description="Roles that must each have a valid record for governance check G-13")
-
-
-RolloutPhase = Literal["not_started", "shadow", "advisory", "blocking"]
 
 
 class RolloutConfig(BaseModel):
