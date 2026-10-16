@@ -8,15 +8,15 @@ validation - is mara.exchange.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol
 
 from ..audit import ReplyRecord, Role
 from ..context.repo_map import RepoContext, fence_safe, source_lines
 from ..exchange import CANARY_PATH, COMMON_SYSTEM, PROVIDER_ERROR_RE, Canary, Outcome, cites_canary, load_prompt, parse_items
 
 __all__ = ["CANARY_PATH", "COMMON_SYSTEM", "PROVIDER_ERROR_RE", "Canary", "ballot_items", "cites_canary", "coverage_gaps",
-           "extraction_recorder", "load_prompt", "verify_quote"]
+           "ExtractionRecord", "extraction_recorder", "load_prompt", "verify_quote"]
 
 
 MIN_QUOTE_CHARS = 8  # non-whitespace characters a quote needs, unless it is the whole claimed line
@@ -74,8 +74,15 @@ def ballot_items(outcome: Outcome, model_cls, expected: set[str]) -> tuple[list 
     return items, 0, ()
 
 
+class ExtractionRecord(Protocol):
+    """Gives the record of one extraction reply: the items it could not read, those whose quote could not be
+    verified, and whether the reply was voided as a whole."""
+
+    def __call__(self, invalid: int = 0, unverified: int = 0, voided: bool = False) -> ReplyRecord: ...
+
+
 def extraction_recorder(outcome: Outcome, role: Role, family: str, echoed: bool, reported: int, *,
-                        unverified_as: str) -> Callable[..., ReplyRecord]:
+                        unverified_as: str) -> ExtractionRecord:
     """The record writer for one reviewer or context reply after its canary screen: record(invalid, unverified, voided)
     gives the reply's record, its canary echo and reports included; `unverified_as` is the role's local name for the
     items whose quote could not be verified."""
