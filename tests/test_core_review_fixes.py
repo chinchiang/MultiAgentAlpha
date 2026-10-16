@@ -14,7 +14,7 @@ import pytest
 from mara import exchange
 from mara.agents import base, redteam, skeptic
 from mara.audit import Audit
-from mara.ballot_round import MAX_L3_FINDINGS, MAX_L4_FINDINGS, l3_chunks
+from mara.ballot_round import MAX_EXCHANGE_FINDINGS, MAX_PASS_FINDINGS, exchange_chunks
 from mara.config import MaraConfig, ModelSpec
 from mara.context.repo_map import MAX_TOTAL_CHARS, RepoContext, bundle_cost
 from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
@@ -49,15 +49,15 @@ class _Fixed(Provider):
 
 # ------------------------------------------------------------------ 1. bounded L3 / L4 calls
 
-def test_l3_chunks_bound_findings_and_evidence_size_and_count_a_shared_file_once():
+def test_exchange_chunks_bound_findings_and_evidence_size_and_count_a_shared_file_once():
     big = "x = 1\n" * (MAX_TOTAL_CHARS // 20)  # each file well under the bound, three of them over it
     content = {f"big{i}.py": big for i in range(6)} | {"app.py": "unsafe()\n"}
     ctx = RepoContext(root=Path("."), content=content)
-    shared = [_finding(i) for i in range(1, 2 * MAX_L3_FINDINGS + 6)]
-    chunks = l3_chunks(ctx, shared)
-    assert [len(c) for c in chunks] == [MAX_L3_FINDINGS, MAX_L3_FINDINGS, 5], "one small shared file: only the count bounds"
+    shared = [_finding(i) for i in range(1, 2 * MAX_EXCHANGE_FINDINGS + 6)]
+    chunks = exchange_chunks(ctx, shared)
+    assert [len(c) for c in chunks] == [MAX_EXCHANGE_FINDINGS, MAX_EXCHANGE_FINDINGS, 5], "one small shared file: only the count bounds"
     spread = [_finding(i, file=f"big{i % 6}.py") for i in range(1, 13)]
-    chunks = l3_chunks(ctx, spread)
+    chunks = exchange_chunks(ctx, spread)
     assert sum(len(c) for c in chunks) == len(spread) and [f.id for c in chunks for f in c] == [f.id for f in spread]
     for c in chunks:
         files = {p.file for f in c for p in f.provenance}
@@ -72,7 +72,7 @@ def test_skeptic_and_red_team_are_called_per_bounded_chunk(tmp_path):
     ballots = panel.run(ctx, findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})
     assert [len(ex.finding_ids) for ex in panel.asked("skeptic")] == [len(ex.finding_ids) for ex in panel.asked("redteam")] == [20, 20, 5]
     assert panel.audit["skeptic_calls"] == panel.audit["redteam_calls"] == 3
-    assert ballots.skeptic_abstained == {f.id for f in findings}, "every chunk without a verdict leaves its findings unchallenged"
+    assert ballots.unchallenged == {f.id for f in findings}, "every chunk without a verdict leaves its findings unchallenged"
 
 
 def test_judge_passes_are_bounded_mirrored_per_chunk_and_cover_every_finding(tmp_path):
@@ -81,7 +81,7 @@ def test_judge_passes_are_bounded_mirrored_per_chunk_and_cover_every_finding(tmp
     panel = Panel().always("judge", REFUSAL)
     panel.run(ctx, findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})  # anthropic is excluded, two families judge
     calls = panel.asked("judge")
-    assert calls and all(len(ex.finding_ids) <= MAX_L4_FINDINGS for ex in calls)
+    assert calls and all(len(ex.finding_ids) <= MAX_PASS_FINDINGS for ex in calls)
     for fam in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON):
         mine = panel.asked("judge", fam)
         assert [ex.pass_id for ex in mine] == ["forward", "reverse"] * 3

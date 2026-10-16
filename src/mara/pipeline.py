@@ -353,7 +353,7 @@ class Pipeline:
                                    say=self._say, progress=prog)
         sk_by_id, rt_by_id, votes = ballots.skeptic, ballots.redteam, ballots.votes
         prog.begin("scoring")
-        consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=ballots.skeptic_abstained,
+        consensus = self.score(findings, finders, sk_by_id, rt_by_id, votes, tool_results, skeptic_abstained_ids=ballots.unchallenged,
                                tool_path_prefix=ctx.repo_prefix)
         # repository + path below its top level for a committed git target (repo_map.target_identity),
         # so CI, every clone and every calibration run name the same target the same way

@@ -15,7 +15,7 @@ from typer.testing import CliRunner
 
 from mara import exchange
 from mara.agents import skeptic
-from mara.ballot_round import MAX_L4_FINDINGS, l4_chunks
+from mara.ballot_round import MAX_PASS_FINDINGS, pass_chunks
 from mara.cli import app
 from mara.config import MaraConfig
 from mara.context.repo_map import RepoContext
@@ -44,9 +44,9 @@ def _finding(i: int) -> Finding:
 @pytest.mark.parametrize("n, sizes", [(0, []), (1, [1]), (25, [25]), (26, [13, 13]), (27, [14, 13]), (51, [17, 17, 17]), (60, [20, 20, 20])])
 def test_judge_chunks_are_as_few_and_as_even_as_possible(n, sizes):
     order = list(range(n))
-    chunks = l4_chunks(order)
+    chunks = pass_chunks(order)
     assert [len(c) for c in chunks] == sizes and [x for c in chunks for x in c] == order
-    assert all(len(c) <= MAX_L4_FINDINGS for c in chunks)
+    assert all(len(c) <= MAX_PASS_FINDINGS for c in chunks)
 
 
 def test_no_finding_is_left_alone_in_a_judge_chunk(tmp_path):

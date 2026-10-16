@@ -415,7 +415,7 @@ def test_judge_refusal_is_counted_separately_from_invalid_output(tmp_path, monke
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     Panel.seated_in(pipe).always("judge", REFUSAL)
     report = pipe.run(tmp_path, mode="mock")
-    # every judge call refused: 3 families x 2 chunks (30 findings, MAX_L4_FINDINGS per pass) x 2 passes
+    # every judge call refused: 3 families x 2 chunks (30 findings, MAX_PASS_FINDINGS per pass) x 2 passes
     assert report.bias_audit["judge_refusals"] == report.bias_audit["judge_calls"] == 12
     assert report.bias_audit["judge_invalid_items"] == 0
     assert "judge_refusals" in report.incomplete_reasons and not report.gate_passed

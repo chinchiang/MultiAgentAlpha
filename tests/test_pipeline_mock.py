@@ -332,23 +332,21 @@ def _ctx(tmp_path):
 
 
 def test_an_unparseable_or_incomplete_reply_is_asked_once_more_but_signals_are_not(tmp_path):
-    from tests.fake_panel import EMPTY, Panel, echo, items
+    from tests.fake_panel import EMPTY, UNPARSEABLE, Panel, echo, items
 
     findings = [_finding(1), _finding(2)]
-    def stands(drop=0):
-        return items(lambda _: {"verdict": "stands", "reason": "r", "sanitizer_or_control": ""}, drop=drop)
-
+    stands = items(lambda _: {"verdict": "stands", "reason": "r", "sanitizer_or_control": ""})
     true_positive = items(lambda _: {"verdict": "true_positive", "severity_band": "High", "reason": "r"}, drop=1)
-    # the skeptic (nemotron) leaves a finding out, then rules on both; the red team (deepseek) echoes the canary; the
-    # deepseek judge's forward pass is empty, then leaves a finding out
-    panel = (Panel().queue("skeptic", stands(drop=1), stands())
-             .queue("redteam", echo).queue("judge", EMPTY, true_positive, family=ModelFamily.DEEPSEEK))
+    # the skeptic (nemotron) answers in prose, then rules on both; the red team (deepseek) echoes the canary; the
+    # deepseek judge's forward pass is empty (its 1st exchange), then leaves a finding out (its 2nd)
+    panel = (Panel().queue("skeptic", UNPARSEABLE, stands).queue("redteam", echo)
+             .nth("judge", 1, EMPTY, family=ModelFamily.DEEPSEEK).nth("judge", 2, true_positive, family=ModelFamily.DEEPSEEK))
     ballots = panel.run(_ctx(tmp_path), findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})
     assert len(panel.asked("skeptic")) == 2 and set(ballots.skeptic) == {"F-0001", "F-0002"}
     assert panel.audit["skeptic_retries"] == 1 and panel.audit["skeptic_retries[nemotron]"] == 1
     assert len(panel.asked("redteam")) == 1 and panel.audit["redteam_retries"] == 0, "an echo is a finding about the model, not noise"
     assert [ex.pass_id for ex in panel.asked("judge", ModelFamily.DEEPSEEK)] == ["forward", "forward", "reverse"]
-    assert panel.audit["judge_retries"] == 1, "only one more call; the second answer stands"
+    assert panel.audit["judge_retries"] == 1, "only one more exchange; the second answer stands"
     assert not [v for v in ballots.votes if v.judge_family == ModelFamily.DEEPSEEK and v.pass_id == "forward"]
 
 
@@ -360,5 +358,5 @@ def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path):
     panel = Panel().queue("skeptic", items(lambda _: {}, drop=1))
     ballots = panel.run(_ctx(tmp_path), [f], {f.id: {ModelFamily.ANTHROPIC}})
     assert list(ballots.skeptic) == [f.id] and ballots.skeptic[f.id].source_family == ModelFamily.NEMOTRON
-    assert not ballots.skeptic_abstained
+    assert not ballots.unchallenged
     assert panel.audit["skeptic_invalid_items"] == 0 and panel.audit["skeptic_retries"] == 1
