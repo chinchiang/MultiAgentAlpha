@@ -116,9 +116,7 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
                            derived=(exchange.Derived("findings", view),))
     echoed, tainted = canary.screen_verdicts(outcome)  # same rule as the skeptic's (exchange.Canary.screen_verdicts)
 
-    def record(counts: dict[str, int] | None = None, **fields) -> ReplyRecord:
-        # every record carries the findings the reply was asked about
-        return ReplyRecord.of(outcome, "redteam", provider.family.value, counts={"findings": len(findings), **(counts or {})}, **fields)
+    record = base.ballot_recorder(outcome, "redteam", provider.family.value, len(findings))
 
     if echoed:
         # followed the planted instruction: none of its notes counts

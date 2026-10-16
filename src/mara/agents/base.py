@@ -1,5 +1,5 @@
 """Shared agent harness: the provenance check and ballot coverage, the checks of what a role's answer claims, and the
-record of an extraction role's screened reply.
+record writers of an extraction role's screened reply and of a ballot reply.
 
 The exchange itself - the prompt layout and its fences, the call, the reply classification, the canary and item
 validation - is mara.exchange.
@@ -8,6 +8,7 @@ validation - is mara.exchange.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
@@ -16,7 +17,7 @@ from ..context.repo_map import RepoContext, fence_safe, source_lines
 from ..exchange import CANARY_PATH, COMMON_SYSTEM, PROVIDER_ERROR_RE, Canary, Outcome, cites_canary, load_prompt, parse_items
 
 __all__ = ["CANARY_PATH", "COMMON_SYSTEM", "PROVIDER_ERROR_RE", "Canary", "ballot_items", "cites_canary", "coverage_gaps",
-           "ExtractionRecord", "extraction_recorder", "load_prompt", "verify_quote"]
+           "BallotRecord", "ExtractionRecord", "ballot_recorder", "extraction_recorder", "load_prompt", "verify_quote"]
 
 
 MIN_QUOTE_CHARS = 8  # non-whitespace characters a quote needs, unless it is the whole claimed line
@@ -90,5 +91,26 @@ def extraction_recorder(outcome: Outcome, role: Role, family: str, echoed: bool,
     def record(invalid: int = 0, unverified: int = 0, voided: bool = False) -> ReplyRecord:
         return ReplyRecord.of(outcome, role, family, canary_echoes=int(echoed), canary_reports=reported, invalid_items=invalid,
                               voided=voided, counts={unverified_as: unverified})
+
+    return record
+
+
+class BallotRecord(Protocol):
+    """Gives the record of one skeptic or red-team reply: its canary echoes and reports, the invalid items it held,
+    whether it was voided, its log codes and the role's own counts besides the findings it was asked about."""
+
+    def __call__(self, *, canary_echoes: int = 0, canary_reports: int = 0, invalid_items: int = 0, voided: bool = False,
+                 log_codes: tuple[str, ...] = (), counts: Mapping[str, int] | None = None) -> ReplyRecord: ...
+
+
+def ballot_recorder(outcome: Outcome, role: Role, family: str, findings: int) -> BallotRecord:
+    """The record writer for one skeptic or red-team reply over `findings` findings: every record it gives carries the
+    findings the reply was asked about (mara.audit counts them under the role's `findings`)."""
+
+    def record(*, canary_echoes: int = 0, canary_reports: int = 0, invalid_items: int = 0, voided: bool = False,
+               log_codes: tuple[str, ...] = (), counts: Mapping[str, int] | None = None) -> ReplyRecord:
+        return ReplyRecord.of(outcome, role, family, canary_echoes=canary_echoes, canary_reports=canary_reports,
+                              invalid_items=invalid_items, voided=voided, log_codes=log_codes,
+                              counts={"findings": findings, **(counts or {})})
 
     return record
