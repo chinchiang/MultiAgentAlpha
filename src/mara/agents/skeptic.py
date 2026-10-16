@@ -81,9 +81,7 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     # else the model followed it
     echoed, tainted = canary.screen_verdicts(outcome)
 
-    def record(counts: dict[str, int] | None = None, **fields) -> ReplyRecord:
-        # every record carries the findings the reply was asked about
-        return ReplyRecord.of(outcome, "skeptic", provider.family.value, counts={"findings": len(findings), **(counts or {})}, **fields)
+    record = base.ballot_recorder(outcome, "skeptic", provider.family.value, len(findings))
 
     if echoed:
         # followed the planted instruction: none of its verdicts counts
