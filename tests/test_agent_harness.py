@@ -394,8 +394,9 @@ def test_an_answer_of_the_wrong_shape_is_voided_as_one_invalid_item(root):
     assert view is None and recs == [extraction("context", provider.family.value, wrong_shape=True)]
 
 
-@pytest.mark.parametrize("agent", [skeptic.run_skeptic, redteam.run_redteam], ids=["skeptic", "redteam"])
-def test_a_ballot_reply_that_echoes_the_canary_still_counts_the_findings_it_was_asked_about(root, agent):
+@pytest.mark.parametrize(("agent", "role"), [(skeptic.run_skeptic, "skeptic"), (redteam.run_redteam, "redteam")],
+                         ids=["skeptic", "redteam"])
+def test_a_ballot_reply_that_echoes_the_canary_still_counts_the_findings_it_was_asked_about(root, agent, role):
     """The echo record holds the echo and the findings asked about, nothing else (tests/reply_records.py)."""
     from tests.reply_records import ballot
 
@@ -410,4 +411,4 @@ def test_a_ballot_reply_that_echoes_the_canary_still_counts_the_findings_it_was_
     provider = Echo()
     ctx = RepoContext(root=root, content={"app.py": "def get(u):\n    return u\n"})
     out, rec = agent(provider, ctx, [_finding()])
-    assert out == [] and rec == ballot(rec.role, provider.family.value, 1, canary_echoes=1)
+    assert out == [] and rec == ballot(role, provider.family.value, 1, canary_echoes=1)
