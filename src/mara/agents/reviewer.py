@@ -58,7 +58,7 @@ CONTEXT_DIMENSIONS = ("architecture", "authn_authz")
 def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canary: base.Canary | None = None,
                      context_view: ContextView | None = None) -> tuple[list[Finding], ReplyRecord]:
     """One reviewer exchange for `dimension` (base.extraction_exchange, a canary of its own unless one is given): the
-    findings of its answer, every one with its quotes verified, and the reply record."""
+    findings of its answer, every one with its quotes checked, and the reply record."""
     derived: tuple[exchange.Derived, ...] = ()
     if context_view is not None and dimension in CONTEXT_DIMENSIONS:
         # the C4-lite view (assessment #19): boundaries a reviewer must reason about, derived

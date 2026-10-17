@@ -1,6 +1,7 @@
 """The reply exchange (GLOSSARY.md: exchange, voided reply, invalid item, canary echo): every role voids a reply that
 echoes the canary or whose reply outcome is not ok before it reads the answer's shape, and only then an answer not of
-the shape asked for; and every exchange plants a canary of its own (docs/adr/0008-reply-accounting.md)."""
+the shape asked for; every exchange plants a canary of its own (docs/adr/0008-reply-accounting.md); and a judge's vote
+says whether the judge's family found the finding itself."""
 
 import json
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from mara.agents import base, context_agent
+from mara.agents.judge import run_judge
 from mara.agents.reviewer import review_dimension
 from mara.config import load_config
 from mara.context.repo_map import build_context
@@ -63,7 +65,6 @@ def test_every_exchange_plants_a_canary_of_its_own(tmp_path):
 def test_a_judge_vote_on_a_finding_its_own_family_found_says_so():
     """The human queue shows each judge's vote with whether the judge's family found the finding itself; the jury
     recomputes that from the finders for its own count, so nothing else would notice the vote losing it."""
-    from mara.agents.judge import run_judge
 
     class Judging(Provider):
         def __init__(self):
