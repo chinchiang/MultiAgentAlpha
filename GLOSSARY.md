@@ -38,7 +38,15 @@ _Avoid_: canary citation
 The single classification of one reply: ok, truncation, unparseable reply, empty reply, refusal or error (no reply at all). Recorded once for every reply; see docs/adr/0001-reply-outcome-accounting.md.
 
 **Reply record**:
-What one exchange's reply counts for: its role and family, its reply outcome, canary echoes and reports, invalid items, whether it was voided as a whole, the role's own counts and its tokens. `mara.audit` turns every record into the audit counters by one table; see docs/adr/0008-reply-accounting.md.
+What one exchange's reply counts for: its role and family, its reply outcome, canary echoes and reports, invalid items, whether it is a voided reply, the role's own counts and its tokens. `mara.audit` turns every record into the audit counters by one table; see docs/adr/0008-reply-accounting.md.
+
+**Voided reply**:
+A reply none of whose items count: its reply outcome is not ok, it echoes the canary, or its answer is not of the shape the role asks for. Its reply outcome and canary echo still count.
+_Avoid_: discarded reply, rejected reply (rejected is a jury outcome)
+
+**Invalid item**:
+One item of a reply that is not of the shape its role asks for, or an answer with no items where items were asked for; invalid output, charged to the model.
+_Avoid_: bad item, malformed finding (a finding is only what a reviewer reports)
 
 **Extraction role**:
 A role that produces new items from repository data (reviewer, context); an empty reply from it is an abstention.

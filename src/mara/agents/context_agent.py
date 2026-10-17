@@ -120,37 +120,34 @@ def run_context_agent(provider: Provider, ctx: RepoContext) -> tuple[ContextView
 
 
 def _context_call(provider: Provider, ctx: RepoContext) -> tuple[list[ContextItem] | None, ReplyRecord]:
-    """One context call over one batch: (verified items, its reply record); None when the call is unusable."""
-    canary = base.Canary()
-    outcome = exchange.ask(provider, role="context", system_extra=base.load_prompt("context"), schema=CONTEXT_SCHEMA, lead="",
-                           ctx=ctx, canary=canary,
-                           close='Return {"containers": [...], "external_systems": [...], "trust_boundaries": [...], '
-                                 '"data_stores": [...]} following the schema.')
-    data, echoed, reported = canary.screen(outcome, tuple(key for _, key in _KIND_BY_KEY))
+    """One context call over one batch (base.extraction_exchange): (verified items, its reply record); None when the
+    reply is voided."""
 
-    record = base.extraction_recorder(outcome, "context", provider.family.value, echoed, reported, unverified_as="unverified")
+    def read(data: dict) -> base.Read:
+        invalid = unverified = 0
+        raw: list[tuple[_ContextKind, dict]] = []
+        for kind, key in _KIND_BY_KEY:
+            arr = data.get(key)
+            if not isinstance(arr, list):
+                invalid += 1
+                continue
+            raw.extend((kind, x) for x in arr if isinstance(x, dict))
+        items: list[ContextItem] = []
+        for kind, x in raw:
+            try:
+                item = _ContextItemRaw(kind=kind, **{k: v for k, v in x.items() if k != "kind"})
+            except ValidationError:
+                invalid += 1
+                continue
+            if not base.verify_quote(ctx, item.file, item.line, item.quote):
+                unverified += 1
+                continue
+            items.append(ContextItem(**item.model_dump()))
+        return base.Read(items, invalid, unverified)
 
-    if outcome.data is None or echoed:
-        return None, record(voided=True)
-    if not isinstance(data, dict):
-        return None, record(invalid=1, voided=True)
-    invalid = unverified = 0
-    raw: list[tuple[_ContextKind, dict]] = []
-    for kind, key in _KIND_BY_KEY:
-        arr = data.get(key)
-        if not isinstance(arr, list):
-            invalid += 1
-            continue
-        raw.extend((kind, x) for x in arr if isinstance(x, dict))
-    items: list[ContextItem] = []
-    for kind, x in raw:
-        try:
-            item = _ContextItemRaw(kind=kind, **{k: v for k, v in x.items() if k != "kind"})
-        except ValidationError:
-            invalid += 1
-            continue
-        if not base.verify_quote(ctx, item.file, item.line, item.quote):
-            unverified += 1
-            continue
-        items.append(ContextItem(**item.model_dump()))
-    return items, record(invalid, unverified)
+    got, record = base.extraction_exchange(
+        provider, ctx, role="context", asked_as="context", system_extra=base.load_prompt("context"), schema=CONTEXT_SCHEMA,
+        lead="", close='Return {"containers": [...], "external_systems": [...], "trust_boundaries": [...], '
+                      '"data_stores": [...]} following the schema.',
+        keys=tuple(key for _, key in _KIND_BY_KEY), unverified_as="unverified", read=read)
+    return (got.items if got is not None else None), record

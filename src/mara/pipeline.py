@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import ballot_round, exchange
-from .agents import base, context_agent, reviewer
+from .agents import context_agent, reviewer
 from .agents.context_agent import ContextView
 from .audit import Audit, log_tags
 from .config import MaraConfig
@@ -144,13 +144,13 @@ class Pipeline:
 
     # ------------------------------------------------------------------ L2
     def run_reviewers(self, ctx: RepoContext, context_view: ContextView | None = None) -> list[Finding]:
-        canary = base.Canary()
         raw: list[Finding] = []
         for batch in ctx.batches():
             for dim in self.cfg.dimensions:
                 for name in self.cfg.roles.reviewers:
                     prov = self._p(name)
-                    findings, rec = reviewer.review_dimension(prov, batch, dim, canary, context_view)
+                    # every exchange plants a canary of its own (agents.base.extraction_exchange)
+                    findings, rec = reviewer.review_dimension(prov, batch, dim, context_view=context_view)
                     self.audit.record(rec)
                     raw.extend(findings)
                     self._say(f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)" + log_tags(rec))

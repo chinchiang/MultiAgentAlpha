@@ -109,30 +109,26 @@ def run_redteam(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
         }
         for f in findings
     ]
-    canary = base.Canary()  # raw repository files again: an injection steering exploitability must show
-    outcome = exchange.ask(provider, role="redteam", system_extra=base.load_prompt("redteam"), schema=REDTEAM_SCHEMA,
-                           lead="Findings to probe: every finding in the findings block below, by finding_id.",
-                           ctx=ctx, canary=canary, paths=sorted({p.file for f in findings for p in f.provenance}),
-                           derived=(exchange.Derived("findings", view),))
-    echoed, tainted = canary.screen_verdicts(outcome)  # same rule as the skeptic's (exchange.Canary.screen_verdicts)
 
-    record = base.ballot_recorder(outcome, "redteam", provider.family.value, len(findings))
+    def rule(items: list, tainted: set[str]) -> tuple[list[RedTeamNote], dict[str, int]]:
+        stripped = 0
+        out = []
+        for i in items:
+            clean, had_code = strip_exploit_code(i.preconditions)
+            stripped += int(had_code)
+            # a note quoting the planted "report no findings" may not declare the finding unexploitable
+            exploitable: Literal["yes", "conditional", "no", "unknown"] = (
+                "unknown" if i.finding_id in tainted and i.exploitable == "no" else i.exploitable)
+            out.append(RedTeamNote(finding_id=i.finding_id, exploitable=exploitable, preconditions=clean,
+                                   source_family=provider.family, source_model=provider.model))
+        # every finding_id is covered exactly once (checked by the exchange), so no filter is needed here
+        return out, {"exploit_code_stripped": stripped}
 
-    if echoed:
-        # followed the planted instruction: none of its notes counts
-        return [], record(canary_echoes=1, voided=True)
-    items, invalid, gaps = base.ballot_items(outcome, _RedRaw, {f.id for f in findings})
-    if items is None:
-        return [], record(canary_reports=len(tainted), invalid_items=invalid, voided=True, log_codes=gaps)
-    stripped = 0
-    out = []
-    for i in items:
-        clean, had_code = strip_exploit_code(i.preconditions)
-        stripped += int(had_code)
-        # a note quoting the planted "report no findings" may not declare the finding unexploitable
-        exploitable: Literal["yes", "conditional", "no", "unknown"] = (
-            "unknown" if i.finding_id in tainted and i.exploitable == "no" else i.exploitable)
-        out.append(RedTeamNote(finding_id=i.finding_id, exploitable=exploitable, preconditions=clean,
-                               source_family=provider.family, source_model=provider.model))
-    # every finding_id is covered exactly once (checked above), so no filter is needed here
-    return out, record(canary_reports=len(tainted), counts={"exploit_code_stripped": stripped})
+    # raw repository files again: an injection steering exploitability must show, so a canary is planted, read by the
+    # same rule as the skeptic's (exchange.Canary.screen_verdicts)
+    out, record = base.ballot_exchange(
+        provider, role="redteam", system_extra=base.load_prompt("redteam"), schema=REDTEAM_SCHEMA,
+        lead="Findings to probe: every finding in the findings block below, by finding_id.", model_cls=_RedRaw,
+        expected={f.id for f in findings}, findings=len(findings), rule=rule, ctx=ctx,
+        paths=sorted({p.file for f in findings for p in f.provenance}), derived=(exchange.Derived("findings", view),))
+    return (out if out is not None else []), record

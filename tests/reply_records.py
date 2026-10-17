@@ -35,21 +35,19 @@ def _check_reply(kind: Kind, fields: dict) -> None:
 def extraction(role: Role, family: str, kind: Kind = OK, *, wrong_shape: bool = False, counts: dict[str, int] | None = None,
                log_codes: tuple[str, ...] = (), **fields) -> ReplyRecord:
     """A reviewer's or the context agent's record. `wrong_shape`: an ok reply whose answer is not the object asked for,
-    voided as one invalid item; `invalid_items` are the items an ok reply the agent used could not read."""
+    voided as one invalid item unless it echoes the canary; `invalid_items` are the items an ok reply the agent used
+    could not read."""
     if ROLES[role].role_type != "extraction":
         raise ValueError(f"{role} is a ballot role")
     _check_reply(kind, fields)
     echoed = bool(fields.get("canary_echoes"))
     if wrong_shape and kind != OK:
         raise ValueError("only an ok reply has an answer of the wrong shape")
-    # the context agent stops at an echo before it reads the answer's shape; the reviewer reads the shape first
-    # (agents.context_agent, agents.reviewer)
-    if wrong_shape and echoed and role == "context":
-        raise ValueError("the context agent's echo record holds no invalid items")
     if fields.get("invalid_items") and (wrong_shape or kind != OK or echoed):
         raise ValueError("only an ok reply the agent used has items it could not read")
     voided = kind != OK or echoed or wrong_shape
-    return ReplyRecord(role=role, family=family, kind=kind, voided=voided, invalid_items=int(wrong_shape),
+    # every role stops at an echo before it reads the answer's shape (agents.base.extraction_exchange)
+    return ReplyRecord(role=role, family=family, kind=kind, voided=voided, invalid_items=int(wrong_shape and not echoed),
                        log_codes=_provider_code(kind) + log_codes, counts={**dict.fromkeys(_COUNTS[role], 0), **(counts or {})},
                        **fields)
 
@@ -63,7 +61,7 @@ def ballot(role: Role, family: str, findings: int, kind: Kind = OK, *, missing: 
     if missing and kind != OK:
         raise ValueError("a reply without a list is not checked for coverage")
     _check_reply(kind, fields)
-    # the skeptic and red team stop at an echo, before the reports and the coverage check (agents.skeptic, agents.redteam)
+    # the skeptic and red team stop at an echo, before the reports and the coverage check (agents.base.ballot_exchange)
     if fields.get("canary_echoes") and (missing or fields.get("canary_reports")):
         raise ValueError("a ballot's echo record holds no invalid items and no canary reports")
     voided = kind != OK or bool(fields.get("canary_echoes")) or bool(missing)
