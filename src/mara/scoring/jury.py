@@ -10,9 +10,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..bias.diversity import pairwise_family_agreement
-from ..identity import NEAR_LINES, norm_cwe, norm_path
 from ..schemas import SEVERITY_ORDER, ConsensusResult, Finding, JudgeVote, ModelFamily
-from ..tools.runner import TOOL_DIMENSIONS
+from ..tools.evidence import corroborates
 from ..tools.sarif import ToolResult
 from . import cvss4
 from .consensus import krippendorff_alpha_nominal, weighted_consensus
@@ -80,7 +79,7 @@ def score(findings: list[Finding], finders: dict[str, set[ModelFamily]], ballots
         refuted = bool(sk and sk.verdict == "refuted")
         unchallenged = f.id in ballots.unchallenged
         prov_ok = bool(f.provenance) and all(p.verified for p in f.provenance)
-        corroborated = _tool_corroborates(f, tool_results, tool_path_prefix)
+        corroborated = corroborates(f, tool_results, tool_path_prefix)
         fams = set(agreeing) | (finders[f.id] if weighted >= policy.accept_threshold else set())
         if corroborated:
             fams.add(ModelFamily.TOOL)
@@ -172,30 +171,3 @@ def _alpha_units(findings: list[Finding], votes: list[JudgeVote]) -> dict[str, l
                 labels.append(passes["forward"])
         units[f.id] = labels
     return units
-
-
-def _tool_corroborates(f: Finding, tool_results: list[ToolResult], prefix: str = "") -> bool:
-    """A tool result corroborates a finding (tier A) only on the same file, within +-3 lines, with a
-    matching CWE (or none), from a tool that scans the finding's dimension, at level error or
-    warning - the levels that also block as unresolved tool findings; a note is information.
-
-    Same file means the exact path. Tools that ran from the repository top level report paths
-    below it (pre-recorded zizmor: fixtures/vuln-sample/.github/workflows/deploy.yml), so a path
-    that is exactly `prefix/<finding path>` also matches, prefix being the target's own path below
-    the top level. A bare suffix match did not: `main.py` matched `services/billing/main.py`, and a
-    tool hit in another file promoted a single-family finding to tier A."""
-    for t in tool_results:
-        # a tool only corroborates findings in the dimensions it scans for (TOOL_DIMENSIONS):
-        # csp-evaluator emits results without CWEs, and without this guard any such result would
-        # corroborate any finding that happens to sit within +-3 lines
-        if f.dimension not in TOOL_DIMENSIONS.get(t.tool, []) or t.level not in ("error", "warning"):
-            continue
-        tf = norm_path(t.file)
-        for p in f.provenance:
-            pf = norm_path(p.file)
-            same_file = tf == pf or (bool(prefix) and tf == f"{prefix}/{pf}")
-            if same_file and abs(t.line - p.line) <= NEAR_LINES:
-                cwes = {norm_cwe(c) for c in (t.cwes or ([t.cwe] if t.cwe else []))}
-                if not cwes or norm_cwe(f.cwe) in cwes:
-                    return True
-    return False

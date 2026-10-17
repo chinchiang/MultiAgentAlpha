@@ -11,6 +11,7 @@ from .audit import INCOMPLETE_COUNTERS
 from .identity import norm_path
 from .schemas import BlockingReason, ConsensusResult, DimensionScore, GateReason
 from .scoring.outcome import OutcomePolicy, tier_c_needs_human
+from .tools.evidence import is_alert
 from .tools.runner import ToolRun
 from .tools.sarif import ToolResult
 
@@ -158,6 +159,6 @@ def _incomplete_reasons(facts: ReviewFacts, consensus: list[ConsensusResult], to
         out.append(UNRESOLVED_HUMAN_REVIEW)
     # Tool evidence remains visible independently of model output. A model's silence or rejection never clears an
     # unsuppressed tool result.
-    if any(t.level in {"error", "warning"} for t in tool_results):
+    if any(is_alert(t.level) for t in tool_results):
         out.append(UNRESOLVED_TOOL_FINDINGS)
     return tuple(out)
