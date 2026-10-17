@@ -18,7 +18,8 @@ always there to read afterwards. The checks, as .github/workflows/mara-review.ym
   gitleaks  scripts/gitleaks_ci.py --event pull_request over the commits since the merge base with --base
 Not run here: the whole suite on CPython 3.12, the repository scanners (semgrep, osv-scanner, trivy, zizmor,
 csp-evaluator), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
-Exit 0 when every check passed, 1 otherwise.
+When a check that reads the branch's commits (gitleaks) ran and the working tree has changes git status lists, the
+summary warns that it did not see them. Exit 0 when every check passed, 1 otherwise; the warning changes neither.
 """
 
 from __future__ import annotations
@@ -81,6 +82,15 @@ CHECKS: dict[str, Check] = {
 }
 
 
+COMMIT_CHECKS = ("gitleaks",)  # the checks that read the branch's commits, not the working tree
+
+
+def uncommitted(root: Path) -> list[str]:
+    """The changes `git status --porcelain` lists under `root`, tracked and untracked; why git could not tell, if so."""
+    cp = subprocess.run(["git", "-C", str(root), "status", "--porcelain"], capture_output=True, text=True)
+    return cp.stdout.splitlines() if cp.returncode == 0 else [f"git status failed: {cp.stderr.strip()}"]
+
+
 def run_check(name: str, check: Check, a: argparse.Namespace) -> int:
     """Run one check with its whole output (stdout and stderr) in <logs>/<name>.log; its exit code."""
     log = a.logs / f"{name}.log"
@@ -120,6 +130,12 @@ def main(argv: list[str] | None = None) -> int:
             failed.append(log)
     for log in failed:
         print(f"failed: {log}")
+    blind = [name for name in a.only if name in COMMIT_CHECKS]
+    changes = uncommitted(ROOT) if blind else []
+    if changes:
+        reads = "it reads" if len(blind) == 1 else "they read"
+        print(f"WARNING: {len(changes)} uncommitted change(s), which {', '.join(blind)} did not see: {reads} the branch's "
+              f"commits. Commit them and run --only {' '.join(blind)} to check them.")
     print(f"logs: {a.logs}")
     return 1 if failed else 0
 
