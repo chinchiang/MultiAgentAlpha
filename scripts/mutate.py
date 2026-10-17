@@ -13,7 +13,9 @@ The list is a YAML file:
       new: 'ALERT_LEVELS = ("error", "warning", "note")'
 
 Quote every value with a ` #` in it: YAML ends an unquoted value at ` #` and reads the rest as a comment, so
-`name: the PR #141 rule` loads as "the PR". Every `old` must occur exactly once in its file; the list is checked before any file is touched. A mutation is caught
+`name: the PR #141 rule` loads as "the PR".
+
+Every `old` must occur exactly once in its file; the list is checked before any file is touched. A mutation is caught
 when a test fails on it: the focused tests first (all of them, or until one fails), then, if they pass, the whole
 suite. Tests run with GITHUB_ACTIONS=true and without writing bytecode, after src/ and tests/ are cleared of it: a
 mutant of the same size written within a second of the original would otherwise run as the original's cached bytecode.

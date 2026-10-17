@@ -1,4 +1,4 @@
-"""scripts/check_local.py: the checks a pull request's CI runs, run before the push with every output kept."""
+"""scripts/check_local.py: four of the checks a pull request's CI runs, run before the push with every output kept."""
 
 from __future__ import annotations
 

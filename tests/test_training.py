@@ -60,8 +60,8 @@ def _repo_refs(rationale: str) -> list[str]:
 
 
 def test_every_path_a_rationale_names_exists_and_defines_the_name_it_points_at():
-    """A rationale pointing at code that moved still read true while the file was there: tightening left
-    src/mara/report/human_queue_out.py for src/mara/human_queue.py, and only a manual search found the pointer."""
+    """A rationale pointing at code that moved reads true for as long as the file is still there, so a `path::name`
+    pointer is checked down to the name."""
     for q in training.load_quiz(QUIZ):
         for ref in _repo_refs(q["rationale"]):
             file, _, name = ref.partition("::")
@@ -74,7 +74,7 @@ def test_a_pointer_to_a_name_the_file_no_longer_defines_is_found():
         "src/mara/human_queue.py::tightening"]
     assert _defines(ROOT / "src" / "mara" / "human_queue.py", "tightening")
     assert _defines(ROOT / "src" / "mara" / "human_queue.py", "Tightening.record")
-    assert not _defines(ROOT / "src" / "mara" / "report" / "human_queue_out.py", "tightening"), "moved out in #141"
+    assert not _defines(ROOT / "src" / "mara" / "report" / "human_queue_out.py", "tightening"), "the file is there, the name is not"
     assert not _defines(ROOT / "src" / "mara" / "human_queue.py", "Tightening.nothing")
 
 

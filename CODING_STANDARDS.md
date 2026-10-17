@@ -30,8 +30,8 @@ glossary.
 An ADR's decision text stays as it was decided. A later change adds a dated paragraph, "Amended YYYY-MM-DD: …", in the
 Consequences when the ADR has them, else after the decision and before the considered options; a later ADR that amends
 one says so in a line of its own ("Amended by ADR 0007 (docs/adr/0007-review-status-and-gate.md): …"). The amendment
-says what changed and what of the original decision still stands, and corrects any sentence of the original that the
-change made stale.
+says what changed, what of the original decision still stands, and which of its sentences the change made stale and
+what holds instead; those sentences are left as they were decided.
 
 ## A CHANGELOG row records one version
 

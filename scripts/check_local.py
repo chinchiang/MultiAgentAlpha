@@ -1,4 +1,4 @@
-"""Before a push, the checks CI runs on a pull request, run here with every output kept.
+"""Before a push, four of the checks CI runs on a pull request, run here with every output kept.
 
   .venv/bin/python scripts/check_local.py                     # ruff, mypy, the whole suite, gitleaks on the branch
   .venv/bin/python scripts/check_local.py --only ruff mypy    # some of them
@@ -14,6 +14,8 @@ always there to read afterwards. The checks, as .github/workflows/mara-review.ym
   pytest    GITHUB_ACTIONS=true pytest -q -rfE (CI colours CLI output), after clearing src/ and tests/ of compiled
             bytecode, which can keep a same-size edit made within a second from taking effect
   gitleaks  scripts/gitleaks_ci.py --event pull_request over the commits since the merge base with --base
+Not run here: the whole suite on CPython 3.12, the repository scanners (semgrep, osv-scanner, trivy, zizmor,
+csp-evaluator), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
 Exit 0 when every check passed, 1 otherwise.
 """
 
