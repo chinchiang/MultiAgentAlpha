@@ -47,6 +47,10 @@ A role that produces new items from repository data (reviewer, context); an empt
 A role that rules on given findings one by one (skeptic, red team, judge); an empty reply from it is invalid output, since a ballot cannot abstain.
 _Avoid_: verdict role
 
+**Ballot round**:
+The part of a review in which every ballot role rules on the deduplicated findings: the skeptic, then the red team on the findings the skeptic did not refute, then each judge in a forward and a mirrored reverse pass. A voided reply worth it is asked once more. Its result, the ballots (the skeptic's verdicts, the red team's notes and the judges' votes), is what the jury outcome is scored from.
+_Avoid_: L3/L4 (layer numbers, not a concept), jury round (the jury is the judges alone)
+
 **Truncation**:
 A reply the vendor stopped at the output limit; a budget problem, never charged to the model, and never evidence of a canary echo.
 _Avoid_: cut-off for unparseable replies
@@ -66,7 +70,7 @@ _Avoid_: block, rejection
 
 **Decision**:
 One adjudicator's ruling, true positive or false positive, on one human-queue key (人工裁決). A well-formed decision is one whose record is internally consistent, whoever made it and whatever it is later compared with.
-_Avoid_: adjudication, label (a label is a calibration sample's answer key), verdict (a judge's vote)
+_Avoid_: adjudication, label (a label is a calibration sample's answer key), verdict (a skeptic's or judge's ruling on one finding)
 
 **Adjudicator**:
 The person who made a decision, named by the decision event on the ticket.
@@ -79,6 +83,14 @@ _Avoid_: matching decision, applied decision
 **Usable decision**:
 A well-formed, bound decision with no contradicting decision on its key, made by a trained adjudicator whenever training is required; the only kind of decision that counts as ground truth (calibration labels, the Alternative Annotator Test, false-positive rates). A decision that is well-formed but not usable still answers its ticket: no new ticket is filed for its key.
 _Avoid_: valid decision (ambiguous between well-formed and usable)
+
+**Jury**:
+The judges of a review as their votes are counted: one judge family each, the weight each family's vote carries, the discount on a vote from a family among the finding's finders, and how many families independent of its finders a finding needs for a quorum.
+_Avoid_: panel (the panel is every model the config names, reviewers included), judges (the judges are the models; the jury is how their votes count)
+
+**Jury signals**:
+What the pipeline measures about one finding before it concludes anything: its evidence tier, weighted score and CVSS severity, whether its provenance is verified, whether the skeptic refuted it or left it unchallenged, whether enough independent judges voted, whether every judge family gave both passes, and their agreement and position consistency. They come from the finding's ballots, its finders, the tool evidence and the jury; the jury outcome is decided from them alone.
+_Avoid_: consensus (the weighted score is one of them), votes (the votes are one input)
 
 **Jury outcome**:
 What the pipeline itself concluded about a finding from the judges, skeptic, tools and evidence tier: accepted, rejected, dropped, or needing a human.
@@ -96,6 +108,10 @@ _Avoid_: rejected finding
 The human look at every rejected finding that policy P8 requires until the Alternative Annotator Test passes. The finding enters the human queue, its jury outcome stays rejected, and the review is not incomplete because of it.
 _Avoid_: needing a human (that outcome is undecided; a rejection under review is decided)
 
+**Queue tightening**:
+What the human queue does while its ticket backlog is over the limit: the agreement a finding needs to avoid a human rises, and tier C findings are left to the jury unless the config keeps them queued. Fewer findings reach a human, and those tier C ones block the gate instead. It never loosens on its own.
+_Avoid_: throttling, backpressure
+
 **Final outcome**:
 A finding's outcome once human decisions are taken into account: the ruling of a usable decision where one exists, the jury outcome otherwise. It takes the jury outcome's values; a true-positive ruling makes it accepted, a false-positive ruling rejected.
 _Avoid_: override result
@@ -104,18 +120,40 @@ _Avoid_: override result
 A finding whose final outcome is the ruling of a usable decision rather than the jury outcome.
 _Avoid_: overridden finding (the jury outcome still exists beside it)
 
+## Tools
+
+**Tool evidence**:
+What the deterministic tools reported on one review's target: each tool's run, whether it ran to completion, and the results it reported, a scan that did not complete included.
+_Avoid_: L0 results, tool findings (a finding is what a reviewer reports), SARIF (one format the results come in)
+
+**Required tool**:
+A deterministic tool that scans at least one of the dimensions a review covers; the review is incomplete unless every required tool ran.
+_Avoid_: enabled tool (a tool can run without being required)
+
+**Tool alert**:
+A tool result at level error or warning: it can corroborate a finding and, until the tool's own triage suppresses it, keeps the review incomplete. A note is information, not an alert.
+_Avoid_: blocking tool result (a blocking finding is a gate rule), tool finding
+
+**Corroboration**:
+A tool alert's independent support for a finding: at the same place, for the same weakness, from a tool that scans the finding's dimension. A corroborated finding has evidence tier A.
+_Avoid_: tool match, confirmation (a judge's vote is not corroboration)
+
 ## Reviews
 
 **Review scope**:
 What one review covered: the whole target (full) or the files changed against a base together with the modules related to them (incremental); unknown for a report written before reviews recorded their scope. Scores of reviews with different scopes cannot be compared.
 _Avoid_: mode (the provider mode is a different thing), diff review
 
+**Review facts**:
+What a review gathered, stage by stage, that its review status and gate are decided from: whether the bundle covered the target, whether source egress was blocked, whether every required tool ran, whether the context view is missing, whether the ML-BOM signature verified, which audit counters make it incomplete, the rollout phase and whether the operator asked to enforce the gate.
+_Avoid_: inputs, state
+
 **Review status**:
 Whether a review can stand as a conclusion: complete, or incomplete together with its incomplete reasons. An incomplete review has no overall score.
 _Avoid_: run status, success
 
 **Incomplete reason**:
-One thing that keeps a review from standing as a conclusion: coverage or a required tool missing, a model reply that failed, a finding whose final outcome still needs a human, a tool result nobody has triaged. A rejection review is not one.
+One thing that keeps a review from standing as a conclusion: coverage or a required tool missing, a model reply that failed, a finding whose final outcome still needs a human, a tool alert. A rejection review is not one.
 _Avoid_: error (an error is one kind of reply outcome), failure
 
 **Gate**:
@@ -125,6 +163,14 @@ _Avoid_: check (a CI check is a different thing), pass/fail
 **Blocking finding**:
 A finding whose final outcome is accepted and whose evidence tier and severity meet the gate's blocking rules; while the human queue is tightened, an accepted tier C finding at the severity floor blocks too, since no human will look at it.
 _Avoid_: blocker, critical finding (severity alone does not block)
+
+**Bias audit**:
+The report's counts and statistics of how the review went: every exchange's reply outcomes and canary echoes by role and family, what the pipeline dropped, merged or excluded on the way, the jury's agreement and position flips, and the exchange version the counts follow. It holds no report metadata: the rollout phase, the human queue's tightening and the ML-BOM and model-evaluation status are fields of the report of their own.
+_Avoid_: audit alone (the Alternative Annotator Test and the governance checks are audits too), report metadata (the rest of the report)
+
+**Report metadata**:
+What a report records about the circumstances of its review rather than about how the review went: the rollout phase, the human queue's tightening, the ML-BOM status and signature, and the model families' red-team evaluations. Each is a field of the report of its own, none is in the bias audit, and a report written before a value was recorded reads it as not recorded.
+_Avoid_: bias audit, config (the config is what was asked for; the metadata are what was in force)
 
 ## Exports
 

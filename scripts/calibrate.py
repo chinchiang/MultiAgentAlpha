@@ -459,7 +459,7 @@ def tool_recall(runs, tool_labels):
 
 def load_model_eval() -> dict | None:
     """G-8: latest calib/model-eval-<date>.json (garak / CyberSecEval verdicts per family), in the workspace
-    where scripts/model_eval.py writes it and the pipeline's bias audit reads it."""
+    where scripts/model_eval.py writes it and the pipeline reads it into the report's model_eval."""
     from mara.model_eval import latest_summary
     from mara.workspace import root as workspace_root
 

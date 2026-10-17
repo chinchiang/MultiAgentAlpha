@@ -8,9 +8,9 @@ cannot buy credibility at the judge layer.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, field_validator, model_validator
 
 DIMENSIONS: list[str] = [
     "architecture",
@@ -163,6 +163,7 @@ JuryOutcomeValue = Literal["accepted", "rejected", "dropped", "needs_human"]
 # (docs/adr/0007-review-status-and-gate.md; mara.review_status writes them)
 GateReason = Literal["review_incomplete", "blocking_tier_and_severity", "tier_c_while_tightened", "dimension_below_minimum"]
 BlockingReason = Literal["blocking_tier_and_severity", "tier_c_while_tightened"]
+RolloutPhase = Literal["not_started", "shadow", "advisory", "blocking"]  # G-10 (config.RolloutConfig)
 
 
 class ConsensusResult(BaseModel):
@@ -269,6 +270,53 @@ class HumanQueueItem(BaseModel):
     judge_votes: list[dict] = Field(default_factory=list, description="family, pass, verdict, severity_band, reason, self_family")
 
 
+class QueueTightening(BaseModel):
+    """The human queue's tightening a review ran under (GLOSSARY.md: queue tightening): the ticket backlog it was judged
+    on (None when none was known), whether the queue was tightened, and the agreement threshold that followed."""
+
+    backlog: int | None
+    tightened: bool
+    alpha_threshold: float
+
+
+class MlBomEntry(BaseModel):
+    """One self-hosted model as the ML-BOM knows it (G-7): its id, the BOM's status for it and, once complete, the
+    component, version and digest of its weights."""
+
+    model_id: str
+    status: str
+    component: str = ""
+    version: str = ""
+    sha256: str = ""
+
+
+class ModelEvalStatus(BaseModel):
+    """A model family's latest red-team evaluation (G-8, garak / CyberSecEval): its date, mode and verdict, 'none' until
+    one has run."""
+
+    date: str | None = None
+    mode: str | None = None
+    status: str = "none"
+
+
+# the report metadata reports written before docs/adr/0009-report-metadata.md kept in bias_audit; the counts among
+# them (human_queue_size, psirt_notifications, tool_results_ingested) and tools_ran are read from the report's own lists
+LEGACY_METADATA = ("human_queue_size", "human_queue_backlog", "human_queue_tightened", "human_alpha_threshold", "psirt_notifications",
+                   "ml_bom", "ml_bom_signature", "rollout_phase", "model_eval", "tool_results_ingested", "tools_ran")
+# the shape an old value must have to be read into its field; one of another shape reads as not recorded
+_LEGACY_SHAPES: dict[str, TypeAdapter[Any]] = {"rollout_phase": TypeAdapter(RolloutPhase), "ml_bom": TypeAdapter(dict[str, MlBomEntry]),
+                  "ml_bom_signature": TypeAdapter(str), "model_eval": TypeAdapter(dict[str, ModelEvalStatus]),
+                  "human_queue_tightening": TypeAdapter(QueueTightening)}
+
+
+def _fits(field: str, value) -> bool:
+    try:
+        _LEGACY_SHAPES[field].validate_python(value)
+    except ValidationError:
+        return False
+    return True
+
+
 class ReviewReport(BaseModel):
     target: str
     generated_at: str
@@ -298,6 +346,38 @@ class ReviewReport(BaseModel):
     # whether a blocked gate was enforced (rollout phase blocking, or --fail-on-gate); false when the gate passed,
     # null in reports written before it: unknown, not "not enforced"
     gate_enforced: bool | None = None
+    # the bias audit (GLOSSARY.md): counts and statistics only; the report's metadata are fields of their own
+    # (docs/adr/0009-report-metadata.md), each None or empty in a report written before it was recorded at all
     bias_audit: dict[str, float | int | str | dict]
+    rollout_phase: RolloutPhase | None = None
+    human_queue_tightening: QueueTightening | None = None
+    ml_bom: dict[str, MlBomEntry] = Field(default_factory=dict)
+    ml_bom_signature: str | None = Field(default=None, description="'verified' or 'failed: <why>' when the config requires a signed ML-BOM")
+    model_eval: dict[str, ModelEvalStatus] = Field(default_factory=dict)
     psirt: list[dict] = Field(default_factory=list, description="G-12: CRA Article 14 early-warning payloads for accepted tier-A Critical findings")
     human_queue: list[HumanQueueItem] = Field(default_factory=list, description="G-11: findings that need a human decision, with full context")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _metadata_out_of_the_bias_audit(cls, data):
+        """A report written before docs/adr/0009-report-metadata.md held its metadata in bias_audit: read it into the
+        fields and out of the audit, so an old report and a new one read alike. The counts and tools_ran are dropped,
+        since the report's own lists give them; a backlog recorded as "unknown" is None, and an old value that does not
+        have its field's shape reads as not recorded rather than failing the report."""
+        if not isinstance(data, dict) or not isinstance(data.get("bias_audit"), dict):
+            return data
+        audit = dict(data["bias_audit"])
+        legacy = {k: audit.pop(k) for k in LEGACY_METADATA if k in audit}
+        if not legacy:
+            return data
+        data = {**data, "bias_audit": audit}
+        for key in ("rollout_phase", "ml_bom", "ml_bom_signature", "model_eval"):
+            if key in legacy and key not in data and _fits(key, legacy[key]):
+                data[key] = legacy[key]
+        if {"human_queue_backlog", "human_queue_tightened", "human_alpha_threshold"} <= legacy.keys() and "human_queue_tightening" not in data:
+            backlog = legacy["human_queue_backlog"]
+            tightening = {"backlog": None if backlog == "unknown" else backlog, "tightened": bool(legacy["human_queue_tightened"]),
+                          "alpha_threshold": legacy["human_alpha_threshold"]}
+            if _fits("human_queue_tightening", tightening):
+                data["human_queue_tightening"] = tightening
+        return data

@@ -10,7 +10,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
-from .schemas import DIMENSIONS, SEVERITY_ORDER, EvidenceTier, ModelFamily
+from .schemas import DIMENSIONS, SEVERITY_ORDER, EvidenceTier, ModelFamily, RolloutPhase
 
 
 class ModelSpec(BaseModel):
@@ -189,9 +189,6 @@ class TrainingConfig(BaseModel):
                                       description="Roles that must each have a valid record for governance check G-13")
 
 
-RolloutPhase = Literal["not_started", "shadow", "advisory", "blocking"]
-
-
 class RolloutConfig(BaseModel):
     """G-10: three-phase rollout (report section 15.4). shadow: the pipeline runs and records, the
     gate is not enforced; advisory: blocking findings are marked, not enforced; blocking: `mara review`
@@ -218,7 +215,7 @@ class ModelEvalThresholds(BaseModel):
 
 class ModelEvalConfig(BaseModel):
     """G-8: quarterly garak + CyberSecEval 4 (prompt injection, false refusal rate) evaluation of
-    every model family, with thresholds that feed the calibration weights and the bias audit.
+    every model family, with thresholds that feed the calibration weights and the review report.
     The thresholds are initial values to be revised after the first live run."""
 
     model_config = ConfigDict(extra="forbid")

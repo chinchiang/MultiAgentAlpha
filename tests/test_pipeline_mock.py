@@ -5,6 +5,7 @@ import pytest
 from mara.report.markdown_out import render_markdown
 from mara.report.sarif_out import to_sarif
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, SkepticVerdict
+from tests import scored_rows
 
 SEEDED = {  # (dimension, cwe, file) that must be accepted
     ("vulnerabilities", "CWE-89", "app.py"),
@@ -51,10 +52,9 @@ def test_fabricated_quote_is_rejected_as_tier_d(mock_report):
     assert cons[fake.id].skeptic_refuted
 
 
-def test_refuted_finding_the_jury_overrode_goes_to_human(mock_report):
+def test_refuted_finding_the_jury_overrode_goes_to_human():
     """assessment #37: a skeptic-refuted finding with high jury consensus must not re-enter the
     blocking logic; it is forced to the human queue instead of being accepted."""
-    pipe, _ = mock_report
     f = Finding(
         id="F-9001", dimension="vulnerabilities", title="SQL injection in search", cwe="CWE-89",
         provenance=[Provenance(file="app.py", line=32, quote="cursor.execute(q)", verified=True)],
@@ -73,7 +73,7 @@ def test_refuted_finding_the_jury_overrode_goes_to_human(mock_report):
     sk = SkepticVerdict(finding_id="F-9001", verdict="refuted", reason="query is parameterised",
                         sanitizer_or_control="app.py:41 prepared statements",
                         source_family=ModelFamily.MOCK, source_model="mock-skeptic")
-    cons = pipe.score([f], {f.id: {ModelFamily.MOCK}}, {"F-9001": sk}, {}, votes, [])[0]
+    (cons,) = scored_rows.score([f], {f.id: {ModelFamily.MOCK}}, votes, skeptic={"F-9001": sk}).rows
     assert cons.skeptic_refuted
     assert cons.tier != EvidenceTier.D  # the jury did override the refutation
     assert cons.needs_human and not cons.accepted
@@ -92,8 +92,8 @@ def test_tool_corroboration_yields_tier_a(mock_report):
 def test_tool_corroboration_respects_tool_dimensions():
     # csp-evaluator emits results without CWEs; without the dimension guard such a result would
     # corroborate any finding within +-3 lines, whatever the dimension
-    from mara.pipeline import _tool_corroborates
     from mara.tools.sarif import ToolResult
+    from tests.scored_rows import tool_corroborated
 
     result = ToolResult(tool="csp-evaluator", rule_id="csp.test", level="error", message="weak CSP",
                         file="static/index.html", line=5, cwe=None, cwes=[])
@@ -106,8 +106,8 @@ def test_tool_corroboration_respects_tool_dimensions():
                        model_confidence=0.9, source_family=ModelFamily.MOCK, source_model="m",
                        finder_families=[ModelFamily.MOCK])
 
-    assert _tool_corroborates(finding("csp", "CWE-1021"), [result])
-    assert not _tool_corroborates(finding("xss", "CWE-79"), [result])
+    assert tool_corroborated(finding("csp", "CWE-1021"), [result])
+    assert not tool_corroborated(finding("xss", "CWE-79"), [result])
 
 
 def test_multi_family_agreement_without_tool_yields_tier_b(mock_report):
@@ -318,49 +318,45 @@ def test_a_deleted_file_does_not_make_every_incremental_review_incomplete(tmp_pa
 
 # ------------------------------------------------------------------ one retry for a rejected L3/L4 reply
 
-def _pipe(tmp_path):
-    from pathlib import Path
+def _finding(i: int = 1) -> Finding:
+    return Finding(id=f"F-{i:04d}", dimension="xss", title="t", cwe="CWE-79", provenance=[Provenance(file="a.py", line=1, quote="print(name)")],
+                   reachability="reachable", reachability_argument="r", exploit_sketch="e",
+                   cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N", model_confidence=0.5,
+                   source_family=ModelFamily.ANTHROPIC, source_model="m")
 
-    from mara.config import load_config
-    from mara.pipeline import Pipeline
 
-    root = Path(__file__).resolve().parents[1]
-    return Pipeline(load_config(root / "config" / "mara.mock.yaml"), out_dir=tmp_path)
+def _ctx(tmp_path):
+    from mara.context.repo_map import RepoContext
+
+    return RepoContext(root=tmp_path, content={"a.py": "print(name)\n"}, content_hash="h")
 
 
 def test_an_unparseable_or_incomplete_reply_is_asked_once_more_but_signals_are_not(tmp_path):
-    from mara import exchange
-    from tests.reply_records import ballot
+    from tests.fake_panel import EMPTY, UNPARSEABLE, Panel, echo, items
 
-    pipe = _pipe(tmp_path)
-    replies = iter([([], ballot("skeptic", "glm", 2, missing=1)), (["v1", "v2"], ballot("skeptic", "glm", 2))])
-    assert pipe._once_more(lambda: next(replies)) == (["v1", "v2"], ballot("skeptic", "glm", 2))
-    assert pipe.audit["skeptic_retries"] == 1 and pipe.audit["skeptic_retries[glm]"] == 1
-    calls = []
-    echo = ballot("redteam", "glm", 1, canary_echoes=1)
-    assert pipe._once_more(lambda: calls.append(1) or ([], echo)) == ([], echo) and len(calls) == 1, \
-        "an echo is a finding about the model, not noise"
-    second = ballot("judge", "gemini", 1, missing=1)
-    replies = iter([([], ballot("judge", "gemini", 1, exchange.EMPTY)), ([], second)])
-    assert pipe._once_more(lambda: next(replies)) == ([], second)
-    assert pipe.audit["judge_retries"] == 1, "only one more call; the second answer stands"
+    findings = [_finding(1), _finding(2)]
+    stands = items(lambda _: {"verdict": "stands", "reason": "r", "sanitizer_or_control": ""})
+    true_positive = items(lambda _: {"verdict": "true_positive", "severity_band": "High", "reason": "r"}, drop=1)
+    # the skeptic (nemotron) answers in prose, then rules on both; the red team (deepseek) echoes the canary; the
+    # deepseek judge's forward pass is empty (its 1st exchange), then leaves a finding out (its 2nd)
+    panel = (Panel().queue("skeptic", UNPARSEABLE, stands).queue("redteam", echo)
+             .nth("judge", 1, EMPTY, family=ModelFamily.DEEPSEEK).nth("judge", 2, true_positive, family=ModelFamily.DEEPSEEK))
+    ballots = panel.run(_ctx(tmp_path), findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+    assert len(panel.asked("skeptic")) == 2 and set(ballots.skeptic) == {"F-0001", "F-0002"}
+    assert panel.audit["skeptic_retries"] == 1 and panel.audit["skeptic_retries[nemotron]"] == 1
+    assert len(panel.asked("redteam")) == 1 and panel.audit["redteam_retries"] == 0, "an echo is a finding about the model, not noise"
+    assert [ex.pass_id for ex in panel.asked("judge", ModelFamily.DEEPSEEK)] == ["forward", "forward", "reverse"]
+    assert panel.audit["judge_retries"] == 1, "only one more exchange; the second answer stands"
+    assert not [v for v in ballots.votes if v.judge_family == ModelFamily.DEEPSEEK and v.pass_id == "forward"]
 
 
-def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path, monkeypatch):
-    from mara.agents import skeptic
-    from mara.context.repo_map import RepoContext
+def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path):
+    from tests.fake_panel import Panel, items
 
-    pipe = _pipe(tmp_path)
-    f = Finding(id="F-0001", dimension="xss", title="t", cwe="CWE-79", provenance=[Provenance(file="a.py", line=1, quote="print(name)")],
-                reachability="reachable", reachability_argument="r", exploit_sketch="e",
-                cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N", model_confidence=0.5,
-                source_family=ModelFamily.ANTHROPIC, source_model="m")
-    good = SkepticVerdict(finding_id="F-0001", verdict="stands", reason="r", sanitizer_or_control="none",
-                          source_family=ModelFamily.DEEPSEEK, source_model="m")
-    from tests.reply_records import ballot
-
-    replies = iter([([], ballot("skeptic", "deepseek", 1, missing=1)), ([good], ballot("skeptic", "deepseek", 1))])
-    monkeypatch.setattr(skeptic, "run_skeptic", lambda *a, **k: next(replies))
-    verdicts, abstained = pipe.run_skeptics(RepoContext(root=tmp_path), [f], {"F-0001": {ModelFamily.ANTHROPIC}})
-    assert verdicts == [good] and not abstained
-    assert pipe.audit["skeptic_invalid_items"] == 0 and pipe.audit["skeptic_retries"] == 1
+    f = _finding()
+    # no verdict at all, then the mock skeptic's own
+    panel = Panel().queue("skeptic", items(lambda _: {}, drop=1))
+    ballots = panel.run(_ctx(tmp_path), [f], {f.id: {ModelFamily.ANTHROPIC}})
+    assert list(ballots.skeptic) == [f.id] and ballots.skeptic[f.id].source_family == ModelFamily.NEMOTRON
+    assert not ballots.unchallenged
+    assert panel.audit["skeptic_invalid_items"] == 0 and panel.audit["skeptic_retries"] == 1

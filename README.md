@@ -649,8 +649,8 @@ OpenAI-compatible endpoint, runs them on a host that
 reaches the endpoints (keys only from the environment), parses the tools' native outputs, applies
 the thresholds in `model_eval.thresholds` and writes `docs/garak-<date>.md`,
 `docs/cyberseceval-<date>.md` and `calib/model-eval-<date>.json`. Calibration multiplies a
-failing family's suggested weight by `weight_penalty_on_fail` and the review's bias audit shows
-the latest verdict per family. `scripts/calibration_run.py --mode live` runs the whole calibration
+failing family's suggested weight by `weight_penalty_on_fail` and the review report's `model_eval`
+shows the latest verdict per family. `scripts/calibration_run.py --mode live` runs the whole calibration
 loop (check-config, every sample, `calibrate.py --mode live`) and both scripts refuse to label
 mock or fixture-based output as live. Governance checks G-8 and G-9 read the reports' front
 matter (`mode: live`, families covering the config, within 90 days). garak reaches Claude through its

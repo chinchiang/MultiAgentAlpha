@@ -2,7 +2,7 @@
 
 The review pipeline trusts three model families with untrusted code; the report (Part X, G-8)
 requires that each family is itself tested every quarter for prompt-injection susceptibility and
-false refusals, and that the results feed the calibration weights and the bias audit. This module
+false refusals, and that the results feed the calibration weights and the review report. This module
 turns the configuration into the exact garak and CyberSecEval commands (keys only from the
 environment, never printed), parses the tools' native outputs, applies the thresholds from the
 config and renders the dated reports governance check G-8 reads. It never runs anything itself;
@@ -408,7 +408,7 @@ def latest_summary(root: Path | str) -> dict | None:
 
 
 def family_eval_status(root: Path | str, families: list[str]) -> dict[str, dict]:
-    """For the pipeline's bias audit: each family's latest evaluation date and verdict (or 'none'). A
+    """For the review report's model_eval: each family's latest evaluation date and verdict (or 'none'). A
     family's latest evaluation is the newest summary that covers it: one run may evaluate a single family."""
     summaries = _summaries(root)
     out = {}

@@ -13,6 +13,7 @@ from typing import Any
 
 from ..audit import INCOMPLETE_COUNTERS, ROLES, Role, by_family
 from ..schemas import DIMENSION_LABELS, SEVERITY_ORDER, ConsensusResult, ReviewReport
+from ..tools.evidence import is_alert
 
 OUTCOMES = ("accepted", "rejected", "dropped", "needs_human")
 
@@ -120,6 +121,7 @@ def budget(manifest: dict[str, Any], report: ReviewReport | None, progress: dict
     """What the run used. MARA has no configured quota, so these are counts, not shares of a limit; tokens are
     recorded for the context and reviewer calls only (the ballot roles do not report them)."""
     audit: dict[str, Any] = dict(report.bias_audit) if report else {}
+    tightening = report.human_queue_tightening if report else None
     calls = {role: _num(audit, ROLES[r].calls) for role, r in AUDIT_ROLES.items()}
     started = (progress or {}).get("started_at") or manifest.get("started_at")
     finished = (progress or {}).get("finished_at") or manifest.get("finished_at")
@@ -133,10 +135,11 @@ def budget(manifest: dict[str, Any], report: ReviewReport | None, progress: dict
         "tokens_partial": True,
         "findings_raw": _num(audit, "findings_raw"),
         "findings_deduped": _num(audit, "findings_deduped"),
-        "tool_results_ingested": _num(audit, "tool_results_ingested"),
-        "human_queue_size": _num(audit, "human_queue_size"),
-        "human_queue_backlog": audit.get("human_queue_backlog"),
-        "human_queue_tightened": bool(_num(audit, "human_queue_tightened")),
+        "tool_results_ingested": len(report.tool_results) if report else 0,
+        "human_queue_size": len(report.human_queue) if report else 0,
+        # the page reads a backlog nobody knew as "unknown", and one with no report as missing
+        "human_queue_backlog": None if tightening is None else ("unknown" if tightening.backlog is None else tightening.backlog),
+        "human_queue_tightened": bool(tightening and tightening.tightened),
         "global_krippendorff_alpha": audit.get("global_krippendorff_alpha"),
         "position_flips": _num(audit, "position_flips"),
     }
@@ -182,16 +185,16 @@ def report_view(manifest: dict[str, Any], report: ReviewReport, progress: dict[s
             "content_hash": coverage.get("content_hash", ""),
             "commit": coverage.get("commit", ""),
             "exchange_version": audit.get("exchange_version"),
-            "rollout_phase": audit.get("rollout_phase"),
-            "ml_bom": audit.get("ml_bom") or {},
-            "model_eval": audit.get("model_eval") or {},
+            "rollout_phase": report.rollout_phase,
+            "ml_bom": {n: b.model_dump() for n, b in report.ml_bom.items()},
+            "model_eval": {fam: e.model_dump() for fam, e in report.model_eval.items()},
         },
         "stats": {
             "findings": len(report.findings),
             **counts,
             "human_queue": len(report.human_queue),
             "tool_results": len(tool_results),
-            "tool_results_blocking": sum(1 for t in tool_results if t.get("level") in ("error", "warning")),
+            "tool_results_blocking": sum(1 for t in tool_results if is_alert(t.get("level"))),
             "tools_ran": sum(1 for h in report.tool_health if h.get("ran")),
             "tools_total": len(report.tool_health),
             "incomplete_reasons": len(report.incomplete_reasons),

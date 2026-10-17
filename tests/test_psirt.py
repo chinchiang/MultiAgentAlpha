@@ -47,7 +47,6 @@ def _adjudicate_for_psirt_test(report, cfg):
         elif c.tier.value == "B":
             _accept(c)
     report.psirt = build_notifications(report, cfg)
-    report.bias_audit["psirt_notifications"] = len(report.psirt)
 
 
 def _event(t0):
@@ -75,7 +74,7 @@ def test_only_accepted_tier_a_critical_findings_notify(shipped_report):
         assert cons[fid].accepted and cons[fid].tier.value == "A" and cons[fid].cvss4_severity == "Critical"
     excluded = {c.finding_id for c in report.consensus if c.accepted and not (c.tier.value == "A" and c.cvss4_severity == "Critical")}
     assert excluded and not (excluded & picked)
-    assert len(report.psirt) == len(picked) and report.bias_audit["psirt_notifications"] == len(picked)
+    assert len(report.psirt) == len(picked)
 
 
 def test_payload_carries_evidence_and_article_14_deadlines(shipped_report):

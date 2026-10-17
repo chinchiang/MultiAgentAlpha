@@ -10,7 +10,6 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from mara import exchange
 from mara.agents import base, judge
 from mara.config import ModelSpec, load_config
 from mara.context.repo_map import RepoContext, build_context
@@ -22,7 +21,8 @@ from mara.report.psirt_out import legal_deadlines
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
 from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
-from tests.reply_records import ballot
+from tests.fake_panel import REFUSAL, Panel
+from tests.scored_rows import MOCK, policy, score, tool_corroborated
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -304,38 +304,38 @@ def test_l3_agents_carry_a_canary_and_an_echo_voids_their_verdicts(tmp_path, rol
 def test_tool_corroboration_needs_the_same_file_and_a_blocking_level():
     """A bare suffix match let a tool hit in services/billing/main.py corroborate a finding in main.py
     and promote it to tier A; a note-level result corroborated as strongly as an error."""
-    from mara.pipeline import _tool_corroborates
-
     f = finding().model_copy(update={"provenance": [Provenance(file="main.py", line=10, quote="unsafe()", verified=True)]})
 
     def hit(file, level="error"):
         return [ToolResult("semgrep", "sql", level, "SQL injection", file, 11, "CWE-89")]
 
-    assert _tool_corroborates(f, hit("main.py")) and _tool_corroborates(f, hit("./main.py"))
-    assert not _tool_corroborates(f, hit("services/billing/main.py")), "another file with the same name"
-    assert not _tool_corroborates(f, hit("main.py", level="note")), "a note is information, not evidence"
+    assert tool_corroborated(f, hit("main.py")) and tool_corroborated(f, hit("./main.py"))
+    assert not tool_corroborated(f, hit("services/billing/main.py")), "another file with the same name"
+    assert not tool_corroborated(f, hit("main.py", level="note")), "a note is information, not evidence"
     # a tool that ran from the repository top level reports the target's own prefix (pre-recorded zizmor)
-    assert _tool_corroborates(f, hit("fixtures/vuln-sample/main.py"), "fixtures/vuln-sample")
-    assert not _tool_corroborates(f, hit("other/vuln-sample/main.py"), "fixtures/vuln-sample")
+    assert tool_corroborated(f, hit("fixtures/vuln-sample/main.py"), "fixtures/vuln-sample")
+    assert not tool_corroborated(f, hit("other/vuln-sample/main.py"), "fixtures/vuln-sample")
 
 
-def test_quorum_requires_two_independent_families_and_both_passes(tmp_path):
-    pipe, f = pipeline(tmp_path), finding()
+def test_quorum_requires_two_independent_families_and_both_passes():
+    f = finding()
     finders = {f.id: {ModelFamily.ANTHROPIC}}
     one = [vote(ModelFamily.DEEPSEEK)]
-    c = pipe.score([f], finders, {}, {}, one, [])[0]
+    (c,) = score([f], finders, one).rows
     assert not c.accepted and c.needs_human and c.independent_judges == 0
+    (lone,) = score([f], finders, [vote(ModelFamily.DEEPSEEK, pass_id) for pass_id in ("forward", "reverse")]).rows
+    assert lone.independent_judges == 1 and lone.needs_human and "insufficient_independent_judges" in lone.human_reasons
     full = [vote(fam, pass_id) for fam in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON) for pass_id in ("forward", "reverse")]
-    accepted = pipe.score([f], finders, {}, {}, full, [])[0]
+    (accepted,) = score([f], finders, full).rows
     assert accepted.accepted and accepted.independent_judges == 2
-    repeated = pipe.score([f], finders, {}, {}, full + [full[0]] * 100, [])[0]
+    (repeated,) = score([f], finders, full + [full[0]] * 100).rows
     assert not repeated.accepted and repeated.needs_human
     # an invalid vector cannot reach scoring: Finding rejects it at the model boundary
     # (test_invalid_cvss_is_rejected_at_model_boundary); one smuggled past validation fails loudly, never as "Unknown"
     from mara.scoring import cvss4
 
     with pytest.raises(cvss4.CVSS4Error):
-        pipe.score([f.model_copy(update={"cvss4_vector": "CVSS:4.0/invalid"})], finders, {}, {}, full, [])
+        score([f.model_copy(update={"cvss4_vector": "CVSS:4.0/invalid"})], finders, full)
 
 
 def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path, monkeypatch):
@@ -366,25 +366,20 @@ def test_truncated_reviewer_replies_block_the_gate(tmp_path, monkeypatch):
     assert "reviewer_truncations" in report.incomplete_reasons
 
 
-def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_path, monkeypatch):
-    pipe, f = pipeline(tmp_path), finding()
-    seen = []
-    def answer(role):
-        return lambda p, ctx, fs: (seen.append((role, p.family)), ([], ballot(role, p.family.value, len(fs), exchange.REFUSAL)))[1]
+def test_l3_prefers_a_family_outside_every_finder_and_audits_the_fallback(tmp_path):
+    f = finding()
+    panel = Panel().always("skeptic", REFUSAL).always("redteam", REFUSAL)
 
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", answer("skeptic"))
-    monkeypatch.setattr("mara.pipeline.redteam.run_redteam", answer("redteam"))
+    def l3_seats():
+        return [(ex.role, ex.family) for ex in panel.exchanges if ex.role in ("skeptic", "redteam")]
+
     # the configured skeptic (nemotron) and red team (deepseek) both found it: only anthropic is independent
-    two = {f.id: {ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
-    pipe.run_skeptics(RepoContext(root=tmp_path), [f], two)
-    pipe.run_redteam(RepoContext(root=tmp_path), [f], two)
-    assert seen == [("skeptic", ModelFamily.ANTHROPIC), ("redteam", ModelFamily.ANTHROPIC)]
-    assert not pipe.audit["skeptic_same_family"] and not pipe.audit["redteam_same_family"]
-    every = {f.id: {ModelFamily.ANTHROPIC, ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}}
-    pipe.run_skeptics(RepoContext(root=tmp_path), [f], every)
-    pipe.run_redteam(RepoContext(root=tmp_path), [f], every)
-    assert pipe.audit["skeptic_same_family"] == 1 and pipe.audit["redteam_same_family"] == 1
-    assert any("no skeptic outside the finder families" in line for line in pipe.log)
+    panel.run(RepoContext(root=tmp_path), [f], {f.id: {ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}})
+    assert l3_seats() == [("skeptic", ModelFamily.ANTHROPIC), ("redteam", ModelFamily.ANTHROPIC)]
+    assert not panel.audit["skeptic_same_family"] and not panel.audit["redteam_same_family"]
+    panel.run(RepoContext(root=tmp_path), [f], {f.id: {ModelFamily.ANTHROPIC, ModelFamily.NEMOTRON, ModelFamily.DEEPSEEK}})
+    assert panel.audit["skeptic_same_family"] == 1 and panel.audit["redteam_same_family"] == 1
+    assert any("no skeptic outside the finder families" in line for line in panel.log)
 
 
 def test_missing_config_is_a_usage_error_not_a_traceback(tmp_path, monkeypatch):
@@ -406,7 +401,7 @@ def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path, monkeypat
     pipe = pipeline(tmp_path)
     (tmp_path / "app.py").write_text("unsafe()")
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    monkeypatch.setattr("mara.pipeline.skeptic.run_skeptic", lambda p, ctx, fs: ([], ballot("skeptic", p.family.value, len(fs), exchange.REFUSAL)))
+    Panel.seated_in(pipe).always("skeptic", REFUSAL)
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["skeptic_refusals"] == report.bias_audit["skeptic_calls"] >= 1
     assert report.bias_audit["skeptic_invalid_items"] == 0
@@ -419,10 +414,9 @@ def test_judge_refusal_is_counted_separately_from_invalid_output(tmp_path, monke
     pipe = pipeline(tmp_path)
     (tmp_path / "app.py").write_text("unsafe()")
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
-    monkeypatch.setattr("mara.pipeline.judge.run_judge", lambda p, batch, pass_id, self_ids=None: (
-        [], ballot("judge", p.family.value, len(batch), exchange.REFUSAL, pass_id=pass_id)))
+    Panel.seated_in(pipe).always("judge", REFUSAL)
     report = pipe.run(tmp_path, mode="mock")
-    # every judge call refused: 3 families x 2 chunks (30 findings, MAX_L4_FINDINGS per pass) x 2 passes
+    # every judge call refused: 3 families x 2 chunks (30 findings, MAX_PASS_FINDINGS per pass) x 2 passes
     assert report.bias_audit["judge_refusals"] == report.bias_audit["judge_calls"] == 12
     assert report.bias_audit["judge_invalid_items"] == 0
     assert "judge_refusals" in report.incomplete_reasons and not report.gate_passed
@@ -650,12 +644,12 @@ def test_p8_reads_its_evidence_from_the_workspace(tmp_path, monkeypatch):
     assert p8().passed
 
 
-def test_one_verified_quote_cannot_launder_an_invalid_primary_location(tmp_path):
-    pipe, f = pipeline(tmp_path), finding()
+def test_one_verified_quote_cannot_launder_an_invalid_primary_location():
+    f = finding()
     bad = Provenance(file="../outside.py", line=999, quote="fabricated", verified=False)
     f = f.model_copy(update={"provenance": [bad, *f.provenance]})
     votes = [vote(family, pass_id) for family in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON) for pass_id in ("forward", "reverse")]
-    c = pipe.score([f], {f.id: {ModelFamily.ANTHROPIC}}, {}, {}, votes, [])[0]
+    (c,) = score([f], {f.id: {ModelFamily.ANTHROPIC}}, votes).rows
     assert not c.accepted and c.needs_human and c.tier.value == "D"
     assert "unverified_provenance" in c.human_reasons
 
@@ -680,17 +674,16 @@ def test_nonempty_model_bom_does_not_crash_completed_report(tmp_path, monkeypatc
     pipe.ml_bom_status = {"selfhosted": SimpleNamespace(model_id="example", status="pending", component_name="x", component_version="1", digest="")}
     monkeypatch.setattr(pipe, "run_tools", lambda *_: [])
     report = pipe.run(tmp_path, mode="mock")
-    assert report.bias_audit["ml_bom"]["selfhosted"]["status"] == "pending"
+    assert report.ml_bom["selfhosted"].status == "pending"
     assert any("ML-BOM" in line for line in pipe.log)
 
 
-def test_human_queue_uses_effective_decision_without_recalculating_threshold(tmp_path):
-    pipe, f = pipeline(tmp_path), finding()
-    pipe.outcome_policy = dataclasses.replace(pipe.outcome_policy, alpha_threshold=1.0)
+def test_human_queue_uses_effective_decision_without_recalculating_threshold():
+    f = finding()
     votes = [vote(fam, pass_id, verdict) for fam, verdict in [(ModelFamily.DEEPSEEK, "true_positive"),
              (ModelFamily.NEMOTRON, "false_positive")] for pass_id in ("forward", "reverse")]
-    result = pipe.score([f], {f.id: {ModelFamily.ANTHROPIC}}, {}, {}, votes, [])[0]
-    queued = build_queue([f], {f.id: result}, {}, {}, votes, pipe.cfg)
+    (result,) = score([f], {f.id: {ModelFamily.ANTHROPIC}}, votes, outcome_policy=dataclasses.replace(policy(), alpha_threshold=1.0)).rows
+    queued = build_queue([f], {f.id: result}, {}, {}, votes, MOCK)
     assert result.needs_human and len(queued) == 1 and "agreement_below_threshold" in queued[0].reasons
 
 

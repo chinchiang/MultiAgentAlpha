@@ -255,7 +255,7 @@ def test_review_exit_code_follows_the_rollout_phase(tmp_path):
                                 "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--out", str(tmp_path / phase)])
         assert r.exit_code == expected, (phase, r.output[-600:])
         report = json.loads((tmp_path / phase / "report.json").read_text(encoding="utf-8"))
-        assert report["bias_audit"]["rollout_phase"] == phase and not report["gate_passed"]
+        assert report["rollout_phase"] == phase and "rollout_phase" not in report["bias_audit"] and not report["gate_passed"]
         md = (tmp_path / phase / "report.md").read_text(encoding="utf-8")
         assert f"rollout phase `{phase}`" in md and (("recorded, not enforced" in md) == (phase != "blocking"))
     r = runner.invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(tmp_path / "shadow.yaml"),
