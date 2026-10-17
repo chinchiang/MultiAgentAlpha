@@ -221,7 +221,7 @@ def _variants(report, cfg) -> list[_Variant]:
     from collections import defaultdict
 
     from mara.context.repo_map import build_context
-    from mara.report.human_queue_out import build_queue
+    from mara.human_queue import build_queue
     from mara.review_status import GatePolicy, assess
     from mara.tools.sarif import ToolResult
     from tests.review_facts import FACTS

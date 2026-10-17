@@ -9,8 +9,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..human_queue import build_queue
 from ..schemas import MlBomEntry, ModelEvalStatus, QueueTightening, ReviewReport, RolloutPhase
-from .human_queue_out import build_queue
 from .psirt_out import build_notifications
 
 if TYPE_CHECKING:

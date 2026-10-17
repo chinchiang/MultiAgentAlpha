@@ -8,7 +8,7 @@ import json
 import pytest
 
 from mara import decisions as dec
-from mara.report.human_queue_out import queue_key
+from mara.human_queue import queue_key
 from mara.training import load_register
 
 TARGET, REVISION, CONTEXT = "target-s9", "rev", "ctx"

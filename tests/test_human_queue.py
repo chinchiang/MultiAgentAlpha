@@ -14,8 +14,9 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara.config import MaraConfig, load_config  # noqa: E402
+from mara.human_queue import build_queue, queue_key, tightening  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
-from mara.report.human_queue_out import build_queue, queue_key, render_human_queue, tightening  # noqa: E402
+from mara.report.human_queue_out import render_human_queue  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, ReviewReport, SkepticVerdict  # noqa: E402
 from mara.scoring.outcome import OutcomePolicy  # noqa: E402
@@ -90,9 +91,11 @@ def test_rejection_review_follows_what_the_row_records_not_the_config_the_queue_
 
 def test_tightening_only_when_backlog_is_over_the_limit(cfg):
     base = cfg.gate.human_threshold_alpha
-    assert tightening(cfg, None) == (base, False, False)
-    assert tightening(cfg, cfg.human_queue.backlog_limit) == (base, False, False)
-    alpha, excl, on = tightening(cfg, cfg.human_queue.backlog_limit + 1)
+    for backlog in (None, cfg.human_queue.backlog_limit):
+        t = tightening(cfg, backlog)
+        assert (t.alpha_threshold, t.exclude_tier_c, t.tightened) == (base, False, False)
+    t = tightening(cfg, cfg.human_queue.backlog_limit + 1)
+    alpha, excl, on = t.alpha_threshold, t.exclude_tier_c, t.tightened
     assert on and excl and alpha == pytest.approx(base + cfg.human_queue.tighten_alpha_step) and alpha > base
 
 
@@ -140,8 +143,8 @@ def _tier_c_finding(vec=VEC):
 def _under(cfg, backlog):
     """The outcome policy a review runs under with `backlog` open tickets (None: unknown), as Pipeline.__init__ builds it,
     and whether the queue is tightened."""
-    alpha_threshold, exclude_tier_c, tightened = tightening(cfg, backlog)
-    return OutcomePolicy.from_config(cfg, alpha_threshold=alpha_threshold, exclude_tier_c=exclude_tier_c), tightened
+    t = tightening(cfg, backlog)
+    return OutcomePolicy.from_config(cfg, alpha_threshold=t.alpha_threshold, exclude_tier_c=t.exclude_tier_c), t.tightened
 
 
 def _scored(cfg, policy, f):

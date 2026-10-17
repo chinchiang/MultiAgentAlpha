@@ -68,8 +68,12 @@ _Avoid_: block, rejection
 
 ## Human decisions
 
+**Queue key**:
+The identity of one place in one reviewed content that a decision binds to: the target, revision and content reviewed, and the file, line and weakness of the finding. A decision under one queue key never settles a finding under another.
+_Avoid_: finding id (a finding's id is only unique within one review), fingerprint
+
 **Decision**:
-One adjudicator's ruling, true positive or false positive, on one human-queue key (人工裁決). A well-formed decision is one whose record is internally consistent, whoever made it and whatever it is later compared with.
+One adjudicator's ruling, true positive or false positive, on one queue key (人工裁決). A well-formed decision is one whose record is internally consistent, whoever made it and whatever it is later compared with.
 _Avoid_: adjudication, label (a label is a calibration sample's answer key), verdict (a skeptic's or judge's ruling on one finding)
 
 **Adjudicator**:
@@ -103,6 +107,14 @@ _Avoid_: dropped finding, false positive (that is a human ruling)
 **Dropped finding**:
 A finding at evidence tier D that needs no human: too little support, or refuted by the skeptic and not carried by the jury. It is out on the evidence, not on the jury's vote.
 _Avoid_: rejected finding
+
+**Human queue**:
+The findings of one review a human must look at: every finding needing a human and every finding in rejection review, unless a usable decision already resolved it; each under its queue key, with its human reasons.
+_Avoid_: review queue, triage list, tickets (a ticket is how one queue item reaches a human)
+
+**Human reason**:
+One reason a finding needs a human: a jury signal that fell short, a rejection review, or a decision on it that is not usable.
+_Avoid_: incomplete reason (that is the review's, not the finding's), why
 
 **Rejection review**:
 The human look at every rejected finding that policy P8 requires until the Alternative Annotator Test passes. The finding enters the human queue, its jury outcome stays rejected, and the review is not incomplete because of it.

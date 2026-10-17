@@ -110,7 +110,7 @@ def test_gitleaks_reads_a_human_queue_key_as_no_credential():
     otherwise report on every pull request that touches docs/workbench/."""
     import tomllib
 
-    from mara.report.human_queue_out import queue_key
+    from mara.human_queue import queue_key
 
     allow = tomllib.loads((ROOT / ".gitleaks.toml").read_text(encoding="utf-8"))["allowlist"]["regexes"]
     key = queue_key("app.py", 3, "CWE-79", target_id="t", revision="r", context_hash="c")

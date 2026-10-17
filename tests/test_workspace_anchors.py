@@ -71,8 +71,8 @@ def test_the_default_review_output_is_in_the_workspace(home):
 @pytest.mark.parametrize("content", ["[1, 2]", '"open"', "7"])
 def test_a_damaged_backlog_is_unknown_not_a_crash(home, content):
     """A list-shaped backlog.json raised AttributeError in Pipeline.__init__ (read_backlog caught TypeError only)."""
+    from mara.decisions import read_backlog
     from mara.pipeline import Pipeline
-    from mara.report.human_queue_out import read_backlog
 
     cfg = _mock_cfg()
     path = home / cfg.human_queue.backlog_file

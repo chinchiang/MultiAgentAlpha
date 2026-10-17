@@ -11,6 +11,9 @@ This module defines that record and the two levels of trust in it (docs/adr/0002
   context), not contradicted on its key, and - whenever training is required - made by an
   adjudicator holding a valid training record on the decision day. Only a usable decision is
   ground truth: calibration labels, the Alternative Annotator Test, false-positive rates.
+
+It also reads the ticket backlog the sync writes (beside the decisions by default), which the human queue's
+tightening is decided from (mara.human_queue.tightening).
 """
 
 from __future__ import annotations
@@ -21,11 +24,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .report.human_queue_out import queue_key
+from .human_queue import queue_key
 from .training import Register, is_trained
 
 if TYPE_CHECKING:
-    from .config import TrainingConfig
+    from .config import MaraConfig, TrainingConfig
 
 VERDICTS = ("true_positive", "false_positive")
 BACKLOG_FILE = "backlog.json"
@@ -129,6 +132,21 @@ def load(directory: Path | str) -> Loaded:
         else:
             out.malformed.append((p, parsed))
     return out
+
+
+def read_backlog(cfg: MaraConfig, root: Path | None = None) -> int | None:
+    """Open ticket count as last written by scripts/human_queue_issues.py, or None if unknown."""
+    from .workspace import root as workspace_root
+
+    path = (root or workspace_root()) / cfg.human_queue.backlog_file
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        # a damaged file (a list, a string) is an unknown backlog, never a crash in Pipeline.__init__
+        return int(data.get("open", 0)) if isinstance(data, dict) else None
+    except (OSError, ValueError, TypeError):
+        return None
 
 
 @dataclass(frozen=True)

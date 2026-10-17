@@ -17,5 +17,5 @@ regexes = [
   '^sk_live_51H8xJ2KzQ9wR7tY6uI5oP4aS3dF2gH1jK0lM$',
   '^vendor_api_zdr$', # ModelSpec data-residency enum, never a credential
   '^vendor_api_30d$', # same noncredential enum declaration
-  '^v2-[0-9a-f]{24}$', # a finding's human-queue key (mara.report.human_queue_out.queue_key), never a credential
+  '^v2-[0-9a-f]{24}$', # a finding's queue key (mara.human_queue.queue_key), never a credential
 ]

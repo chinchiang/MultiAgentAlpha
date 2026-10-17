@@ -185,7 +185,7 @@ def _aat_run(sample, findings, consensus=()):
 
 def _dec(file, line, cwe, decision, trained=True):
     from mara.decisions import Decision
-    from mara.report.human_queue_out import queue_key
+    from mara.human_queue import queue_key
 
     return Decision.parse({"key": queue_key(file, line, cwe, target_id="target-s9", revision="rev", context_hash="ctx"),
                            "decision": decision, "file": file, "line": line, "cwe": cwe, "issue": line,
