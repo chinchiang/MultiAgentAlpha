@@ -11,7 +11,7 @@ always there to read afterwards. The checks, as .github/workflows/mara-review.ym
   mypy      python -m mypy from .venv-typecheck: CPython 3.12 with the hash-pinned closure CI installs (the 3.12 dev
             requirements, the build requirements, this package without its dependencies, the typecheck requirements),
             built on first use and again whenever one of those requirement files changes
-  pytest    GITHUB_ACTIONS=true pytest -q -rfE (CI colours CLI output), after clearing src/ and tests/ of compiled
+  pytest    GITHUB_ACTIONS=true pytest -q -rs (CI colours CLI output), after clearing src/ and tests/ of compiled
             bytecode, which can keep a same-size edit made within a second from taking effect
   gitleaks  scripts/gitleaks_ci.py --event pull_request over the commits since the merge base with --base
 Not run here: the whole suite on CPython 3.12, the repository scanners (semgrep, osv-scanner, trivy, zizmor,
@@ -71,7 +71,7 @@ Check = Callable[[argparse.Namespace], tuple[list[str], dict[str, str], Callable
 CHECKS: dict[str, Check] = {
     "ruff": lambda a: ([sys.executable, "-m", "ruff", "check", *RUFF_PATHS], {}, None),
     "mypy": lambda a: ([str(typecheck_python(a.python312)), "-m", "mypy"], {}, None),
-    "pytest": lambda a: ([sys.executable, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"], {"GITHUB_ACTIONS": "true"},
+    "pytest": lambda a: ([sys.executable, "-m", "pytest", "-q", "-rs"], {"GITHUB_ACTIONS": "true"},
                          _clear_bytecode),
     "gitleaks": lambda a: ([sys.executable, str(ROOT / "scripts" / "gitleaks_ci.py"), "--base", a.base, "--head", "HEAD",
                             "--event", "pull_request", "--report", str(a.logs / "gitleaks.sarif")], {}, None),

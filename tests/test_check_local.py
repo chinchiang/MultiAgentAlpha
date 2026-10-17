@@ -17,6 +17,14 @@ def test_the_lint_is_the_one_ci_runs():
     assert f"run: ruff check {' '.join(check_local.RUFF_PATHS)}\n" in WORKFLOW
 
 
+def test_the_suite_runs_with_the_options_ci_runs_it_with():
+    """CI lists the skipped tests (-rs): a tool test skipping for a missing binary is seen, not passed over."""
+    ci = set(re.findall(r"run: pytest(.*)\n", WORKFLOW))
+    argv, env, _ = check_local.CHECKS["pytest"](None)
+    assert len(ci) == 1 and argv[argv.index("pytest") + 1:] == ci.pop().split()
+    assert env == {"GITHUB_ACTIONS": "true"}
+
+
 def test_the_type_check_environment_is_the_closure_the_ci_type_check_job_installs_in_its_order():
     """The type-check job (CPython 3.12) installs three hash-pinned requirement files, the package itself between the
     second and the third; a local environment built from anything else would type-check against other versions."""
