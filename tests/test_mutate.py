@@ -66,3 +66,41 @@ def test_a_wrong_list_is_refused_before_any_file_is_touched(tmp_path, capsys):
     assert "ambiguous: `old` occurs 2 times" in err and "nowhere: no file src/gone.py" in err and "half: no old, new" in err
     assert not (tmp_path / "runs").exists()
     assert mutate.main([str(_list(tmp_path, wrong[:0])), "--root", str(root), "--only", "nothing"]) == 2
+
+
+def test_a_focused_test_that_does_not_exist_is_refused_before_any_file_is_touched(tmp_path, capsys):
+    """pytest exits 4 on a path it cannot find, which a failed test's exit 1 must not be mistaken for."""
+    root = _repo(tmp_path)
+    path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"}],
+                 ["tests/test_window.py::test_limit", "tests/test_gone.py"])
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
+    assert "focused: no tests/test_gone.py" in capsys.readouterr().err
+    assert not (tmp_path / "runs").exists()
+
+
+def test_tests_that_fail_without_a_mutation_stop_the_run_before_any_mutation(tmp_path, capsys):
+    """Otherwise every mutation would count as caught by a test that fails anyway."""
+    root = _repo(tmp_path)
+    (root / "tests" / "test_window.py").write_text("from window import limit\n\n\ndef test_limit():\n    assert limit() == 4\n",
+                                                   encoding="utf-8")
+    path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 5"}],
+                 ["tests/test_window.py"])
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
+    assert "the focused tests exit 1 without a mutation (tests/test_window.py::test_limit)" in capsys.readouterr().err
+    (run,) = (tmp_path / "runs").iterdir()
+    assert not (run / "results.json").exists() and (run / "baseline.focused.log").is_file()
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+
+
+def test_a_mutant_the_tests_cannot_run_against_is_an_error_not_a_catch(tmp_path, capsys):
+    """A mutant that does not import stops pytest at collection (exit 2): no test failed on it, so nothing caught it."""
+    root = _repo(tmp_path)
+    broken = [{"name": "a broken module", "file": "src/window.py", "old": "return 3", "new": "return ("}]
+    for focused in (["tests/test_window.py"], []):
+        runs = tmp_path / f"runs-{len(focused)}"
+        assert mutate.main([str(_list(tmp_path, broken, focused)), "--root", str(root), "--runs", str(runs)]) == 1
+        (run,) = runs.iterdir()
+        (r,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+        assert (r["caught"], r["exit"], r["where"]) == (False, 2, "focused" if focused else "suite")
+        assert "ERROR a broken module  (pytest exit 2" in capsys.readouterr().out
+        assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE

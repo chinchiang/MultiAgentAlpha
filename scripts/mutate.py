@@ -15,14 +15,18 @@ The list is a YAML file:
 Quote every value with a ` #` in it: YAML ends an unquoted value at ` #` and reads the rest as a comment, so
 `name: the PR #141 rule` loads as "the PR".
 
-Every `old` must occur exactly once in its file; the list is checked before any file is touched. A mutation is caught
-when a test fails on it: the focused tests first (all of them, or until one fails), then, if they pass, the whole
-suite. Tests run with GITHUB_ACTIONS=true and without writing bytecode, after src/ and tests/ are cleared of it: a
-mutant of the same size written within a second of the original would otherwise run as the original's cached bytecode.
-The file is restored after each mutation, and checked to be byte for byte what it was. Each run writes
-out/mutations/<UTC time>/results.json (one entry per mutation: caught, by which test, by the focused tests or the whole
-suite) and the output of every run of the whole suite; a later run never overwrites an earlier one.
-Exit 0 when every mutation was caught, 1 when one was missed, 2 when the list is wrong.
+Every `old` must occur exactly once in its file and every focused path must exist; the list is checked before any file
+is touched. Then the focused tests and the whole suite run once without a mutation, and must pass. A mutation is caught
+when a test fails on it (pytest exits 1): the focused tests first (all of them, or until one fails), then, if they
+pass, the whole suite. Any other exit, such as a mutant that does not import (2), is an error: nothing caught the
+mutation, and the whole suite does not run after the focused tests. Tests run with GITHUB_ACTIONS=true and without
+writing bytecode, after src/ and tests/ are cleared of it: a mutant of the same size written within a second of the
+original would otherwise run as the original's cached bytecode. The file is restored after each mutation, and checked
+to be byte for byte what it was. Each run writes out/mutations/<UTC time>/results.json (one entry per mutation: caught,
+by which test, by the focused tests or the whole suite, pytest's exit code), the output of the runs without a mutation
+and of every run of the whole suite; a later run never overwrites an earlier one.
+Exit 0 when every mutation was caught, 1 when one was missed or was an error, 2 when the list is wrong or the tests
+fail without a mutation.
 """
 
 from __future__ import annotations
@@ -41,10 +45,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
-    """(the focused tests, the mutations) of a list, every `old` checked to occur exactly once; ValueError otherwise."""
+    """(the focused tests, the mutations) of a list, every focused path checked to exist and every `old` to occur exactly
+    once; ValueError otherwise."""
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    focused = list(data.get("focused") or [])
     mutations = data.get("mutations") or []
-    problems = []
+    problems = [f"focused: no {t}" for t in focused if not isinstance(t, str) or not (root / t.split("::")[0]).exists()]
     for m in mutations:
         missing = [k for k in ("name", "file", "old", "new") if not isinstance(m.get(k), str)]
         if missing:
@@ -57,7 +63,7 @@ def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
     problems += [f"{n}: named twice" for n in sorted({n for n in names if names.count(n) > 1})]
     if problems:
         raise ValueError("; ".join(problems))
-    return list(data.get("focused") or []), mutations
+    return focused, mutations
 
 
 def _clear_bytecode(root: Path) -> None:
@@ -66,13 +72,26 @@ def _clear_bytecode(root: Path) -> None:
             pyc.unlink(missing_ok=True)
 
 
-def _pytest(root: Path, tests: list[str]) -> tuple[bool, str, str]:
-    """(whether a test failed, the first failing test, the whole output) of one pytest run that stops at a failure."""
+def _pytest(root: Path, tests: list[str]) -> tuple[int, str, str]:
+    """(pytest's exit code, the first failing test, the whole output) of one pytest run that stops at a failure."""
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "GITHUB_ACTIONS": "true"}
     cp = subprocess.run([sys.executable, "-m", "pytest", "-x", "-q", "-rf", "-p", "no:cacheprovider", *tests], cwd=root, env=env,
                         capture_output=True, text=True)
     failed = [line.removeprefix("FAILED ").split(" - ")[0] for line in cp.stdout.splitlines() if line.startswith("FAILED ")]
-    return cp.returncode != 0, failed[0] if failed else "", cp.stdout + cp.stderr
+    return cp.returncode, failed[0] if failed else "", cp.stdout + cp.stderr
+
+
+def baseline(focused: list[str], root: Path, run_dir: Path) -> str:
+    """Why the focused tests or the whole suite fail without a mutation, each run's output kept; empty when they pass."""
+    _clear_bytecode(root)
+    runs = ([("focused tests", focused, "focused")] if focused else []) + [("whole suite", [], "suite")]
+    for name, tests, where in runs:
+        code, by, out = _pytest(root, tests)
+        log = run_dir / f"baseline.{where}.log"
+        log.write_text(out, encoding="utf-8")
+        if code != 0:
+            return f"the {name} exit {code} without a mutation" + (f" ({by})" if by else "") + f"; {log}"
+    return ""
 
 
 def check(m: dict, focused: list[str], root: Path, run_dir: Path) -> dict:
@@ -82,19 +101,19 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path) -> dict:
     try:
         path.write_bytes(original.decode("utf-8").replace(m["old"], m["new"]).encode("utf-8"))
         _clear_bytecode(root)
-        caught, by, where = False, "", "focused"
+        code, by, where = 0, "", "focused"
         if focused:
-            caught, by, _ = _pytest(root, focused)
-        if not caught:
+            code, by, _ = _pytest(root, focused)
+        if code == 0:
             where = "suite"
-            caught, by, out = _pytest(root, [])
+            code, by, out = _pytest(root, [])
             (run_dir / (m["name"].replace("/", "_").replace(" ", "_")[:80] + ".suite.log")).write_text(out, encoding="utf-8")
     finally:
         path.write_bytes(original)
         _clear_bytecode(root)
     if path.read_bytes() != original:
         raise RuntimeError(f"{m['file']} was not restored")
-    return {"mutation": m["name"], "file": m["file"], "caught": caught, "by": by, "where": where}
+    return {"mutation": m["name"], "file": m["file"], "caught": code == 1, "by": by, "where": where, "exit": code}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,12 +137,19 @@ def main(argv: list[str] | None = None) -> int:
         mutations = [m for m in mutations if m["name"] in a.only]
     run_dir = (a.runs or root / "out" / "mutations") / dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%S%fZ")
     run_dir.mkdir(parents=True)
+    why = baseline(focused, root, run_dir)
+    if why:
+        print(f"ERROR: {why}", file=sys.stderr)
+        return 2
     results = []
     for m in mutations:
         r = check(m, focused, root, run_dir)
         results.append(r)
-        print(("CAUGHT " if r["caught"] else "MISSED ") + r["mutation"] + (f"  <- {r['by']}" if r["by"] else f"  ({r['where']})"),
-              flush=True)
+        if r["exit"] not in (0, 1):
+            print(f"ERROR {r['mutation']}  (pytest exit {r['exit']}, {r['where']})", flush=True)
+        else:
+            print(("CAUGHT " if r["caught"] else "MISSED ") + r["mutation"] + (f"  <- {r['by']}" if r["by"] else f"  ({r['where']})"),
+                  flush=True)
         (run_dir / "results.json").write_text(json.dumps(results, indent=1) + "\n", encoding="utf-8")
     caught = sum(r["caught"] for r in results)
     print(f"{caught} of {len(results)} caught; {run_dir / 'results.json'}")
