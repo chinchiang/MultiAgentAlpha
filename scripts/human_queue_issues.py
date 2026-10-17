@@ -40,8 +40,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from mara.decisions import Decision  # noqa: E402
 from mara.decisions import read as read_decision  # noqa: E402
+from mara.human_queue import queue_key  # noqa: E402
 from mara.report.escaping import code, literal  # noqa: E402
-from mara.report.human_queue_out import queue_key  # noqa: E402
 from mara.training import is_trained, load_register  # noqa: E402
 from mara.workspace import resolve  # noqa: E402
 

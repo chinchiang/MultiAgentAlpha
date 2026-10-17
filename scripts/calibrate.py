@@ -114,7 +114,7 @@ def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = Non
 
 def _match(f: dict, lab: dict) -> bool:
     p = f["provenance"][0]
-    return same_place(p["file"], p["line"], f["cwe"], lab["file"], lab["line"], lab["cwe"])  # mara.identity, as the pipeline
+    return same_place(p["file"], p["line"], f["cwe"], lab["file"], lab["line"], lab["cwe"])  # mara.identity: same file and weakness, lines within NEAR_LINES
 
 
 def family_metrics(runs):
@@ -304,8 +304,8 @@ def alternative_annotator_test(runs, decisions: list[Decision], post, training: 
     contradicted keys and, under G-13, untrained adjudicators are excluded, with the reason in
     `excluded_by_reason`). Every live result goes to calib/latest.json; policy P8
     accepts only a passing result tagged with this method (mara.policy.AAT_METHOD)."""
+    from mara.human_queue import queue_key
     from mara.policy import AAT_METHOD
-    from mara.report.human_queue_out import queue_key
 
     pairs: list[tuple[bool, bool]] = []  # (pipeline says true_positive, human says true_positive)
     rejected = misses = 0

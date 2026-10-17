@@ -62,7 +62,7 @@ def test_decided_findings_are_settled_on_a_review_of_the_same_content(home):
 
 def decide_finding(home, report, finding_id, decision, *, by="alice", issue=1):
     """A decision on any finding of `report`, queued or not (it may have been decided on an earlier review)."""
-    from mara.report.human_queue_out import queue_key
+    from mara.human_queue import queue_key
 
     f = next(x for x in report.findings if x.id == finding_id)
     p = f.provenance[0]
@@ -151,7 +151,7 @@ def test_calibration_still_counts_a_jury_drop_that_a_human_confirmed_as_a_miss()
     import calibrate
 
     from mara.decisions import Decision, TrainingRequirement
-    from mara.report.human_queue_out import queue_key
+    from mara.human_queue import queue_key
     from mara.schemas import ConsensusResult, EvidenceTier
 
     key = queue_key("app.py", 10, "CWE-79", target_id="t", revision="r", context_hash="c")

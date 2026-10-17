@@ -13,9 +13,9 @@ from pydantic import ValidationError
 from mara.agents import base, judge
 from mara.config import ModelSpec, load_config
 from mara.context.repo_map import RepoContext, build_context
+from mara.human_queue import build_queue, queue_key
 from mara.pipeline import Pipeline
 from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
-from mara.report.human_queue_out import build_queue, queue_key
 from mara.report.markdown_out import render_markdown
 from mara.report.psirt_out import legal_deadlines
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance

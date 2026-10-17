@@ -17,7 +17,7 @@ from .agents.context_agent import ContextView
 from .audit import Audit, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
-from .identity import norm_path
+from .identity import NEAR_LINES, norm_path
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
@@ -30,7 +30,6 @@ from .schemas import (
     MlBomEntry,
     ModelEvalStatus,
     ModelFamily,
-    QueueTightening,
     ReviewReport,
 )
 from .scoring import jury
@@ -83,18 +82,27 @@ class Pipeline:
         self.audit = Audit()
         self.log: list[str] = []
         # G-11: the human queue tightens when its ticket backlog is over the limit (never loosens)
-        from .report.human_queue_out import read_backlog, tightening
+        from .decisions import read_backlog
+        from .human_queue import tightening
 
-        self.backlog = read_backlog(cfg)
-        alpha_threshold, exclude_tier_c, self.queue_tightened = tightening(cfg, self.backlog)
+        self.tightening = tightening(cfg, read_backlog(cfg))
         # read once and held only here: the jury outcome, the gate, the audit and the log see the same tightening
         # (docs/adr/0007-review-status-and-gate.md)
-        self.outcome_policy = OutcomePolicy.from_config(cfg, alpha_threshold=alpha_threshold, exclude_tier_c=exclude_tier_c)
+        self.outcome_policy = OutcomePolicy.from_config(cfg, alpha_threshold=self.tightening.alpha_threshold,
+                                                        exclude_tier_c=self.tightening.exclude_tier_c)
         self.gate_policy = GatePolicy.from_config(cfg)
         self.jury = jury.Jury.from_config(cfg)
         from .mlbom import status_for_config
 
         self.ml_bom_status = status_for_config(cfg)
+
+    @property
+    def backlog(self) -> int | None:
+        return self.tightening.backlog
+
+    @property
+    def queue_tightened(self) -> bool:
+        return self.tightening.tightened
 
     # ------------------------------------------------------------------ helpers
     def _p(self, name: str) -> Provider:
@@ -175,7 +183,7 @@ class Pipeline:
                 # never merge an unverified (possibly fabricated) finding into a verified one:
                 # it would inherit the verified finding's acceptance and hide the fabrication
                 same_file = norm_path(q.file) == norm_path(p.file)  # ./app.py and app.py are one file
-                if k.dimension == f.dimension and k.cwe == f.cwe and same_file and abs(q.line - p.line) <= 3 and k_ok == f_ok:
+                if k.dimension == f.dimension and k.cwe == f.cwe and same_file and abs(q.line - p.line) <= NEAR_LINES and k_ok == f_ok:
                     match = k
                     break
             if match is None:
@@ -187,33 +195,19 @@ class Pipeline:
 
     def apply_decisions(self, findings: list[Finding], consensus: list[ConsensusResult], *, target_id: str, revision: str,
                         context_hash: str) -> None:
-        """Usable human decisions on this very content settle their findings (docs/adr/0003-human-resolution.md):
-        each one is recorded on its consensus row, whose jury outcome stays as it is."""
+        """The decision files, selected against this review, settle the findings their usable decisions bind to
+        (mara.human_queue.settle); the audit counts the rows settled and, by why, the decisions not usable on this content
+        (a decision on other content is not counted)."""
         from .decisions import TrainingRequirement, select
         from .decisions import load as load_decisions
-        from .report.human_queue_out import queue_key
+        from .human_queue import settle
         from .workspace import resolve
 
         loaded = load_decisions(resolve("calib/decisions"))
         report = {"target_id": target_id, "revision": revision, "coverage": {"content_hash": context_hash}}
         sel = select(loaded.decisions, report, TrainingRequirement.from_config(self.cfg.training))
-        usable = {d.key: d for d in sel.usable}
-        # a well-formed decision that is not usable settles nothing; the finding says why it still waits
-        not_usable = {d.key: why for d, why in sel.excluded if why != "unbound"}
-        by_id = {f.id: f for f in findings}
-        applied = 0
-        for c in consensus:
-            f = by_id[c.finding_id]
-            key = queue_key(f.provenance[0].file, f.provenance[0].line, f.cwe, target_id=target_id, revision=revision,
-                            context_hash=context_hash)
-            d = usable.get(key)
-            if d is not None:
-                c.human_decision = {"decision": d.decision, "key": d.key, "issue": d.issue, "decided_by": d.decided_by,
-                                    "decided_at": d.decided_at}
-                applied += 1
-            elif key in not_usable and c.needs_human:
-                c.human_reasons.append(f"decision_not_usable:{not_usable[key]}")
-        self.audit["human_decisions_applied"] = applied
+        self.audit["human_decisions_applied"] = settle(findings, consensus, sel, target_id=target_id, revision=revision,
+                                                       context_hash=context_hash)
         for why, n in sel.by_reason().items():
             if why != "unbound":
                 self.audit[f"human_decisions_not_usable[{why}]"] = n
@@ -248,7 +242,8 @@ class Pipeline:
         self._say(
             f"L5: human queue: {len(report.human_queue)} item(s)"
             + (
-                f" [TIGHTENED: backlog {self.backlog} > {self.cfg.human_queue.backlog_limit}, alpha threshold {self.outcome_policy.alpha_threshold}"
+                f" [TIGHTENED: backlog {self.tightening.backlog} > {self.cfg.human_queue.backlog_limit}, "
+                f"alpha threshold {self.outcome_policy.alpha_threshold}"
                 f"{', tier C not queued' if self.outcome_policy.exclude_tier_c else ''}]"
                 if self.queue_tightened
                 else ""
@@ -391,8 +386,7 @@ class Pipeline:
         evaluated = sorted({m.family.value for m in self.cfg.models if m.provider != "mock"})
         return ReportMetadata(
             rollout_phase=self.cfg.rollout.phase,
-            human_queue_tightening=QueueTightening(backlog=self.backlog, tightened=self.queue_tightened,
-                                                   alpha_threshold=self.outcome_policy.alpha_threshold),
+            human_queue_tightening=self.tightening.record(),
             # G-7: which self-hosted weights the report was produced with, as the ML-BOM knows them
             ml_bom={n: MlBomEntry(model_id=st.model_id, status=st.status, component=st.component_name, version=st.component_version,
                                   sha256=st.digest)

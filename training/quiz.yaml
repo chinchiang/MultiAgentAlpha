@@ -57,7 +57,7 @@ questions:
       b: The finding is tier A Critical
       c: The finding is tier C at High severity or above
     answer: b
-    rationale: "Queue reasons are the L5 human_reasons set in src/mara/pipeline.py, among them majority_needs_human, agreement_below_threshold and tier_c_high (src/mara/report/human_queue_out.py adds unsupervised_reject_unverified). Tier A Critical is not a reason by itself: an accepted one blocks the gate and, for shipped products, goes to the PSIRT."
+    rationale: "Queue reasons are the human reasons the jury outcome writes in src/mara/scoring/outcome.py, among them majority_needs_human, agreement_below_threshold and tier_c_high (src/mara/human_queue.py adds unsupervised_reject_unverified). Tier A Critical is not a reason by itself: an accepted one blocks the gate and, for shipped products, goes to the PSIRT."
 
   - id: T7
     roles: [adjudicator, security]
@@ -77,7 +77,7 @@ questions:
       b: Raises the alpha threshold and stops queuing tier C; it never loosens
       c: Sends everything to the PSIRT
     answer: b
-    rationale: "src/mara/report/human_queue_out.py::tightening; report section 15.2 on review fatigue."
+    rationale: "src/mara/human_queue.py::tightening; report section 15.2 on review fatigue."
 
   - id: T9
     roles: [adjudicator, security]
