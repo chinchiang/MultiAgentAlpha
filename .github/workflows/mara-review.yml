@@ -142,7 +142,7 @@ jobs:
         run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/dev-requirements-py312.txt --lockfile tools/typecheck-requirements.txt --lockfile tools/build-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
       - name: osv-scanner on the isolated model-evaluation closure only
         run: python3 scripts/osv_ci.py --lockfile tools/model-eval-requirements.txt --config tools/osv-model-eval.toml --report osv-model-eval.sarif
-      - name: osv-scanner on the semgrep closure only (tools/osv-semgrep.toml, exception-free since semgrep 1.179.0)
+      - name: osv-scanner on the semgrep closure only (tools/osv-semgrep.toml, CVE-2026-59951 exception expires 2026-12-31)
         run: python3 scripts/osv_ci.py --lockfile tools/semgrep-requirements.txt --config tools/osv-semgrep.toml --report osv-semgrep.sarif
       - name: trivy offline database — fetch once, record its digests, refuse a stale or tampered copy
         run: |
