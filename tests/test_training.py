@@ -1,7 +1,9 @@
 """G-13: AI-literacy training register (EU AI Act Article 4): quiz grading, record validity and
 expiry, coverage per role, CLI exit codes, governance check G-13, and the config block."""
 
+import ast
 import datetime as dt
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +31,51 @@ def _register(tmp_path: Path) -> Path:
     p = tmp_path / "records.yaml"
     p.write_text((ROOT / "training" / "records.yaml").read_text(encoding="utf-8"), encoding="utf-8")
     return p
+
+
+# a repository path a rationale points at, optionally with the name it defines: src/mara/human_queue.py::tightening
+_REPO_REF = re.compile(r"^(?:src|scripts|tests|docs|tools|training|config|fixtures|calib)/[\w./-]+\.\w+(?:::[\w.]+)?$")
+
+
+def _defines(path: Path, name: str) -> bool:
+    """Whether `path` defines `name` (a function, class or assignment at the top level, or `Class.member`)."""
+    scope: list[ast.stmt] = ast.parse(path.read_text(encoding="utf-8")).body
+    for part in name.split("."):
+        found = None
+        for node in scope:
+            names = ([node.name] if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else
+                     [t.id for t in node.targets if isinstance(t, ast.Name)] if isinstance(node, ast.Assign) else
+                     [node.target.id] if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) else [])
+            if part in names:
+                found = node
+                break
+        if found is None:
+            return False
+        scope = found.body if isinstance(found, ast.ClassDef) else []
+    return True
+
+
+def _repo_refs(rationale: str) -> list[str]:
+    return [ref for ref in (tok.strip("(),;.") for tok in rationale.split()) if _REPO_REF.match(ref)]
+
+
+def test_every_path_a_rationale_names_exists_and_defines_the_name_it_points_at():
+    """A rationale pointing at code that moved still read true while the file was there: tightening left
+    src/mara/report/human_queue_out.py for src/mara/human_queue.py, and only a manual search found the pointer."""
+    for q in training.load_quiz(QUIZ):
+        for ref in _repo_refs(q["rationale"]):
+            file, _, name = ref.partition("::")
+            assert (ROOT / file).is_file(), f"{q['id']}: {file} does not exist"
+            assert not name or _defines(ROOT / file, name), f"{q['id']}: {file} does not define {name}"
+
+
+def test_a_pointer_to_a_name_the_file_no_longer_defines_is_found():
+    assert _repo_refs("src/mara/human_queue.py::tightening; report section 15.2 on B17/B18 and calib/decisions/<key>.json") == [
+        "src/mara/human_queue.py::tightening"]
+    assert _defines(ROOT / "src" / "mara" / "human_queue.py", "tightening")
+    assert _defines(ROOT / "src" / "mara" / "human_queue.py", "Tightening.record")
+    assert not _defines(ROOT / "src" / "mara" / "report" / "human_queue_out.py", "tightening"), "moved out in #141"
+    assert not _defines(ROOT / "src" / "mara" / "human_queue.py", "Tightening.nothing")
 
 
 def test_quiz_is_well_formed_and_every_rationale_points_at_something_real():
