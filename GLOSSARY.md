@@ -126,6 +126,10 @@ _Avoid_: overridden finding (the jury outcome still exists beside it)
 What one review covered: the whole target (full) or the files changed against a base together with the modules related to them (incremental); unknown for a report written before reviews recorded their scope. Scores of reviews with different scopes cannot be compared.
 _Avoid_: mode (the provider mode is a different thing), diff review
 
+**Review facts**:
+What a review gathered, stage by stage, that its review status and gate are decided from: whether the bundle covered the target, whether source egress was blocked, whether every required tool ran, whether the context view is missing, whether the ML-BOM signature verified, which audit counters make it incomplete, the rollout phase and whether the operator asked to enforce the gate.
+_Avoid_: inputs, state
+
 **Review status**:
 Whether a review can stand as a conclusion: complete, or incomplete together with its incomplete reasons. An incomplete review has no overall score.
 _Avoid_: run status, success

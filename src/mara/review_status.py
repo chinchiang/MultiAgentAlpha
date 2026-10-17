@@ -59,7 +59,8 @@ def _declared_secret(res: ToolResult, answer_key: list[dict]) -> bool:
 
 @dataclass(frozen=True)
 class ReviewFacts:
-    """What `Pipeline.run()` gathered before deciding: run() runs the tools and cosign, assess() only reads results."""
+    """The review facts (GLOSSARY.md) a review's stages handed in: the pipeline runs the tools and cosign, assess() only
+    reads results."""
 
     context_complete: bool  # every file in scope reached the bundle
     egress_blocked: bool  # secret_preflight blocked source egress

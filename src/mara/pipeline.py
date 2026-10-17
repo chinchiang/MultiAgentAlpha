@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-from dataclasses import asdict
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import ballot_round, exchange
@@ -21,9 +21,11 @@ from .identity import norm_path
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
-from .review_status import GatePolicy, ReviewFacts, assess, secret_preflight
+from .report.assembly import ReportMetadata, assemble
+from .review_status import Assessment, GatePolicy, ReviewFacts, SecretPreflight, assess, secret_preflight
 from .schemas import (
     ConsensusResult,
+    DimensionScore,
     Finding,
     MlBomEntry,
     ModelEvalStatus,
@@ -36,7 +38,46 @@ from .scoring.dimension_score import score_dimension
 from .scoring.idcheck import check_finding_refs
 from .scoring.outcome import OutcomePolicy
 from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
+from .tools.sarif import ToolResult
 from .workspace import check_outside, resolve
+
+
+@dataclass(frozen=True)
+class ToolEvidence:
+    """What the tools stage hands in: every tool run (the live secret preflight's gitleaks in place of a pre-recorded
+    one), their results, the tools that ran, and the secret preflight's decision on source egress."""
+
+    runs: list[ToolRun]
+    results: list[ToolResult]
+    ran: frozenset[str]
+    egress: SecretPreflight
+
+
+@dataclass(frozen=True)
+class ReviewerFindings:
+    """What the reviewers stage hands in: how many findings the reviewers reported, and the deduplicated findings with
+    the families that found each."""
+
+    raw_count: int
+    findings: list[Finding]
+    finders: dict[str, set[ModelFamily]]
+
+
+@dataclass(frozen=True)
+class Stages:
+    """What a review's stages handed in, up to its jury scoring and dimension scores: the bundle, the tool evidence, the
+    context view, the reviewers' findings, the ballots, the jury scoring (its rows carry the human decisions applied),
+    the dimension scores, the target's id and the base of an incremental review."""
+
+    ctx: RepoContext
+    tools: ToolEvidence
+    context_view: ContextView | None
+    reviewed: ReviewerFindings
+    ballots: ballot_round.Ballots
+    scoring: jury.JuryScoring
+    dimensions: list[DimensionScore]
+    target_id: str
+    base_ref: str | None
 
 
 class Pipeline:
@@ -200,6 +241,36 @@ class Pipeline:
         check_outside(target)
         answer_key = calibration_answer_key(target) if calibration_sample else None
         self.out_dir.mkdir(parents=True, exist_ok=True)
+        ctx = self._bundle(target, base_ref)
+        tools = self._tools(target, sarif_dir, mode, answer_key)
+        context_view = self._context(ctx, tools)
+        reviewed = self._reviewers(ctx, context_view, tools)
+        ballots = ballot_round.run(ctx, reviewed.findings, reviewed.finders, cfg=self.cfg, providers=self.providers, audit=self.audit,
+                                   say=self._say, progress=self.progress)
+        stages = self._score(ctx, tools, context_view, reviewed, ballots, base_ref)
+        assessment, signature = self._assess(stages, fail_on_gate)
+        self.progress.begin("report")
+        report = assemble(stages, assessment, self._metadata(signature), cfg=self.cfg, target=target, mode=mode,
+                          generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+                          provider_manifest=self._provider_manifest(),
+                          bias_audit={**self.audit, "exchange_version": exchange.EXCHANGE_VERSION}, psirt_event=psirt_event)
+        self._say(
+            f"L5: human queue: {len(report.human_queue)} item(s)"
+            + (
+                f" [TIGHTENED: backlog {self.backlog} > {self.cfg.human_queue.backlog_limit}, alpha threshold {self.outcome_policy.alpha_threshold}"
+                f"{', tier C not queued' if self.outcome_policy.exclude_tier_c else ''}]"
+                if self.queue_tightened
+                else ""
+            )
+        )
+        if report.ml_bom:
+            self._say("L0: ML-BOM: " + ", ".join(f"{n} {v.status}" for n, v in report.ml_bom.items()))
+        self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")
+        self.progress.done("report", f"{len(report.human_queue)} human-queue item(s), {len(report.psirt)} PSIRT payload(s)")
+        return report
+
+    # ------------------------------------------------------------------ stages
+    def _bundle(self, target: Path, base_ref: str | None) -> RepoContext:
         prog = self.progress
         prog.begin("bundle")
         ctx = build_context(target)
@@ -214,26 +285,35 @@ class Pipeline:
             prov.bind_target(ctx.root)
         self._say(f"L1: {ctx.summary()}")
         prog.done("bundle", f"{len(ctx.content)} file(s) in the bundle, {len(ctx.omitted)} omitted, {len(ctx.excluded)} excluded")
+        return ctx
+
+    def _tools(self, target: Path, sarif_dir: Path | None, mode: str, answer_key: list[dict] | None) -> ToolEvidence:
+        prog = self.progress
         prog.begin("tools")
         tool_runs = self.run_tools(target, sarif_dir)
         if mode == "live" and sarif_dir:
             # Pre-recorded SARIF cannot authorize egress from the current working tree.
             preflight = run_all(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])
             tool_runs = [r for r in tool_runs if r.tool != "gitleaks"] + preflight
-        tool_results = [r for run in tool_runs for r in run.results]
-        tools_ran = {run.tool for run in tool_runs if run.ran}
-        # Live source egress is blocked before any provider sees data if the trusted local
-        # secret scan is unavailable or reports secrets (mara.review_status). The masked manifest remains reviewable.
-        egress = secret_preflight(mode, [r for r in tool_runs if r.tool == "gitleaks"], answer_key)
+        tools = ToolEvidence(runs=tool_runs, results=[r for run in tool_runs for r in run.results],
+                             ran=frozenset(run.tool for run in tool_runs if run.ran),
+                             # Live source egress is blocked before any provider sees data if the trusted local
+                             # secret scan is unavailable or reports secrets (mara.review_status). The masked manifest remains reviewable.
+                             egress=secret_preflight(mode, [r for r in tool_runs if r.tool == "gitleaks"], answer_key))
+        egress = tools.egress
         if answer_key is not None and (egress.exempted or egress.unexplained):
             self.audit["secret_preflight_calibration_exempted"] = len(egress.exempted)
             self._say(f"L0: secret preflight: {len(egress.exempted)} seeded secret(s) declared by the calibration answer key, "
                       f"{len(egress.unexplained)} other finding(s)")
-        prog.done("tools", f"{len(tools_ran)} of {len(tool_runs)} tool(s) ran, {len(tool_results)} result(s)"
+        prog.done("tools", f"{len(tools.ran)} of {len(tool_runs)} tool(s) ran, {len(tools.results)} result(s)"
                   + ("; source egress blocked by the secret preflight" if egress.blocked else ""))
+        return tools
+
+    def _context(self, ctx: RepoContext, tools: ToolEvidence) -> ContextView | None:
+        prog = self.progress
         # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked
-        if egress.blocked or not self.cfg.roles.context:
-            prog.skip("context", "source egress blocked by the secret preflight" if egress.blocked else "no context role configured")
+        if tools.egress.blocked or not self.cfg.roles.context:
+            prog.skip("context", "source egress blocked by the secret preflight" if tools.egress.blocked else "no context role configured")
             context_view = None
         else:
             prog.begin("context")
@@ -242,35 +322,49 @@ class Pipeline:
         if context_view is not None:
             (self.out_dir / "context.json").write_text(context_view.model_dump_json(indent=2), encoding="utf-8")
             self.audit["context_view_items"] = len(context_view.items)
-        if egress.blocked:
+        return context_view
+
+    def _reviewers(self, ctx: RepoContext, context_view: ContextView | None, tools: ToolEvidence) -> ReviewerFindings:
+        prog = self.progress
+        if tools.egress.blocked:
             prog.skip("reviewers", "source egress blocked by the secret preflight")
             raw = []
         else:
             prog.begin("reviewers")
             raw = self.run_reviewers(ctx, context_view)
         findings, finders = self.dedupe(raw)
-        if not egress.blocked:
+        if not tools.egress.blocked:
             prog.done("reviewers", f"{len(raw)} raw finding(s), {len(findings)} after deduplication")
         findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
         self.audit["findings_raw"] = len(raw)
         self.audit["findings_deduped"] = len(findings)
-        ballots = ballot_round.run(ctx, findings, finders, cfg=self.cfg, providers=self.providers, audit=self.audit,
-                                   say=self._say, progress=prog)
-        sk_by_id, rt_by_id, votes = ballots.skeptic, ballots.redteam, ballots.votes
-        prog.begin("scoring")
-        scoring = jury.score(findings, finders, ballots, tool_results, jury=self.jury, policy=self.outcome_policy,
+        return ReviewerFindings(raw_count=len(raw), findings=findings, finders=finders)
+
+    def _score(self, ctx: RepoContext, tools: ToolEvidence, context_view: ContextView | None, reviewed: ReviewerFindings,
+               ballots: ballot_round.Ballots, base_ref: str | None) -> Stages:
+        """The jury scoring, the human decisions on it and the dimension scores, with everything the stages before
+        handed in."""
+        self.progress.begin("scoring")
+        findings = reviewed.findings
+        scoring = jury.score(findings, reviewed.finders, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
                              tool_path_prefix=ctx.repo_prefix)
         self.audit["position_flips"] = scoring.position_flips
-        consensus = scoring.rows
         # repository + path below its top level for a committed git target (repo_map.target_identity),
         # so CI, every clone and every calibration run name the same target the same way
         target_id = hashlib.sha256(ctx.identity.encode()).hexdigest()
-        self.apply_decisions(findings, consensus, target_id=target_id, revision=ctx.revision, context_hash=ctx.content_hash)
-        cons_by_id = {c.finding_id: c for c in consensus}
+        self.apply_decisions(findings, scoring.rows, target_id=target_id, revision=ctx.revision, context_hash=ctx.content_hash)
+        cons_by_id = {c.finding_id: c for c in scoring.rows}
         dims = []
         for d in self.cfg.dimensions:
-            tool_ran = any(d in TOOL_DIMENSIONS.get(t, []) for t in tools_ran)
+            tool_ran = any(d in TOOL_DIMENSIONS.get(t, []) for t in tools.ran)
             dims.append(score_dimension(d, findings, cons_by_id, tool_ran))
+        return Stages(ctx=ctx, tools=tools, context_view=context_view, reviewed=reviewed, ballots=ballots, scoring=scoring,
+                      dimensions=dims, target_id=target_id, base_ref=base_ref)
+
+    def _assess(self, stages: Stages, fail_on_gate: bool) -> tuple[Assessment, str | None]:
+        """The review facts the stages handed in, the ML-BOM signature check among them, and the review status and gate
+        decided from them; with the signature check's result for the report."""
+        tools = stages.tools
         required_tools = {t for t, ds in TOOL_DIMENSIONS.items() if set(ds) & set(self.cfg.dimensions)}
         signed: bool | None = None
         signature: str | None = None  # the report's ml_bom_signature
@@ -280,86 +374,25 @@ class Pipeline:
 
             signed, why = verify_signature(self.cfg)
             signature = "verified" if signed else f"failed: {why}"
-        facts = ReviewFacts(context_complete=ctx.complete, egress_blocked=egress.blocked,
-                            required_tools_ran=required_tools <= tools_ran and all(r.ran for r in tool_runs), ml_bom_signature=signed,
-                            context_view_missing=bool(self.cfg.roles.context) and context_view is None,
+        facts = ReviewFacts(context_complete=stages.ctx.complete, egress_blocked=tools.egress.blocked,
+                            required_tools_ran=required_tools <= tools.ran and all(r.ran for r in tools.runs), ml_bom_signature=signed,
+                            context_view_missing=bool(self.cfg.roles.context) and stages.context_view is None,
                             incomplete_counters=tuple(self.audit.incomplete_reasons()),  # audit.INCOMPLETE_COUNTERS: the one list
                             rollout_phase=self.cfg.rollout.phase, fail_on_gate=fail_on_gate)
-        assessment = assess(facts, consensus, tool_results, dims, self.outcome_policy, self.gate_policy)
+        consensus = stages.scoring.rows
+        assessment = assess(facts, consensus, tools.results, stages.dimensions, self.outcome_policy, self.gate_policy)
         for c in consensus:
             c.blocking_reason = assessment.blocking_reasons.get(c.finding_id)
         if assessment.tier_c_blocked_while_tightened:
             self.audit["tier_c_blocked_while_tightened"] = assessment.tier_c_blocked_while_tightened
-        self.audit["global_krippendorff_alpha"] = scoring.global_alpha if scoring.global_alpha is not None else "n/a"
-        for k, v in scoring.family_agreement.items():
+        self.audit["global_krippendorff_alpha"] = stages.scoring.global_alpha if stages.scoring.global_alpha is not None else "n/a"
+        for k, v in stages.scoring.family_agreement.items():
             self.audit[f"judge_agreement[{k}]"] = v
-        prog.done("scoring", f"review {assessment.review_status}, gate {'passed' if assessment.gate_passed else 'blocked'}")
-        prog.begin("report")
-        report = ReviewReport(
-            target=str(target),
-            generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
-            provider_mode=mode,
-            families_used=sorted({m.family.value for m in self.cfg.models}),
-            findings=findings,
-            skeptic=list(sk_by_id.values()),
-            redteam=list(rt_by_id.values()),
-            review_status=assessment.review_status,
-            incomplete_reasons=list(assessment.incomplete_reasons),
-            review_scope="incremental" if base_ref else "full",
-            coverage=ctx.coverage(),
-            tool_results=[asdict(t) for t in tool_results],
-            tool_health=[{"tool": t.tool, "ran": t.ran, "note": t.note} for t in tool_runs],
-            provider_manifest=[{"name": n, "type": p.spec.provider, "family": p.family.value, "model": p.model,
-                                "served_models": sorted(getattr(p, "served_models", ()))} for n, p in self.providers.items()],
-            config_hash=hashlib.sha256(self.cfg.model_dump_json().encode()).hexdigest(),
-            target_id=target_id,
-            revision=ctx.revision,
-            votes=votes,
-            consensus=consensus,
-            dimensions=dims,
-            overall_score=assessment.overall_score,
-            gate_passed=assessment.gate_passed,
-            gate_reasons=list(assessment.gate_reasons),
-            gate_enforced=assessment.gate_enforced,
-            # the accounting the counts above follow (docs/adr/0001-reply-outcome-accounting.md)
-            bias_audit={**self.audit, "exchange_version": exchange.EXCHANGE_VERSION},
-            rollout_phase=self.cfg.rollout.phase,
-            human_queue_tightening=QueueTightening(backlog=self.backlog, tightened=self.queue_tightened,
-                                                   alpha_threshold=self.outcome_policy.alpha_threshold),
-            ml_bom_signature=signature,
-        )
-        # G-11: the human queue as an object with full context; decisions come back through calib/decisions
-        from .report.human_queue_out import build_queue
+        self.progress.done("scoring", f"review {assessment.review_status}, gate {'passed' if assessment.gate_passed else 'blocked'}")
+        return assessment, signature
 
-        report.human_queue = build_queue(
-            findings,
-            cons_by_id,
-            sk_by_id,
-            rt_by_id,
-            votes,
-            self.cfg,
-            target_id=target_id,
-            revision=ctx.revision,
-            context_hash=ctx.content_hash,
-        )
-        self._say(
-            f"L5: human queue: {len(report.human_queue)} item(s)"
-            + (
-                f" [TIGHTENED: backlog {self.backlog} > {self.cfg.human_queue.backlog_limit}, alpha threshold {self.outcome_policy.alpha_threshold}"
-                f"{', tier C not queued' if self.outcome_policy.exclude_tier_c else ''}]"
-                if self.queue_tightened
-                else ""
-            )
-        )
-        # G-12: accepted tier-A Critical findings on a shipped product start the CRA Article 14 clock
-        from .report.psirt_out import build_notifications
-
-        report.psirt = build_notifications(report, self.cfg, event=psirt_event)  # built once: the count below is these
-        # G-7: which self-hosted weights the report was produced with, as the ML-BOM knows them
-        report.ml_bom = {
-            n: MlBomEntry(model_id=st.model_id, status=st.status, component=st.component_name, version=st.component_version, sha256=st.digest)
-            for n, st in self.ml_bom_status.items()
-        }
+    def _metadata(self, signature: str | None) -> ReportMetadata:
+        """The report metadata (GLOSSARY.md) as this review ran under them."""
         # G-8: latest red-team evaluation verdict per family (garak / CyberSecEval), 'none' until one has run
         from .model_eval import family_eval_status
 
@@ -368,12 +401,22 @@ class Pipeline:
         from .workspace import root as workspace_root
 
         evaluated = sorted({m.family.value for m in self.cfg.models if m.provider != "mock"})
-        report.model_eval = {fam: ModelEvalStatus(**v) for fam, v in family_eval_status(workspace_root(), evaluated).items()}
-        if report.ml_bom:
-            self._say("L0: ML-BOM: " + ", ".join(f"{n} {v.status}" for n, v in report.ml_bom.items()))
-        self._say(f"L5: PSIRT hand-off: {len(report.psirt)} finding(s)" if self.cfg.psirt.enabled else "L5: PSIRT hand-off disabled")
-        prog.done("report", f"{len(report.human_queue)} human-queue item(s), {len(report.psirt)} PSIRT payload(s)")
-        return report
+        return ReportMetadata(
+            rollout_phase=self.cfg.rollout.phase,
+            human_queue_tightening=QueueTightening(backlog=self.backlog, tightened=self.queue_tightened,
+                                                   alpha_threshold=self.outcome_policy.alpha_threshold),
+            # G-7: which self-hosted weights the report was produced with, as the ML-BOM knows them
+            ml_bom={n: MlBomEntry(model_id=st.model_id, status=st.status, component=st.component_name, version=st.component_version,
+                                  sha256=st.digest)
+                    for n, st in self.ml_bom_status.items()},
+            ml_bom_signature=signature,
+            model_eval={fam: ModelEvalStatus(**v) for fam, v in family_eval_status(workspace_root(), evaluated).items()},
+        )
+
+    def _provider_manifest(self) -> list[dict]:
+        """Every provider and the models it served in this review (for the report's provider manifest)."""
+        return [{"name": n, "type": p.spec.provider, "family": p.family.value, "model": p.model,
+                 "served_models": sorted(getattr(p, "served_models", ()))} for n, p in self.providers.items()]
 
 
 
