@@ -1,7 +1,8 @@
 # Coding standards
 
-The judgement calls a review checks. What a tool checks is not here: lint (`ruff check`, line length 150), types
-(mypy) and the tests run in CI and, before a push, in `scripts/check_local.py`.
+The judgement calls a review checks. What a tool checks is not here: lint (`ruff check`), the width of the lines a
+change adds (`scripts/line_width.py`), types (mypy) and the tests run in CI and, before a push, in
+`scripts/check_local.py`.
 
 ## Module docstrings name their terms, their decisions and their purity
 
@@ -46,4 +47,6 @@ row.
 ## Lines are wrapped by hand
 
 `ruff format` is not part of the checks. Code is wrapped by hand within 150 columns, the way the code around it is; a
-change keeps the wrapping style of the file it edits, and a new file may follow either.
+change keeps the wrapping style of the file it edits, and a new file may follow either. The width is checked: ruff
+checks src/, and `scripts/line_width.py` the lines a change adds to any Python file, so the wider lines already in
+tests/ and scripts/ stay until a change rewrites them.
