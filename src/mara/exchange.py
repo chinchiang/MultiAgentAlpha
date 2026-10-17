@@ -43,7 +43,10 @@ from .providers.base import STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply, c
 # 4: a ballot's failed call is a provider error (<role>_errors), no longer invalid output, and never retried
 # 5: the context agent's canary echoes and reports are context_canary_*, so canary_echoes counts reviewer replies only;
 #    skeptic_items, redteam_items and judge_items have totals (docs/adr/0008-reply-accounting.md)
-EXCHANGE_VERSION = 5
+# 6: every role voids a reply that echoes the canary or is not ok before it reads the answer's shape, so a reviewer
+#    reply that echoes and has the wrong shape no longer counts an invalid item
+#    (docs/adr/0008-reply-accounting.md, amended)
+EXCHANGE_VERSION = 6
 
 Kind = Literal["ok", "truncation", "unparseable", "empty", "refusal", "error"]  # a reply outcome's kind (GLOSSARY.md)
 KINDS: tuple[Kind, ...] = get_args(Kind)

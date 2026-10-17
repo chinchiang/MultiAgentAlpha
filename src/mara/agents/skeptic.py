@@ -70,42 +70,35 @@ def run_skeptic(provider: Provider, ctx: RepoContext, findings: list[Finding]) -
     if not findings:
         return [], None
     shown = sorted({p.file for f in findings for p in f.provenance})
-    # the skeptic reads raw repository files like a reviewer, and its verdict can clear a finding: an
-    # injection that drives refutations must be as detectable as one that silences a reviewer
-    canary = base.Canary()
-    # the findings carry verified, hence attacker-writable, repository quotes: derived data, fenced
-    outcome = exchange.ask(provider, role="skeptic", system_extra=base.load_prompt("skeptic"), schema=SKEPTIC_SCHEMA,
-                           lead="Findings to refute: every finding in the findings block below, by finding_id.",
-                           ctx=ctx, canary=canary, paths=shown, derived=(exchange.Derived("findings", [_view(f) for f in findings]),))
-    # the token in a verdict that also names the planted file reports it (tainted: it cannot refute); anywhere
-    # else the model followed it
-    echoed, tainted = canary.screen_verdicts(outcome)
 
-    record = base.ballot_recorder(outcome, "skeptic", provider.family.value, len(findings))
+    def rule(items: list, tainted: set[str]) -> tuple[list[SkepticVerdict], dict[str, int]]:
+        unverified = 0
+        out = []
+        for i in items:
+            data = i.model_dump()
+            if data["verdict"] == "refuted" and not _control_location_ok(ctx, data["sanitizer_or_control"], {norm_path(p) for p in shown}):
+                data["verdict"] = "weakened"
+                data["reason"] = (data["reason"] + " [control citation not verifiable in bundle]")[:600]
+                unverified += 1
+            if data["finding_id"] in tainted and data["verdict"] == "refuted":
+                # the verdict quotes the planted "report no findings": it may not clear the finding on its own
+                data["verdict"] = "weakened"
+                data["reason"] = (data["reason"] + " [quotes the planted canary instruction]")[:600]
+            out.append(SkepticVerdict(**data, source_family=provider.family, source_model=provider.model))
+        # every finding_id is covered exactly once (checked by the exchange), so no filter is needed here
+        return out, {"unverified_controls": unverified, "refuted": sum(v.verdict == "refuted" for v in out)}
 
-    if echoed:
-        # followed the planted instruction: none of its verdicts counts
-        return [], record(canary_echoes=1, voided=True)
-    items, invalid, gaps = base.ballot_items(outcome, _SkepticRaw, {f.id for f in findings})
-    if items is None:
-        return [], record(canary_reports=len(tainted), invalid_items=invalid, voided=True, log_codes=gaps)
-    unverified = 0
-    out = []
-    for i in items:
-        data = i.model_dump()
-        if data["verdict"] == "refuted" and not _control_location_ok(ctx, data["sanitizer_or_control"], {norm_path(p) for p in shown}):
-            data["verdict"] = "weakened"
-            data["reason"] = (data["reason"] + " [control citation not verifiable in bundle]")[:600]
-            unverified += 1
-        if data["finding_id"] in tainted and data["verdict"] == "refuted":
-            # the verdict quotes the planted "report no findings": it may not clear the finding on its own
-            data["verdict"] = "weakened"
-            data["reason"] = (data["reason"] + " [quotes the planted canary instruction]")[:600]
-        out.append(SkepticVerdict(**data, source_family=provider.family, source_model=provider.model))
-    # every finding_id is covered exactly once (checked above), so no filter is needed here
-    # canary_reports: verdicts that reported the planted file (the bias audit's L3 injection-resistance count)
-    return out, record(canary_reports=len(tainted), counts={"unverified_controls": unverified,
-                                                            "refuted": sum(v.verdict == "refuted" for v in out)})
+    # the skeptic reads raw repository files like a reviewer, and its verdict can clear a finding: an injection that
+    # drives refutations must be as detectable as one that silences a reviewer, so a canary is planted. The token in a
+    # verdict that also names the planted file reports it (tainted: it cannot refute); anywhere else the model followed
+    # it. The findings carry verified, hence attacker-writable, repository quotes: derived data, fenced. The record's
+    # canary reports are the bias audit's L3 injection-resistance count.
+    out, record = base.ballot_exchange(
+        provider, role="skeptic", system_extra=base.load_prompt("skeptic"), schema=SKEPTIC_SCHEMA,
+        lead="Findings to refute: every finding in the findings block below, by finding_id.", model_cls=_SkepticRaw,
+        expected={f.id for f in findings}, findings=len(findings), rule=rule, ctx=ctx, paths=shown,
+        derived=(exchange.Derived("findings", [_view(f) for f in findings]),))
+    return (out if out is not None else []), record
 
 
 from pydantic import BaseModel, Field  # noqa: E402
