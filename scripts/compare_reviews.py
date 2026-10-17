@@ -13,11 +13,11 @@ training register with one trained adjudicator, alice:
 Each review writes to one fixed directory and is moved under <out>/<label>/<scenario> afterwards, so the console
 output of two labels can be compared as it is.
 
-`compare <before> <after>` passes when, in every scenario, the reports are the same apart from what the reviews cannot
-keep the same and what is allowed: report.json apart from generated_at and every --allow key (a dotted path); the
-other files and the console apart from timestamps and lines matching an --ignore regex; the progress record apart from
-its timestamps; and in the decisions scenario the same keys decided. It prints what differs and exits 1 when anything
-does.
+`compare <before> <after>` passes when both labels hold the same scenarios and, in every scenario, the reports are the
+same apart from what the reviews cannot keep the same and what is allowed: report.json apart from generated_at and
+every --allow key (a dotted path); the other files and the console apart from timestamps and lines matching an
+--ignore regex; the progress record apart from its timestamps; and in the decisions scenario the same keys decided,
+recorded under both labels. It prints what differs and exits 1 when anything does.
 """
 
 from __future__ import annotations
@@ -149,19 +149,27 @@ def compare_scenario(before: Path, after: Path, allow: list[str], ignore: list[r
     if pb != pa:
         diffs.append("progress record differs (timestamps aside)")
     kb, ka = before / "decided-keys.json", after / "decided-keys.json"
-    if kb.is_file() and ka.is_file() and kb.read_text(encoding="utf-8") != ka.read_text(encoding="utf-8"):
+    missing = [k.parent.parent.name for k in (kb, ka) if not k.is_file()]
+    if missing and (before.name == "decisions" or len(missing) == 1):
+        diffs.append(f"decided-keys.json: not recorded under {', '.join(missing)}")
+    elif not missing and kb.read_text(encoding="utf-8") != ka.read_text(encoding="utf-8"):
         diffs.append("the decided keys differ")
     return diffs
 
 
 def compare(before: Path, after: Path, allow: list[str], ignore: list[str]) -> int:
     patterns = [re.compile(p) for p in ignore]
-    scenarios = sorted({p.name for p in before.iterdir() if p.is_dir()} & {p.name for p in after.iterdir() if p.is_dir()},
-                       key=lambda s: SCENARIOS.index(s) if s in SCENARIOS else len(SCENARIOS))
+    recorded = {d: {p.name for p in d.iterdir() if p.is_dir()} for d in (before, after)}
+    order = {s: i for i, s in enumerate(SCENARIOS)}
+    scenarios = sorted(recorded[before] & recorded[after], key=lambda s: order.get(s, len(SCENARIOS)))
     if not scenarios:
         print(f"no scenario recorded under both {before} and {after}")
         return 1
     failed = False
+    for d, other in ((before, after), (after, before)):
+        for scenario in sorted(recorded[d] - recorded[other], key=lambda s: order.get(s, len(SCENARIOS))):
+            print(f"{scenario}: recorded under {d.name} only")
+            failed = True
     for scenario in scenarios:
         diffs = compare_scenario(before / scenario, after / scenario, allow, patterns)
         print(f"{scenario}: " + ("the same" if not diffs else "DIFFERENT"))

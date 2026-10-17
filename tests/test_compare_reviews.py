@@ -41,9 +41,29 @@ def test_each_scenario_reaches_what_it_is_there_for(recorded):
 
 
 def test_two_recordings_of_one_source_are_the_same_apart_from_their_timestamps(recorded, tmp_path, capsys):
-    compare_reviews.record("again", recorded, ("default",))
-    assert compare_reviews.main(["--out", str(recorded), "compare", "before", "again"]) == 0
+    compare_reviews.record("again", recorded, ("default",))  # under the same --out: the console output names its paths
+    out = tmp_path / "out"
+    for label in ("before", "again"):
+        shutil.copytree(recorded / label / "default", out / label / "default")
+    assert compare_reviews.main(["--out", str(out), "compare", "before", "again"]) == 0
     assert "default: the same" in capsys.readouterr().out
+
+
+def test_a_scenario_recorded_under_one_label_only_fails_the_comparison(out, capsys):
+    """A `record after` that stopped part way would otherwise pass on the scenarios it did record."""
+    shutil.rmtree(out / "after" / "tightened")
+    assert compare_reviews.main(["--out", str(out), "compare", "before", "after"]) == 1
+    printed = capsys.readouterr().out
+    assert "tightened: recorded under before only" in printed and "default: the same" in printed
+
+
+def test_the_decided_keys_missing_from_a_decisions_recording_fail_the_comparison(out, capsys):
+    (out / "after" / "decisions" / "decided-keys.json").unlink()
+    assert compare_reviews.main(["--out", str(out), "compare", "before", "after"]) == 1
+    assert "decided-keys.json: not recorded under after" in capsys.readouterr().out
+    (out / "before" / "decisions" / "decided-keys.json").unlink()
+    assert compare_reviews.main(["--out", str(out), "compare", "before", "after"]) == 1
+    assert "decided-keys.json: not recorded under before, after" in capsys.readouterr().out
 
 
 def test_a_difference_fails_the_comparison_unless_it_is_allowed(out, capsys):
