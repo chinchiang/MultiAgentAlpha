@@ -37,20 +37,9 @@ from .scoring import jury
 from .scoring.dimension_score import score_dimension
 from .scoring.idcheck import check_finding_refs
 from .scoring.outcome import OutcomePolicy
-from .tools.runner import TOOL_DIMENSIONS, ToolRun, load_prerecorded, run_all
-from .tools.sarif import ToolResult
+from .tools.evidence import ToolEvidence
+from .tools.runner import ToolRun, load_prerecorded, run_all
 from .workspace import check_outside, resolve
-
-
-@dataclass(frozen=True)
-class ToolEvidence:
-    """What the tools stage hands in: every tool run (the live secret preflight's gitleaks in place of a pre-recorded
-    one), their results, the tools that ran, and the secret preflight's decision on source egress."""
-
-    runs: list[ToolRun]
-    results: list[ToolResult]
-    ran: frozenset[str]
-    egress: SecretPreflight
 
 
 @dataclass(frozen=True)
@@ -66,11 +55,13 @@ class ReviewerFindings:
 @dataclass(frozen=True)
 class Stages:
     """What a review's stages handed in, up to its jury scoring and dimension scores: the bundle, the tool evidence, the
-    context view, the reviewers' findings, the ballots, the jury scoring (its rows carry the human decisions applied),
-    the dimension scores, the target's id and the base of an incremental review."""
+    secret preflight's decision on source egress, the context view, the reviewers' findings, the ballots, the jury
+    scoring (its rows carry the human decisions applied), the dimension scores, the target's id and the base of an
+    incremental review."""
 
     ctx: RepoContext
     tools: ToolEvidence
+    egress: SecretPreflight
     context_view: ContextView | None
     reviewed: ReviewerFindings
     ballots: ballot_round.Ballots
@@ -242,12 +233,12 @@ class Pipeline:
         answer_key = calibration_answer_key(target) if calibration_sample else None
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = self._bundle(target, base_ref)
-        tools = self._tools(target, sarif_dir, mode, answer_key)
-        context_view = self._context(ctx, tools)
-        reviewed = self._reviewers(ctx, context_view, tools)
+        tools, egress = self._tools(target, sarif_dir, mode, answer_key)
+        context_view = self._context(ctx, egress)
+        reviewed = self._reviewers(ctx, context_view, egress)
         ballots = ballot_round.run(ctx, reviewed.findings, reviewed.finders, cfg=self.cfg, providers=self.providers, audit=self.audit,
                                    say=self._say, progress=self.progress)
-        stages = self._score(ctx, tools, context_view, reviewed, ballots, base_ref)
+        stages = self._score(ctx, tools, egress, context_view, reviewed, ballots, base_ref)
         assessment, signature = self._assess(stages, fail_on_gate)
         self.progress.begin("report")
         report = assemble(stages, assessment, self._metadata(signature), cfg=self.cfg, target=target, mode=mode,
@@ -287,7 +278,8 @@ class Pipeline:
         prog.done("bundle", f"{len(ctx.content)} file(s) in the bundle, {len(ctx.omitted)} omitted, {len(ctx.excluded)} excluded")
         return ctx
 
-    def _tools(self, target: Path, sarif_dir: Path | None, mode: str, answer_key: list[dict] | None) -> ToolEvidence:
+    def _tools(self, target: Path, sarif_dir: Path | None, mode: str,
+               answer_key: list[dict] | None) -> tuple[ToolEvidence, SecretPreflight]:
         prog = self.progress
         prog.begin("tools")
         tool_runs = self.run_tools(target, sarif_dir)
@@ -295,25 +287,23 @@ class Pipeline:
             # Pre-recorded SARIF cannot authorize egress from the current working tree.
             preflight = run_all(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])
             tool_runs = [r for r in tool_runs if r.tool != "gitleaks"] + preflight
-        tools = ToolEvidence(runs=tool_runs, results=[r for run in tool_runs for r in run.results],
-                             ran=frozenset(run.tool for run in tool_runs if run.ran),
-                             # Live source egress is blocked before any provider sees data if the trusted local
-                             # secret scan is unavailable or reports secrets (mara.review_status). The masked manifest remains reviewable.
-                             egress=secret_preflight(mode, [r for r in tool_runs if r.tool == "gitleaks"], answer_key))
-        egress = tools.egress
+        tools = ToolEvidence(runs=tool_runs)
+        # Live source egress is blocked before any provider sees data if the trusted local
+        # secret scan is unavailable or reports secrets (mara.review_status). The masked manifest remains reviewable.
+        egress = secret_preflight(mode, tools.runs_of("gitleaks"), answer_key)
         if answer_key is not None and (egress.exempted or egress.unexplained):
             self.audit["secret_preflight_calibration_exempted"] = len(egress.exempted)
             self._say(f"L0: secret preflight: {len(egress.exempted)} seeded secret(s) declared by the calibration answer key, "
                       f"{len(egress.unexplained)} other finding(s)")
         prog.done("tools", f"{len(tools.ran)} of {len(tool_runs)} tool(s) ran, {len(tools.results)} result(s)"
                   + ("; source egress blocked by the secret preflight" if egress.blocked else ""))
-        return tools
+        return tools, egress
 
-    def _context(self, ctx: RepoContext, tools: ToolEvidence) -> ContextView | None:
+    def _context(self, ctx: RepoContext, egress: SecretPreflight) -> ContextView | None:
         prog = self.progress
         # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked
-        if tools.egress.blocked or not self.cfg.roles.context:
-            prog.skip("context", "source egress blocked by the secret preflight" if tools.egress.blocked else "no context role configured")
+        if egress.blocked or not self.cfg.roles.context:
+            prog.skip("context", "source egress blocked by the secret preflight" if egress.blocked else "no context role configured")
             context_view = None
         else:
             prog.begin("context")
@@ -324,24 +314,24 @@ class Pipeline:
             self.audit["context_view_items"] = len(context_view.items)
         return context_view
 
-    def _reviewers(self, ctx: RepoContext, context_view: ContextView | None, tools: ToolEvidence) -> ReviewerFindings:
+    def _reviewers(self, ctx: RepoContext, context_view: ContextView | None, egress: SecretPreflight) -> ReviewerFindings:
         prog = self.progress
-        if tools.egress.blocked:
+        if egress.blocked:
             prog.skip("reviewers", "source egress blocked by the secret preflight")
             raw = []
         else:
             prog.begin("reviewers")
             raw = self.run_reviewers(ctx, context_view)
         findings, finders = self.dedupe(raw)
-        if not tools.egress.blocked:
+        if not egress.blocked:
             prog.done("reviewers", f"{len(raw)} raw finding(s), {len(findings)} after deduplication")
         findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
         self.audit["findings_raw"] = len(raw)
         self.audit["findings_deduped"] = len(findings)
         return ReviewerFindings(raw_count=len(raw), findings=findings, finders=finders)
 
-    def _score(self, ctx: RepoContext, tools: ToolEvidence, context_view: ContextView | None, reviewed: ReviewerFindings,
-               ballots: ballot_round.Ballots, base_ref: str | None) -> Stages:
+    def _score(self, ctx: RepoContext, tools: ToolEvidence, egress: SecretPreflight, context_view: ContextView | None,
+               reviewed: ReviewerFindings, ballots: ballot_round.Ballots, base_ref: str | None) -> Stages:
         """The jury scoring, the human decisions on it and the dimension scores, with everything the stages before
         handed in."""
         self.progress.begin("scoring")
@@ -356,16 +346,14 @@ class Pipeline:
         cons_by_id = {c.finding_id: c for c in scoring.rows}
         dims = []
         for d in self.cfg.dimensions:
-            tool_ran = any(d in TOOL_DIMENSIONS.get(t, []) for t in tools.ran)
-            dims.append(score_dimension(d, findings, cons_by_id, tool_ran))
-        return Stages(ctx=ctx, tools=tools, context_view=context_view, reviewed=reviewed, ballots=ballots, scoring=scoring,
+            dims.append(score_dimension(d, findings, cons_by_id, tools.ran_for(d)))
+        return Stages(ctx=ctx, tools=tools, egress=egress, context_view=context_view, reviewed=reviewed, ballots=ballots, scoring=scoring,
                       dimensions=dims, target_id=target_id, base_ref=base_ref)
 
     def _assess(self, stages: Stages, fail_on_gate: bool) -> tuple[Assessment, str | None]:
         """The review facts the stages handed in, the ML-BOM signature check among them, and the review status and gate
         decided from them; with the signature check's result for the report."""
         tools = stages.tools
-        required_tools = {t for t, ds in TOOL_DIMENSIONS.items() if set(ds) & set(self.cfg.dimensions)}
         signed: bool | None = None
         signature: str | None = None  # the report's ml_bom_signature
         if self.cfg.ml_bom.require_signature:
@@ -374,8 +362,8 @@ class Pipeline:
 
             signed, why = verify_signature(self.cfg)
             signature = "verified" if signed else f"failed: {why}"
-        facts = ReviewFacts(context_complete=stages.ctx.complete, egress_blocked=tools.egress.blocked,
-                            required_tools_ran=required_tools <= tools.ran and all(r.ran for r in tools.runs), ml_bom_signature=signed,
+        facts = ReviewFacts(context_complete=stages.ctx.complete, egress_blocked=stages.egress.blocked,
+                            required_tools_ran=tools.complete_for(self.cfg.dimensions), ml_bom_signature=signed,
                             context_view_missing=bool(self.cfg.roles.context) and stages.context_view is None,
                             incomplete_counters=tuple(self.audit.incomplete_reasons()),  # audit.INCOMPLETE_COUNTERS: the one list
                             rollout_phase=self.cfg.rollout.phase, fail_on_gate=fail_on_gate)

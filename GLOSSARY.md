@@ -89,7 +89,7 @@ The judges of a review as their votes are counted: one judge family each, the we
 _Avoid_: panel (the panel is every model the config names, reviewers included), judges (the judges are the models; the jury is how their votes count)
 
 **Jury signals**:
-What the pipeline measures about one finding before it concludes anything: its evidence tier, weighted score and CVSS severity, whether its provenance is verified, whether the skeptic refuted it or left it unchallenged, whether enough independent judges voted, whether every judge family gave both passes, and their agreement and position consistency. They come from the finding's ballots, its finders, the tool results and the jury; the jury outcome is decided from them alone.
+What the pipeline measures about one finding before it concludes anything: its evidence tier, weighted score and CVSS severity, whether its provenance is verified, whether the skeptic refuted it or left it unchallenged, whether enough independent judges voted, whether every judge family gave both passes, and their agreement and position consistency. They come from the finding's ballots, its finders, the tool evidence and the jury; the jury outcome is decided from them alone.
 _Avoid_: consensus (the weighted score is one of them), votes (the votes are one input)
 
 **Jury outcome**:
@@ -120,6 +120,24 @@ _Avoid_: override result
 A finding whose final outcome is the ruling of a usable decision rather than the jury outcome.
 _Avoid_: overridden finding (the jury outcome still exists beside it)
 
+## Tools
+
+**Tool evidence**:
+What the deterministic tools reported on one review's target: each tool's run, whether it ran to completion, and the results it reported, a scan that did not complete included.
+_Avoid_: L0 results, tool findings (a finding is what a reviewer reports), SARIF (one format the results come in)
+
+**Required tool**:
+A deterministic tool that scans at least one of the dimensions a review covers; the review is incomplete unless every required tool ran.
+_Avoid_: enabled tool (a tool can run without being required)
+
+**Tool alert**:
+A tool result at level error or warning: it can corroborate a finding and, until the tool's own triage suppresses it, keeps the review incomplete. A note is information, not an alert.
+_Avoid_: blocking tool result (a blocking finding is a gate rule), tool finding
+
+**Corroboration**:
+A tool alert's independent support for a finding: at the same place, for the same weakness, from a tool that scans the finding's dimension. A corroborated finding has evidence tier A.
+_Avoid_: tool match, confirmation (a judge's vote is not corroboration)
+
 ## Reviews
 
 **Review scope**:
@@ -135,7 +153,7 @@ Whether a review can stand as a conclusion: complete, or incomplete together wit
 _Avoid_: run status, success
 
 **Incomplete reason**:
-One thing that keeps a review from standing as a conclusion: coverage or a required tool missing, a model reply that failed, a finding whose final outcome still needs a human, a tool result nobody has triaged. A rejection review is not one.
+One thing that keeps a review from standing as a conclusion: coverage or a required tool missing, a model reply that failed, a finding whose final outcome still needs a human, a tool alert. A rejection review is not one.
 _Avoid_: error (an error is one kind of reply outcome), failure
 
 **Gate**:

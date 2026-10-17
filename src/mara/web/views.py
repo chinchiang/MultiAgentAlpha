@@ -13,6 +13,7 @@ from typing import Any
 
 from ..audit import INCOMPLETE_COUNTERS, ROLES, Role, by_family
 from ..schemas import DIMENSION_LABELS, SEVERITY_ORDER, ConsensusResult, ReviewReport
+from ..tools.evidence import is_alert
 
 OUTCOMES = ("accepted", "rejected", "dropped", "needs_human")
 
@@ -193,7 +194,7 @@ def report_view(manifest: dict[str, Any], report: ReviewReport, progress: dict[s
             **counts,
             "human_queue": len(report.human_queue),
             "tool_results": len(tool_results),
-            "tool_results_blocking": sum(1 for t in tool_results if t.get("level") in ("error", "warning")),
+            "tool_results_blocking": sum(1 for t in tool_results if is_alert(t.get("level"))),
             "tools_ran": sum(1 for h in report.tool_health if h.get("ran")),
             "tools_total": len(report.tool_health),
             "incomplete_reasons": len(report.incomplete_reasons),

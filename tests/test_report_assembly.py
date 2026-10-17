@@ -9,11 +9,12 @@ import pytest
 
 from mara.ballot_round import Ballots
 from mara.context.repo_map import RepoContext
-from mara.pipeline import ReviewerFindings, Stages, ToolEvidence
+from mara.pipeline import ReviewerFindings, Stages
 from mara.report.assembly import ReportMetadata, assemble
 from mara.review_status import GatePolicy, SecretPreflight, assess
 from mara.schemas import MlBomEntry, ModelEvalStatus, ModelFamily, QueueTightening, RedTeamNote, SkepticVerdict
 from mara.scoring.dimension_score import score_dimension
+from mara.tools.evidence import ToolEvidence
 from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
 from tests import scored_rows
@@ -42,12 +43,11 @@ def _stages(tmp_path: Path, base_ref: str | None = None) -> Stages:
                                 source_model="m") for fid in ("F-2", "F-1")}
     ballots = Ballots(skeptic=skeptic, unchallenged=frozenset(), redteam=redteam, votes=votes)
     result = ToolResult("semgrep", "sql", "warning", "SQL injection", "other.py", 9, "CWE-89")
-    tools = ToolEvidence(runs=[ToolRun("semgrep", True, [result], "pinned 1.0"), ToolRun("gitleaks", False, [], "missing")],
-                         results=[result], ran=frozenset({"semgrep"}), egress=SecretPreflight(blocked=False))
+    tools = ToolEvidence(runs=[ToolRun("semgrep", True, [result], "pinned 1.0"), ToolRun("gitleaks", False, [], "missing")])
     scoring = scored_rows.score(findings, finders, votes, skeptic=skeptic, redteam=redteam, tool_results=tools.results)
     dims = [score_dimension("vulnerabilities", findings, {c.finding_id: c for c in scoring.rows}, True)]
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h", revision="r1")
-    return Stages(ctx=ctx, tools=tools, context_view=None, reviewed=ReviewerFindings(raw_count=3, findings=findings, finders=finders),
+    return Stages(ctx=ctx, tools=tools, egress=SecretPreflight(blocked=False), context_view=None, reviewed=ReviewerFindings(raw_count=3, findings=findings, finders=finders),
                   ballots=ballots, scoring=scoring, dimensions=dims, target_id="t" * 64, base_ref=base_ref)
 
 
