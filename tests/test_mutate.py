@@ -104,3 +104,30 @@ def test_a_mutant_the_tests_cannot_run_against_is_an_error_not_a_catch(tmp_path,
         assert (r["caught"], r["exit"], r["where"]) == (False, 2, "focused" if focused else "suite")
         assert "ERROR a broken module  (pytest exit 2" in capsys.readouterr().out
         assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+
+
+def test_focused_only_runs_the_focused_tests_alone_and_a_mutation_they_miss_is_missed(tmp_path, capsys):
+    """A failing test outside the focused ones stops a run that reads the whole suite; with --focused-only it is never run."""
+    root = _repo(tmp_path)
+    (root / "tests" / "test_elsewhere.py").write_text("def test_elsewhere():\n    assert False\n", encoding="utf-8")
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"},
+                 {"name": "another comment", "file": "src/window.py", "old": "# the window", "new": "# a window"}]
+    path = _list(tmp_path, mutations, ["tests/test_window.py"])
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "whole")]) == 2
+    assert "the whole suite exit 1 without a mutation" in capsys.readouterr().err
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs"), "--focused-only"]) == 1
+    (run,) = (tmp_path / "runs").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [(r["mutation"], r["caught"], r["where"]) for r in results] == [("a wider window", True, "focused"),
+                                                                          ("another comment", False, "focused")]
+    assert sorted(p.name for p in run.iterdir()) == ["baseline.focused.log", "results.json"], "no run of the whole suite"
+    assert "MISSED another comment  (focused)" in capsys.readouterr().out
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+
+
+def test_focused_only_without_focused_tests_is_refused(tmp_path, capsys):
+    root = _repo(tmp_path)
+    path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"}])
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs"), "--focused-only"]) == 2
+    assert "--focused-only needs focused tests" in capsys.readouterr().err
+    assert not (tmp_path / "runs").exists()
