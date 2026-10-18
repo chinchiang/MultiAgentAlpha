@@ -2,6 +2,7 @@
 
   .venv/bin/python scripts/mutate.py mutations.yaml                  # every mutation of the list
   .venv/bin/python scripts/mutate.py mutations.yaml --only "a name"  # some of them, by name
+  .venv/bin/python scripts/mutate.py mutations.yaml --focused-only   # the focused tests alone, never the whole suite
 
 The list is a YAML file:
 
@@ -25,8 +26,10 @@ original would otherwise run as the original's cached bytecode. The file is rest
 to be byte for byte what it was. Each run writes out/mutations/<UTC time>/results.json (one entry per mutation: caught,
 by which test, by the focused tests or the whole suite, pytest's exit code), the output of the runs without a mutation
 and of every run of the whole suite; a later run never overwrites an earlier one.
-Exit 0 when every mutation was caught, 1 when one was missed or was an error, 2 when the list is wrong or the tests
-fail without a mutation.
+With --focused-only the whole suite never runs, for checking the tests of one module: the baseline is the focused
+tests, and a mutation they miss is missed.
+Exit 0 when every mutation was caught, 1 when one was missed or was an error, 2 when the list is wrong (or names no
+focused tests for --focused-only) or the tests fail without a mutation.
 """
 
 from __future__ import annotations
@@ -81,10 +84,10 @@ def _pytest(root: Path, tests: list[str]) -> tuple[int, str, str]:
     return cp.returncode, failed[0] if failed else "", cp.stdout + cp.stderr
 
 
-def baseline(focused: list[str], root: Path, run_dir: Path) -> str:
+def baseline(focused: list[str], root: Path, run_dir: Path, *, whole_suite: bool = True) -> str:
     """Why the focused tests or the whole suite fail without a mutation, each run's output kept; empty when they pass."""
     _clear_bytecode(root)
-    runs = ([("focused tests", focused, "focused")] if focused else []) + [("whole suite", [], "suite")]
+    runs = ([("focused tests", focused, "focused")] if focused else []) + ([("whole suite", [], "suite")] if whole_suite else [])
     for name, tests, where in runs:
         code, by, out = _pytest(root, tests)
         log = run_dir / f"baseline.{where}.log"
@@ -94,7 +97,7 @@ def baseline(focused: list[str], root: Path, run_dir: Path) -> str:
     return ""
 
 
-def check(m: dict, focused: list[str], root: Path, run_dir: Path) -> dict:
+def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite: bool = True) -> dict:
     """Apply `m`, find whether a test catches it, restore the file; its result."""
     path = root / m["file"]
     original = path.read_bytes()
@@ -104,7 +107,7 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path) -> dict:
         code, by, where = 0, "", "focused"
         if focused:
             code, by, _ = _pytest(root, focused)
-        if code == 0:
+        if code == 0 and whole_suite:
             where = "suite"
             code, by, out = _pytest(root, [])
             (run_dir / (m["name"].replace("/", "_").replace(" ", "_")[:80] + ".suite.log")).write_text(out, encoding="utf-8")
@@ -122,12 +125,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--only", nargs="+", default=None, help="the names of the mutations to run")
     ap.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)  # a repository other than this one (tests)
     ap.add_argument("--runs", type=Path, default=None, help="default: <root>/out/mutations")
+    ap.add_argument("--focused-only", action="store_true", help="run the focused tests alone, never the whole suite")
     a = ap.parse_args(argv)
     root = a.root.resolve()
     try:
         focused, mutations = load(a.mutations, root)
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    if a.focused_only and not focused:
+        print("ERROR: --focused-only needs focused tests, and the list names none", file=sys.stderr)
         return 2
     if a.only:
         unknown = sorted(set(a.only) - {m["name"] for m in mutations})
@@ -137,13 +144,13 @@ def main(argv: list[str] | None = None) -> int:
         mutations = [m for m in mutations if m["name"] in a.only]
     run_dir = (a.runs or root / "out" / "mutations") / dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%S%fZ")
     run_dir.mkdir(parents=True)
-    why = baseline(focused, root, run_dir)
+    why = baseline(focused, root, run_dir, whole_suite=not a.focused_only)
     if why:
         print(f"ERROR: {why}", file=sys.stderr)
         return 2
     results = []
     for m in mutations:
-        r = check(m, focused, root, run_dir)
+        r = check(m, focused, root, run_dir, whole_suite=not a.focused_only)
         results.append(r)
         if r["exit"] not in (0, 1):
             print(f"ERROR {r['mutation']}  (pytest exit {r['exit']}, {r['where']})", flush=True)
