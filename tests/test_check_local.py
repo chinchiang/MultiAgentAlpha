@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -59,3 +60,51 @@ def test_a_check_that_cannot_be_set_up_fails_with_why(tmp_path, monkeypatch, cap
     assert check_local.main(["--only", "broken", "--logs", str(tmp_path)]) == 1
     assert "could not set up broken: python3.12 not found" in (tmp_path / "broken.log").read_text(encoding="utf-8")
     assert "FAIL broken" in capsys.readouterr().out
+
+
+def _git(repo, *args):
+    return subprocess.run(["git", "-c", "commit.gpgsign=false", *args], cwd=repo, capture_output=True, text=True, check=True).stdout
+
+
+def test_the_uncommitted_changes_are_what_git_status_lists(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    _git(repo, "config", "user.name", "t")
+    (repo / "a.py").write_text("a = 1\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "base")
+    assert check_local.uncommitted(repo) == []
+    (repo / "a.py").write_text("a = 2\n", encoding="utf-8")
+    (repo / "b.py").write_text("b = 1\n", encoding="utf-8")
+    assert check_local.uncommitted(repo) == [" M a.py", "?? b.py"]
+
+
+def test_uncommitted_changes_are_warned_of_when_a_check_that_reads_commits_ran(tmp_path, monkeypatch, capsys):
+    """gitleaks scans the branch's commits: a run before the commit passes it without having seen the change."""
+    monkeypatch.setattr(check_local, "CHECKS", {name: (lambda a: ([sys.executable, "-c", "print('ok')"], {}, None))
+                                                for name in ("ruff", "gitleaks")})
+    monkeypatch.setattr(check_local, "uncommitted", lambda root: [" M a.py", "?? b.py"])
+    assert check_local.main(["--only", "ruff", "gitleaks", "--logs", str(tmp_path / "1")]) == 0, "a warning, not a failure"
+    out = capsys.readouterr().out
+    assert "WARNING: 2 uncommitted change(s), which gitleaks did not see: it reads the branch's commits" in out
+    assert "--only gitleaks" in out
+    assert check_local.main(["--only", "ruff", "--logs", str(tmp_path / "2")]) == 0
+    assert "WARNING" not in capsys.readouterr().out, "ruff read the working tree"
+    monkeypatch.setattr(check_local, "uncommitted", lambda root: [])
+    assert check_local.main(["--only", "gitleaks", "--logs", str(tmp_path / "3")]) == 0
+    assert "WARNING" not in capsys.readouterr().out
+
+
+def test_the_line_width_check_reads_commits_too_and_is_warned_of_with_gitleaks(tmp_path, monkeypatch, capsys):
+    """scripts/line_width.py reads the lines the branch's commits add, so an uncommitted line is not measured either."""
+    monkeypatch.setattr(check_local, "CHECKS", {name: (lambda a: ([sys.executable, "-c", "print('ok')"], {}, None))
+                                                for name in ("ruff", "lines", "gitleaks")})
+    monkeypatch.setattr(check_local, "uncommitted", lambda root: [" M a.py"])
+    assert check_local.main(["--only", "ruff", "lines", "gitleaks", "--logs", str(tmp_path / "1")]) == 0
+    out = capsys.readouterr().out
+    assert "1 uncommitted change(s), which lines, gitleaks did not see: they read the branch's commits" in out
+    assert "--only lines gitleaks" in out
+    assert check_local.main(["--only", "lines", "--logs", str(tmp_path / "2")]) == 0
+    assert "which lines did not see: it reads" in capsys.readouterr().out
