@@ -4,16 +4,18 @@
 # Install: python3 -m pip install --require-hashes --no-build-isolation -r <this file>
 # Preinstall the hash-pinned tools/build-requirements.txt closure before resolving or installing sdists.
 # Source distributions (no wheel published; built at install time, see scripts/relock_requirements.py): ecoji==0.1.1, langdetect==1.0.9
-# Hand-applied 2026-10-06, the one exception to the rule above: multidict 6.8.0 -> 6.9.1 (GHSA-54p9-h82j-f925), with the
-# index's SHA-256 of multidict-6.9.1-cp311-cp311-manylinux2014_x86_64...whl, verified by pip --require-hashes for CPython 3.11 /
-# manylinux x86_64; aiohttp 3.14.3 (multidict>=4.5,<7.0) and yarl 1.25.1 (>=4.0) accept it. A full relock could not run (the
-# CUDA wheels download at ~50 KB/s from the authoring host); the .in file's floor keeps it, and the next relock drops this note.
+# Hand-applied, the two exceptions to the rule above (a full relock could not run: the CUDA wheels download at ~50 KB/s from
+# the authoring host; the .in file's floors keep them, and the next relock drops these notes). Each takes the index's SHA-256
+# of the cp311-cp311-manylinux2014_x86_64 wheel, verified by pip --require-hashes for CPython 3.11 / manylinux x86_64:
+# - 2026-10-06: multidict 6.8.0 -> 6.9.1 (GHSA-54p9-h82j-f925); aiohttp (multidict>=4.5,<7.0) and yarl 1.25.1 (>=4.0) accept it.
+# - 2026-10-20: aiohttp 3.14.3 -> 3.14.4 (GHSA-2g87-pp6c-29x5, GHSA-5wr8-gcqf-gqf3, GHSA-494j-54xm-rwp3); its requirements are
+#   3.14.3's but yarl>=1.25.1, which the closure's yarl 1.25.1 meets.
 accelerate==1.15.0 \
     --hash=sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec
 aiohappyeyeballs==2.7.1 \
     --hash=sha256:9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472
-aiohttp==3.14.3 \
-    --hash=sha256:53e7b4ce82b54a8bcc71b3b67a5cbd177ca1d7f592cbc92cd38b7349f73482db
+aiohttp==3.14.4 \
+    --hash=sha256:f887c3b7fb3058fc1ccd917f52078540c18d938d12018cb9edd64b6811d20c57
 aiosignal==1.4.0 \
     --hash=sha256:053243f8b92b990551949e63930a839ff0cf0b0ebbe0597b0f3fb19e1a0fe82e
 annotated-doc==0.0.5 \
