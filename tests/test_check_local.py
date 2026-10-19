@@ -108,3 +108,31 @@ def test_the_line_width_check_reads_commits_too_and_is_warned_of_with_gitleaks(t
     assert "--only lines gitleaks" in out
     assert check_local.main(["--only", "lines", "--logs", str(tmp_path / "2")]) == 0
     assert "which lines did not see: it reads" in capsys.readouterr().out
+
+
+def test_a_failed_suite_names_its_failed_tests_in_the_summary(tmp_path, monkeypatch, capsys):
+    """With -rs pytest's short summary lists skips only, so the summary reads the names off the log's FAILURES and ERRORS
+    sections: a failed run is named without opening its log."""
+    suite = tmp_path / "suite" / "test_some.py"
+    suite.parent.mkdir()
+    suite.write_text("import pytest\n\n\n@pytest.fixture\ndef broken():\n    raise RuntimeError('no')\n\n\n"
+                     "def test_passes():\n    assert True\n\n\ndef test_fails():\n    assert 1 == 2\n\n\n"
+                     "def test_errors(broken):\n    pass\n\n\nclass TestGroup:\n    def test_fails_too(self):\n        assert False\n",
+                     encoding="utf-8")
+    monkeypatch.setattr(check_local, "CHECKS", {"pytest": lambda a: ([sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",
+                                                                     str(suite)], {}, None)})
+    monkeypatch.setattr(check_local, "uncommitted", lambda root: [])
+    assert check_local.main(["--only", "pytest", "--logs", str(tmp_path / "logs")]) == 1
+    out = capsys.readouterr().out
+    assert "FAIL pytest   2 failed, 1 passed, 1 error" in out
+    assert "  failed tests: test_fails, TestGroup.test_fails_too; errors: ERROR at setup of test_errors" in out
+
+
+def test_only_the_headers_of_the_failures_and_errors_sections_name_tests():
+    """A traceback through several frames separates them with `_ _ _` lines, and -rP adds a PASSES section with headers of
+    its own: neither names a failed test."""
+    log = ("=== PASSES ===\n____ test_passes ____\n=== FAILURES ===\n____ test_deep ____\n    def test_deep():\n"
+           "_ _ _ _ _ _ _ _\n    def helper():\n=== ERRORS ===\n____ ERROR collecting tests/test_x.py ____\n"
+           "=== short test summary info ===\n")
+    assert check_local.failed_tests(log) == (["test_deep"], ["ERROR collecting tests/test_x.py"])
+    assert check_local.failed_tests("....\n4 passed in 0.1s\n") == ([], [])
