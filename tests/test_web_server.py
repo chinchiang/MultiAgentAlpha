@@ -553,6 +553,26 @@ def test_a_run_whose_waiter_stopped_without_recording_its_exit_is_read_from_its_
     assert (run["status"], run["exit_code"]) == ("finished", None)
 
 
+def test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code(tmp_path, monkeypatch):
+    """run.json and the waiter are read in one step: the exit cannot be recorded between the two."""
+    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
+    (waiter,) = [t for t in threading.enumerate() if t.name == f"mara-run-{run_id}"]
+    read_json, reading = procs.read_json, threading.current_thread()
+
+    def read_then_let_the_exit_be_recorded(path):
+        data = read_json(path)
+        if threading.current_thread() is reading and path.name == "run.json" and not child.released.is_set():
+            child.released.set()
+            waiter.join(2)  # the waiter records the exit unless this read holds the lock it records under
+        return data
+
+    monkeypatch.setattr(procs, "read_json", read_then_let_the_exit_be_recorded)
+    run = reg.get(run_id)
+    assert (run["status"], run["exit_code"]) == ("running", None)
+    run = _until_not_running(reg, run_id, 30)
+    assert (run["status"], run["exit_code"]) == ("finished", 0)
+
+
 def _exited_job(tmp_path, monkeypatch, child_type, kind="trivy_db_download"):
     """A run registry, a job registry and a job whose child exited 0; every child spawned, wrapped in `child_type`, is in
     the list returned last."""
