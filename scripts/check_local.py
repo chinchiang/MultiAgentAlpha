@@ -1,13 +1,15 @@
-"""Before a push, four of the checks CI runs on a pull request, run here with every output kept.
+"""Before a push, five of the checks CI runs on a pull request, run here with every output kept.
 
-  .venv/bin/python scripts/check_local.py                     # ruff, mypy, the whole suite, gitleaks on the branch
+  .venv/bin/python scripts/check_local.py                     # ruff, line width, mypy, the whole suite, gitleaks
   .venv/bin/python scripts/check_local.py --only ruff mypy    # some of them
-  .venv/bin/python scripts/check_local.py --base origin/main  # the base gitleaks scans from (default origin/main)
+  .venv/bin/python scripts/check_local.py --base origin/main  # the base of the branch's change (default origin/main)
 
 Run it with the dev environment's interpreter: ruff and pytest come from it. Each check writes its whole output to
 out/check-local/<UTC time>/<check>.log and the summary names the log of every check that failed, so a failure is
 always there to read afterwards. The checks, as .github/workflows/mara-review.yml runs them:
   ruff      ruff check src tests scripts
+  lines     scripts/line_width.py: the lines the commits since the merge base with --base add to Python files are
+            within 150 columns (CI runs it on a pull request)
   mypy      python -m mypy from .venv-typecheck: CPython 3.12 with the hash-pinned closure CI installs (the 3.12 dev
             requirements, the build requirements, this package without its dependencies, the typecheck requirements),
             built on first use and again whenever one of those requirement files changes
@@ -70,6 +72,7 @@ def _clear_bytecode() -> None:
 Check = Callable[[argparse.Namespace], tuple[list[str], dict[str, str], Callable[[], None] | None]]
 CHECKS: dict[str, Check] = {
     "ruff": lambda a: ([sys.executable, "-m", "ruff", "check", *RUFF_PATHS], {}, None),
+    "lines": lambda a: ([sys.executable, str(ROOT / "scripts" / "line_width.py"), "--base", a.base], {}, None),
     "mypy": lambda a: ([str(typecheck_python(a.python312)), "-m", "mypy"], {}, None),
     "pytest": lambda a: ([sys.executable, "-m", "pytest", "-q", "-rs"], {"GITHUB_ACTIONS": "true"},
                          _clear_bytecode),
@@ -102,7 +105,7 @@ def _last_line(log: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--only", nargs="+", choices=list(CHECKS), default=list(CHECKS))
-    ap.add_argument("--base", default="origin/main", help="gitleaks scans the commits since the merge base with this")
+    ap.add_argument("--base", default="origin/main", help="the line width and gitleaks checks read the commits since the merge base with this")
     ap.add_argument("--python312", default=shutil.which("python3.12") or "python3.12", help="builds .venv-typecheck")
     ap.add_argument("--logs", type=Path, default=None, help="default: out/check-local/<UTC time>")
     a = ap.parse_args(argv)
