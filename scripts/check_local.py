@@ -18,8 +18,8 @@ always there to read afterwards. The checks, as .github/workflows/mara-review.ym
   gitleaks  scripts/gitleaks_ci.py --event pull_request over the commits since the merge base with --base
 Not run here: the whole suite on CPython 3.12, the repository scanners (semgrep, osv-scanner, trivy, zizmor,
 csp-evaluator), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
-When a check that reads the branch's commits (gitleaks) ran and the working tree has changes git status lists, the
-summary warns that it did not see them. Exit 0 when every check passed, 1 otherwise; the warning changes neither.
+When a check that reads the branch's commits (lines, gitleaks) ran and the working tree has changes git status lists,
+the summary warns that it did not see them. Exit 0 when every check passed, 1 otherwise; the warning changes neither.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ CHECKS: dict[str, Check] = {
 }
 
 
-COMMIT_CHECKS = ("gitleaks",)  # the checks that read the branch's commits, not the working tree
+COMMIT_CHECKS = ("lines", "gitleaks")  # the checks that read the branch's commits, not the working tree
 
 
 def uncommitted(root: Path) -> list[str]:

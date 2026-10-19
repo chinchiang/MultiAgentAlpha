@@ -95,3 +95,16 @@ def test_uncommitted_changes_are_warned_of_when_a_check_that_reads_commits_ran(t
     monkeypatch.setattr(check_local, "uncommitted", lambda root: [])
     assert check_local.main(["--only", "gitleaks", "--logs", str(tmp_path / "3")]) == 0
     assert "WARNING" not in capsys.readouterr().out
+
+
+def test_the_line_width_check_reads_commits_too_and_is_warned_of_with_gitleaks(tmp_path, monkeypatch, capsys):
+    """scripts/line_width.py reads the lines the branch's commits add, so an uncommitted line is not measured either."""
+    monkeypatch.setattr(check_local, "CHECKS", {name: (lambda a: ([sys.executable, "-c", "print('ok')"], {}, None))
+                                                for name in ("ruff", "lines", "gitleaks")})
+    monkeypatch.setattr(check_local, "uncommitted", lambda root: [" M a.py"])
+    assert check_local.main(["--only", "ruff", "lines", "gitleaks", "--logs", str(tmp_path / "1")]) == 0
+    out = capsys.readouterr().out
+    assert "1 uncommitted change(s), which lines, gitleaks did not see: they read the branch's commits" in out
+    assert "--only lines gitleaks" in out
+    assert check_local.main(["--only", "lines", "--logs", str(tmp_path / "2")]) == 0
+    assert "which lines did not see: it reads" in capsys.readouterr().out
