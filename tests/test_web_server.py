@@ -553,6 +553,128 @@ def test_a_run_whose_waiter_stopped_without_recording_its_exit_is_read_from_its_
     assert (run["status"], run["exit_code"]) == ("finished", None)
 
 
+def _exited_job(tmp_path, monkeypatch, child_type, kind="trivy_db_download"):
+    """A run registry, a job registry and a job whose child exited 0; every child spawned, wrapped in `child_type`, is in
+    the list returned last."""
+    from mara.web import jobs as jobs_mod
+
+    monkeypatch.setenv("MARA_HOME", str(ROOT))
+    real, children = procs.spawn, []
+
+    def spawn(argv, **kw):
+        children.append(child_type(real([sys.executable, "-c", "pass"], **kw)))
+        return children[-1]
+
+    monkeypatch.setattr(procs, "spawn", spawn)
+    reg = runs.RunRegistry(ROOT, tmp_path / "out")
+    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg)
+    job_id = job_reg.create(jobs_mod.JobRequest(kind=kind))["id"]
+    (child,) = children
+    assert child.proc.wait(timeout=60) == 0
+    return reg, job_reg, job_id, children
+
+
+def _until_the_job_is_not_running(job_reg, job_id, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and job_reg.get(job_id)["status"] == "running":
+        time.sleep(0.1)
+    return job_reg.get(job_id)
+
+
+def test_a_job_whose_exit_is_not_recorded_yet_reads_as_running_not_interrupted(tmp_path, monkeypatch):
+    """The child exited, but job.json has no exit code yet."""
+    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
+    try:
+        job = job_reg.get(job_id)
+        assert (job["status"], job["exit_code"]) == ("running", None)
+    finally:
+        child.released.set()
+    job = _until_the_job_is_not_running(job_reg, job_id, 30)
+    assert (job["status"], job["exit_code"]) == ("finished", 0)
+
+
+def test_no_second_job_starts_while_the_exit_of_the_first_is_not_recorded_yet(tmp_path, monkeypatch):
+    """The first job still reads as running, so another job is refused."""
+    from mara.web import jobs as jobs_mod
+
+    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
+    try:
+        with pytest.raises(runs.LaunchError) as refused:
+            job_reg.create(jobs_mod.JobRequest(kind="trivy_db_status"))
+        assert refused.value.code == "busy"
+    finally:
+        child.released.set()
+    _until_the_job_is_not_running(job_reg, job_id, 30)
+
+
+def test_no_review_starts_while_the_exit_of_a_job_replacing_the_tools_is_not_recorded_yet(tmp_path, monkeypatch):
+    """The job still reads as running, so it still replaces the trivy database a review would use."""
+    reg, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
+    reg.blocked_by = job_reg.changing_tools
+    try:
+        with pytest.raises(runs.LaunchError) as refused:
+            reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))
+        assert refused.value.code == "busy"
+    finally:
+        child.released.set()
+    _until_the_job_is_not_running(job_reg, job_id, 30)
+
+
+def test_stopping_the_job_registry_waits_for_the_exit_of_a_job_not_recorded_yet(tmp_path, monkeypatch):
+    """The server is exiting: the exit is recorded in job.json first, instead of the next server reading it interrupted."""
+    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
+    release = threading.Timer(0.5, child.released.set)
+    release.start()
+    try:
+        job_reg.shutdown()
+        record = procs.read_json(job_reg.jobs_dir / job_id / "job.json")
+        assert (record["status"], record["exit_code"]) == ("finished", 0)
+    finally:
+        release.cancel()
+        child.released.set()
+
+
+def test_a_job_replacing_no_tools_does_not_hold_a_review_back(tmp_path, monkeypatch):
+    reg, job_reg, job_id, children = _exited_job(tmp_path, monkeypatch, _UnrecordedExit, kind="trivy_db_status")
+    reg.blocked_by = job_reg.changing_tools
+    try:
+        assert job_reg.get(job_id)["status"] == "running"
+        reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))
+    finally:
+        for child in children:
+            child.released.set()
+    _until_the_job_is_not_running(job_reg, job_id, 30)
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_a_job_whose_waiter_stopped_without_recording_its_exit_reads_as_interrupted(tmp_path, monkeypatch):
+    """As a job of an earlier server does, instead of reading as running for good."""
+    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _LostExit)
+    child.released.set()
+    job = _until_the_job_is_not_running(job_reg, job_id, 10)
+    assert (job["status"], job["exit_code"]) == ("interrupted", None)
+
+
+def test_a_job_whose_exit_is_recorded_while_it_is_read_is_never_read_as_interrupted(tmp_path, monkeypatch):
+    """job.json and the waiter are read in one step: the exit cannot be recorded between the two."""
+    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
+    (waiter,) = [t for t in threading.enumerate() if t.name == f"mara-job-{job_id}"]
+    read_json, reading = procs.read_json, threading.current_thread()
+
+    def read_then_let_the_exit_be_recorded(path):
+        data = read_json(path)
+        if threading.current_thread() is reading and path.name == "job.json" and not child.released.is_set():
+            child.released.set()
+            waiter.join(2)  # the waiter records the exit unless this read holds the lock it records under
+        return data
+
+    monkeypatch.setattr(procs, "read_json", read_then_let_the_exit_be_recorded)
+    job = job_reg.get(job_id)
+    assert (job["status"], job["exit_code"]) == ("running", None)
+    job = _until_the_job_is_not_running(job_reg, job_id, 30)
+    assert (job["status"], job["exit_code"]) == ("finished", 0)
+
+
 @pytest.mark.parametrize("recorded, exit_code, enforced", [
     (True, 3, True),    # a failed PSIRT hand-off exits 3, outranking the gate's 2: the report still says it was enforced
     (False, 0, False),
