@@ -302,14 +302,15 @@ class RunRegistry:
         return report
 
     def get(self, run_id: str) -> dict[str, Any] | None:
-        manifest = self._manifest(run_id)
+        with self._lock:  # the waiter records a run's exit under the lock: read run.json and the waiter in one step
+            manifest = self._manifest(run_id)
+            waiter = self._waiters.get(run_id)
+            owned = waiter is not None and waiter.is_alive()
         if manifest is None:
             return None
         prog = self.progress(run_id)
-        with self._lock:
-            owned = run_id in self._procs and self._procs[run_id].poll() is None
         if manifest.get("status") == "running" and not owned:
-            # a run of an earlier server, or one whose waiter has not written yet: the progress file decides
+            # a run of an earlier server, or one whose waiter stopped without recording it: the progress file decides
             st = (prog or {}).get("status")
             manifest["status"] = "finished" if st == "finished" else "failed" if st == "failed" else "interrupted"
         manifest["current_stage"] = (prog or {}).get("current")

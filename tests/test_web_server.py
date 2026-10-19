@@ -377,6 +377,72 @@ def _finished_review(real, report_file: Path, exit_code: int):
     return spawn
 
 
+class _UnrecordedExit:
+    """A child whose exit the registry has not recorded yet: poll() sees it exited, wait() holds until `released` is set."""
+
+    def __init__(self, proc):
+        self.proc, self.pid, self.released = proc, proc.pid, threading.Event()
+
+    def poll(self):
+        return self.proc.poll()
+
+    def wait(self, timeout=None):
+        self.released.wait(60)
+        return self.proc.wait(timeout)
+
+
+def test_a_run_whose_exit_is_not_recorded_yet_reads_as_running_not_finished_without_its_exit_code(tmp_path, monkeypatch):
+    """The child exited and its progress record says finished, but run.json has no exit code yet."""
+    monkeypatch.setenv("MARA_HOME", str(ROOT))
+    report_file = tmp_path / "report.json"
+    report_file.write_text("{}", encoding="utf-8")
+    finished, children = _finished_review(procs.spawn, report_file, 0), []
+    monkeypatch.setattr(runs.procs, "spawn", lambda argv, **kw: children.append(_UnrecordedExit(finished(argv, **kw))) or children[-1])
+    reg = runs.RunRegistry(ROOT, tmp_path / "out")
+    run_id = reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))["id"]
+    (child,) = children
+    try:
+        assert child.proc.wait(timeout=60) == 0
+        assert prog.read(reg.runs_dir / run_id / "progress.json")["status"] == "finished"
+        run = reg.get(run_id)
+        assert (run["status"], run["exit_code"]) == ("running", None)
+    finally:
+        child.released.set()
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and reg.get(run_id)["status"] == "running":
+        time.sleep(0.1)
+    run = reg.get(run_id)
+    assert (run["status"], run["exit_code"]) == ("finished", 0)
+
+
+class _LostExit(_UnrecordedExit):
+    """A child whose exit the registry never records: once released, wait() raises and the waiter stops."""
+
+    def wait(self, timeout=None):
+        self.released.wait(60)
+        raise OSError("the exit is lost")
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_a_run_whose_waiter_stopped_without_recording_its_exit_is_read_from_its_progress_record(tmp_path, monkeypatch):
+    """As for a run of an earlier server, instead of reading as running for good."""
+    monkeypatch.setenv("MARA_HOME", str(ROOT))
+    report_file = tmp_path / "report.json"
+    report_file.write_text("{}", encoding="utf-8")
+    finished, children = _finished_review(procs.spawn, report_file, 0), []
+    monkeypatch.setattr(runs.procs, "spawn", lambda argv, **kw: children.append(_LostExit(finished(argv, **kw))) or children[-1])
+    reg = runs.RunRegistry(ROOT, tmp_path / "out")
+    run_id = reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))["id"]
+    (child,) = children
+    assert child.proc.wait(timeout=60) == 0
+    child.released.set()
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and reg.get(run_id)["status"] == "running":
+        time.sleep(0.1)
+    run = reg.get(run_id)
+    assert (run["status"], run["exit_code"]) == ("finished", None)
+
+
 @pytest.mark.parametrize("recorded, exit_code, enforced", [
     (True, 3, True),    # a failed PSIRT hand-off exits 3, outranking the gate's 2: the report still says it was enforced
     (False, 0, False),
