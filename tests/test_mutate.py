@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
+import py_compile
 import sys
 from pathlib import Path
 
@@ -123,6 +125,20 @@ def test_focused_only_runs_the_focused_tests_alone_and_a_mutation_they_miss_is_m
     assert sorted(p.name for p in run.iterdir()) == ["baseline.focused.log", "results.json"], "no run of the whole suite"
     assert "MISSED another comment  (focused)" in capsys.readouterr().out
     assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+
+
+def test_a_mutation_in_scripts_runs_as_its_source_not_as_bytecode_cached_before_it(tmp_path):
+    """Bytecode Python never checks against its source stands in for a mutant written within a second of the original."""
+    root = _repo(tmp_path)
+    (root / "scripts").mkdir()
+    (root / "scripts" / "window.py").write_text(SOURCE, encoding="utf-8")
+    (root / "pyproject.toml").write_text('[tool.pytest.ini_options]\npythonpath = ["scripts"]\n', encoding="utf-8")
+    source = str(root / "scripts" / "window.py")
+    py_compile.compile(source, cfile=importlib.util.cache_from_source(source), invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)
+    path = _list(tmp_path, [{"name": "a wider window", "file": "scripts/window.py", "old": "return 3", "new": "return 4"}],
+                 ["tests/test_window.py"])
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 0
+    assert (root / "scripts" / "window.py").read_text(encoding="utf-8") == SOURCE
 
 
 def test_focused_only_without_focused_tests_is_refused(tmp_path, capsys):
