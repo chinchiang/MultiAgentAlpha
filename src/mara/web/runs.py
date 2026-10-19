@@ -165,8 +165,8 @@ class RunRegistry:
 
     # ------------------------------------------------------------------ lifecycle
     def busy(self) -> bool:
-        with self._lock:
-            return any(p.poll() is None for p in self._procs.values())
+        with self._lock:  # a run is running until its waiter has recorded the exit, as get() reads it
+            return any(w.is_alive() for w in self._waiters.values())
 
     def create(self, req: LaunchRequest) -> dict[str, Any]:
         argv, fields = self.prepare(req)
@@ -228,14 +228,19 @@ class RunRegistry:
 
     def cancel(self, run_id: str) -> dict[str, Any]:
         with self._lock:
-            proc = self._procs.get(run_id)
-            if proc is None or proc.poll() is not None:
+            waiter = self._waiters.get(run_id)
+            if waiter is None:
                 raise LaunchError("not_running", f"run {run_id} is not running", status=409)
-            self._cancelled.add(run_id)
-        procs.stop(proc)
-        waiter = self._waiters.get(run_id)
-        if waiter is not None:
+            proc = self._procs.get(run_id)
+            if proc is not None and proc.poll() is None:
+                self._cancelled.add(run_id)
+            else:  # the child exited by itself: there is nothing to stop, and the run is not cancelled
+                proc = None
+        if proc is None:  # wait for its exit to be recorded
             waiter.join(timeout=15)
+            raise LaunchError("not_running", f"run {run_id} is not running", status=409)
+        procs.stop(proc)
+        waiter.join(timeout=15)
         return self.get(run_id) or {"id": run_id, "status": "cancelled"}
 
     def rerun(self, run_id: str) -> dict[str, Any]:
@@ -247,13 +252,13 @@ class RunRegistry:
     def shutdown(self) -> None:
         """Stop every running review (server exit): a review nobody can follow any more is cancelled, not orphaned."""
         with self._lock:
+            waiters = [w for w in self._waiters.values() if w.is_alive()]
             running = [(rid, p) for rid, p in self._procs.items() if p.poll() is None]
             self._cancelled.update(rid for rid, _ in running)
-        for rid, p in running:
+        for _, p in running:
             procs.stop(p)
-            w = self._waiters.get(rid)
-            if w is not None:
-                w.join(timeout=15)
+        for w in waiters:  # a run whose child exited by itself too: its exit is recorded before the server exits
+            w.join(timeout=15)
 
     # ------------------------------------------------------------------ reading
     def run_dir(self, run_id: str) -> Path | None:
@@ -310,7 +315,7 @@ class RunRegistry:
             return None
         prog = self.progress(run_id)
         if manifest.get("status") == "running" and not owned:
-            # a run of an earlier server, or one whose waiter stopped without recording it: the progress file decides
+            # a run of an earlier server, or one whose waiter stopped without recording its exit: the progress record decides
             st = (prog or {}).get("status")
             manifest["status"] = "finished" if st == "finished" else "failed" if st == "failed" else "interrupted"
         manifest["current_stage"] = (prog or {}).get("current")
