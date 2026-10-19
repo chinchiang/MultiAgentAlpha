@@ -377,6 +377,120 @@ def _finished_review(real, report_file: Path, exit_code: int):
     return spawn
 
 
+class _UnrecordedExit:
+    """A child whose exit the registry has not recorded yet: poll() sees it exited, wait() holds until `released` is set."""
+
+    def __init__(self, proc):
+        self.proc, self.pid, self.released = proc, proc.pid, threading.Event()
+
+    def poll(self):
+        return self.proc.poll()
+
+    def wait(self, timeout=None):
+        self.released.wait(60)
+        return self.proc.wait(timeout)
+
+
+def _exited_run(tmp_path, monkeypatch, child_type):
+    """A registry and a run whose review finished and exited 0, its child wrapped in `child_type`."""
+    monkeypatch.setenv("MARA_HOME", str(ROOT))
+    report_file = tmp_path / "report.json"
+    report_file.write_text("{}", encoding="utf-8")
+    finished, children = _finished_review(procs.spawn, report_file, 0), []
+
+    def spawn(argv, **kw):
+        children.append(child_type(finished(argv, **kw)))
+        return children[-1]
+
+    monkeypatch.setattr(runs.procs, "spawn", spawn)
+    reg = runs.RunRegistry(ROOT, tmp_path / "out")
+    run_id = reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))["id"]
+    (child,) = children
+    assert child.proc.wait(timeout=60) == 0
+    return reg, run_id, child
+
+
+def _until_not_running(reg, run_id, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and reg.get(run_id)["status"] == "running":
+        time.sleep(0.1)
+    return reg.get(run_id)
+
+
+def test_a_run_whose_exit_is_not_recorded_yet_reads_as_running_not_finished_without_its_exit_code(tmp_path, monkeypatch):
+    """The child exited and its progress record says finished, but run.json has no exit code yet."""
+    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
+    try:
+        assert prog.read(reg.runs_dir / run_id / "progress.json")["status"] == "finished"
+        run = reg.get(run_id)
+        assert (run["status"], run["exit_code"]) == ("running", None)
+    finally:
+        child.released.set()
+    run = _until_not_running(reg, run_id, 30)
+    assert (run["status"], run["exit_code"]) == ("finished", 0)
+
+
+def test_no_second_review_starts_while_the_exit_of_the_first_is_not_recorded_yet(tmp_path, monkeypatch):
+    """The first run still reads as running, so the registry is still busy with it."""
+    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
+    try:
+        assert reg.busy()
+        with pytest.raises(runs.LaunchError) as refused:
+            reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))
+        assert refused.value.code == "busy"
+    finally:
+        child.released.set()
+    _until_not_running(reg, run_id, 30)
+    assert not reg.busy()
+
+
+def test_cancelling_a_run_whose_exit_is_not_recorded_yet_waits_for_it_and_leaves_the_run_finished(tmp_path, monkeypatch):
+    """Its child exited by itself: there is nothing to stop, and a finished review is not recorded as cancelled."""
+    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
+    release = threading.Timer(0.5, child.released.set)
+    release.start()
+    try:
+        with pytest.raises(runs.LaunchError) as refused:
+            reg.cancel(run_id)
+        assert refused.value.code == "not_running"
+        run = reg.get(run_id)
+        assert (run["status"], run["exit_code"]) == ("finished", 0)
+    finally:
+        release.cancel()
+        child.released.set()
+
+
+def test_stopping_the_registry_waits_for_the_exit_of_a_run_not_recorded_yet_and_leaves_it_finished(tmp_path, monkeypatch):
+    """The server is exiting: the exit is recorded in run.json first, and the review finished, it is not cancelled."""
+    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
+    release = threading.Timer(0.5, child.released.set)
+    release.start()
+    try:
+        reg.shutdown()
+        record = procs.read_json(reg.runs_dir / run_id / "run.json")
+        assert (record["status"], record["exit_code"]) == ("finished", 0)
+    finally:
+        release.cancel()
+        child.released.set()
+
+
+class _LostExit(_UnrecordedExit):
+    """A child whose exit the registry never records: once released, wait() raises and the waiter stops."""
+
+    def wait(self, timeout=None):
+        self.released.wait(60)
+        raise OSError("the exit is lost")
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_a_run_whose_waiter_stopped_without_recording_its_exit_is_read_from_its_progress_record(tmp_path, monkeypatch):
+    """As for a run of an earlier server, instead of reading as running for good."""
+    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _LostExit)
+    child.released.set()
+    run = _until_not_running(reg, run_id, 10)
+    assert (run["status"], run["exit_code"]) == ("finished", None)
+
+
 @pytest.mark.parametrize("recorded, exit_code, enforced", [
     (True, 3, True),    # a failed PSIRT hand-off exits 3, outranking the gate's 2: the report still says it was enforced
     (False, 0, False),
