@@ -72,7 +72,7 @@ class JobRegistry:
 
     def create(self, req: JobRequest) -> dict[str, Any]:
         argv = self.argv(req)
-        with self._lock:
+        with self.runs.launching, self._lock:
             if any(p.poll() is None for p in self._procs.values()):
                 raise LaunchError("busy", "an environment job is already running", status=409)
             if req.kind in CHANGES_TOOLS and self.runs.busy():

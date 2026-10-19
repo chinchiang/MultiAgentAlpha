@@ -343,6 +343,68 @@ def test_a_job_replacing_the_tools_holds_reviews_back(server, monkeypatch):
     assert not server.jobs.changing_tools()
 
 
+@pytest.mark.parametrize("first", ["review", "job"])
+def test_a_review_and_a_job_replacing_the_tools_launched_at_once_neither_hang_and_one_is_refused(tmp_path, monkeypatch, first):
+    """Each launch checks the other kind under its own lock; the first launch, holding its lock, asks about the other kind
+    only once the second holds its own (or a second has passed), the order that took both locks."""
+    from mara.web import jobs as jobs_mod
+
+    monkeypatch.setenv("MARA_HOME", str(ROOT))
+    monkeypatch.setattr(runs.procs, "spawn", _slow_review(procs.spawn))
+    real = procs.spawn
+    monkeypatch.setattr(jobs_mod.procs, "spawn", lambda argv, **kw: real([sys.executable, "-c", "import time; time.sleep(60)"], **kw))
+    reg = runs.RunRegistry(ROOT, tmp_path / "out")
+    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg)
+    holding = {"review": threading.Event(), "job": threading.Event()}
+    second = "job" if first == "review" else "review"
+
+    def asking_about_the_other(name):
+        if name == first:
+            holding[second].wait(1)
+
+    def blocked_by():  # the review's launch asks about jobs
+        asking_about_the_other("review")
+        return job_reg.changing_tools()
+
+    busy = reg.busy
+
+    def busy_seen_by(name):  # the review's launch checks its own registry first; the job's launch asks about runs
+        holding[name].set()
+        if name == "job":
+            asking_about_the_other("job")
+        return busy()
+
+    reg.blocked_by = blocked_by
+    monkeypatch.setattr(reg, "busy", lambda: busy_seen_by(threading.current_thread().name.removeprefix("launch-")))
+    outcomes: dict[str, str] = {}
+
+    def launch(name, create):
+        try:
+            create()
+            outcomes[name] = "launched"
+        except runs.LaunchError as e:
+            outcomes[name] = e.code
+
+    threads = {
+        "review": threading.Thread(target=launch, name="launch-review", daemon=True, args=(
+            "review", lambda: reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock")))),
+        "job": threading.Thread(target=launch, name="launch-job", daemon=True, args=(
+            "job", lambda: job_reg.create(jobs_mod.JobRequest(kind="trivy_db_download")))),
+    }
+    try:
+        threads[first].start()
+        assert holding[first].wait(30)
+        threads[second].start()
+        for t in threads.values():
+            t.join(15)
+        assert not any(t.is_alive() for t in threads.values()), "the two launches wait for each other's lock"
+        assert outcomes == {first: "launched", second: "busy"}
+    finally:
+        if not any(t.is_alive() for t in threads.values()):  # two hung launches hold both locks, and have spawned nothing
+            reg.shutdown()
+            job_reg.shutdown()
+
+
 def test_stopping_the_registry_cancels_a_running_review(tmp_path, monkeypatch):
     monkeypatch.setenv("MARA_HOME", str(ROOT))
     monkeypatch.setattr(runs.procs, "spawn", _slow_review(procs.spawn))
