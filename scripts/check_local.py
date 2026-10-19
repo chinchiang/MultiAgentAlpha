@@ -6,7 +6,8 @@
 
 Run it with the dev environment's interpreter: ruff and pytest come from it. Each check writes its whole output to
 out/check-local/<UTC time>/<check>.log and the summary names the log of every check that failed, so a failure is
-always there to read afterwards. The checks, as .github/workflows/mara-review.yml runs them:
+always there to read afterwards; for a failed suite it also names the tests the log's FAILURES and ERRORS sections
+head (the short summary of -rs lists skips only). The checks, as .github/workflows/mara-review.yml runs them:
   ruff      ruff check src tests scripts
   lines     scripts/line_width.py: the lines the commits since the merge base with --base add to Python files are
             within 150 columns (CI runs it on a pull request)
@@ -28,6 +29,7 @@ import argparse
 import datetime as dt
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -107,6 +109,23 @@ def run_check(name: str, check: Check, a: argparse.Namespace) -> int:
         return subprocess.run(argv, cwd=ROOT, env={**os.environ, **env}, stdout=out, stderr=subprocess.STDOUT).returncode
 
 
+SECTION = re.compile(r"^={3,} (.+?) ={3,}$")
+TEST_HEADER = re.compile(r"^_{3,} (.+?) _{3,}$")  # not the `_ _ _` line between a traceback's frames
+
+
+def failed_tests(log: str) -> tuple[list[str], list[str]]:
+    """(the tests, the errors) a pytest log names in its FAILURES and ERRORS sections, by their section headers: with -rs
+    the short summary lists skips only."""
+    found: dict[str, list[str]] = {"FAILURES": [], "ERRORS": []}
+    section = ""
+    for line in log.splitlines():
+        if m := SECTION.match(line):
+            section = m[1]
+        elif (m := TEST_HEADER.match(line)) and section in found:
+            found[section].append(m[1])
+    return found["FAILURES"], found["ERRORS"]
+
+
 def _last_line(log: Path) -> str:
     lines = [line for line in log.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip()]
     return lines[-1].strip() if lines else ""
@@ -126,6 +145,11 @@ def main(argv: list[str] | None = None) -> int:
         code = run_check(name, CHECKS[name], a)
         log = a.logs / f"{name}.log"
         print(f"{'ok  ' if code == 0 else 'FAIL'} {name:8} {_last_line(log)}")
+        if name == "pytest" and code != 0:
+            tests, errors = failed_tests(log.read_text(encoding="utf-8", errors="replace"))
+            named = ([f"failed tests: {', '.join(tests)}"] if tests else []) + ([f"errors: {', '.join(errors)}"] if errors else [])
+            if named:
+                print("  " + "; ".join(named))
         if code != 0:
             failed.append(log)
     for log in failed:
