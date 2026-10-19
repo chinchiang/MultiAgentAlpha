@@ -77,6 +77,7 @@ class RunRegistry:
         self.out_dir = out_dir.resolve()
         self.runs_dir = self.out_dir / "runs"
         self._lock = threading.RLock()
+        self.launching = threading.Lock()  # one launch at a time, a run's or a job's: each checks the other under its own lock
         self._procs: dict[str, Any] = {}
         self._waiters: dict[str, threading.Thread] = {}
         self._cancelled: set[str] = set()
@@ -170,7 +171,7 @@ class RunRegistry:
 
     def create(self, req: LaunchRequest) -> dict[str, Any]:
         argv, fields = self.prepare(req)
-        with self._lock:
+        with self.launching, self._lock:
             if self.busy():
                 raise LaunchError("busy", "a review is already running; wait for it or cancel it", status=409)
             if self.blocked_by is not None and self.blocked_by():
