@@ -21,11 +21,11 @@ is touched. Then the focused tests and the whole suite run once without a mutati
 when a test fails on it (pytest exits 1): the focused tests first (all of them, or until one fails), then, if they
 pass, the whole suite. Any other exit, such as a mutant that does not import (2), is an error: nothing caught the
 mutation, and the whole suite does not run after the focused tests. Tests run with GITHUB_ACTIONS=true and without
-writing bytecode, after src/ and tests/ are cleared of it: a mutant of the same size written within a second of the
-original would otherwise run as the original's cached bytecode. The file is restored after each mutation, and checked
-to be byte for byte what it was. Each run writes out/mutations/<UTC time>/results.json (one entry per mutation: caught,
-by which test, by the focused tests or the whole suite, pytest's exit code), the output of the runs without a mutation
-and of every run of the whole suite; a later run never overwrites an earlier one.
+writing bytecode, after src/, tests/ and scripts/ are cleared of it: a mutant of the same size written within a second
+of the original would otherwise run as the original's cached bytecode. The file is restored after each mutation, and
+checked to be byte for byte what it was. Each run writes out/mutations/<UTC time>/results.json (one entry per mutation:
+caught, by which test, by the focused tests or the whole suite, pytest's exit code), the output of the runs without a
+mutation and of every run of the whole suite; a later run never overwrites an earlier one.
 With --focused-only the whole suite never runs, for checking the tests of one module: the baseline is the focused
 tests, and a mutation they miss is missed.
 Exit 0 when every mutation was caught, 1 when one was missed or was an error, 2 when the list is wrong (or names no
@@ -70,7 +70,7 @@ def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
 
 
 def _clear_bytecode(root: Path) -> None:
-    for top in ("src", "tests"):
+    for top in ("src", "tests", "scripts"):
         for pyc in (root / top).rglob("*.pyc") if (root / top).is_dir() else ():
             pyc.unlink(missing_ok=True)
 
