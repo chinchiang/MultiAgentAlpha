@@ -553,20 +553,45 @@ def test_a_run_whose_waiter_stopped_without_recording_its_exit_is_read_from_its_
     assert (run["status"], run["exit_code"]) == ("finished", None)
 
 
-def test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code(tmp_path, monkeypatch):
+class _WaiterAskedFirst:
+    """A run's waiter, asked whether it is alive: `asked` runs first in the thread that reads the run."""
+
+    def __init__(self, waiter, reading, asked):
+        self.waiter, self.reading, self.asked = waiter, reading, asked
+
+    def is_alive(self):
+        if threading.current_thread() is self.reading:
+            self.asked()
+        return self.waiter.is_alive()
+
+    def __getattr__(self, name):
+        return getattr(self.waiter, name)
+
+
+@pytest.mark.parametrize("recorded_when", ["run.json is read", "the waiter is asked"])
+def test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code(
+    tmp_path, monkeypatch, recorded_when
+):
     """run.json and the waiter are read in one step: the exit cannot be recorded between the two."""
     reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
     (waiter,) = [t for t in threading.enumerate() if t.name == f"mara-run-{run_id}"]
     read_json, reading = procs.read_json, threading.current_thread()
 
-    def read_then_let_the_exit_be_recorded(path):
-        data = read_json(path)
-        if threading.current_thread() is reading and path.name == "run.json" and not child.released.is_set():
+    def let_the_exit_be_recorded():
+        if not child.released.is_set():
             child.released.set()
             waiter.join(2)  # the waiter records the exit unless this read holds the lock it records under
+
+    def read_then_let_the_exit_be_recorded(path):
+        data = read_json(path)
+        if threading.current_thread() is reading and path.name == "run.json":
+            let_the_exit_be_recorded()
         return data
 
-    monkeypatch.setattr(procs, "read_json", read_then_let_the_exit_be_recorded)
+    if recorded_when == "run.json is read":
+        monkeypatch.setattr(procs, "read_json", read_then_let_the_exit_be_recorded)
+    else:
+        monkeypatch.setitem(reg._waiters, run_id, _WaiterAskedFirst(waiter, reading, let_the_exit_be_recorded))
     run = reg.get(run_id)
     assert (run["status"], run["exit_code"]) == ("running", None)
     run = _until_not_running(reg, run_id, 30)
