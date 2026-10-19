@@ -54,6 +54,7 @@ class JobRegistry:
         self.runs = runs  # for the config allowlist
         self._lock = threading.RLock()
         self._procs: dict[str, Any] = {}
+        self._waiters: dict[str, threading.Thread] = {}
         self._kinds: dict[str, str] = {}
 
     def argv(self, req: JobRequest) -> list[str]:
@@ -73,7 +74,7 @@ class JobRegistry:
     def create(self, req: JobRequest) -> dict[str, Any]:
         argv = self.argv(req)
         with self.runs.launching, self._lock:
-            if any(p.poll() is None for p in self._procs.values()):
+            if any(w.is_alive() for w in self._waiters.values()):  # a job is running while its waiter is alive, as get() reads it
                 raise LaunchError("busy", "an environment job is already running", status=409)
             if req.kind in CHANGES_TOOLS and self.runs.busy():
                 raise LaunchError("busy", "a review is running with the installed tools; wait for it or cancel it", status=409)
@@ -91,13 +92,15 @@ class JobRegistry:
                 raise LaunchError("spawn_failed", str(e), status=500) from e
             self._procs[job_id] = proc
             self._kinds[job_id] = req.kind
-            threading.Thread(target=self._wait, args=(job_id, proc), name=f"mara-job-{job_id}", daemon=True).start()
+            waiter = threading.Thread(target=self._wait, args=(job_id, proc), name=f"mara-job-{job_id}", daemon=True)
+            self._waiters[job_id] = waiter
+            waiter.start()
         return self.get(job_id) or job
 
     def changing_tools(self) -> bool:
         """A running job that replaces the tools or the trivy database (a review must not start meanwhile)."""
         with self._lock:
-            return any(p.poll() is None and self._kinds.get(j) in CHANGES_TOOLS for j, p in self._procs.items())
+            return any(w.is_alive() and self._kinds.get(j) in CHANGES_TOOLS for j, w in self._waiters.items())
 
     def _wait(self, job_id: str, proc: Any) -> None:
         code = proc.wait()
@@ -112,12 +115,13 @@ class JobRegistry:
         if not procs.ID_RE.match(job_id):
             return None
         d = self.jobs_dir / job_id
-        job = procs.read_json(d / "job.json")
+        with self._lock:  # the waiter records a job's exit under the lock: read job.json and the waiter in one step
+            job = procs.read_json(d / "job.json")
+            waiter = self._waiters.get(job_id)
+            owned = waiter is not None and waiter.is_alive()
         if job is None:
             return None
-        with self._lock:
-            owned = job_id in self._procs and self._procs[job_id].poll() is None
-        if job.get("status") == "running" and not owned:
+        if job.get("status") == "running" and not owned:  # a job of an earlier server, or one whose waiter stopped
             job["status"] = "interrupted"
         job["log_tail"] = procs.tail(d / "job.log", lines=lines)
         return job
@@ -130,6 +134,9 @@ class JobRegistry:
 
     def shutdown(self) -> None:
         with self._lock:
+            waiters = [w for w in self._waiters.values() if w.is_alive()]
             running = [p for p in self._procs.values() if p.poll() is None]
         for p in running:
             procs.stop(p)
+        for w in waiters:  # a job whose child exited by itself too: its exit is recorded before the server exits
+            w.join(timeout=15)
