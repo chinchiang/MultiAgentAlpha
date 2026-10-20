@@ -81,7 +81,7 @@ class RunRegistry:
         self.out_dir = out_dir.resolve()
         self.runs_dir = self.out_dir / "runs"
         self.children = procs.Children("run", self._record_exit, start=start)
-        self.launching = threading.Lock()  # one launch at a time, a run's or a job's: each checks the other under its own lock
+        self.launching = threading.Lock()  # one launch at a time, a run's or a job's, each checking the other kind meanwhile
         self._reports_lock = threading.Lock()
         self._reports: dict[str, tuple[int, int, ReviewReport]] = {}
         self.blocked_by: Callable[[], bool] | None = None  # set by the server: an environment job changing the tools

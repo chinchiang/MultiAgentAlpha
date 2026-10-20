@@ -345,16 +345,15 @@ def test_a_job_replacing_the_tools_holds_reviews_back(server, monkeypatch):
 
 @pytest.mark.parametrize("first", ["review", "job"])
 def test_a_review_and_a_job_replacing_the_tools_launched_at_once_neither_hang_and_one_is_refused(tmp_path, monkeypatch, first):
-    """Each launch checks the other kind under its own lock; the first launch, holding its lock, asks about the other kind
-    only once the second holds its own (or a second has passed), the order that took both locks."""
+    """Each launch takes the launch lock before it checks the other kind; the first launch, holding it, asks about the
+    other kind only once the second has reached its own check (or a second has passed), the order that once took a run's
+    lock and a job's lock each waiting for the other."""
     from mara.web import jobs as jobs_mod
 
     monkeypatch.setenv("MARA_HOME", str(ROOT))
-    monkeypatch.setattr(runs.procs, "spawn", _slow_review(procs.spawn))
-    real = procs.spawn
-    monkeypatch.setattr(jobs_mod.procs, "spawn", lambda argv, **kw: real([sys.executable, "-c", "import time; time.sleep(60)"], **kw))
-    reg = runs.RunRegistry(ROOT, tmp_path / "out")
-    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg)
+    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=_slow_review(procs.spawn))
+    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg, start=lambda argv, **kw: procs.spawn(
+        [sys.executable, "-c", "import time; time.sleep(60)"], **kw))
     holding = {"review": threading.Event(), "job": threading.Event()}
     second = "job" if first == "review" else "review"
 
@@ -639,9 +638,8 @@ def _exited_job(tmp_path, monkeypatch, child_type, kind="trivy_db_download"):
         children.append(child_type(real([sys.executable, "-c", "pass"], **kw)))
         return children[-1]
 
-    monkeypatch.setattr(procs, "spawn", spawn)
-    reg = runs.RunRegistry(ROOT, tmp_path / "out")
-    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg)
+    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=spawn)
+    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg, start=spawn)
     job_id = job_reg.create(jobs_mod.JobRequest(kind=kind))["id"]
     (child,) = children
     assert child.proc.wait(timeout=60) == 0
@@ -750,7 +748,14 @@ def test_a_job_whose_exit_is_recorded_while_it_is_read_is_never_read_as_interrup
     if recorded_when == "job.json is read":
         monkeypatch.setattr(procs, "read_json", read_then_let_the_exit_be_recorded)
     else:
-        monkeypatch.setitem(job_reg._waiters, job_id, _WaiterAskedFirst(waiter, reading, let_the_exit_be_recorded))
+        running = job_reg.children.running
+
+        def let_the_exit_be_recorded_then_ask(child_id):
+            if threading.current_thread() is reading:
+                let_the_exit_be_recorded()
+            return running(child_id)
+
+        monkeypatch.setattr(job_reg.children, "running", let_the_exit_be_recorded_then_ask)
     job = job_reg.get(job_id)
     assert (job["status"], job["exit_code"]) == ("running", None)
     job = _until_the_job_is_not_running(job_reg, job_id, 30)

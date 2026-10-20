@@ -14,7 +14,7 @@ writes the files under `<out>/jobs/`.
 from __future__ import annotations
 
 import sys
-import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -52,14 +52,11 @@ def available(workspace: Path) -> dict[str, bool]:
 
 
 class JobRegistry:
-    def __init__(self, workspace: Path, out_dir: Path, runs: RunRegistry) -> None:
+    def __init__(self, workspace: Path, out_dir: Path, runs: RunRegistry, *, start: Callable[..., Any] | None = None) -> None:
         self.workspace = workspace.resolve()
         self.jobs_dir = out_dir.resolve() / "jobs"
         self.runs = runs  # for the config allowlist, whether a run is running (busy()) and the launch lock (launching)
-        self._lock = threading.RLock()
-        self._procs: dict[str, Any] = {}
-        self._waiters: dict[str, threading.Thread] = {}
-        self._kinds: dict[str, str] = {}
+        self.children = procs.Children("job", self._record_exit, start=start)
 
     def argv(self, req: JobRequest) -> list[str]:
         if req.kind in SCRIPTS and not available(self.workspace)[req.kind]:
@@ -77,8 +74,8 @@ class JobRegistry:
 
     def create(self, req: JobRequest) -> dict[str, Any]:
         argv = self.argv(req)
-        with self.runs.launching, self._lock:
-            if any(w.is_alive() for w in self._waiters.values()):  # a job is running while its waiter is alive, as get() reads it
+        with self.runs.launching:  # nothing is written after start(), so no exit recorded at once can be overwritten
+            if self.children.any_running():
                 raise LaunchError("busy", "an environment job is already running", status=409)
             if req.kind in CHANGES_TOOLS and self.runs.busy():
                 raise LaunchError("busy", "a review is running with the installed tools; wait for it or cancel it", status=409)
@@ -89,40 +86,31 @@ class JobRegistry:
                                    "started_at": procs.now(), "finished_at": None, "exit_code": None}
             procs.write_json(d / "job.json", job)
             try:
-                proc = procs.spawn(argv, cwd=self.workspace, log_path=d / "job.log", env=procs.child_env(self.workspace))
+                self.children.start(job_id, argv, cwd=self.workspace, log_path=d / "job.log", env=procs.child_env(self.workspace),
+                                    tag=req.kind)
             except OSError as e:
                 job.update(status="failed", finished_at=procs.now())
                 procs.write_json(d / "job.json", job)
                 raise LaunchError("spawn_failed", str(e), status=500) from e
-            self._procs[job_id] = proc
-            self._kinds[job_id] = req.kind
-            waiter = threading.Thread(target=self._wait, args=(job_id, proc), name=f"mara-job-{job_id}", daemon=True)
-            self._waiters[job_id] = waiter
-            waiter.start()
         return self.get(job_id) or job
 
     def changing_tools(self) -> bool:
         """A running job that replaces the tools or the trivy database (a run must not start meanwhile)."""
-        with self._lock:
-            return any(w.is_alive() and self._kinds.get(j) in CHANGES_TOOLS for j, w in self._waiters.items())
+        return self.children.any_running(tags=CHANGES_TOOLS)
 
-    def _wait(self, job_id: str, proc: Any) -> None:
-        code = proc.wait()
+    def _record_exit(self, job_id: str, code: int, stopped: bool) -> None:
         d = self.jobs_dir / job_id
-        with self._lock:
-            job = procs.read_json(d / "job.json") or {"id": job_id}
-            job.update(status="finished" if code == 0 else "failed", exit_code=code, finished_at=procs.now())
-            procs.write_json(d / "job.json", job)
-            self._procs.pop(job_id, None)
+        job = procs.read_json(d / "job.json") or {"id": job_id}
+        job.update(status="finished" if code == 0 else "failed", exit_code=code, finished_at=procs.now())
+        procs.write_json(d / "job.json", job)
 
     def get(self, job_id: str, lines: int = 400) -> dict[str, Any] | None:
         if not procs.ID_RE.match(job_id):
             return None
         d = self.jobs_dir / job_id
-        with self._lock:  # the waiter records a job's exit under the lock: read job.json and the waiter in one step
+        with self.children.held():  # a job's exit is recorded under this lock: read job.json and whether it runs in one step
             job = procs.read_json(d / "job.json")
-            waiter = self._waiters.get(job_id)
-            owned = waiter is not None and waiter.is_alive()
+            owned = self.children.running(job_id)
         if job is None:
             return None
         if job.get("status") == "running" and not owned:  # a job of an earlier server, or one whose waiter stopped
@@ -140,10 +128,4 @@ class JobRegistry:
         """Server exit: stop the child of every job whose child still runs, so that the job is recorded with the exit code
         the stop gave (failed, or finished if it is 0); then give the waiter of every job still running, one whose child
         exited by itself included, up to 15 s to record the exit."""
-        with self._lock:
-            waiters = [w for w in self._waiters.values() if w.is_alive()]
-            to_stop = [p for p in self._procs.values() if p.poll() is None]
-        for p in to_stop:
-            procs.stop(p)
-        for w in waiters:  # a waiter still alive after 15 s leaves job.json without the exit code
-            w.join(timeout=15)
+        self.children.shutdown()  # a waiter still alive after 15 s leaves job.json without the exit code
