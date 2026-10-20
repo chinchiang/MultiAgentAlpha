@@ -1,4 +1,4 @@
-"""Child processes and small files of the workbench: one way to start, stop and read a review or an environment job.
+"""Child processes and small files of the workbench: one way to start, stop and read a run or an environment job.
 
 Every child is an argv list started without a shell, from the MARA workspace, with MARA_HOME pointing at it and
 the `mara` package the server itself runs on first on PYTHONPATH, so the review is the one the server was started

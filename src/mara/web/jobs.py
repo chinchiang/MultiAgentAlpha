@@ -7,8 +7,8 @@ check the trivy offline database (`scripts/trivy_db.py`), or evaluate the polici
 (`mara check-config`). The scripts live in the workspace, not in the package, so a workspace without them offers no
 such job. One job runs at a time; its output goes to `<out>/jobs/<job-id>/job.log`.
 
-Not pure: it starts and stops children and waits for them on threads of its own, reads the workspace (which scripts it
-has, `tools/versions.lock`) and reads and writes the files under `<out>/jobs/`.
+Not pure: it starts and stops children and waits for them on threads of its own, reads the workspace and reads and
+writes the files under `<out>/jobs/`.
 """
 
 from __future__ import annotations
@@ -102,7 +102,7 @@ class JobRegistry:
         return self.get(job_id) or job
 
     def changing_tools(self) -> bool:
-        """A running job that replaces the tools or the trivy database (a review must not start meanwhile)."""
+        """A running job that replaces the tools or the trivy database (a run must not start meanwhile)."""
         with self._lock:
             return any(w.is_alive() and self._kinds.get(j) in CHANGES_TOOLS for j, w in self._waiters.items())
 
