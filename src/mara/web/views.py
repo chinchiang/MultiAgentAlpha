@@ -1,7 +1,8 @@
-"""What the workbench shows of a review (GLOSSARY.md: workbench, run, progress record, jury outcome, final outcome,
-review status, gate, bias audit, report metadata; docs/adr/0006-local-web-workbench.md,
-docs/adr/0007-review-status-and-gate.md, docs/adr/0008-reply-accounting.md, docs/adr/0009-report-metadata.md): the
-report as the run page reads it.
+"""What the workbench shows of a review: the report as the run page reads it (GLOSSARY.md: workbench, run, progress
+record, review scope, review status, incomplete reason, gate, tool alert, canary echo, jury outcome, final outcome,
+human-resolved finding, human queue, queue tightening, bias audit, report metadata; docs/adr/0005-jury-outcome.md,
+docs/adr/0006-local-web-workbench.md, docs/adr/0007-review-status-and-gate.md, docs/adr/0008-reply-accounting.md,
+docs/adr/0009-report-metadata.md).
 
 The browser derives nothing: the jury outcome and the final outcome are the `ConsensusResult` properties
 (docs/adr/0005-jury-outcome.md), read here from the validated report rather than re-implemented in JavaScript, and

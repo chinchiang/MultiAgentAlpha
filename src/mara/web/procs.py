@@ -7,7 +7,7 @@ from. Nothing a browser sends reaches the environment; values reach argv only af
 Output goes to a log file, never through a pipe the server would have to drain.
 
 Not pure: it starts and stops children, copies the server's environment into theirs, reads the clock and a random
-source for ids, and reads and writes the files it is given.
+source for ids and temporary file names, and reads and writes the files it is given.
 """
 
 from __future__ import annotations

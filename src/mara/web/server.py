@@ -16,7 +16,8 @@ Types, so the script can only build the DOM through text and element APIs (docs/
 `render_page` also builds the workbench demo's page when `scripts/build_workbench_demo.py` gives it the demo's data.
 
 Not pure: it listens on a socket, starts and stops runs and jobs through their registries, handles SIGTERM and SIGHUP
-while it serves, and writes and removes the file the browser is opened on.
+while it serves, draws its token at random, opens a browser, reads the packaged page, and creates the output directory
+and reads and writes files in it.
 """
 
 from __future__ import annotations
