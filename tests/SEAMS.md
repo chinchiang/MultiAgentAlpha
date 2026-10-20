@@ -1,8 +1,8 @@
 # Test seams
 
-Where the tests reach into the pipeline and the agents, and the shape of the code each one relies on. A change that
-moves, renames or re-signs one of these breaks the tests named beside it, or leaves them passing against code they no
-longer reach.
+Where the tests reach into the pipeline, the agents and the workbench, and the shape of the code each one relies on.
+A change that moves, renames or re-signs one of these breaks the tests named beside it, or leaves them passing against
+code they no longer reach.
 
 ## Patch a name where it is looked up
 
@@ -59,6 +59,28 @@ prompt the tests inspect is `user`. The entry points the tests call directly, ea
 
 Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py`, `test_live_providers.py`,
 `test_core_review_fixes.py`, `test_exchange.py`, `test_audit.py`, `test_redteam_strip.py`.
+
+## The workbench (`src/mara/web/`)
+
+- `RunRegistry(workspace, out_dir, start=...)`, `JobRegistry(workspace, out_dir, runs, start=...)`: tests pass a starter
+  instead of patching `procs.spawn`. Each registry hands it to its `procs.Children`, which calls it as
+  `start(argv, cwd=..., log_path=..., env=...)` and keeps the child it returns for its `pid`, `poll()` and `wait()`: a
+  Popen of the subprocess module, or one wrapped by `tests/held_children.py` so that it has exited while its exit is not
+  yet recorded. With no starter, `Children` calls `procs.spawn` as the module has it at that moment, so a test patching
+  `procs.spawn` after the server was built still reaches it. `test_web_server.py`.
+- `procs.Children(name, on_exit, start=...)`: driven at its own interface (`start`, `running`, `any_running`, `stop`,
+  `shutdown`, `held`). Its waiters are threads named after the registry and the child (`"mara-run-" + run_id`), the
+  name tests find one by to join it. `test_web_procs.py`, `test_web_server.py`.
+- `Children.running`: replaced on a registry's own instance (its `children` attribute) by a function that first lets
+  the exit be recorded, then asks; `get()` calls it with the id alone, under `Children.held`.
+  `test_web_server.py::test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code`,
+  `test_web_server.py::test_a_job_whose_exit_is_recorded_while_it_is_read_is_never_read_as_interrupted`.
+- `procs.read_json`, `procs.write_json`: patched as attributes of `mara.web.procs`, which the registries call through
+  the module (`get()` reads a run's or a job's record with the first, `create()` writes a run's pid with the second).
+  The two tests above, and `test_web_server.py::test_a_run_whose_child_exits_at_once_keeps_the_exit_code_its_waiter_recorded`.
+- `RunRegistry.busy`, `RunRegistry.blocked_by`: the first replaced on the instance, the second set, and the two
+  launches run on threads named `launch-review` and `launch-job`.
+  `test_web_server.py::test_a_review_and_a_job_replacing_the_tools_launched_at_once_neither_hang_and_one_is_refused`.
 
 ## What the tests build instead of running
 

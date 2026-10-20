@@ -6,8 +6,9 @@ the `mara` package the server itself runs on first on PYTHONPATH, so the child r
 from. Nothing a browser sends reaches the environment; values reach argv only after the caller validated them.
 Output goes to a log file, never through a pipe the server would have to drain.
 
-Not pure: it starts and stops children, copies the server's environment into theirs, reads the clock (ids and
-timestamps) and a random source (ids and temporary file names), and reads and writes the files it is given.
+Not pure: it starts and stops children and waits for them on threads of its own, copies the server's environment into
+theirs, reads the clock (ids and timestamps) and a random source (ids and temporary file names), and reads and writes
+the files it is given.
 """
 
 from __future__ import annotations
@@ -21,11 +22,13 @@ import signal
 import subprocess
 import sys
 import threading
+from collections.abc import Callable, Collection
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 STOP_GRACE_SECONDS = 10.0
+WAITER_JOIN_SECONDS = 15.0  # how long Children.stop() and shutdown() wait for each waiter to record its child's exit
 
 
 def now() -> str:
@@ -112,6 +115,83 @@ def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> No
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
+
+
+class Children:
+    """The children of one registry and their waiters. A child is running while its waiter is alive: the waiter records
+    the exit through `on_exit(child_id, code, stopped)` under the lock, so a registry that reads its record and asks
+    `running()` under `held()` reads a record without the exit code only as running, unless the waiter stopped without
+    recording it (`wait()` or `on_exit` raised; tests/test_web_procs.py,
+    test_a_child_whose_waiter_stopped_without_recording_its_exit_is_no_longer_running)."""
+
+    def __init__(self, name: str, on_exit: Callable[[str, int, bool], None], *, start: Callable[..., Any] | None = None) -> None:
+        self.name, self.on_exit, self._start = name, on_exit, start
+        self._lock = threading.RLock()
+        self._procs: dict[str, Any] = {}
+        self._waiters: dict[str, threading.Thread] = {}
+        self._tags: dict[str, str | None] = {}
+        self._stopped: set[str] = set()
+
+    def held(self) -> threading.RLock:
+        """The lock exits are recorded under (reentrant): hold it to read a record and ask `running()` in one step."""
+        return self._lock
+
+    def start(self, child_id: str, argv: list[str], *, cwd: Path, log_path: Path, env: dict[str, str],
+              tag: str | None = None) -> int:
+        """Start `argv` through the starter given at construction, else `spawn` as this module has it when called, and its
+        waiter thread `mara-<name>-<child_id>`; the child's pid. An OSError of the starter propagates, and nothing is
+        registered."""
+        with self._lock:
+            proc = (self._start or spawn)(argv, cwd=cwd, log_path=log_path, env=env)
+            self._procs[child_id] = proc
+            self._tags[child_id] = tag
+            waiter = threading.Thread(target=self._wait, args=(child_id, proc), name=f"mara-{self.name}-{child_id}", daemon=True)
+            self._waiters[child_id] = waiter
+            waiter.start()
+            return int(proc.pid)
+
+    def _wait(self, child_id: str, proc: Any) -> None:
+        code = proc.wait()
+        with self._lock:
+            self.on_exit(child_id, code, child_id in self._stopped)
+            self._procs.pop(child_id, None)
+
+    def running(self, child_id: str) -> bool:
+        with self._lock:
+            waiter = self._waiters.get(child_id)
+            return waiter is not None and waiter.is_alive()
+
+    def stop(self, child_id: str) -> Literal["stopped", "exited", "unknown"]:
+        """Stop a child still running, its exit then recorded as stopped ("stopped"); a child no longer running, one that
+        exited by itself or was stopped before, is not stopped again ("exited"). Either way its waiter gets up to
+        WAITER_JOIN_SECONDS to record the exit. "unknown": no child of that id was started."""
+        with self._lock:
+            waiter, proc = self._waiters.get(child_id), self._procs.get(child_id)
+            if waiter is None:
+                return "unknown"
+            to_stop = proc if proc is not None and proc.poll() is None else None
+            if to_stop is not None:
+                self._stopped.add(child_id)
+        if to_stop is not None:
+            stop(to_stop)
+        waiter.join(timeout=WAITER_JOIN_SECONDS)
+        return "exited" if to_stop is None else "stopped"
+
+    def shutdown(self) -> None:
+        """Server exit: stop every child still running, its exit then recorded as stopped; then give the waiter of every
+        child still running, one whose child exited by itself included, up to WAITER_JOIN_SECONDS each to record it."""
+        with self._lock:
+            waiters = [w for w in self._waiters.values() if w.is_alive()]
+            to_stop = [(c, p) for c, p in self._procs.items() if p.poll() is None]
+            self._stopped.update(c for c, _ in to_stop)
+        for _, p in to_stop:
+            stop(p)
+        for w in waiters:
+            w.join(timeout=WAITER_JOIN_SECONDS)
+
+    def any_running(self, tags: Collection[str] | None = None) -> bool:
+        with self._lock:
+            return any(w.is_alive() and (tags is None or self._tags.get(c) in tags) for c, w in self._waiters.items())
 
 
 def tail(path: Path, *, max_bytes: int = 256 * 1024, lines: int = 400) -> str:
