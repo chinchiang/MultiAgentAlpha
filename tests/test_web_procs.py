@@ -10,28 +10,7 @@ import time
 import pytest
 
 from mara.web import procs
-
-
-class _UnrecordedExit:
-    """A child whose exit has not been recorded yet: poll() sees it exited, wait() holds until `released` is set."""
-
-    def __init__(self, proc):
-        self.proc, self.pid, self.released = proc, proc.pid, threading.Event()
-
-    def poll(self):
-        return self.proc.poll()
-
-    def wait(self, timeout=None):
-        self.released.wait(60)
-        return self.proc.wait(timeout)
-
-
-class _LostExit(_UnrecordedExit):
-    """A child whose exit is never recorded: once released, wait() raises and the waiter stops."""
-
-    def wait(self, timeout=None):
-        self.released.wait(60)
-        raise OSError("the exit is lost")
+from tests.held_children import LostExit, UnrecordedExit
 
 
 def _children(child_type, records):
@@ -59,7 +38,7 @@ def _until(condition, timeout):
 
 def test_a_child_whose_exit_is_not_recorded_yet_is_still_running(tmp_path):
     records = []
-    children, made = _children(_UnrecordedExit, records)
+    children, made = _children(UnrecordedExit, records)
     _start(children, tmp_path)
     (child,) = made
     assert child.proc.wait(timeout=60) == 0
@@ -73,7 +52,7 @@ def test_a_child_whose_exit_is_not_recorded_yet_is_still_running(tmp_path):
 
 
 def test_any_child_or_any_child_of_some_tags_is_running_until_its_exit_is_recorded(tmp_path):
-    children, made = _children(_UnrecordedExit, [])
+    children, made = _children(UnrecordedExit, [])
     _start(children, tmp_path, tag="trivy_db_download")
     (child,) = made
     assert child.proc.wait(timeout=60) == 0
@@ -98,7 +77,7 @@ def test_stopping_a_running_child_records_its_exit_as_stopped(tmp_path):
 
 def test_stopping_a_child_that_exited_by_itself_waits_for_its_exit_to_be_recorded_and_does_not_record_it_stopped(tmp_path):
     records = []
-    children, made = _children(_UnrecordedExit, records)
+    children, made = _children(UnrecordedExit, records)
     _start(children, tmp_path)
     (child,) = made
     assert child.proc.wait(timeout=60) == 0
@@ -128,7 +107,7 @@ def test_shutting_down_stops_every_running_child_its_exit_recorded_as_stopped(tm
 
 def test_shutting_down_waits_for_the_exit_of_a_child_that_exited_by_itself_and_does_not_record_it_stopped(tmp_path):
     records = []
-    children, made = _children(_UnrecordedExit, records)
+    children, made = _children(UnrecordedExit, records)
     _start(children, tmp_path)
     (child,) = made
     assert child.proc.wait(timeout=60) == 0
@@ -145,7 +124,7 @@ def test_shutting_down_waits_for_the_exit_of_a_child_that_exited_by_itself_and_d
 def test_while_the_lock_is_held_an_exit_is_neither_recorded_nor_read_as_no_longer_running(tmp_path):
     """A registry reads its record and asks running() under held(): the exit cannot be recorded between the two."""
     records = []
-    children, made = _children(_UnrecordedExit, records)
+    children, made = _children(UnrecordedExit, records)
     _start(children, tmp_path)
     (child,) = made
     assert child.proc.wait(timeout=60) == 0
@@ -161,7 +140,7 @@ def test_while_the_lock_is_held_an_exit_is_neither_recorded_nor_read_as_no_longe
 def test_a_child_whose_waiter_stopped_without_recording_its_exit_is_no_longer_running(tmp_path):
     """Its record never gets the exit code; the registry reads it as one of an earlier server."""
     records = []
-    children, made = _children(_LostExit, records)
+    children, made = _children(LostExit, records)
     _start(children, tmp_path)
     (child,) = made
     child.released.set()

@@ -19,6 +19,7 @@ from mara import progress as prog
 from mara.schemas import ReviewReport
 from mara.web import procs, runs
 from mara.web.server import make_server
+from tests.held_children import LostExit, UnrecordedExit
 
 ROOT = Path(__file__).resolve().parents[1]
 SENTINEL = "sk-workbench-sentinel-0123456789"  # a credential value that must never reach a response
@@ -438,20 +439,6 @@ def _finished_review(real, report_file: Path, exit_code: int):
     return spawn
 
 
-class _UnrecordedExit:
-    """A child whose exit the registry has not recorded yet: poll() sees it exited, wait() holds until `released` is set."""
-
-    def __init__(self, proc):
-        self.proc, self.pid, self.released = proc, proc.pid, threading.Event()
-
-    def poll(self):
-        return self.proc.poll()
-
-    def wait(self, timeout=None):
-        self.released.wait(60)
-        return self.proc.wait(timeout)
-
-
 def _exited_run(tmp_path, monkeypatch, child_type):
     """A registry and a run whose review finished and exited 0, its child wrapped in `child_type`."""
     monkeypatch.setenv("MARA_HOME", str(ROOT))
@@ -477,22 +464,9 @@ def _until_not_running(reg, run_id, timeout):
     return reg.get(run_id)
 
 
-def test_a_run_whose_exit_is_not_recorded_yet_reads_as_running_not_finished_without_its_exit_code(tmp_path, monkeypatch):
-    """The child exited and its progress record says finished, but run.json has no exit code yet."""
-    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
-    try:
-        assert prog.read(reg.runs_dir / run_id / "progress.json")["status"] == "finished"
-        run = reg.get(run_id)
-        assert (run["status"], run["exit_code"]) == ("running", None)
-    finally:
-        child.released.set()
-    run = _until_not_running(reg, run_id, 30)
-    assert (run["status"], run["exit_code"]) == ("finished", 0)
-
-
 def test_no_second_review_starts_while_the_exit_of_the_first_is_not_recorded_yet(tmp_path, monkeypatch):
     """The first run still reads as running, so the registry is still busy with it."""
-    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
+    reg, run_id, child = _exited_run(tmp_path, monkeypatch, UnrecordedExit)
     try:
         assert reg.busy()
         with pytest.raises(runs.LaunchError) as refused:
@@ -504,74 +478,21 @@ def test_no_second_review_starts_while_the_exit_of_the_first_is_not_recorded_yet
     assert not reg.busy()
 
 
-def test_cancelling_a_run_whose_exit_is_not_recorded_yet_waits_for_it_and_leaves_the_run_finished(tmp_path, monkeypatch):
-    """Its child exited by itself: there is nothing to stop, and a finished review is not recorded as cancelled."""
-    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
-    release = threading.Timer(0.5, child.released.set)
-    release.start()
-    try:
-        with pytest.raises(runs.LaunchError) as refused:
-            reg.cancel(run_id)
-        assert refused.value.code == "not_running"
-        run = reg.get(run_id)
-        assert (run["status"], run["exit_code"]) == ("finished", 0)
-    finally:
-        release.cancel()
-        child.released.set()
-
-
-def test_stopping_the_registry_waits_for_the_exit_of_a_run_not_recorded_yet_and_leaves_it_finished(tmp_path, monkeypatch):
-    """The server is exiting: the exit is recorded in run.json first, and the review finished, it is not cancelled."""
-    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
-    release = threading.Timer(0.5, child.released.set)
-    release.start()
-    try:
-        reg.shutdown()
-        record = procs.read_json(reg.runs_dir / run_id / "run.json")
-        assert (record["status"], record["exit_code"]) == ("finished", 0)
-    finally:
-        release.cancel()
-        child.released.set()
-
-
-class _LostExit(_UnrecordedExit):
-    """A child whose exit the registry never records: once released, wait() raises and the waiter stops."""
-
-    def wait(self, timeout=None):
-        self.released.wait(60)
-        raise OSError("the exit is lost")
-
-
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_a_run_whose_waiter_stopped_without_recording_its_exit_is_read_from_its_progress_record(tmp_path, monkeypatch):
     """As for a run of an earlier server, instead of reading as running for good."""
-    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _LostExit)
+    reg, run_id, child = _exited_run(tmp_path, monkeypatch, LostExit)
     child.released.set()
     run = _until_not_running(reg, run_id, 10)
     assert (run["status"], run["exit_code"]) == ("finished", None)
 
 
-class _WaiterAskedFirst:
-    """A run's or a job's waiter, asked whether it is alive: `asked` runs first in the thread that reads the run or job."""
-
-    def __init__(self, waiter, reading, asked):
-        self.waiter, self.reading, self.asked = waiter, reading, asked
-
-    def is_alive(self):
-        if threading.current_thread() is self.reading:
-            self.asked()
-        return self.waiter.is_alive()
-
-    def __getattr__(self, name):
-        return getattr(self.waiter, name)
-
-
-@pytest.mark.parametrize("recorded_when", ["run.json is read", "the waiter is asked"])
+@pytest.mark.parametrize("recorded_when", ["run.json is read", "running() is asked"])
 def test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code(
     tmp_path, monkeypatch, recorded_when
 ):
     """run.json and the waiter are read in one step: the exit cannot be recorded between the two."""
-    reg, run_id, child = _exited_run(tmp_path, monkeypatch, _UnrecordedExit)
+    reg, run_id, child = _exited_run(tmp_path, monkeypatch, UnrecordedExit)
     (waiter,) = [t for t in threading.enumerate() if t.name == f"mara-run-{run_id}"]
     read_json, reading = procs.read_json, threading.current_thread()
 
@@ -646,42 +567,23 @@ def _exited_job(tmp_path, monkeypatch, child_type, kind="trivy_db_download"):
     return reg, job_reg, job_id, children
 
 
-def _until_the_job_is_not_running(job_reg, job_id, timeout):
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline and job_reg.get(job_id)["status"] == "running":
-        time.sleep(0.1)
-    return job_reg.get(job_id)
-
-
-def test_a_job_whose_exit_is_not_recorded_yet_reads_as_running_not_interrupted(tmp_path, monkeypatch):
-    """The child exited, but job.json has no exit code yet."""
-    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
-    try:
-        job = job_reg.get(job_id)
-        assert (job["status"], job["exit_code"]) == ("running", None)
-    finally:
-        child.released.set()
-    job = _until_the_job_is_not_running(job_reg, job_id, 30)
-    assert (job["status"], job["exit_code"]) == ("finished", 0)
-
-
 def test_no_second_job_starts_while_the_exit_of_the_first_is_not_recorded_yet(tmp_path, monkeypatch):
     """The first job still reads as running, so another job is refused."""
     from mara.web import jobs as jobs_mod
 
-    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
+    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, UnrecordedExit)
     try:
         with pytest.raises(runs.LaunchError) as refused:
             job_reg.create(jobs_mod.JobRequest(kind="trivy_db_status"))
         assert refused.value.code == "busy"
     finally:
         child.released.set()
-    _until_the_job_is_not_running(job_reg, job_id, 30)
+    _until_not_running(job_reg, job_id, 30)
 
 
 def test_no_review_starts_while_the_exit_of_a_job_replacing_the_tools_is_not_recorded_yet(tmp_path, monkeypatch):
     """The job still reads as running, so it still replaces the trivy database a review would use."""
-    reg, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
+    reg, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, UnrecordedExit)
     reg.blocked_by = job_reg.changing_tools
     try:
         with pytest.raises(runs.LaunchError) as refused:
@@ -689,25 +591,11 @@ def test_no_review_starts_while_the_exit_of_a_job_replacing_the_tools_is_not_rec
         assert refused.value.code == "busy"
     finally:
         child.released.set()
-    _until_the_job_is_not_running(job_reg, job_id, 30)
-
-
-def test_stopping_the_job_registry_waits_for_the_exit_of_a_job_not_recorded_yet(tmp_path, monkeypatch):
-    """The server is exiting: the exit is recorded in job.json first, instead of the next server reading it interrupted."""
-    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
-    release = threading.Timer(0.5, child.released.set)
-    release.start()
-    try:
-        job_reg.shutdown()
-        record = procs.read_json(job_reg.jobs_dir / job_id / "job.json")
-        assert (record["status"], record["exit_code"]) == ("finished", 0)
-    finally:
-        release.cancel()
-        child.released.set()
+    _until_not_running(job_reg, job_id, 30)
 
 
 def test_a_job_replacing_no_tools_does_not_hold_a_review_back(tmp_path, monkeypatch):
-    reg, job_reg, job_id, children = _exited_job(tmp_path, monkeypatch, _UnrecordedExit, kind="trivy_db_status")
+    reg, job_reg, job_id, children = _exited_job(tmp_path, monkeypatch, UnrecordedExit, kind="trivy_db_status")
     reg.blocked_by = job_reg.changing_tools
     try:
         assert job_reg.get(job_id)["status"] == "running"
@@ -715,22 +603,22 @@ def test_a_job_replacing_no_tools_does_not_hold_a_review_back(tmp_path, monkeypa
     finally:
         for child in children:
             child.released.set()
-    _until_the_job_is_not_running(job_reg, job_id, 30)
+    _until_not_running(job_reg, job_id, 30)
 
 
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_a_job_whose_waiter_stopped_without_recording_its_exit_reads_as_interrupted(tmp_path, monkeypatch):
     """As a job of an earlier server does, instead of reading as running for good."""
-    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _LostExit)
+    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, LostExit)
     child.released.set()
-    job = _until_the_job_is_not_running(job_reg, job_id, 10)
+    job = _until_not_running(job_reg, job_id, 10)
     assert (job["status"], job["exit_code"]) == ("interrupted", None)
 
 
-@pytest.mark.parametrize("recorded_when", ["job.json is read", "the waiter is asked"])
+@pytest.mark.parametrize("recorded_when", ["job.json is read", "running() is asked"])
 def test_a_job_whose_exit_is_recorded_while_it_is_read_is_never_read_as_interrupted(tmp_path, monkeypatch, recorded_when):
     """job.json and the waiter are read in one step: the exit cannot be recorded between the two."""
-    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, _UnrecordedExit)
+    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, UnrecordedExit)
     (waiter,) = [t for t in threading.enumerate() if t.name == f"mara-job-{job_id}"]
     read_json, reading = procs.read_json, threading.current_thread()
 
@@ -758,7 +646,7 @@ def test_a_job_whose_exit_is_recorded_while_it_is_read_is_never_read_as_interrup
         monkeypatch.setattr(job_reg.children, "running", let_the_exit_be_recorded_then_ask)
     job = job_reg.get(job_id)
     assert (job["status"], job["exit_code"]) == ("running", None)
-    job = _until_the_job_is_not_running(job_reg, job_id, 30)
+    job = _until_not_running(job_reg, job_id, 30)
     assert (job["status"], job["exit_code"]) == ("finished", 0)
 
 
