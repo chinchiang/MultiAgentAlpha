@@ -1,4 +1,5 @@
-"""The workbench's HTTP server: `http.server` on a loopback address, one page and a small JSON API.
+"""The workbench's HTTP server (GLOSSARY.md: workbench, workbench demo, run; docs/adr/0006-local-web-workbench.md):
+`http.server` on a loopback address, one page and a small JSON API.
 
 Access: `mara serve` prints a URL whose fragment carries a random token that exists for this server's lifetime
 (`#token=...`; a fragment never reaches a server, a log or a Referer). The page keeps it in this origin's
@@ -12,6 +13,10 @@ naming another site is refused. The page itself holds no data and needs no token
 The page is assembled once at start-up from the packaged template, stylesheet, script and the two dictionaries;
 its Content-Security-Policy allows exactly that script and that stylesheet by SHA-256, no other origin, and Trusted
 Types, so the script can only build the DOM through text and element APIs (docs/adr/0006-local-web-workbench.md).
+`render_page` also builds the workbench demo's page when `scripts/build_workbench_demo.py` gives it the demo's data.
+
+Not pure: it listens on a socket, starts and stops runs and jobs through their registries, handles SIGTERM and SIGHUP
+while it serves, and writes and removes the file the browser is opened on.
 """
 
 from __future__ import annotations
@@ -434,7 +439,7 @@ def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser:
     url = f"{httpd.url}#token={httpd.token}"
     echo(f"MARA workbench {__version__} · workspace {httpd.workspace} · runs in {httpd.runs.runs_dir}")
     echo(f"open: {url}")
-    echo("the link is the key to this server: do not share it; Ctrl-C stops the server and any running review")
+    echo("the link is the key to this server: do not share it; Ctrl-C stops the server and any running review or job")
     previous = _stop_on_signals()
     redirect: Path | None = None
     try:
