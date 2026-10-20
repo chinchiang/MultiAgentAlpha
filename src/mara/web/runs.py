@@ -6,10 +6,13 @@ matching the config) so a browser gets a clear refusal instead of a failed run, 
 check anyway. `run.json` is the record of a run: the request as given, the argv, the roles and models of the
 config at launch (the config file may change later, and the report keeps only the provider manifest), status
 and exit code. The exit code alone is ambiguous (2 is a usage error and an enforced gate alike), so a run counts
-as finished only when its progress file says the reports were written.
+as finished only when its progress record says the reports were written.
 
 PSIRT hand-off options (`--notify-psirt`, `--psirt-event`) are not offered: they start EU CRA Article 14 clocks
 and stay a deliberate command-line step.
+
+GLOSSARY.md: run, progress record, workbench; docs/adr/0006-local-web-workbench.md. Not pure: it starts and stops the
+children, writes `run.json` and closes the progress record of a child that exited before the reports were written.
 """
 
 from __future__ import annotations
@@ -166,7 +169,7 @@ class RunRegistry:
 
     # ------------------------------------------------------------------ lifecycle
     def busy(self) -> bool:
-        with self._lock:  # a run is running until its waiter has recorded the exit, as get() reads it
+        with self._lock:  # a run is running while its waiter is alive, as get() reads it
             return any(w.is_alive() for w in self._waiters.values())
 
     def create(self, req: LaunchRequest) -> dict[str, Any]:
@@ -237,7 +240,7 @@ class RunRegistry:
                 self._cancelled.add(run_id)
             else:  # the child exited by itself: there is nothing to stop, and the run is not cancelled
                 proc = None
-        if proc is None:  # wait for its exit to be recorded
+        if proc is None:  # wait, up to 15 s, for its waiter to record the exit
             waiter.join(timeout=15)
             raise LaunchError("not_running", f"run {run_id} is not running", status=409)
         procs.stop(proc)
@@ -251,14 +254,16 @@ class RunRegistry:
         return self.create(LaunchRequest.model_validate(manifest["request"]))
 
     def shutdown(self) -> None:
-        """Stop every running review (server exit): a review nobody can follow any more is cancelled, not orphaned."""
+        """Server exit: stop the child of every run whose child still runs, so that the run is recorded cancelled, not
+        orphaned; then give the waiter of every run still running, one whose child exited by itself included, up to 15 s
+        to record the exit."""
         with self._lock:
             waiters = [w for w in self._waiters.values() if w.is_alive()]
-            running = [(rid, p) for rid, p in self._procs.items() if p.poll() is None]
-            self._cancelled.update(rid for rid, _ in running)
-        for _, p in running:
+            to_stop = [(rid, p) for rid, p in self._procs.items() if p.poll() is None]
+            self._cancelled.update(rid for rid, _ in to_stop)
+        for _, p in to_stop:
             procs.stop(p)
-        for w in waiters:  # a run whose child exited by itself too: its exit is recorded before the server exits
+        for w in waiters:  # a waiter still alive after 15 s leaves run.json without the exit code
             w.join(timeout=15)
 
     # ------------------------------------------------------------------ reading

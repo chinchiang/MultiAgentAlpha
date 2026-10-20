@@ -427,8 +427,8 @@ def _stop_on_signals() -> dict[int, Any]:
 
 
 def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser: bool, echo: Any = print) -> None:
-    """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); reviews and jobs still running then are stopped and recorded
-    as cancelled."""
+    """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); then every child still running is stopped, its run recorded
+    cancelled or its job recorded with the exit code the stop gave (RunRegistry.shutdown, JobRegistry.shutdown)."""
     httpd = make_server(host=host, port=port, workspace=workspace, out_dir=out_dir)
     url = f"{httpd.url}#token={httpd.token}"
     echo(f"MARA workbench {__version__} · workspace {httpd.workspace} · runs in {httpd.runs.runs_dir}")
@@ -448,7 +448,7 @@ def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser:
     finally:
         for sig in previous:
             signal.signal(sig, signal.SIG_IGN)  # a second signal must not cut the cleanup short
-        echo("stopping: cancelling any running review or job")
+        echo("stopping: cancelling any running review and stopping any running job")
         httpd.shutdown_children()
         httpd.server_close()
         if redirect is not None:

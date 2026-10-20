@@ -5,6 +5,9 @@ Each job is one of a fixed set of argv lists (no free-form command): install or 
 check the trivy offline database (`scripts/trivy_db.py`), or evaluate the policies of one config
 (`mara check-config`). The scripts live in the workspace, not in the package, so a workspace without them offers no
 such job. One job runs at a time; its output goes to `<out>/jobs/<job-id>/job.log`.
+
+GLOSSARY.md: workbench (a job is not a run); docs/adr/0006-local-web-workbench.md. Not pure: it starts and stops the
+children and writes `job.json`.
 """
 
 from __future__ import annotations
@@ -51,7 +54,7 @@ class JobRegistry:
     def __init__(self, workspace: Path, out_dir: Path, runs: RunRegistry) -> None:
         self.workspace = workspace.resolve()
         self.jobs_dir = out_dir.resolve() / "jobs"
-        self.runs = runs  # for the config allowlist
+        self.runs = runs  # for the config allowlist, whether a run is running (busy()) and the launch lock (launching)
         self._lock = threading.RLock()
         self._procs: dict[str, Any] = {}
         self._waiters: dict[str, threading.Thread] = {}
@@ -133,10 +136,13 @@ class JobRegistry:
         return [j for j in (self.get(i, lines=0) for i in ids) if j is not None]
 
     def shutdown(self) -> None:
+        """Server exit: stop the child of every job whose child still runs, so that the job is recorded with the exit code
+        the stop gave (failed, or finished if it is 0); then give the waiter of every job still running, one whose child
+        exited by itself included, up to 15 s to record the exit."""
         with self._lock:
             waiters = [w for w in self._waiters.values() if w.is_alive()]
-            running = [p for p in self._procs.values() if p.poll() is None]
-        for p in running:
+            to_stop = [p for p in self._procs.values() if p.poll() is None]
+        for p in to_stop:
             procs.stop(p)
-        for w in waiters:  # a job whose child exited by itself too: its exit is recorded before the server exits
+        for w in waiters:  # a waiter still alive after 15 s leaves job.json without the exit code
             w.join(timeout=15)
