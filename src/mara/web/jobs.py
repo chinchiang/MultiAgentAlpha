@@ -1,10 +1,14 @@
-"""Environment jobs of the workbench: the workspace's own maintenance scripts, started from the 工具與執行環境 page.
+"""Environment jobs of the workbench (GLOSSARY.md: workbench; docs/adr/0006-local-web-workbench.md): the workspace's
+own maintenance scripts, started from the 工具與執行環境 page.
 
 Each job is one of a fixed set of argv lists (no free-form command): install or update the pinned L0 tools
 (`scripts/install_tools.py`, every SHA-256 and publisher signature checked as on the command line), download or
 check the trivy offline database (`scripts/trivy_db.py`), or evaluate the policies of one config
 (`mara check-config`). The scripts live in the workspace, not in the package, so a workspace without them offers no
 such job. One job runs at a time; its output goes to `<out>/jobs/<job-id>/job.log`.
+
+Not pure: it starts and stops children and waits for them on threads of its own, reads the workspace and reads and
+writes the files under `<out>/jobs/`.
 """
 
 from __future__ import annotations
@@ -51,7 +55,7 @@ class JobRegistry:
     def __init__(self, workspace: Path, out_dir: Path, runs: RunRegistry) -> None:
         self.workspace = workspace.resolve()
         self.jobs_dir = out_dir.resolve() / "jobs"
-        self.runs = runs  # for the config allowlist
+        self.runs = runs  # for the config allowlist, whether a run is running (busy()) and the launch lock (launching)
         self._lock = threading.RLock()
         self._procs: dict[str, Any] = {}
         self._waiters: dict[str, threading.Thread] = {}
@@ -98,7 +102,7 @@ class JobRegistry:
         return self.get(job_id) or job
 
     def changing_tools(self) -> bool:
-        """A running job that replaces the tools or the trivy database (a review must not start meanwhile)."""
+        """A running job that replaces the tools or the trivy database (a run must not start meanwhile)."""
         with self._lock:
             return any(w.is_alive() and self._kinds.get(j) in CHANGES_TOOLS for j, w in self._waiters.items())
 
@@ -133,10 +137,13 @@ class JobRegistry:
         return [j for j in (self.get(i, lines=0) for i in ids) if j is not None]
 
     def shutdown(self) -> None:
+        """Server exit: stop the child of every job whose child still runs, so that the job is recorded with the exit code
+        the stop gave (failed, or finished if it is 0); then give the waiter of every job still running, one whose child
+        exited by itself included, up to 15 s to record the exit."""
         with self._lock:
             waiters = [w for w in self._waiters.values() if w.is_alive()]
-            running = [p for p in self._procs.values() if p.poll() is None]
-        for p in running:
+            to_stop = [p for p in self._procs.values() if p.poll() is None]
+        for p in to_stop:
             procs.stop(p)
-        for w in waiters:  # a job whose child exited by itself too: its exit is recorded before the server exits
+        for w in waiters:  # a waiter still alive after 15 s leaves job.json without the exit code
             w.join(timeout=15)

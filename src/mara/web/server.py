@@ -409,9 +409,9 @@ def open_file(out_dir: Path, url: str, port: int) -> Path:
 
 
 def _stop_on_signals() -> dict[int, Any]:
-    """SIGTERM and SIGHUP (a `kill`, a service stop, a closed terminal) end the server like Ctrl-C does, so the reviews
-    it started are stopped and recorded instead of running on unseen: they live in their own process groups and would
-    not receive the signal themselves."""
+    """SIGTERM and SIGHUP (a `kill`, a service stop, a closed terminal) end the server like Ctrl-C does, so the runs and
+    jobs it started are stopped as serve() says instead of running on unseen: they live in their own process groups and
+    would not receive the signal themselves."""
     previous: dict[int, Any] = {}
     if threading.current_thread() is not threading.main_thread():
         return previous
@@ -427,8 +427,9 @@ def _stop_on_signals() -> dict[int, Any]:
 
 
 def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser: bool, echo: Any = print) -> None:
-    """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); reviews and jobs still running then are stopped and recorded
-    as cancelled."""
+    """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); then every child still running is stopped, and each run or job
+    still running gets up to 15 s to be recorded: a stopped run cancelled, a stopped job with the exit code the stop gave
+    (RunRegistry.shutdown, JobRegistry.shutdown)."""
     httpd = make_server(host=host, port=port, workspace=workspace, out_dir=out_dir)
     url = f"{httpd.url}#token={httpd.token}"
     echo(f"MARA workbench {__version__} · workspace {httpd.workspace} · runs in {httpd.runs.runs_dir}")
@@ -448,7 +449,7 @@ def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser:
     finally:
         for sig in previous:
             signal.signal(sig, signal.SIG_IGN)  # a second signal must not cut the cleanup short
-        echo("stopping: cancelling any running review or job")
+        echo("stopping: cancelling any running review and stopping any running job")
         httpd.shutdown_children()
         httpd.server_close()
         if redirect is not None:
