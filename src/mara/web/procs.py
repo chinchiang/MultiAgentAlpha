@@ -122,7 +122,7 @@ class Children:
     the exit through `on_exit(child_id, code, stopped)` under the lock, so a registry that reads its record and asks
     `running()` under `held()` never sees a record without the exit code of a child no longer running."""
 
-    def __init__(self, name: str, on_exit: Callable[[str, int, bool], None], *, start: Callable[..., Any] = spawn) -> None:
+    def __init__(self, name: str, on_exit: Callable[[str, int, bool], None], *, start: Callable[..., Any] | None = None) -> None:
         self.name, self.on_exit, self._start = name, on_exit, start
         self._lock = threading.RLock()
         self._procs: dict[str, Any] = {}
@@ -136,10 +136,11 @@ class Children:
 
     def start(self, child_id: str, argv: list[str], *, cwd: Path, log_path: Path, env: dict[str, str],
               tag: str | None = None) -> int:
-        """Start `argv` through the starter given at construction, and its waiter thread `mara-<name>-<child_id>`; the
-        child's pid. An OSError of the starter propagates, and nothing is registered."""
+        """Start `argv` through the starter given at construction, else `spawn` as this module has it when called, and its
+        waiter thread `mara-<name>-<child_id>`; the child's pid. An OSError of the starter propagates, and nothing is
+        registered."""
         with self._lock:
-            proc = self._start(argv, cwd=cwd, log_path=log_path, env=env)
+            proc = (self._start or spawn)(argv, cwd=cwd, log_path=log_path, env=env)
             self._procs[child_id] = proc
             self._tags[child_id] = tag
             waiter = threading.Thread(target=self._wait, args=(child_id, proc), name=f"mara-{self.name}-{child_id}", daemon=True)

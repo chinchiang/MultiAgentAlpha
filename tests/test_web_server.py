@@ -464,8 +464,7 @@ def _exited_run(tmp_path, monkeypatch, child_type):
         children.append(child_type(finished(argv, **kw)))
         return children[-1]
 
-    monkeypatch.setattr(runs.procs, "spawn", spawn)
-    reg = runs.RunRegistry(ROOT, tmp_path / "out")
+    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=spawn)
     run_id = reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))["id"]
     (child,) = children
     assert child.proc.wait(timeout=60) == 0
@@ -591,11 +590,41 @@ def test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_wi
     if recorded_when == "run.json is read":
         monkeypatch.setattr(procs, "read_json", read_then_let_the_exit_be_recorded)
     else:
-        monkeypatch.setitem(reg._waiters, run_id, _WaiterAskedFirst(waiter, reading, let_the_exit_be_recorded))
+        running = reg.children.running
+
+        def let_the_exit_be_recorded_then_ask(child_id):
+            if threading.current_thread() is reading:
+                let_the_exit_be_recorded()
+            return running(child_id)
+
+        monkeypatch.setattr(reg.children, "running", let_the_exit_be_recorded_then_ask)
     run = reg.get(run_id)
     assert (run["status"], run["exit_code"]) == ("running", None)
     run = _until_not_running(reg, run_id, 30)
     assert (run["status"], run["exit_code"]) == ("finished", 0)
+
+
+def test_a_run_whose_child_exits_at_once_keeps_the_exit_code_its_waiter_recorded(tmp_path, monkeypatch):
+    """The launch writes the pid into run.json under the lock the exit is recorded under, so it never overwrites the exit."""
+    monkeypatch.setenv("MARA_HOME", str(ROOT))
+    write_json = procs.write_json
+
+    def exited_at_once(argv, **kw):
+        child = procs.spawn([sys.executable, "-c", "import sys; sys.exit(2)"], **kw)
+        child.wait(timeout=60)
+        return child
+
+    def let_the_exit_be_recorded_then_write(path, data):
+        if path.name == "run.json" and data.get("pid") and data.get("status") == "running":
+            (waiter,) = [t for t in threading.enumerate() if t.name == f"mara-run-{data['id']}"]
+            waiter.join(2)  # the waiter records the exit unless the launch holds the lock it records under
+        write_json(path, data)
+
+    monkeypatch.setattr(procs, "write_json", let_the_exit_be_recorded_then_write)
+    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=exited_at_once)
+    run_id = reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))["id"]
+    run = _until_not_running(reg, run_id, 30)
+    assert (run["status"], run["exit_code"]) == ("failed", 2)
 
 
 def _exited_job(tmp_path, monkeypatch, child_type, kind="trivy_db_download"):

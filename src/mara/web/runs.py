@@ -76,15 +76,13 @@ def config_dirs(workspace: Path) -> tuple[Path, Path]:
 
 
 class RunRegistry:
-    def __init__(self, workspace: Path, out_dir: Path) -> None:
+    def __init__(self, workspace: Path, out_dir: Path, *, start: Callable[..., Any] | None = None) -> None:
         self.workspace = workspace.resolve()
         self.out_dir = out_dir.resolve()
         self.runs_dir = self.out_dir / "runs"
-        self._lock = threading.RLock()
+        self.children = procs.Children("run", self._record_exit, start=start)
         self.launching = threading.Lock()  # one launch at a time, a run's or a job's: each checks the other under its own lock
-        self._procs: dict[str, Any] = {}
-        self._waiters: dict[str, threading.Thread] = {}
-        self._cancelled: set[str] = set()
+        self._reports_lock = threading.Lock()
         self._reports: dict[str, tuple[int, int, ReviewReport]] = {}
         self.blocked_by: Callable[[], bool] | None = None  # set by the server: an environment job changing the tools
 
@@ -170,12 +168,11 @@ class RunRegistry:
 
     # ------------------------------------------------------------------ lifecycle
     def busy(self) -> bool:
-        with self._lock:  # a run is running while its waiter is alive, as get() reads it
-            return any(w.is_alive() for w in self._waiters.values())
+        return self.children.any_running()
 
     def create(self, req: LaunchRequest) -> dict[str, Any]:
         argv, fields = self.prepare(req)
-        with self.launching, self._lock:
+        with self.launching, self.children.held():
             if self.busy():
                 raise LaunchError("busy", "a review is already running; wait for it or cancel it", status=409)
             if self.blocked_by is not None and self.blocked_by():
@@ -200,52 +197,32 @@ class RunRegistry:
             }
             procs.write_json(run_dir / "run.json", manifest)
             try:
-                proc = procs.spawn(argv, cwd=self.workspace, log_path=run_dir / "run.log", env=procs.child_env(self.workspace))
+                pid = self.children.start(run_id, argv, cwd=self.workspace, log_path=run_dir / "run.log",
+                                          env=procs.child_env(self.workspace))
             except OSError as e:
                 manifest.update(status="failed", finished_at=procs.now(), error=type(e).__name__)
                 procs.write_json(run_dir / "run.json", manifest)
                 raise LaunchError("spawn_failed", str(e), status=500) from e
-            manifest["pid"] = proc.pid
+            manifest["pid"] = pid
             procs.write_json(run_dir / "run.json", manifest)
-            self._procs[run_id] = proc
-            waiter = threading.Thread(target=self._wait, args=(run_id, proc), name=f"mara-run-{run_id}", daemon=True)
-            self._waiters[run_id] = waiter
-            waiter.start()
         return self.get(run_id) or manifest
 
-    def _wait(self, run_id: str, proc: Any) -> None:
-        code = proc.wait()
+    def _record_exit(self, run_id: str, code: int, stopped: bool) -> None:
         run_dir = self.runs_dir / run_id
-        with self._lock:
-            manifest = procs.read_json(run_dir / "run.json") or {"id": run_id}
-            prog = progress_mod.read(run_dir / "progress.json")
-            finished = bool(prog and prog.get("status") == "finished")
-            if run_id in self._cancelled:
-                status = "cancelled"
-            else:
-                status = "finished" if finished else "failed"
-            if not finished:
-                progress_mod.close_abandoned(run_dir / "progress.json", "cancelled" if status == "cancelled" else f"exit {code}")
-            manifest.update(status=status, exit_code=code, finished_at=procs.now(),
-                            gate_enforced=finished and _gate_enforced(run_dir, code), psirt_failed=finished and code == 3)
-            procs.write_json(run_dir / "run.json", manifest)
-            self._procs.pop(run_id, None)
+        manifest = procs.read_json(run_dir / "run.json") or {"id": run_id}
+        prog = progress_mod.read(run_dir / "progress.json")
+        finished = bool(prog and prog.get("status") == "finished")
+        status = "cancelled" if stopped else "finished" if finished else "failed"
+        if not finished:
+            progress_mod.close_abandoned(run_dir / "progress.json", "cancelled" if status == "cancelled" else f"exit {code}")
+        manifest.update(status=status, exit_code=code, finished_at=procs.now(),
+                        gate_enforced=finished and _gate_enforced(run_dir, code), psirt_failed=finished and code == 3)
+        procs.write_json(run_dir / "run.json", manifest)
 
     def cancel(self, run_id: str) -> dict[str, Any]:
-        with self._lock:
-            waiter = self._waiters.get(run_id)
-            if waiter is None:
-                raise LaunchError("not_running", f"run {run_id} is not running", status=409)
-            proc = self._procs.get(run_id)
-            if proc is not None and proc.poll() is None:
-                self._cancelled.add(run_id)
-            else:  # the child exited by itself: there is nothing to stop, and the run is not cancelled
-                proc = None
-        if proc is None:  # wait, up to 15 s, for its waiter to record the exit
-            waiter.join(timeout=15)
+        # a run whose child exited by itself has nothing to stop and is not cancelled: stop() waits for its exit to be recorded
+        if self.children.stop(run_id) != "stopped":
             raise LaunchError("not_running", f"run {run_id} is not running", status=409)
-        procs.stop(proc)
-        waiter.join(timeout=15)
         return self.get(run_id) or {"id": run_id, "status": "cancelled"}
 
     def rerun(self, run_id: str) -> dict[str, Any]:
@@ -258,14 +235,7 @@ class RunRegistry:
         """Server exit: stop the child of every run whose child still runs, so that the run is recorded cancelled, not
         orphaned; then give the waiter of every run still running, one whose child exited by itself included, up to 15 s
         to record the exit."""
-        with self._lock:
-            waiters = [w for w in self._waiters.values() if w.is_alive()]
-            to_stop = [(rid, p) for rid, p in self._procs.items() if p.poll() is None]
-            self._cancelled.update(rid for rid, _ in to_stop)
-        for _, p in to_stop:
-            procs.stop(p)
-        for w in waiters:  # a waiter still alive after 15 s leaves run.json without the exit code
-            w.join(timeout=15)
+        self.children.shutdown()  # a waiter still alive after 15 s leaves run.json without the exit code
 
     # ------------------------------------------------------------------ reading
     def run_dir(self, run_id: str) -> Path | None:
@@ -301,7 +271,7 @@ class RunRegistry:
             st = path.stat()
         except OSError:
             return None
-        with self._lock:
+        with self._reports_lock:
             cached = self._reports.get(run_id)
             if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
                 return cached[2]
@@ -309,15 +279,14 @@ class RunRegistry:
             report = ReviewReport.model_validate_json(path.read_bytes())
         except (OSError, ValueError):
             return None
-        with self._lock:
+        with self._reports_lock:
             self._reports[run_id] = (st.st_mtime_ns, st.st_size, report)
         return report
 
     def get(self, run_id: str) -> dict[str, Any] | None:
-        with self._lock:  # the waiter records a run's exit under the lock: read run.json and the waiter in one step
+        with self.children.held():  # a run's exit is recorded under this lock: read run.json and whether it runs in one step
             manifest = self._manifest(run_id)
-            waiter = self._waiters.get(run_id)
-            owned = waiter is not None and waiter.is_alive()
+            owned = self.children.running(run_id)
         if manifest is None:
             return None
         prog = self.progress(run_id)
