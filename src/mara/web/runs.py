@@ -1,4 +1,5 @@
-"""Runs of the workbench: one `mara review` subprocess per run, one directory per run under `<out>/runs/<run-id>/`.
+"""Runs of the workbench (GLOSSARY.md: run, progress record, workbench; docs/adr/0006-local-web-workbench.md): one
+`mara review` subprocess per run, one directory per run under `<out>/runs/<run-id>/`.
 
 A launch is validated here exactly as the command line validates it (paths resolved, `workspace.check_outside`
 with the config, output, evidence and progress paths, the config loaded under policies P1-P8, the provider mode
@@ -11,8 +12,8 @@ as finished only when its progress record says the reports were written.
 PSIRT hand-off options (`--notify-psirt`, `--psirt-event`) are not offered: they start EU CRA Article 14 clocks
 and stay a deliberate command-line step.
 
-GLOSSARY.md: run, progress record, workbench; docs/adr/0006-local-web-workbench.md. Not pure: it starts and stops the
-children, writes `run.json` and closes the progress record of a child that exited before the reports were written.
+Not pure: it starts and stops children and waits for them on threads of its own, reads the config and the workspace,
+and reads and writes the files under `<out>/runs/`.
 """
 
 from __future__ import annotations

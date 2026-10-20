@@ -1,4 +1,5 @@
-"""Environment jobs of the workbench: the workspace's own maintenance scripts, started from the 工具與執行環境 page.
+"""Environment jobs of the workbench (GLOSSARY.md: workbench; docs/adr/0006-local-web-workbench.md): the workspace's
+own maintenance scripts, started from the 工具與執行環境 page.
 
 Each job is one of a fixed set of argv lists (no free-form command): install or update the pinned L0 tools
 (`scripts/install_tools.py`, every SHA-256 and publisher signature checked as on the command line), download or
@@ -6,8 +7,8 @@ check the trivy offline database (`scripts/trivy_db.py`), or evaluate the polici
 (`mara check-config`). The scripts live in the workspace, not in the package, so a workspace without them offers no
 such job. One job runs at a time; its output goes to `<out>/jobs/<job-id>/job.log`.
 
-GLOSSARY.md: workbench (a job is not a run); docs/adr/0006-local-web-workbench.md. Not pure: it starts and stops the
-children and writes `job.json`.
+Not pure: it starts and stops children and waits for them on threads of its own, reads the workspace (which scripts it
+has, `tools/versions.lock`) and reads and writes the files under `<out>/jobs/`.
 """
 
 from __future__ import annotations
