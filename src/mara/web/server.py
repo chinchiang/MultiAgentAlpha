@@ -15,9 +15,10 @@ its Content-Security-Policy allows exactly that script and that stylesheet by SH
 Types, so the script can only build the DOM through text and element APIs (docs/adr/0006-local-web-workbench.md).
 `render_page` also builds the workbench demo's page when `scripts/build_workbench_demo.py` gives it the demo's data.
 
-Not pure: it listens on a socket, starts and stops runs and jobs through their registries, handles SIGTERM and SIGHUP
-while it serves, draws its token at random, opens a browser, reads the packaged page, and creates the output directory
-and reads and writes files in it.
+Not pure: it listens on a socket, handles SIGTERM and SIGHUP while it serves, reads the clock, draws its token at
+random, opens a browser and reads the packaged page; through `runs`, `jobs` and `env` it starts and stops runs and jobs
+and reads the workspace; it creates the output directory and reads, writes and removes files in it, and reads the
+reports `mara review` wrote into `<workspace>/out/`.
 """
 
 from __future__ import annotations

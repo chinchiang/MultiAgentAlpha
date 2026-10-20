@@ -1,15 +1,16 @@
-"""What the workbench shows of a review: the report as the run page reads it (GLOSSARY.md: workbench, run, progress
-record, review scope, review status, incomplete reason, gate, tool alert, canary echo, jury outcome, final outcome,
-human-resolved finding, human queue, queue tightening, bias audit, report metadata; docs/adr/0005-jury-outcome.md,
-docs/adr/0006-local-web-workbench.md, docs/adr/0007-review-status-and-gate.md, docs/adr/0008-reply-accounting.md,
-docs/adr/0009-report-metadata.md).
+"""What the workbench shows of a review (GLOSSARY.md: workbench, run, progress record, review scope, review status,
+incomplete reason, gate, tool evidence, tool alert, exchange, ballot role, reply outcome, refusal, truncation, invalid
+item, canary echo, jury outcome, final outcome, rejected finding, dropped finding, human-resolved finding, human queue,
+human reason, queue tightening, bias audit, report metadata): the report as the run page reads it
+(docs/adr/0001-reply-outcome-accounting.md, docs/adr/0005-jury-outcome.md, docs/adr/0006-local-web-workbench.md,
+docs/adr/0007-review-status-and-gate.md, docs/adr/0008-reply-accounting.md, docs/adr/0009-report-metadata.md).
 
 The browser derives nothing: the jury outcome and the final outcome are the `ConsensusResult` properties
 (docs/adr/0005-jury-outcome.md), read here from the validated report rather than re-implemented in JavaScript, and
 every count on the page comes from the same objects the Markdown report is written from. Repository-derived text
 (titles, quotes, arguments, notes) passes through unchanged; the page renders it as text, never as markup.
 
-Pure: every function reads only the run record, the report and the progress record it is given.
+Pure: every function reads only what it is given: a run's `run.json`, its report and its progress record.
 """
 
 from __future__ import annotations

@@ -6,8 +6,8 @@ the `mara` package the server itself runs on first on PYTHONPATH, so the child r
 from. Nothing a browser sends reaches the environment; values reach argv only after the caller validated them.
 Output goes to a log file, never through a pipe the server would have to drain.
 
-Not pure: it starts and stops children, copies the server's environment into theirs, reads the clock and a random
-source for ids and temporary file names, and reads and writes the files it is given.
+Not pure: it starts and stops children, copies the server's environment into theirs, reads the clock (ids and
+timestamps) and a random source (ids and temporary file names), and reads and writes the files it is given.
 """
 
 from __future__ import annotations
