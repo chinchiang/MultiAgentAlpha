@@ -347,8 +347,7 @@ def test_a_job_replacing_the_tools_holds_reviews_back(server, monkeypatch):
 @pytest.mark.parametrize("first", ["review", "job"])
 def test_a_review_and_a_job_replacing_the_tools_launched_at_once_neither_hang_and_one_is_refused(tmp_path, monkeypatch, first):
     """Each launch takes the launch lock before it checks the other kind; the first launch, holding it, asks about the
-    other kind only once the second has reached its own check (or a second has passed), the order that once took a run's
-    lock and a job's lock each waiting for the other."""
+    other kind only once the second has reached its own check, or a second has passed."""
     from mara.web import jobs as jobs_mod
 
     monkeypatch.setenv("MARA_HOME", str(ROOT))

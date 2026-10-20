@@ -12,8 +12,8 @@ as finished only when its progress record says the reports were written.
 PSIRT hand-off options (`--notify-psirt`, `--psirt-event`) are not offered: they start EU CRA Article 14 clocks
 and stay a deliberate command-line step.
 
-Not pure: it starts and stops children and waits for them on threads of its own, reads the config and the workspace,
-and reads and writes the files under `<out>/runs/`.
+Not pure: it starts and stops children through `procs.Children`, whose waiter threads record each exit through it,
+reads the config and the workspace, and reads and writes the files under `<out>/runs/`.
 """
 
 from __future__ import annotations
@@ -233,9 +233,9 @@ class RunRegistry:
 
     def shutdown(self) -> None:
         """Server exit: stop the child of every run whose child still runs, so that the run is recorded cancelled, not
-        orphaned; then give the waiter of every run still running, one whose child exited by itself included, up to 15 s
-        to record the exit."""
-        self.children.shutdown()  # a waiter still alive after 15 s leaves run.json without the exit code
+        orphaned; then give the waiter of every run still running, one whose child exited by itself included, up to
+        `procs.WAITER_JOIN_SECONDS` to record the exit. A waiter still alive then leaves run.json without the exit code."""
+        self.children.shutdown()
 
     # ------------------------------------------------------------------ reading
     def run_dir(self, run_id: str) -> Path | None:

@@ -1,6 +1,7 @@
 """The children of one workbench registry (mara.web.procs.Children, docs/adr/0006-local-web-workbench.md): a child is
-running while its waiter is alive, so until its exit has been recorded through the registry's callback, and the record
-and that answer are read under the lock the exit is recorded under. Real `python -c` children, held back by doubles."""
+running while its waiter is alive, the waiter recording its exit through the registry's callback (or stopping without,
+when the exit is lost), and the record and that answer are read under the lock the exit is recorded under. Real
+`python -c` children, held back by tests/held_children.py."""
 
 import os
 import sys
@@ -158,3 +159,24 @@ def test_a_child_that_cannot_be_started_is_not_registered(tmp_path):
     assert not children.running("a")
     assert not children.any_running()
     assert children.stop("a") == "unknown"
+
+
+@pytest.mark.parametrize("stopping", ["stop", "shutdown"])
+def test_while_a_child_is_being_stopped_whether_it_runs_is_answered_at_once(tmp_path, stopping):
+    """procs.stop waits for the child to exit, which may take its whole grace: it runs outside the lock reads take."""
+    records = []
+    children = procs.Children("test", lambda child_id, code, stopped: records.append((child_id, code, stopped)))
+    ready = tmp_path / "ready"
+    code = ("import signal, sys, time\nfrom pathlib import Path\n"
+            "signal.signal(signal.SIGTERM, lambda *_: (time.sleep(2), sys.exit(0)))\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n")
+    children.start("a", [sys.executable, "-c", code, str(ready)], cwd=tmp_path, log_path=tmp_path / "a.log", env=dict(os.environ))
+    assert _until(ready.exists, 30)
+    stopper = threading.Thread(target=lambda: children.stop("a") if stopping == "stop" else children.shutdown())
+    stopper.start()
+    time.sleep(0.5)  # the child got SIGTERM and takes 2 s to exit
+    asked = time.monotonic()
+    assert children.running("a")
+    waited = round(time.monotonic() - asked, 1)
+    assert waited < 1
+    stopper.join(30)
+    assert records == [("a", 0, True)]

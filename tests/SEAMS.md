@@ -67,7 +67,7 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
   `start(argv, cwd=..., log_path=..., env=...)` and keeps the child it returns for its `pid`, `poll()` and `wait()`: a
   Popen of the subprocess module, or one wrapped by `tests/held_children.py` so that it has exited while its exit is not
   yet recorded. With no starter, `Children` calls `procs.spawn` as the module has it at that moment, so a test patching
-  `procs.spawn` after the server was built still reaches it. `test_web_server.py`, `test_web_procs.py`.
+  `procs.spawn` after the server was built still reaches it. `test_web_server.py`.
 - `procs.Children(name, on_exit, start=...)`: driven at its own interface (`start`, `running`, `any_running`, `stop`,
   `shutdown`, `held`). Its waiters are threads named after the registry and the child (`"mara-run-" + run_id`), the
   name tests find one by to join it. `test_web_procs.py`, `test_web_server.py`.

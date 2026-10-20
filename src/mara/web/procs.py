@@ -28,7 +28,7 @@ from typing import Any, Literal
 
 ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 STOP_GRACE_SECONDS = 10.0
-WAITER_JOIN_SECONDS = 15.0  # how long a stop waits for the waiter to record the exit
+WAITER_JOIN_SECONDS = 15.0  # how long Children.stop() and shutdown() wait for each waiter to record its child's exit
 
 
 def now() -> str:
@@ -120,7 +120,9 @@ def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> No
 class Children:
     """The children of one registry and their waiters. A child is running while its waiter is alive: the waiter records
     the exit through `on_exit(child_id, code, stopped)` under the lock, so a registry that reads its record and asks
-    `running()` under `held()` never sees a record without the exit code of a child no longer running."""
+    `running()` under `held()` reads a record without the exit code only as running, unless the waiter stopped without
+    recording it (`wait()` or `on_exit` raised; tests/test_web_procs.py,
+    test_a_child_whose_waiter_stopped_without_recording_its_exit_is_no_longer_running)."""
 
     def __init__(self, name: str, on_exit: Callable[[str, int, bool], None], *, start: Callable[..., Any] | None = None) -> None:
         self.name, self.on_exit, self._start = name, on_exit, start
@@ -160,9 +162,9 @@ class Children:
             return waiter is not None and waiter.is_alive()
 
     def stop(self, child_id: str) -> Literal["stopped", "exited", "unknown"]:
-        """Stop a child still running, its exit then recorded as stopped ("stopped"); a child that exited by itself is
-        not stopped ("exited"). Either way the waiter gets up to WAITER_JOIN_SECONDS to record the exit. "unknown": no
-        child of that id was started."""
+        """Stop a child still running, its exit then recorded as stopped ("stopped"); a child no longer running, one that
+        exited by itself or was stopped before, is not stopped again ("exited"). Either way its waiter gets up to
+        WAITER_JOIN_SECONDS to record the exit. "unknown": no child of that id was started."""
         with self._lock:
             waiter, proc = self._waiters.get(child_id), self._procs.get(child_id)
             if waiter is None:

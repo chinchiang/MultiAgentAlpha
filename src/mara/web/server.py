@@ -435,8 +435,8 @@ def _stop_on_signals() -> dict[int, Any]:
 
 def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser: bool, echo: Any = print) -> None:
     """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); then every child still running is stopped, and each run or job
-    still running gets up to 15 s to be recorded: a stopped run cancelled, a stopped job with the exit code the stop gave
-    (RunRegistry.shutdown, JobRegistry.shutdown)."""
+    still running gets up to `procs.WAITER_JOIN_SECONDS` to be recorded: a stopped run cancelled, a stopped job with the
+    exit code the stop gave (RunRegistry.shutdown, JobRegistry.shutdown)."""
     httpd = make_server(host=host, port=port, workspace=workspace, out_dir=out_dir)
     url = f"{httpd.url}#token={httpd.token}"
     echo(f"MARA workbench {__version__} · workspace {httpd.workspace} · runs in {httpd.runs.runs_dir}")

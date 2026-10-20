@@ -7,8 +7,8 @@ check the trivy offline database (`scripts/trivy_db.py`), or evaluate the polici
 (`mara check-config`). The scripts live in the workspace, not in the package, so a workspace without them offers no
 such job. One job runs at a time; its output goes to `<out>/jobs/<job-id>/job.log`.
 
-Not pure: it starts and stops children and waits for them on threads of its own, reads the workspace and reads and
-writes the files under `<out>/jobs/`.
+Not pure: it starts and stops children through `procs.Children`, whose waiter threads record each exit through it,
+reads the workspace and reads and writes the files under `<out>/jobs/`.
 """
 
 from __future__ import annotations
@@ -127,5 +127,6 @@ class JobRegistry:
     def shutdown(self) -> None:
         """Server exit: stop the child of every job whose child still runs, so that the job is recorded with the exit code
         the stop gave (failed, or finished if it is 0); then give the waiter of every job still running, one whose child
-        exited by itself included, up to 15 s to record the exit."""
-        self.children.shutdown()  # a waiter still alive after 15 s leaves job.json without the exit code
+        exited by itself included, up to `procs.WAITER_JOIN_SECONDS` to record the exit. A waiter still alive then leaves
+        job.json without the exit code."""
+        self.children.shutdown()
