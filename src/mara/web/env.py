@@ -1,4 +1,5 @@
-"""The execution environment as the workbench's 工具與執行環境 page shows it: read, never changed here.
+"""The execution environment as the workbench's 工具與執行環境 page shows it (GLOSSARY.md: workbench;
+docs/adr/0006-local-web-workbench.md): read, never changed here.
 
 Tools: every entry of `tools/versions.lock` against what `scripts/install_tools.py` recorded in the tool
 directory's manifest (installed version, signature verification) and whether the runner would find it
@@ -6,6 +7,9 @@ directory's manifest (installed version, signature verification) and whether the
 review applies (cached while the database file is unchanged, since the check hashes it). Configs: every file
 under `config/` and `config/examples/`, validated as `mara check-config` validates it, with the eight policy
 results. Credentials are reported by environment variable name and presence only, never by value.
+
+Not pure: it reads the workspace, the tool directory, the trivy database, the environment and the clock (the trivy
+database's age), runs `node --version`, and keeps the trivy check and the node version in caches of the module's own.
 """
 
 from __future__ import annotations

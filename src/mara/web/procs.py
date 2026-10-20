@@ -1,9 +1,13 @@
-"""Child processes and small files of the workbench: one way to start, stop and read a run or an environment job.
+"""Child processes and small files of the workbench (GLOSSARY.md: workbench, run; docs/adr/0006-local-web-workbench.md):
+one way to start, stop and read a run or an environment job.
 
 Every child is an argv list started without a shell, from the MARA workspace, with MARA_HOME pointing at it and
-the `mara` package the server itself runs on first on PYTHONPATH, so the review is the one the server was started
+the `mara` package the server itself runs on first on PYTHONPATH, so the child runs the `mara` the server was started
 from. Nothing a browser sends reaches the environment; values reach argv only after the caller validated them.
 Output goes to a log file, never through a pipe the server would have to drain.
+
+Not pure: it starts and stops children, copies the server's environment into theirs, reads the clock (ids and
+timestamps) and a random source (ids and temporary file names), and reads and writes the files it is given.
 """
 
 from __future__ import annotations
