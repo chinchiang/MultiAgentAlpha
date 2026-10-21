@@ -7,8 +7,8 @@ from. Nothing a browser sends reaches the environment; values reach argv only af
 Output goes to a log file, never through a pipe the server would have to drain.
 
 Not pure: it starts and stops children and waits for them on threads of its own, copies the server's environment into
-theirs, reads the clock (ids and timestamps) and a random source (ids and temporary file names), and reads and writes
-the files it is given.
+theirs, reads the clock (ids, timestamps and the deadlines of a stop) and a random source (ids and temporary file
+names), and reads and writes the files it is given.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import Any, Literal
@@ -88,10 +89,8 @@ def spawn(argv: list[str], *, cwd: Path, log_path: Path, env: dict[str, str]) ->
                                 start_new_session=True)
 
 
-def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> None:
-    """Terminate the child and its process group; kill it when it has not exited after `grace` seconds."""
-    if proc.poll() is not None:
-        return
+def terminate(proc: subprocess.Popen[bytes]) -> None:
+    """Ask the child and its process group to exit (SIGTERM; terminate() on Windows)."""
     try:
         if sys.platform != "win32":
             os.killpg(proc.pid, signal.SIGTERM)
@@ -99,11 +98,10 @@ def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> No
             proc.terminate()
     except (ProcessLookupError, PermissionError, OSError):
         pass
-    try:
-        proc.wait(timeout=grace)
-        return
-    except subprocess.TimeoutExpired:
-        pass
+
+
+def kill(proc: subprocess.Popen[bytes]) -> None:
+    """Kill the child and its process group (SIGKILL; kill() on Windows)."""
     try:
         if sys.platform != "win32":
             os.killpg(proc.pid, signal.SIGKILL)
@@ -111,10 +109,25 @@ def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> No
             proc.kill()
     except (ProcessLookupError, PermissionError, OSError):
         pass
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        pass
+
+
+def _wait_until(to_wait: list[subprocess.Popen[bytes]], deadline: float) -> None:
+    for proc in to_wait:
+        try:
+            proc.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> None:
+    """Terminate the child and its process group; kill it when it has not exited after `grace` seconds."""
+    if proc.poll() is not None:
+        return
+    terminate(proc)
+    _wait_until([proc], time.monotonic() + grace)
+    if proc.poll() is None:
+        kill(proc)
+        _wait_until([proc], time.monotonic() + 5)
 
 
 class ChildTable:
@@ -129,15 +142,21 @@ class ChildTable:
         with self.lock:
             return {tag for children in self._members for tag in children._running_tags()}
 
-    def shutdown(self) -> None:
+    def shutdown(self, grace: float = STOP_GRACE_SECONDS) -> None:
         """Server exit: stop every child still running, whichever registry's it is, its exit then recorded as stopped;
         then give the waiter of every child still running, one whose child exited by itself included, up to
-        WAITER_JOIN_SECONDS each to record it. The children are stopped one by one."""
+        WAITER_JOIN_SECONDS each to record it. The children are stopped at once: each is terminated, those still
+        running `grace` seconds later are killed, and those get up to 5 s more to exit."""
         with self.lock:
             taken = [children._taken_for_shutdown() for children in self._members]
-        for _, to_stop in taken:
-            for p in to_stop:
-                stop(p)
+        to_stop = [p for _, ps in taken for p in ps]
+        for p in to_stop:
+            terminate(p)
+        _wait_until(to_stop, time.monotonic() + grace)
+        to_kill = [p for p in to_stop if p.poll() is None]
+        for p in to_kill:
+            kill(p)
+        _wait_until(to_kill, time.monotonic() + 5)
         for waiters, _ in taken:
             for w in waiters:
                 w.join(timeout=WAITER_JOIN_SECONDS)
