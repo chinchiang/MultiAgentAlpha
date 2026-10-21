@@ -289,7 +289,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.NOT_FOUND, "not_found")
             return
         if not self._token_ok():
-            self._error(HTTPStatus.UNAUTHORIZED, "unauthenticated", "open the URL printed by `mara serve`")
+            self._error(HTTPStatus.UNAUTHORIZED, "unauthenticated", "open the URL printed by `mara`")
             return
         if method != "GET":
             if not self._same_origin():
