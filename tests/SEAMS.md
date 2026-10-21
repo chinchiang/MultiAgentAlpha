@@ -62,18 +62,19 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
 
 ## The workbench (`src/mara/web/`)
 
-- `RunRegistry(workspace, out_dir, start=...)`, `JobRegistry(workspace, out_dir, runs, start=...)`: tests pass a starter
-  instead of patching `procs.spawn`. Each registry hands it to its `procs.Children`, which calls it as
+- `RunRegistry(workspace, out_dir, start=..., table=...)`,
+  `JobRegistry(workspace, out_dir, runs, start=..., table=...)`: tests pass a starter instead of patching
+  `procs.spawn`, and no table. Each registry hands both to its `procs.Children`, which calls the starter as
   `start(argv, cwd=..., log_path=..., env=...)` and keeps the child it returns for its `pid`, `poll()` and `wait()`: a
   Popen of the subprocess module, or one wrapped by `tests/held_children.py` so that it has exited while its exit is not
   yet recorded. With no starter, `Children` calls `procs.spawn` as the module has it at that moment, so a test patching
-  `procs.spawn` after the server was built still reaches it. A `JobRegistry` shares the table of the `RunRegistry` it is
-  given unless `table=` gives it another, so a test building the two sees the admission between runs and jobs without
-  wiring it. `test_web_server.py`.
+  `procs.spawn` after the server was built still reaches it. With no table, a `RunRegistry`'s children get a table of
+  their own and a `JobRegistry`'s join the table of the `RunRegistry` it is given, so a test building the two sees the
+  admission between runs and jobs without wiring it. `test_web_server.py`.
 - `procs.Children(name, on_exit, start=..., table=...)`: driven at its own interface (`start`, `running`, `any_running`,
-  `stop`, `shutdown`, `held`), which sees one registry's children only. Its waiters are threads named after the registry
-  and the child (`"mara-run-" + run_id`), the name tests find one by to join it. `test_web_procs.py`,
-  `test_web_server.py`.
+  `stop`, `shutdown`, which see one registry's children only, and `held`, the lock of its whole table). Its waiters are
+  threads named after the registry and the child (`"mara-run-" + run_id`), the name tests find one by to join it.
+  `test_web_procs.py`, `test_web_server.py`.
 - `procs.ChildTable`: the children of the registries given one table share its lock (`held()` of any of them), and
   `ChildTable.running_tags` answers the tags of every child running in it. `test_web_procs.py`.
 - `admission.refusal(kind, running)`: pure, called directly with a kind and a set of kinds. Also patched as an attribute

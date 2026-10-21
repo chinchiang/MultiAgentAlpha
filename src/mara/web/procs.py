@@ -131,11 +131,12 @@ class ChildTable:
 
 
 class Children:
-    """The children of one registry and their waiters, in `table` (a table of its own when none is given), whose lock is
-    theirs. Every method but `held()` sees this registry's children only. A child is running while its waiter is alive:
-    the waiter records the exit through `on_exit(child_id, code, stopped)` under the lock, so a registry that reads its record and asks
-    `running()` under `held()` reads a record without the exit code only as running, unless the waiter stopped without
-    recording it (`wait()` or `on_exit` raised; tests/test_web_procs.py,
+    """The children of one registry and their waiters, in `table` (a table of their own when none is given), whose
+    lock, shared by every registry in the table, is the one they are kept under. Every method but `held()` sees this
+    registry's children only. A child is running while its waiter is alive: the waiter records the exit through
+    `on_exit(child_id, code, stopped)` under that lock, so a registry that reads its record and asks `running()` under
+    `held()` reads a record without the exit code only as running, unless the waiter stopped without recording it
+    (`wait()` or `on_exit` raised; tests/test_web_procs.py,
     test_a_child_whose_waiter_stopped_without_recording_its_exit_is_no_longer_running)."""
 
     def __init__(self, name: str, on_exit: Callable[[str, int, bool], None], *, start: Callable[..., Any] | None = None,
@@ -151,7 +152,9 @@ class Children:
             self.table._members.append(self)
 
     def held(self) -> threading.RLock:
-        """The lock exits are recorded under (reentrant): hold it to read a record and ask `running()` in one step."""
+        """The table's lock (reentrant), shared by every registry in it and the one exits are recorded under: hold it
+        to read a record and ask `running()` in one step, or to ask `admission.refusal()` about the table's running tags
+        and start a child in one step."""
         return self._lock
 
     def start(self, child_id: str, argv: list[str], *, cwd: Path, log_path: Path, env: dict[str, str],

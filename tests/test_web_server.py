@@ -308,8 +308,10 @@ def test_one_review_at_a_time_and_cancel_stops_it(server, monkeypatch):
     run_id = data["run"]["id"]
     res, busy, _ = c.request("POST", "/api/runs", body=body)
     assert res.status == 409 and _error(busy) == "busy"
+    assert busy["error"]["message"] == "a review is already running; wait for it or cancel it"
     res, busy, _ = c.request("POST", "/api/jobs", body={"kind": "install_tools"})
     assert res.status == 409 and _error(busy) == "busy", "the tools a running review executes are never replaced under it"
+    assert busy["error"]["message"] == "a review is running with the installed tools; wait for it or cancel it"
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline and not (prog.read(server.runs.runs_dir / run_id / "progress.json") or {}).get("current"):
         time.sleep(0.1)
