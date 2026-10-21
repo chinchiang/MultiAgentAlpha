@@ -117,10 +117,3 @@ class JobRegistry:
             return []
         ids = sorted((d.name for d in self.jobs_dir.iterdir() if procs.ID_RE.match(d.name)), reverse=True)[:20]
         return [j for j in (self.get(i, lines=0) for i in ids) if j is not None]
-
-    def shutdown(self) -> None:
-        """Server exit: stop the child of every job whose child still runs, so that the job is recorded with the exit code
-        the stop gave (failed, or finished if it is 0); then give the waiter of every job still running, one whose child
-        exited by itself included, up to `procs.WAITER_JOIN_SECONDS` to record the exit. A waiter still alive then leaves
-        job.json without the exit code."""
-        self.children.shutdown()

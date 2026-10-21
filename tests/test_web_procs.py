@@ -100,7 +100,7 @@ def test_shutting_down_stops_every_running_child_its_exit_recorded_as_stopped(tm
     records = []
     children, _ = _children(lambda proc: proc, records)
     _start(children, tmp_path, code="import time; time.sleep(60)")
-    children.shutdown()
+    children.table.shutdown()
     assert _until(lambda: records, 10)
     ((child_id, code, stopped),) = records
     assert (child_id, code != 0, stopped) == ("a", True, True)
@@ -115,7 +115,7 @@ def test_shutting_down_waits_for_the_exit_of_a_child_that_exited_by_itself_and_d
     release = threading.Timer(0.5, child.released.set)
     release.start()
     try:
-        children.shutdown()
+        children.table.shutdown()
         assert records == [("a", 0, False)]
     finally:
         release.cancel()
@@ -171,7 +171,7 @@ def test_while_a_child_is_being_stopped_whether_it_runs_is_answered_at_once(tmp_
             "signal.signal(signal.SIGTERM, lambda *_: (time.sleep(2), sys.exit(0)))\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n")
     children.start("a", [sys.executable, "-c", code, str(ready)], cwd=tmp_path, log_path=tmp_path / "a.log", env=dict(os.environ))
     assert _until(ready.exists, 30)
-    stopper = threading.Thread(target=lambda: children.stop("a") if stopping == "stop" else children.shutdown())
+    stopper = threading.Thread(target=lambda: children.stop("a") if stopping == "stop" else children.table.shutdown())
     stopper.start()
     time.sleep(0.5)  # the child got SIGTERM and takes 2 s to exit
     asked = time.monotonic()
