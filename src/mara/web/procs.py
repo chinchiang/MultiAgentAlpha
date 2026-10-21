@@ -117,20 +117,38 @@ def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> No
         pass
 
 
+class ChildTable:
+    """The children of the registries that share one lock, so that a launch of one checks what the others run."""
+
+    def __init__(self) -> None:
+        self.lock = threading.RLock()
+        self._members: list[Children] = []
+
+    def running_tags(self) -> set[str]:
+        """The tags of every child running, whichever registry's it is."""
+        with self.lock:
+            return {tag for children in self._members for tag in children._running_tags()}
+
+
 class Children:
-    """The children of one registry and their waiters. A child is running while its waiter is alive: the waiter records
-    the exit through `on_exit(child_id, code, stopped)` under the lock, so a registry that reads its record and asks
+    """The children of one registry and their waiters, in `table` (a table of its own when none is given), whose lock is
+    theirs. Every method but `held()` sees this registry's children only. A child is running while its waiter is alive:
+    the waiter records the exit through `on_exit(child_id, code, stopped)` under the lock, so a registry that reads its record and asks
     `running()` under `held()` reads a record without the exit code only as running, unless the waiter stopped without
     recording it (`wait()` or `on_exit` raised; tests/test_web_procs.py,
     test_a_child_whose_waiter_stopped_without_recording_its_exit_is_no_longer_running)."""
 
-    def __init__(self, name: str, on_exit: Callable[[str, int, bool], None], *, start: Callable[..., Any] | None = None) -> None:
+    def __init__(self, name: str, on_exit: Callable[[str, int, bool], None], *, start: Callable[..., Any] | None = None,
+                 table: ChildTable | None = None) -> None:
         self.name, self.on_exit, self._start = name, on_exit, start
-        self._lock = threading.RLock()
+        self.table = table or ChildTable()
+        self._lock = self.table.lock
         self._procs: dict[str, Any] = {}
         self._waiters: dict[str, threading.Thread] = {}
         self._tags: dict[str, str | None] = {}
         self._stopped: set[str] = set()
+        with self._lock:
+            self.table._members.append(self)
 
     def held(self) -> threading.RLock:
         """The lock exits are recorded under (reentrant): hold it to read a record and ask `running()` in one step."""
@@ -188,6 +206,9 @@ class Children:
             stop(p)
         for w in waiters:
             w.join(timeout=WAITER_JOIN_SECONDS)
+
+    def _running_tags(self) -> set[str]:
+        return {tag for c, w in self._waiters.items() if w.is_alive() and (tag := self._tags.get(c)) is not None}
 
     def any_running(self, tags: Collection[str] | None = None) -> bool:
         with self._lock:
