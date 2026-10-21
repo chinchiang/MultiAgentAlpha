@@ -21,8 +21,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import procs
-from .admission import CHANGES_TOOLS
+from . import admission, procs
 from .runs import LaunchError, RunRegistry
 
 JobKind = Literal["install_tools", "trivy_db_download", "trivy_db_status", "check_config"]
@@ -52,11 +51,12 @@ def available(workspace: Path) -> dict[str, bool]:
 
 
 class JobRegistry:
-    def __init__(self, workspace: Path, out_dir: Path, runs: RunRegistry, *, start: Callable[..., Any] | None = None) -> None:
+    def __init__(self, workspace: Path, out_dir: Path, runs: RunRegistry, *, start: Callable[..., Any] | None = None,
+                 table: procs.ChildTable | None = None) -> None:
         self.workspace = workspace.resolve()
         self.jobs_dir = out_dir.resolve() / "jobs"
-        self.runs = runs  # for the config allowlist, whether a run is running (busy()) and the launch lock (launching)
-        self.children = procs.Children("job", self._record_exit, start=start)
+        self.runs = runs  # for the config allowlist; and the table its children are in, unless another is given
+        self.children = procs.Children("job", self._record_exit, start=start, table=table or runs.children.table)
 
     def argv(self, req: JobRequest) -> list[str]:
         if req.kind in SCRIPTS and not available(self.workspace)[req.kind]:
@@ -74,11 +74,9 @@ class JobRegistry:
 
     def create(self, req: JobRequest) -> dict[str, Any]:
         argv = self.argv(req)
-        with self.runs.launching:  # nothing is written after start(), so no exit recorded at once can be overwritten
-            if self.children.any_running():
-                raise LaunchError("busy", "an environment job is already running", status=409)
-            if req.kind in CHANGES_TOOLS and self.runs.busy():
-                raise LaunchError("busy", "a review is running with the installed tools; wait for it or cancel it", status=409)
+        with self.children.held():  # the lock of every registry's children: the check and the start are one step
+            if refused := admission.refusal(req.kind, self.children.table.running_tags()):
+                raise LaunchError("busy", refused, status=409)
             job_id = procs.new_id()
             d = self.jobs_dir / job_id
             d.mkdir(parents=True)
@@ -93,10 +91,6 @@ class JobRegistry:
                 procs.write_json(d / "job.json", job)
                 raise LaunchError("spawn_failed", str(e), status=500) from e
         return self.get(job_id) or job
-
-    def changing_tools(self) -> bool:
-        """A running job that replaces the tools or the trivy database (a run must not start meanwhile)."""
-        return self.children.any_running(tags=CHANGES_TOOLS)
 
     def _record_exit(self, job_id: str, code: int, stopped: bool) -> None:
         d = self.jobs_dir / job_id

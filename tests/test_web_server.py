@@ -339,69 +339,57 @@ def test_a_job_replacing_the_tools_holds_reviews_back(server, monkeypatch):
     finally:
         server.jobs.shutdown()
     deadline = time.monotonic() + 15
-    while time.monotonic() < deadline and server.jobs.changing_tools():
+    while time.monotonic() < deadline and server.jobs.children.any_running():
         time.sleep(0.1)
-    assert not server.jobs.changing_tools()
+    assert not server.jobs.children.any_running()
 
 
 @pytest.mark.parametrize("first", ["review", "job"])
-def test_a_review_and_a_job_replacing_the_tools_launched_at_once_neither_hang_and_one_is_refused(tmp_path, monkeypatch, first):
-    """Each launch takes the launch lock before it checks the other kind; the first launch, holding it, asks about the
-    other kind only once the second has reached its own check, or a second has passed."""
+def test_a_review_and_a_job_replacing_the_tools_launched_at_once_one_is_refused(tmp_path, monkeypatch, first):
+    """The admission and the start are one step under the lock every registry's children share: the second launch, made
+    once the first has been admitted, waits for the first to start its child, then sees it running and is refused."""
+    from mara.web import admission
     from mara.web import jobs as jobs_mod
 
     monkeypatch.setenv("MARA_HOME", str(ROOT))
-    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=_slow_review(procs.spawn))
-    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg, start=lambda argv, **kw: procs.spawn(
-        [sys.executable, "-c", "import time; time.sleep(60)"], **kw))
-    holding = {"review": threading.Event(), "job": threading.Event()}
-    second = "job" if first == "review" else "review"
+    starting, refusal = threading.Event(), admission.refusal
 
-    def asking_about_the_other(name):
-        if name == first:
-            holding[second].wait(1)
+    def admitted_then_slow(kind, running):
+        refused = refusal(kind, running)
+        if not starting.is_set():
+            starting.set()
+            time.sleep(1)  # the second launch is made meanwhile; it is admitted too unless this holds the lock
+        return refused
 
-    def blocked_by():  # the review's launch asks about jobs
-        asking_about_the_other("review")
-        return job_reg.changing_tools()
+    def sleeping(argv, **kw):
+        return procs.spawn([sys.executable, "-c", "import time; time.sleep(60)"], **kw)
 
-    busy = reg.busy
-
-    def busy_seen_by(name):  # the review's launch checks its own registry first; the job's launch asks about runs
-        holding[name].set()
-        if name == "job":
-            asking_about_the_other("job")
-        return busy()
-
-    reg.blocked_by = blocked_by
-    monkeypatch.setattr(reg, "busy", lambda: busy_seen_by(threading.current_thread().name.removeprefix("launch-")))
+    monkeypatch.setattr(admission, "refusal", admitted_then_slow)
+    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=sleeping)
+    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg, start=sleeping)
+    create = {"review": lambda: reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock")),
+              "job": lambda: job_reg.create(jobs_mod.JobRequest(kind="trivy_db_download"))}
     outcomes: dict[str, str] = {}
 
-    def launch(name, create):
+    def launch(name):
         try:
-            create()
+            create[name]()
             outcomes[name] = "launched"
         except runs.LaunchError as e:
             outcomes[name] = e.code
 
-    threads = {
-        "review": threading.Thread(target=launch, name="launch-review", daemon=True, args=(
-            "review", lambda: reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock")))),
-        "job": threading.Thread(target=launch, name="launch-job", daemon=True, args=(
-            "job", lambda: job_reg.create(jobs_mod.JobRequest(kind="trivy_db_download")))),
-    }
+    second = "job" if first == "review" else "review"
+    threads = [threading.Thread(target=launch, args=(name,), daemon=True) for name in (first, second)]
     try:
-        threads[first].start()
-        assert holding[first].wait(30)
-        threads[second].start()
-        for t in threads.values():
+        threads[0].start()
+        assert starting.wait(30)
+        threads[1].start()
+        for t in threads:
             t.join(15)
-        assert not any(t.is_alive() for t in threads.values()), "the two launches wait for each other's lock"
         assert outcomes == {first: "launched", second: "busy"}
     finally:
-        if not any(t.is_alive() for t in threads.values()):  # two hung launches hold both locks, and have spawned nothing
-            reg.shutdown()
-            job_reg.shutdown()
+        reg.shutdown()
+        job_reg.shutdown()
 
 
 def test_stopping_the_registry_cancels_a_running_review(tmp_path, monkeypatch):
@@ -583,7 +571,6 @@ def test_no_second_job_starts_while_the_exit_of_the_first_is_not_recorded_yet(tm
 def test_no_review_starts_while_the_exit_of_a_job_replacing_the_tools_is_not_recorded_yet(tmp_path, monkeypatch):
     """The job still reads as running, so it still replaces the trivy database a review would use."""
     reg, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, UnrecordedExit)
-    reg.blocked_by = job_reg.changing_tools
     try:
         with pytest.raises(runs.LaunchError) as refused:
             reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))
@@ -595,7 +582,6 @@ def test_no_review_starts_while_the_exit_of_a_job_replacing_the_tools_is_not_rec
 
 def test_a_job_replacing_no_tools_does_not_hold_a_review_back(tmp_path, monkeypatch):
     reg, job_reg, job_id, children = _exited_job(tmp_path, monkeypatch, UnrecordedExit, kind="trivy_db_status")
-    reg.blocked_by = job_reg.changing_tools
     try:
         assert job_reg.get(job_id)["status"] == "running"
         reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))

@@ -78,9 +78,6 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
 - `procs.read_json`, `procs.write_json`: patched as attributes of `mara.web.procs`, which the registries call through
   the module (`get()` reads a run's or a job's record with the first, `create()` writes a run's pid with the second).
   The two tests above, and `test_web_server.py::test_a_run_whose_child_exits_at_once_keeps_the_exit_code_its_waiter_recorded`.
-- `RunRegistry.busy`, `RunRegistry.blocked_by`: the first replaced on the instance, the second set, and the two
-  launches run on threads named `launch-review` and `launch-job`.
-  `test_web_server.py::test_a_review_and_a_job_replacing_the_tools_launched_at_once_neither_hang_and_one_is_refused`.
 
 ## What the tests build instead of running
 
