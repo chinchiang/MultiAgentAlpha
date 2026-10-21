@@ -132,8 +132,8 @@ class ChildTable:
 
 class Children:
     """The children of one registry and their waiters, in `table` (a table of their own when none is given), whose
-    lock, shared by every registry in the table, is the one they are kept under. Every method but `held()` sees this
-    registry's children only. A child is running while its waiter is alive: the waiter records the exit through
+    lock, shared by every registry in the table, is the one exits are recorded under. Every method but `held()` sees
+    this registry's children only. A child is running while its waiter is alive: the waiter records the exit through
     `on_exit(child_id, code, stopped)` under that lock, so a registry that reads its record and asks `running()` under
     `held()` reads a record without the exit code only as running, unless the waiter stopped without recording it
     (`wait()` or `on_exit` raised; tests/test_web_procs.py,
