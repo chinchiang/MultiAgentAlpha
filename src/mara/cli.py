@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import cast
 
 import typer
 from rich.console import Console
 from rich.table import Table
+from typer.core import TyperGroup
 
 from .config import MaraConfig, load_config
 from .pipeline import Pipeline
@@ -15,8 +17,19 @@ from .report.markdown_out import enforcement_wording, write_markdown
 from .report.sarif_out import write_sarif
 from .schemas import DIMENSION_LABELS, ReviewReport
 
-app = typer.Typer(add_completion=False, help="MARA - Multi-Agent Review Architecture")
+app = typer.Typer(add_completion=False,
+                  help="MARA - Multi-Agent Review Architecture. `mara` alone starts the local web workbench, as `mara serve` does.")
 console = Console()
+
+
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context) -> None:
+    if ctx.invoked_subcommand is None:
+        # `mara serve` with no options: serve's own command parses an empty argument list, so its options' defaults are
+        # the ones used (ctx.invoke on the command would parse sys.argv; on the bare function, pass Typer's OptionInfo)
+        serve_cmd = cast(TyperGroup, ctx.command).commands["serve"]
+        with serve_cmd.make_context("serve", [], parent=ctx) as sub:
+            serve_cmd.invoke(sub)
 
 
 @app.command()
