@@ -125,7 +125,6 @@ class WorkbenchServer(ThreadingHTTPServer):
         self.started_at = procs.now()
         self.runs = RunRegistry(self.workspace, self.out_dir)
         self.jobs = JobRegistry(self.workspace, self.out_dir, self.runs)
-        self.runs.blocked_by = self.jobs.changing_tools  # a review never runs while the tools it executes are replaced
         self.page, self.csp = build_page()
         host = address[0]
         port = self.port

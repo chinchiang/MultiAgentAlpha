@@ -62,15 +62,27 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
 
 ## The workbench (`src/mara/web/`)
 
-- `RunRegistry(workspace, out_dir, start=...)`, `JobRegistry(workspace, out_dir, runs, start=...)`: tests pass a starter
-  instead of patching `procs.spawn`. Each registry hands it to its `procs.Children`, which calls it as
-  `start(argv, cwd=..., log_path=..., env=...)` and keeps the child it returns for its `pid`, `poll()` and `wait()`: a
-  Popen of the subprocess module, or one wrapped by `tests/held_children.py` so that it has exited while its exit is not
-  yet recorded. With no starter, `Children` calls `procs.spawn` as the module has it at that moment, so a test patching
-  `procs.spawn` after the server was built still reaches it. `test_web_server.py`.
-- `procs.Children(name, on_exit, start=...)`: driven at its own interface (`start`, `running`, `any_running`, `stop`,
-  `shutdown`, `held`). Its waiters are threads named after the registry and the child (`"mara-run-" + run_id`), the
-  name tests find one by to join it. `test_web_procs.py`, `test_web_server.py`.
+- `RunRegistry(workspace, out_dir, start=..., table=...)`,
+  `JobRegistry(workspace, out_dir, runs, start=..., table=...)`: tests pass no table. A test that builds a registry
+  and starts children passes it a starter or patches `procs.spawn` (as the HTTP-level tests, which build the server,
+  and `test_stopping_the_registry_cancels_a_running_review` do). Each registry hands its starter and its table to its
+  `procs.Children`, which calls the starter as `start(argv, cwd=..., log_path=..., env=...)` and keeps the child it
+  returns for its `pid`, `poll()` and `wait()`: a Popen of the subprocess module, or one wrapped by
+  `tests/held_children.py` so that it has exited while its exit is not yet recorded. With no starter, `Children` calls
+  `procs.spawn` as the module has it at that moment, so a test patching `procs.spawn` after the server was built still
+  reaches it. With no table, a `RunRegistry`'s children get a table of their own and a `JobRegistry`'s join the table
+  of the `RunRegistry` it is given, so a test building the two sees the admission between runs and jobs without wiring
+  it. `test_web_server.py`.
+- `procs.Children(name, on_exit, start=..., table=...)`: driven at its own interface (`start`, `running`, `any_running`,
+  `stop`, `shutdown`, which see one registry's children only, and `held`, the lock of its whole table). Its waiters are
+  threads named after the registry and the child (`"mara-run-" + run_id`), the name tests find one by to join it.
+  `test_web_procs.py`, `test_web_server.py`.
+- `procs.ChildTable`: the children of the registries given one table share its lock (`held()` of any of them), and
+  `ChildTable.running_tags` answers the tags of every child running in it. `test_web_procs.py`.
+- `admission.refusal(kind, running)`: pure, called directly with a kind and a set of kinds. Also patched as an attribute
+  of `mara.web.admission`, which both registries call through the module under `held()`.
+  `test_web_admission.py`,
+  `test_web_server.py::test_a_review_and_a_job_replacing_the_tools_launched_at_once_one_is_refused`.
 - `Children.running`: replaced on a registry's own instance (its `children` attribute) by a function that first lets
   the exit be recorded, then asks; `get()` calls it with the id alone, under `Children.held`.
   `test_web_server.py::test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code`,
@@ -78,9 +90,6 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
 - `procs.read_json`, `procs.write_json`: patched as attributes of `mara.web.procs`, which the registries call through
   the module (`get()` reads a run's or a job's record with the first, `create()` writes a run's pid with the second).
   The two tests above, and `test_web_server.py::test_a_run_whose_child_exits_at_once_keeps_the_exit_code_its_waiter_recorded`.
-- `RunRegistry.busy`, `RunRegistry.blocked_by`: the first replaced on the instance, the second set, and the two
-  launches run on threads named `launch-review` and `launch-job`.
-  `test_web_server.py::test_a_review_and_a_job_replacing_the_tools_launched_at_once_neither_hang_and_one_is_refused`.
 
 ## What the tests build instead of running
 

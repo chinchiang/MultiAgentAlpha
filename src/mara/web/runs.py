@@ -32,7 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .. import progress as progress_mod
 from ..schemas import ReviewReport
 from ..workspace import WorkspaceInsideTarget, check_outside
-from . import procs, views
+from . import admission, procs, views
 
 ARTIFACTS = ("report.md", "report.json", "report.sarif", "human_queue.md", "human_queue.json", "context.json",
              "psirt-notifications.json", "pipeline.log", "run.log", "progress.json")
@@ -76,15 +76,14 @@ def config_dirs(workspace: Path) -> tuple[Path, Path]:
 
 
 class RunRegistry:
-    def __init__(self, workspace: Path, out_dir: Path, *, start: Callable[..., Any] | None = None) -> None:
+    def __init__(self, workspace: Path, out_dir: Path, *, start: Callable[..., Any] | None = None,
+                 table: procs.ChildTable | None = None) -> None:
         self.workspace = workspace.resolve()
         self.out_dir = out_dir.resolve()
         self.runs_dir = self.out_dir / "runs"
-        self.children = procs.Children("run", self._record_exit, start=start)
-        self.launching = threading.Lock()  # one launch at a time, a run's or a job's, each checking the other kind meanwhile
+        self.children = procs.Children("run", self._record_exit, start=start, table=table)
         self._reports_lock = threading.Lock()
         self._reports: dict[str, tuple[int, int, ReviewReport]] = {}
-        self.blocked_by: Callable[[], bool] | None = None  # set by the server: an environment job changing the tools
 
     # ------------------------------------------------------------------ validation
     def _path(self, value: str) -> Path:
@@ -172,11 +171,9 @@ class RunRegistry:
 
     def create(self, req: LaunchRequest) -> dict[str, Any]:
         argv, fields = self.prepare(req)
-        with self.launching, self.children.held():
-            if self.busy():
-                raise LaunchError("busy", "a review is already running; wait for it or cancel it", status=409)
-            if self.blocked_by is not None and self.blocked_by():
-                raise LaunchError("busy", "an environment job is replacing the tools or the trivy database; wait for it", status=409)
+        with self.children.held():  # the lock of every registry's children: the check and the start are one step
+            if refused := admission.refusal("run", self.children.table.running_tags()):
+                raise LaunchError("busy", refused, status=409)
             run_id = procs.new_id()
             run_dir = self.runs_dir / run_id
             run_dir.mkdir(parents=True)
@@ -198,7 +195,7 @@ class RunRegistry:
             procs.write_json(run_dir / "run.json", manifest)
             try:
                 pid = self.children.start(run_id, argv, cwd=self.workspace, log_path=run_dir / "run.log",
-                                          env=procs.child_env(self.workspace))
+                                          env=procs.child_env(self.workspace), tag="run")
             except OSError as e:
                 manifest.update(status="failed", finished_at=procs.now(), error=type(e).__name__)
                 procs.write_json(run_dir / "run.json", manifest)

@@ -180,3 +180,47 @@ def test_while_a_child_is_being_stopped_whether_it_runs_is_answered_at_once(tmp_
     assert waited < 1
     stopper.join(30)
     assert records == [("a", 0, True)]
+
+
+def test_children_of_one_table_share_its_lock(tmp_path):
+    """The runs' and the jobs' children: holding one's lock holds back the other's exits too."""
+    table, records = procs.ChildTable(), []
+    runs = procs.Children("run", lambda *_: None, table=table)
+    made = []
+
+    def start(argv, **kw):
+        made.append(UnrecordedExit(procs.spawn(argv, **kw)))
+        return made[-1]
+
+    jobs = procs.Children("job", lambda child_id, code, stopped: records.append((child_id, code, stopped)), start=start,
+                          table=table)
+    _start(jobs, tmp_path, "j")
+    (child,) = made
+    assert child.proc.wait(timeout=60) == 0
+    with runs.held():
+        child.released.set()
+        assert not _until(lambda: records, 2)  # the job's waiter records the exit unless the runs' lock is the same
+        assert jobs.running("j")
+    assert _until(lambda: records, 30)
+    assert records == [("j", 0, False)]
+
+
+def test_a_table_tells_the_tags_of_every_child_running_and_each_registry_sees_only_its_own(tmp_path):
+    table, made = procs.ChildTable(), []
+
+    def start(argv, **kw):
+        made.append(UnrecordedExit(procs.spawn(argv, **kw)))
+        return made[-1]
+
+    runs = procs.Children("run", lambda *_: None, start=start, table=table)
+    jobs = procs.Children("job", lambda *_: None, start=start, table=table)
+    _start(runs, tmp_path, "r", tag="run")
+    _start(jobs, tmp_path, "j", tag="trivy_db_status")
+    try:
+        assert table.running_tags() == {"run", "trivy_db_status"}
+        assert not runs.any_running(tags={"trivy_db_status"}) and jobs.any_running()
+        assert not runs.running("j") and runs.stop("j") == "unknown"
+    finally:
+        for child in made:
+            child.released.set()
+    assert _until(lambda: not table.running_tags(), 30)
