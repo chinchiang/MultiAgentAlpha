@@ -24,9 +24,10 @@ console = Console()
 
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
+    """Without a command, start the workbench as `mara serve` with no options does."""
     if ctx.invoked_subcommand is None:
-        # `mara serve` with no options: serve's own command parses an empty argument list, so its options' defaults are
-        # the ones used (ctx.invoke on the command would parse sys.argv; on the bare function, pass Typer's OptionInfo)
+        # serve's own command parses an empty argument list, so its options' defaults are the ones used (ctx.invoke on
+        # the command would parse sys.argv; on the bare function it would pass Typer's OptionInfo objects as the values)
         serve_cmd = cast(TyperGroup, ctx.command).commands["serve"]
         with serve_cmd.make_context("serve", [], parent=ctx) as sub:
             serve_cmd.invoke(sub)

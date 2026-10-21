@@ -132,7 +132,7 @@ a vote between the forward and reverse pass) so the tests exercise every defence
 
 ```bash
 mara                             # prints http://127.0.0.1:8765/#token=… and opens it: mara serve with every default
-mara serve                       # the same, taking options: --port 0 picks a free port, --no-browser only prints
+mara serve                       # the same, taking options, e.g. --port 0 picks a free port, --no-browser only prints
 ```
 
 To look at it without installing anything, open the **read-only demo** at

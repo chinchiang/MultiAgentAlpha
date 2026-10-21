@@ -3,28 +3,31 @@
 listen on a port or open a browser."""
 
 import re
+import sys
 
 from typer.testing import CliRunner
 
 from mara.cli import app
 from mara.web import server
+from tests import cli_output
 
 
 def plain(text: str) -> str:
-    """CLI output as one line of words: without rich's colour codes (CI forces colour), its box characters, backticks
-    or line breaks."""
-    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
-    return " ".join(re.sub(r"[│╭╮╰╯─`]", " ", text).split())
+    """CLI output as `cli_output.plain` gives it, also without rich's box characters and backticks."""
+    return cli_output.plain(re.sub(r"[│╭╮╰╯─`]", " ", text))
 
 
 def recording(monkeypatch):
-    """Every call `mara` makes to start the workbench, by its keyword arguments."""
+    """Replaces `mara.web.server.serve` with a double that takes keyword arguments only, as `cli.serve` passes them;
+    the list it returns gets each call's arguments."""
     calls = []
     monkeypatch.setattr(server, "serve", lambda **kw: calls.append(kw))
     return calls
 
 
 def test_mara_alone_starts_the_workbench_as_mara_serve_does(tmp_path, monkeypatch):
+    """Whatever the process was started with: `serve` parses its own empty argument list, not `sys.argv`."""
+    monkeypatch.setattr(sys, "argv", ["mara", "--not-a-serve-option"])
     calls = recording(monkeypatch)
     alone = CliRunner().invoke(app, [], env={"MARA_HOME": str(tmp_path)})
     serve = CliRunner().invoke(app, ["serve"], env={"MARA_HOME": str(tmp_path)})
