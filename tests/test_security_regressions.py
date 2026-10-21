@@ -123,7 +123,7 @@ def test_prerecorded_secret_scan_cannot_authorize_live_egress(tmp_path):
     calls = []
 
     def runner(target, out_dir, enabled=None):
-        calls.append((out_dir, enabled))
+        calls.append((target, out_dir, enabled))
         return [ToolRun(tool="gitleaks", ran=False, note="not installed")] if enabled == ["gitleaks"] else []
 
     pipe = pipeline(tmp_path, run_tools=runner)
@@ -134,7 +134,7 @@ def test_prerecorded_secret_scan_cannot_authorize_live_egress(tmp_path):
     for name, provider in list(pipe.providers.items()):
         pipe.providers[name] = Reply(provider.spec.model_copy(update={"provider": "openai_compatible"}))
     report = pipe.run(tmp_path, mode="live", sarif_dir=sarif_dir)
-    assert calls == [(tmp_path / "out" / "live-secret-preflight", ["gitleaks"])]
+    assert calls == [(tmp_path.resolve(), tmp_path / "out" / "live-secret-preflight", ["gitleaks"])]
     gitleaks = [t for t in report.tool_health if t["tool"] == "gitleaks"]
     assert gitleaks == [{"tool": "gitleaks", "ran": False, "note": "not installed"}], "the live scan replaces the pre-recorded one"
     assert "source_egress_blocked_by_secret_preflight" in report.incomplete_reasons

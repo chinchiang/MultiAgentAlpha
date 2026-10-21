@@ -75,7 +75,8 @@ class Pipeline:
     def __init__(self, cfg: MaraConfig, *, mock_fixtures: str | None = None, out_dir: Path | None = None,
                  progress: Progress | None = None, run_tools: Callable[..., list[ToolRun]] = run_all):
         self.cfg = cfg
-        self._run_tools = run_tools  # the tools' runner, called as run_all is (mara.tools.runner)
+        # a runner with run_all's signature (mara.tools.runner), for the main tool run and the live secret preflight
+        self._run_tools = run_tools
         # the live view `mara serve` draws (mara.progress); a no-op unless `mara review --progress-file` is given
         self.progress = progress if progress is not None else Progress()
         self.out_dir = out_dir or resolve("out")  # the workspace, like `mara review --out`
