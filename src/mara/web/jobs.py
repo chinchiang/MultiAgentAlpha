@@ -22,11 +22,11 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import procs
+from .admission import CHANGES_TOOLS
 from .runs import LaunchError, RunRegistry
 
 JobKind = Literal["install_tools", "trivy_db_download", "trivy_db_status", "check_config"]
 SCRIPTS = {"install_tools": "scripts/install_tools.py", "trivy_db_download": "scripts/trivy_db.py", "trivy_db_status": "scripts/trivy_db.py"}
-CHANGES_TOOLS = frozenset({"install_tools", "trivy_db_download"})  # never while a review executes the tools or reads the database
 
 
 class JobRequest(BaseModel):
