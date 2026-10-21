@@ -4,12 +4,19 @@
 # Install: python3 -m pip install --require-hashes --no-build-isolation -r <this file>
 # Preinstall the hash-pinned tools/build-requirements.txt closure before resolving or installing sdists.
 # Source distributions (no wheel published; built at install time, see scripts/relock_requirements.py): ecoji==0.1.1, langdetect==1.0.9
-# Hand-applied, the two exceptions to the rule above (a full relock could not run: the CUDA wheels download at ~50 KB/s from
+# Hand-applied, the four exceptions to the rule above (a full relock could not run: the CUDA wheels download at ~50 KB/s from
 # the authoring host; the .in file's floors keep them, and the next relock drops these notes). Each takes the index's SHA-256
-# of the cp311-cp311-manylinux2014_x86_64 wheel, verified by pip --require-hashes for CPython 3.11 / manylinux x86_64:
+# of the cp311-cp311-manylinux2014_x86_64 wheel unless another wheel is named, verified by pip --require-hashes for CPython
+# 3.11 / manylinux x86_64:
 # - 2026-10-06: multidict 6.8.0 -> 6.9.1 (GHSA-54p9-h82j-f925); aiohttp (multidict>=4.5,<7.0) and yarl 1.25.1 (>=4.0) accept it.
 # - 2026-10-20: aiohttp 3.14.3 -> 3.14.4 (GHSA-2g87-pp6c-29x5, GHSA-5wr8-gcqf-gqf3, GHSA-494j-54xm-rwp3); its requirements are
 #   3.14.3's but yarl>=1.25.1, which the closure's yarl 1.25.1 meets.
+# - 2026-10-21: certifi 2026.7.22 -> 2026.10.19 (GHSA-6q48-6c7w-9gw2 / PYSEC-2026-4320), the SHA-256 of its one wheel,
+#   certifi-2026.10.19-py3-none-any.whl; it requires nothing.
+# - 2026-10-21: pillow 12.3.0 -> 13.0.0 (GHSA-462x-pgg6-55fp, GHSA-58r4-6rv3-gfh8, GHSA-65qm-jvmh-6pqg, GHSA-8g5g-8vmr-9782,
+#   GHSA-c6hw-5grf-ff96, GHSA-p4wg-p73j-c528, GHSA-pchr-8j38-3x4p, GHSA-q45j-58j2-45rg), the SHA-256 of its
+#   cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64 wheel; it requires nothing, and garak 0.17.0 (pillow>=12.3.0)
+#   and the closure's other dependents (only in extras the closure does not install) accept it.
 accelerate==1.15.0 \
     --hash=sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec
 aiohappyeyeballs==2.7.1 \
@@ -36,8 +43,8 @@ boto3==1.43.96 \
     --hash=sha256:73f0386fcc412ce5ad3ae4245e2a405e69e889988dd77e91b82e3b66404f3fee
 botocore==1.43.96 \
     --hash=sha256:c21153a07b97e8497f4ffa83e340a055f3f479b074e6eedf7d0562a9bc861cac
-certifi==2026.7.22 \
-    --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
+certifi==2026.10.19 \
+    --hash=sha256:42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b
 cffi==2.1.1 \
     --hash=sha256:34e261f78cb6ceaaa36f42f2613f4380d94d9c759a9c73c769ee6e0247364632
 charset-normalizer==3.5.1 \
@@ -256,8 +263,8 @@ packaging==26.3 \
     --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
 pandas==3.0.5 \
     --hash=sha256:2c0cf1dd9b55a22d105fc46c1b489af3bd42264fcba7c66297bf47a9a1d9c78a
-pillow==12.3.0 \
-    --hash=sha256:23d27a3e0307ec2244cc51e7287b919aa68d097504ebe19df4e76a98a3eea5bd
+pillow==13.0.0 \
+    --hash=sha256:a625df9a2a5597fa5e5266e01aefc82604bb85d291e3547981e863560d75da6c
 pip==26.2.1 \
     --hash=sha256:71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e
 pluggy==1.6.0 \

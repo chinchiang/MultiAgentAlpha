@@ -1,5 +1,8 @@
 # semgrep and its full dependency closure, hash-pinned for CPython 3.11 / manylinux x86_64.
 # Regenerate with scripts/install_tools.py --relock-semgrep (see docs/tools-provenance.md).
+# Hand-applied, the one exception to the rule above (the next relock drops this note): 2026-10-21, certifi 2026.7.22 ->
+#   2026.10.19 (GHSA-6q48-6c7w-9gw2 / PYSEC-2026-4320, emSign roots with compromised intermediate keys), the index's
+#   SHA-256 of certifi-2026.10.19-py3-none-any.whl, verified by pip --require-hashes; it requires nothing.
 annotated-types==0.8.0 \
     --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
 anyio==4.15.1 \
@@ -10,8 +13,8 @@ boltons==21.0.0 \
     --hash=sha256:b9bb7b58b2b420bbe11a6025fdef6d3e5edc9f76a42fb467afe7ca212ef9948b
 bracex==3.0.1 \
     --hash=sha256:6523ad83aeb5098a4ee597cff0f964442ff74e460bd3fafaffab6a013ff2288c
-certifi==2026.7.22 \
-    --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
+certifi==2026.10.19 \
+    --hash=sha256:42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b
 cffi==2.1.1 \
     --hash=sha256:34e261f78cb6ceaaa36f42f2613f4380d94d9c759a9c73c769ee6e0247364632
 charset-normalizer==3.5.2 \
