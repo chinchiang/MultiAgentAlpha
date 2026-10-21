@@ -471,7 +471,7 @@
 
   function loggedOutView() {
     return h("div", { class: "stack" }, pageHead(t("logout.eyebrow"), t("logout.title"), t("logout.sub")),
-      h("div", { class: "callout" }, icon("key"), h("div", null, t("logout.how"), " ", mono("mara serve"))));
+      h("div", { class: "callout" }, icon("key"), h("div", null, t("logout.how"), " ", mono("mara"))));
   }
   function showLoggedOut() {
     if (loggedOut) return;
