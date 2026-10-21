@@ -282,7 +282,7 @@ class Pipeline:
         tool_runs = self.run_tools(target, sarif_dir)
         if mode == "live" and sarif_dir:
             # Pre-recorded SARIF cannot authorize egress from the current working tree.
-            preflight = run_all(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])
+            preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])
             tool_runs = [r for r in tool_runs if r.tool != "gitleaks"] + preflight
         tools = ToolEvidence(runs=tool_runs)
         # Live source egress is blocked before any provider sees data if the trusted local

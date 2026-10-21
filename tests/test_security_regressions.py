@@ -19,7 +19,7 @@ from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provide
 from mara.report.markdown_out import render_markdown
 from mara.report.psirt_out import legal_deadlines
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
-from mara.tools.runner import ToolRun
+from mara.tools.runner import ToolRun, run_all
 from mara.tools.sarif import ToolResult
 from tests.fake_panel import REFUSAL, Panel
 from tests.scored_rows import MOCK, policy, score, tool_corroborated
@@ -39,8 +39,8 @@ class Reply(Provider):
         return RawReply(STOP_REFUSAL) if self.data is None else RawReply(STOP_END, answer_text=json.dumps(self.data))
 
 
-def pipeline(tmp_path):
-    return Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
+def pipeline(tmp_path, run_tools=run_all):
+    return Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=run_tools)
 
 
 def finding():
@@ -117,15 +117,24 @@ def test_line_number_overhead_is_bounded_and_redacted_changes_invalidate_revisio
     assert before.revision != after.revision
 
 
-def test_prerecorded_secret_scan_cannot_authorize_live_egress(tmp_path, monkeypatch):
-    import mara.pipeline as mod
-    pipe = pipeline(tmp_path)
+def test_prerecorded_secret_scan_cannot_authorize_live_egress(tmp_path):
+    """A pre-recorded gitleaks scan that found nothing does not let the source leave in live mode: gitleaks is run
+    again on the working tree, into out/live-secret-preflight, and here it is not installed."""
+    calls = []
+
+    def runner(target, out_dir, enabled=None):
+        calls.append((out_dir, enabled))
+        return [ToolRun(tool="gitleaks", ran=False, note="not installed")] if enabled == ["gitleaks"] else []
+
+    pipe = pipeline(tmp_path, run_tools=runner)
     (tmp_path / "app.py").write_text("print(1)")
+    sarif_dir = tmp_path / "sarif"
+    sarif_dir.mkdir()
+    (sarif_dir / "gitleaks.sarif").write_text(json.dumps({"runs": [{"tool": {"driver": {"name": "gitleaks"}}, "results": []}]}))
     for name, provider in list(pipe.providers.items()):
         pipe.providers[name] = Reply(provider.spec.model_copy(update={"provider": "openai_compatible"}))
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(tool="gitleaks", ran=True)])
-    monkeypatch.setattr(mod, "run_all", lambda *_a, **_k: [ToolRun(tool="gitleaks", ran=False, note="not installed")])
-    report = pipe.run(tmp_path, mode="live", sarif_dir=tmp_path)
+    report = pipe.run(tmp_path, mode="live", sarif_dir=sarif_dir)
+    assert calls == [(tmp_path / "out" / "live-secret-preflight", ["gitleaks"])]
     assert "source_egress_blocked_by_secret_preflight" in report.incomplete_reasons
     assert not any(p.requests for p in pipe.providers.values())
 
