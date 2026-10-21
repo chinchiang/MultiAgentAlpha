@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -72,8 +73,9 @@ class Stages:
 
 class Pipeline:
     def __init__(self, cfg: MaraConfig, *, mock_fixtures: str | None = None, out_dir: Path | None = None,
-                 progress: Progress | None = None):
+                 progress: Progress | None = None, run_tools: Callable[..., list[ToolRun]] = run_all):
         self.cfg = cfg
+        self._run_tools = run_tools  # the tools' runner, called as run_all is (mara.tools.runner)
         # the live view `mara serve` draws (mara.progress); a no-op unless `mara review --progress-file` is given
         self.progress = progress if progress is not None else Progress()
         self.out_dir = out_dir or resolve("out")  # the workspace, like `mara review --out`
@@ -118,7 +120,7 @@ class Pipeline:
             runs = load_prerecorded(sarif_dir)
             self._say(f"L0: ingested {len(runs)} pre-recorded SARIF file(s) from {sarif_dir}")
             return runs
-        runs = run_all(target, self.out_dir / "tools")
+        runs = self._run_tools(target, self.out_dir / "tools")
         for r in runs:
             self._say(f"L0: {r.tool}: {'ran' if r.ran else 'skipped'} {r.note} ({len(r.results)} results)")
         return runs
