@@ -114,17 +114,6 @@ class Pipeline:
         self.log.append(msg)
         self.progress.log(msg)
 
-    # ------------------------------------------------------------------ L0
-    def run_tools(self, target: Path, sarif_dir: Path | None) -> list[ToolRun]:
-        if sarif_dir and sarif_dir.is_dir():
-            runs = load_prerecorded(sarif_dir)
-            self._say(f"L0: ingested {len(runs)} pre-recorded SARIF file(s) from {sarif_dir}")
-            return runs
-        runs = self._run_tools(target, self.out_dir / "tools")
-        for r in runs:
-            self._say(f"L0: {r.tool}: {'ran' if r.ran else 'skipped'} {r.note} ({len(r.results)} results)")
-        return runs
-
     # ------------------------------------------------------------------ L1
     def run_context(self, ctx: RepoContext) -> ContextView | None:
         """C4-lite architecture view from a dedicated context agent (assessment #19).
@@ -279,7 +268,13 @@ class Pipeline:
                answer_key: list[dict] | None) -> tuple[ToolEvidence, SecretPreflight]:
         prog = self.progress
         prog.begin("tools")
-        tool_runs = self.run_tools(target, sarif_dir)
+        if sarif_dir and sarif_dir.is_dir():
+            tool_runs = load_prerecorded(sarif_dir)
+            self._say(f"L0: ingested {len(tool_runs)} pre-recorded SARIF file(s) from {sarif_dir}")
+        else:
+            tool_runs = self._run_tools(target, self.out_dir / "tools")
+            for r in tool_runs:
+                self._say(f"L0: {r.tool}: {'ran' if r.ran else 'skipped'} {r.note} ({len(r.results)} results)")
         if mode == "live" and sarif_dir:
             # Pre-recorded SARIF cannot authorize egress from the current working tree.
             preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])

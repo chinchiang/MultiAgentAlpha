@@ -6,23 +6,28 @@ code they no longer reach.
 
 ## Patch a name where it is looked up
 
-`mara.pipeline` imports `run_all` by name (`from .tools.runner import ToolRun, load_prerecorded, run_all`), and
-`mara.cli` imports `load_config` the same way. A test patches such a name in the module that calls it:
-`mara.pipeline.run_all`, `cli.load_config`. A patch of `mara.tools.runner.run_all` leaves the pipeline's own reference
-in place, so the test runs the real tools: it fails for another reason, or passes without testing what it names. When a
-module changes between importing a name (`from .tools.runner import run_all`) and calling it through its module
-(`runner.run_all(...)`), the patches of that name move with it. A patch of a class attribute (`cli.Pipeline.run`)
+`mara.cli` imports `load_config` by name (`from .config import MaraConfig, load_config`), so a test patches it in the
+module that calls it: `cli.load_config`. A patch of `mara.config.load_config` leaves the cli's own reference in place,
+so the test reads the real config: it fails for another reason, or passes without testing what it names. When a module
+changes between importing a name (`from .config import load_config`) and calling it through its module
+(`config.load_config(...)`), the patches of that name move with it. A patch of a class attribute (`cli.Pipeline.run`)
 changes the class itself, the same object wherever it is imported.
+
+The tools a review runs are given, not patched: a test passes its runner to `Pipeline(cfg, ..., run_tools=...)`
+(below). `run_all` is that parameter's default, bound when the class is defined, so a patch of `mara.pipeline.run_all`
+or `mara.tools.runner.run_all` reaches no review.
 
 ## The pipeline (`src/mara/pipeline.py`)
 
 Each seam: how tests use it; what the code keeps for them to still reach it; the tests.
 
-- `Pipeline.run_tools(target, sarif_dir)`: patched on the instance, `lambda *_: [ToolRun(...)]`. The main tool run goes
-  through it, called with positional arguments, and it returns `list[ToolRun]`. `test_security_regressions.py`,
-  `test_redteam_strip.py`, `test_tool_evidence.py`.
-- `mara.pipeline.run_all`: patched as a module name. In live mode with pre-recorded SARIF, the secret preflight calls
-  `run_all(..., enabled=["gitleaks"])` itself, outside `run_tools`.
+- `Pipeline(cfg, ..., run_tools=...)`: tests pass a runner with `run_all`'s signature,
+  `(target, out_dir, enabled=None) -> list[ToolRun]`, most often `lambda *_a, **_k: [ToolRun(...)]`. `Pipeline._tools`
+  calls it for the main tool run, into `<out_dir>/tools`, unless `sarif_dir` is a directory of pre-recorded SARIF; and
+  in live mode with a `sarif_dir`, again for the secret preflight, into `<out_dir>/live-secret-preflight` with
+  `enabled=["gitleaks"]`.
+  `test_security_regressions.py`, `test_redteam_strip.py`, `test_tool_evidence.py`; the two calls:
+  `test_tool_evidence.py::test_a_review_takes_its_tool_runs_from_the_runner_it_is_given`,
   `test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress`.
 - `Pipeline.providers`: the dict, or its items, replaced after `Pipeline(cfg)` and before `run()`. `Pipeline.run`
   reads them when it runs (the mode check, binding the target, the ballot round, the provider manifest); nothing built

@@ -126,12 +126,11 @@ def test_a_review_takes_its_tool_runs_from_the_runner_it_is_given(tmp_path, sari
         assert {t["note"] for t in report.tool_health} == {"prerecorded"}
 
 
-def test_a_review_reads_its_required_tools_and_each_dimension_s_tool_from_the_evidence(tmp_path, monkeypatch):
+def test_a_review_reads_its_required_tools_and_each_dimension_s_tool_from_the_evidence(tmp_path):
     (tmp_path / "app.py").write_text("print(1)\n")
 
     def review(runs):
-        pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
-        monkeypatch.setattr(pipe, "run_tools", lambda *_: runs)
+        pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=lambda *_a, **_k: runs)
         return pipe.run(tmp_path, mode="mock")
 
     every = [ToolRun(t, True) for t in TOOL_DIMENSIONS]
