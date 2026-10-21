@@ -7,7 +7,7 @@ decide the outcome.
 > **Try the workbench in your browser:** <https://chinchiang.github.io/MultiAgentAlpha/workbench/>
 > (唯讀展示 / read-only demo, 正體中文 and English). It is a snapshot of one offline review of the seeded
 > fixture by the mock model families; it starts nothing and talks to no server. To run reviews
-> yourself, use `mara serve` (see [Local web workbench](#local-web-workbench-mara-serve)).
+> yourself, run `mara`, or `mara serve` for its options (see [Local web workbench](#local-web-workbench-mara-serve)).
 
 This repository contains two things:
 
@@ -118,7 +118,7 @@ python -m pip install --require-hashes --only-binary=:all: -r tools/build-requir
 python -m pip install --no-deps --no-build-isolation -e .                                    # use only the pinned backend
 pytest -q
 mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out
-mara serve                         # the same offline demo in the browser: New review → Offline demo (see Local web workbench)
+mara                               # the same offline demo in the browser: New review → Offline demo (see Local web workbench)
 ```
 
 `fixtures/vuln-sample` is a deliberately vulnerable "vibe-coded" Flask app (reflected and DOM XSS,
@@ -131,7 +131,8 @@ a vote between the forward and reverse pass) so the tests exercise every defence
 ## Local web workbench (`mara serve`)
 
 ```bash
-mara serve                       # prints http://127.0.0.1:8765/#token=… and opens it; --port 0 picks a free port, --no-browser only prints
+mara                             # prints http://127.0.0.1:8765/#token=… and opens it: mara serve with every default
+mara serve                       # the same, taking options, e.g. --port 0 picks a free port, --no-browser only prints
 ```
 
 To look at it without installing anything, open the **read-only demo** at

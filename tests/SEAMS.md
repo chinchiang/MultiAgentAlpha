@@ -94,6 +94,10 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
 - `procs.read_json`, `procs.write_json`: patched as attributes of `mara.web.procs`, which the registries call through
   the module (`get()` reads a run's or a job's record with the first, `create()` writes a run's pid with the second).
   The two tests above, and `test_web_server.py::test_a_run_whose_child_exits_at_once_keeps_the_exit_code_its_waiter_recorded`.
+- `mara.web.server.serve`: patched as an attribute of its module; `cli.serve` imports it when it runs, so a test that
+  patches it before invoking `mara` or `mara serve` reaches it, and no server listens. `cli.serve` calls it with keyword
+  arguments only (`host`, `port`, `workspace`, `out_dir`, `open_browser`, `echo`), which the double records and the
+  tests compare. `test_cli_default.py`.
 
 ## What the tests build instead of running
 
