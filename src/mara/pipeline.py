@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -72,8 +73,10 @@ class Stages:
 
 class Pipeline:
     def __init__(self, cfg: MaraConfig, *, mock_fixtures: str | None = None, out_dir: Path | None = None,
-                 progress: Progress | None = None):
+                 progress: Progress | None = None, run_tools: Callable[..., list[ToolRun]] = run_all):
         self.cfg = cfg
+        # a runner with run_all's signature (mara.tools.runner), for the main tool run and the live secret preflight
+        self._run_tools = run_tools
         # the live view `mara serve` draws (mara.progress); a no-op unless `mara review --progress-file` is given
         self.progress = progress if progress is not None else Progress()
         self.out_dir = out_dir or resolve("out")  # the workspace, like `mara review --out`
@@ -111,17 +114,6 @@ class Pipeline:
     def _say(self, msg: str) -> None:
         self.log.append(msg)
         self.progress.log(msg)
-
-    # ------------------------------------------------------------------ L0
-    def run_tools(self, target: Path, sarif_dir: Path | None) -> list[ToolRun]:
-        if sarif_dir and sarif_dir.is_dir():
-            runs = load_prerecorded(sarif_dir)
-            self._say(f"L0: ingested {len(runs)} pre-recorded SARIF file(s) from {sarif_dir}")
-            return runs
-        runs = run_all(target, self.out_dir / "tools")
-        for r in runs:
-            self._say(f"L0: {r.tool}: {'ran' if r.ran else 'skipped'} {r.note} ({len(r.results)} results)")
-        return runs
 
     # ------------------------------------------------------------------ L1
     def run_context(self, ctx: RepoContext) -> ContextView | None:
@@ -277,10 +269,16 @@ class Pipeline:
                answer_key: list[dict] | None) -> tuple[ToolEvidence, SecretPreflight]:
         prog = self.progress
         prog.begin("tools")
-        tool_runs = self.run_tools(target, sarif_dir)
+        if sarif_dir and sarif_dir.is_dir():
+            tool_runs = load_prerecorded(sarif_dir)
+            self._say(f"L0: ingested {len(tool_runs)} pre-recorded SARIF file(s) from {sarif_dir}")
+        else:
+            tool_runs = self._run_tools(target, self.out_dir / "tools")
+            for r in tool_runs:
+                self._say(f"L0: {r.tool}: {'ran' if r.ran else 'skipped'} {r.note} ({len(r.results)} results)")
         if mode == "live" and sarif_dir:
             # Pre-recorded SARIF cannot authorize egress from the current working tree.
-            preflight = run_all(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])
+            preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])
             tool_runs = [r for r in tool_runs if r.tool != "gitleaks"] + preflight
         tools = ToolEvidence(runs=tool_runs)
         # Live source egress is blocked before any provider sees data if the trusted local

@@ -68,12 +68,12 @@ def test_every_test_file_path_and_name_seams_md_points_at_exists():
 
 
 def test_a_pointer_at_nothing_is_found_and_one_at_something_is_not():
-    for there in ("Pipeline.run_tools(target, sarif_dir)", "Pipeline.providers", "Pipeline.backlog", "mara.pipeline.run_all",
+    for there in ("Pipeline(cfg, ..., run_tools=...)", "Pipeline.providers", "Pipeline.backlog", "mara.pipeline.run_all",
                   "cli.Pipeline.__init__", "ballot_round.run(...)", "exchange.Canary()", "mara.review_status", "OpenAICompatibleProvider",
                   "test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress", "tests/fake_panel.py",
                   "lambda *_: [ToolRun(...)]", "run()"):
         assert problem(there) == "", there
-    for gone in ("Pipeline.run_tool", "Pipeline.providers.x", "cli.Pipeline.nothing", "mara.pipeline.gone", "mara.gone.thing",
+    for gone in ("Pipeline.run_tools", "Pipeline.providers.x", "cli.Pipeline.nothing", "mara.pipeline.gone", "mara.gone.thing",
                  "ballot_round.gone", "pipe.run(target)", "GoneProvider", "test_gone.py", "test_seams.py::test_gone",
                  "tests/gone.py"):
         assert problem(gone), gone
