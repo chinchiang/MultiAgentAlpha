@@ -392,7 +392,7 @@ def test_a_review_and_a_job_replacing_the_tools_launched_at_once_one_is_refused(
         reg.children.table.shutdown()  # the job registry's too: they share the table
 
 
-def test_server_exit_cancels_a_running_review(tmp_path, monkeypatch):
+def test_server_exit_cancels_a_running_run(tmp_path, monkeypatch):
     monkeypatch.setenv("MARA_HOME", str(ROOT))
     monkeypatch.setattr(runs.procs, "spawn", _slow_review(procs.spawn))
     reg = runs.RunRegistry(ROOT, tmp_path / "out")

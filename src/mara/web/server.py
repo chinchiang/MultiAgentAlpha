@@ -16,9 +16,10 @@ Types, so the script can only build the DOM through text and element APIs (docs/
 `render_page` also builds the workbench demo's page when `scripts/build_workbench_demo.py` gives it the demo's data.
 
 Not pure: it listens on a socket, handles SIGTERM and SIGHUP while it serves, reads the clock, draws its token at
-random, opens a browser and reads the packaged page; through `runs`, `jobs` and `env` it starts and stops runs and jobs
-and reads the workspace; it creates the output directory and reads, writes and removes files in it, and reads the
-reports `mara review` wrote into `<workspace>/out/`.
+random, opens a browser and reads the packaged page; through `runs`, `jobs` and `env` it starts runs and jobs, cancels
+runs and reads the workspace, and at exit it stops every child still running through the table the registries share
+(`procs.ChildTable`); it creates the output directory and reads, writes and removes files in it, and reads the reports
+`mara review` wrote into `<workspace>/out/`.
 """
 
 from __future__ import annotations

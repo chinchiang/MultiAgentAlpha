@@ -30,6 +30,11 @@ def _start(children, tmp_path, child_id="a", code="pass", tag=None):
                           env=dict(os.environ), tag=tag)
 
 
+# a child that touches the file argv[1] names once it ignores SIGTERM, then sleeps
+_IGNORING_SIGTERM = ("import signal, sys, time\nfrom pathlib import Path\n"
+                     "signal.signal(signal.SIGTERM, signal.SIG_IGN)\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n")
+
+
 def _until(condition, timeout):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline and not condition():
@@ -74,6 +79,21 @@ def test_stopping_a_running_child_records_its_exit_as_stopped(tmp_path):
     assert not children.running("a")
     ((child_id, code, stopped),) = records
     assert (child_id, code != 0, stopped) == ("a", True, True)
+
+
+def test_stopping_a_child_still_running_after_the_grace_kills_it(tmp_path):
+    """What a cancel does through Children.stop(), with the grace shortened."""
+    ready = tmp_path / "ready"
+    proc = procs.spawn([sys.executable, "-c", _IGNORING_SIGTERM, str(ready)], cwd=tmp_path, log_path=tmp_path / "a.log",
+                       env=dict(os.environ))
+    try:
+        assert _until(ready.exists, 30)
+        began = time.monotonic()
+        procs.stop(proc, grace=0.5)
+        assert time.monotonic() - began < 5
+        assert proc.poll() == -9
+    finally:
+        procs.kill(proc)  # a child left running when the test fails
 
 
 def test_stopping_a_child_that_exited_by_itself_waits_for_its_exit_to_be_recorded_and_does_not_record_it_stopped(tmp_path):
@@ -228,9 +248,7 @@ def test_a_child_still_running_after_the_grace_is_killed(tmp_path):
     records = []
     children = procs.Children("test", lambda child_id, code, stopped: records.append((child_id, code, stopped)))
     ready = tmp_path / "ready"
-    code = ("import signal, sys, time\nfrom pathlib import Path\n"
-            "signal.signal(signal.SIGTERM, signal.SIG_IGN)\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n")
-    children.start("a", [sys.executable, "-c", code, str(ready)], cwd=tmp_path, log_path=tmp_path / "a.log", env=dict(os.environ))
+    children.start("a", [sys.executable, "-c", _IGNORING_SIGTERM, str(ready)], cwd=tmp_path, log_path=tmp_path / "a.log", env=dict(os.environ))
     assert _until(ready.exists, 30)
     began = time.monotonic()
     children.table.shutdown(grace=0.5)

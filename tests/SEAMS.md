@@ -69,7 +69,7 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
 - `RunRegistry(workspace, out_dir, start=..., table=...)`,
   `JobRegistry(workspace, out_dir, runs, start=..., table=...)`: tests pass no table. A test that builds a registry
   and starts children passes it a starter or patches `procs.spawn` (as the HTTP-level tests, which build the server,
-  and `test_server_exit_cancels_a_running_review` do). Each registry hands its starter and its table to its
+  and `test_server_exit_cancels_a_running_run` do). Each registry hands its starter and its table to its
   `procs.Children`, which calls the starter as `start(argv, cwd=..., log_path=..., env=...)` and keeps the child it
   returns for its `pid`, `poll()` and `wait()`: a Popen of the subprocess module, or one wrapped by
   `tests/held_children.py` so that it has exited while its exit is not yet recorded. With no starter, `Children` calls
