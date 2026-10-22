@@ -431,6 +431,23 @@ def test_closing_a_serving_server_stops_serving_and_its_children(tmp_path, monke
         httpd.runs.children.stop(run["id"])  # a child left running when the test fails
 
 
+def test_closing_a_server_stops_serving_then_its_children_then_closes_its_socket(tmp_path, monkeypatch):
+    """Serving stopped first, so that no request is accepted while the children are stopped."""
+    httpd = make_server(port=0, workspace=ROOT, out_dir=tmp_path / "out")
+    steps = []
+    for obj, method, step in ((httpd, "shutdown", "serving"), (httpd.table, "shutdown", "children"),
+                              (httpd, "server_close", "socket")):
+        real = getattr(obj, method)
+        monkeypatch.setattr(obj, method, lambda *a, real=real, step=step, **kw: (steps.append(step), real(*a, **kw))[1])
+    serving = threading.Thread(target=httpd.serve_forever, daemon=True)
+    serving.start()
+    res, _, _ = Client(httpd, token=False).request("GET", "/api/health")  # answered: it serves
+    assert res.status == 200
+    httpd.close()
+    serving.join(5)
+    assert steps == ["serving", "children", "socket"]
+
+
 def test_a_failed_run_is_failed_not_finished(server, monkeypatch):
     """exit 2 is also a usage error: without a finished progress record the run failed"""
     real = procs.spawn

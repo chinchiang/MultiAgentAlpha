@@ -161,12 +161,11 @@ class WorkbenchServer(ThreadingHTTPServer):
             self._serving = False
 
     def close(self) -> None:
-        """Server exit: stop serving when serve_forever() still runs on another thread (socketserver's shutdown() would
-        wait forever for one that never ran); stop every child still running, so that a stopped run is recorded
-        cancelled, not orphaned, and a stopped job with the exit code the stop gave (failed, or finished if it is 0); give
-        the waiter of every run or job still running, one whose child exited by itself included, up to
-        `procs.WAITER_JOIN_SECONDS` to record the exit, a waiter still alive then leaving run.json or job.json without it
-        (ChildTable.shutdown); then close the socket."""
+        """Server exit, in this order: stop serving when serve_forever() still runs on another thread (socketserver's
+        shutdown() would wait forever for one that never ran), so that no request is accepted while the children are
+        stopped; stop every child still running and give the exits time to be recorded (ChildTable.shutdown says how
+        long), a stopped run recorded cancelled, not orphaned, and a stopped job with the exit code the stop gave
+        (failed, or finished if it is 0); then close the socket."""
         if self._serving:
             self.shutdown()
         self.table.shutdown()
