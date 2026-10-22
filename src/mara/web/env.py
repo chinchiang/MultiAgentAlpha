@@ -36,6 +36,7 @@ from ..tools import trivy_db
 from ..tools.csp_eval import node_exe
 from ..tools.runner import TOOL_DIMENSIONS, installed_manifest_entry, tool_path, tools_dir
 from . import jobs
+from .configs import config_files
 
 WORKSPACE_ENV = ("MARA_HOME", "MARA_TOOLS_DIR", "MARA_TRIVY_CACHE_DIR", "MARA_NODE", "MARA_SEMGREP_CONFIG", "MARA_ZIZMOR_ONLINE",
                  "MARA_SUMMARY_KEY", "SSL_CERT_FILE", "SSL_CERT_DIR", "AWS_PROFILE", "AWS_REGION")
@@ -169,12 +170,6 @@ def credential(m: ModelSpec) -> dict[str, Any]:
                 "present": bool(os.environ.get("AWS_PROFILE") or os.environ.get("AWS_ACCESS_KEY_ID"))}
     name = m.api_key_env or DEFAULT_KEY_ENV.get(m.provider)
     return {"kind": "env", "env": name, "present": bool(name and os.environ.get(name))}
-
-
-def config_files(workspace: Path) -> list[Path]:
-    base = workspace / "config"
-    files = sorted(base.glob("*.yaml")) + sorted((base / "examples").glob("*.yaml"))
-    return [p for p in files if p.is_file()]
 
 
 def configs(workspace: Path) -> list[dict[str, Any]]:

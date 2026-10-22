@@ -795,6 +795,40 @@ def test_the_environment_lists_every_locked_tool_and_never_a_credential_value(se
     assert SENTINEL.encode() not in body and SENTINEL.encode() not in body2
 
 
+def test_the_page_lists_exactly_the_configs_a_launch_accepts(tmp_path):
+    """A config the page offers is one a review and a check_config job accept, and the other way round: a .yml config,
+    a symlink in config/ to a file outside the workspace, a file that is not YAML."""
+    from mara.web import env
+    from mara.web import jobs as jobs_mod
+
+    mock = (ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8")
+    workspace, outside = tmp_path / "ws", tmp_path / "outside"
+    for d in (workspace / "config", workspace / "target", outside):
+        d.mkdir(parents=True)
+    (workspace / "config" / "plain.yaml").write_text(mock, encoding="utf-8")
+    (workspace / "config" / "short.yml").write_text(mock, encoding="utf-8")
+    (outside / "mara.yaml").write_text(mock, encoding="utf-8")
+    (workspace / "config" / "elsewhere.yaml").symlink_to(outside / "mara.yaml")
+    (workspace / "config" / "notes.toml").write_text(mock, encoding="utf-8")
+    reg = runs.RunRegistry(workspace, workspace / "out")
+    job_reg = jobs_mod.JobRegistry(workspace, workspace / "out")
+
+    def accepted(launch) -> set[str]:
+        ok = set()
+        for name in ("plain.yaml", "short.yml", "elsewhere.yaml", "notes.toml"):
+            try:
+                launch(f"config/{name}")
+                ok.add(f"config/{name}")
+            except runs.LaunchError as e:
+                assert e.code == "config_not_found", (name, e.code, e.message)
+        return ok
+
+    listed = {c["path"] for c in env.configs(workspace)}
+    by_review = accepted(lambda cfg: reg.prepare(runs.LaunchRequest(target="target", provider="mock", config=cfg)))
+    by_job = accepted(lambda cfg: job_reg.argv(jobs_mod.JobRequest(kind="check_config", config=cfg)))
+    assert listed == by_review == by_job == {"config/plain.yaml", "config/short.yml"}
+
+
 def test_a_check_config_job_runs_the_command_line(server):
     c = Client(server)
     res, data, _ = c.request("POST", "/api/jobs", body={"kind": "check_config", "config": "config/mara.mock.yaml"})

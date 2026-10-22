@@ -1,0 +1,22 @@
+focused: [tests/test_web_server.py]
+mutations:
+  - name: the predicate without .yml
+    file: src/mara/web/configs.py
+    old: "SUFFIXES = (\".yaml\", \".yml\")\n"
+    new: "SUFFIXES = (\".yaml\",)\n"
+  - name: the predicate not resolving a symlink
+    file: src/mara/web/configs.py
+    old: "        real = path.resolve()\n"
+    new: "        real = path.absolute()\n"
+  - name: the predicate without config/examples/
+    file: src/mara/web/configs.py
+    old: "    return (workspace / \"config\").resolve(), (workspace / \"config\" / \"examples\").resolve()\n"
+    new: "    return (workspace / \"config\").resolve(), (workspace / \"config\").resolve()\n"
+  - name: the page lists every .yaml file, not what the predicate accepts
+    file: src/mara/web/configs.py
+    old: "for p in sorted(d.iterdir()) if allowed(workspace, p)]"
+    new: "for p in sorted(d.glob(\"*.yaml\")) if p.is_file()]"
+  - name: a launch names any file, the predicate not asked
+    file: src/mara/web/runs.py
+    old: "    if not configs.allowed(workspace, cfg_path):\n"
+    new: "    if False:\n"
