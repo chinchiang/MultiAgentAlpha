@@ -29,6 +29,7 @@ from typing import Any, Literal
 
 ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 STOP_GRACE_SECONDS = 10.0
+KILL_WAIT_SECONDS = 5.0  # how long a stop waits for the children it killed to exit
 WAITER_JOIN_SECONDS = 15.0  # how long Children.stop() and ChildTable.shutdown() wait for each waiter to record an exit
 
 
@@ -119,15 +120,22 @@ def _wait_until(to_wait: list[subprocess.Popen[bytes]], deadline: float) -> None
             pass
 
 
+def _stop_all(to_stop: list[subprocess.Popen[bytes]], grace: float) -> None:
+    """Terminate every child still running; kill those still running `grace` seconds later and give them up to
+    KILL_WAIT_SECONDS more to exit, each wait one deadline for all."""
+    running = [p for p in to_stop if p.poll() is None]
+    for p in running:
+        terminate(p)
+    _wait_until(running, time.monotonic() + grace)
+    to_kill = [p for p in running if p.poll() is None]
+    for p in to_kill:
+        kill(p)
+    _wait_until(to_kill, time.monotonic() + KILL_WAIT_SECONDS)
+
+
 def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> None:
     """Terminate the child and its process group; kill it when it has not exited after `grace` seconds."""
-    if proc.poll() is not None:
-        return
-    terminate(proc)
-    _wait_until([proc], time.monotonic() + grace)
-    if proc.poll() is None:
-        kill(proc)
-        _wait_until([proc], time.monotonic() + 5)
+    _stop_all([proc], grace)
 
 
 class ChildTable:
@@ -146,17 +154,10 @@ class ChildTable:
         """Server exit: stop every child still running, whichever registry's it is, its exit then recorded as stopped;
         then give the waiter of every child still running, one whose child exited by itself included, up to
         WAITER_JOIN_SECONDS each to record it. The children are stopped at once: each is terminated, those still
-        running `grace` seconds later are killed, and those get up to 5 s more to exit."""
+        running `grace` seconds later are killed, and those get up to KILL_WAIT_SECONDS more to exit."""
         with self.lock:
             taken = [children._taken_for_shutdown() for children in self._members]
-        to_stop = [p for _, ps in taken for p in ps]
-        for p in to_stop:
-            terminate(p)
-        _wait_until(to_stop, time.monotonic() + grace)
-        to_kill = [p for p in to_stop if p.poll() is None]
-        for p in to_kill:
-            kill(p)
-        _wait_until(to_kill, time.monotonic() + 5)
+        _stop_all([p for _, ps in taken for p in ps], grace)
         for waiters, _ in taken:
             for w in waiters:
                 w.join(timeout=WAITER_JOIN_SECONDS)
