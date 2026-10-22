@@ -24,13 +24,14 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Collection
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 STOP_GRACE_SECONDS = 10.0
 KILL_WAIT_SECONDS = 5.0  # how long a stop waits for the children it killed to exit
-WAITER_JOIN_SECONDS = 15.0  # how long Children.stop() and ChildTable.shutdown() wait for each waiter to record an exit
+WAITER_JOIN_SECONDS = 15.0  # how long ChildTable.stop() and ChildTable.shutdown() wait for each waiter to record an exit
 
 
 def now() -> str:
@@ -138,20 +139,80 @@ def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> No
     _stop_all([proc], grace)
 
 
+@dataclass
+class _Child:
+    """One child in a table: its process (None once its waiter recorded the exit), its waiter, its tag, and whether it
+    was stopped."""
+    proc: Any
+    waiter: threading.Thread
+    tag: str | None
+    stopped: bool = False
+
+
 class ChildTable:
-    """The children of the registries that share one lock, so that a launch of one checks what the others run, and
-    that are stopped at once at server exit (shutdown()), which closes the table: a registry refuses every launch once
-    `closed`, which it reads under the lock."""
+    """Every child of the registries that share one lock, each kept under its registry's name and its id, so that a
+    launch of one checks what the others run (running_tags()) and all are stopped at once at server exit (shutdown()),
+    which closes the table: a registry refuses every launch once `closed`, which it reads under the lock. start(),
+    running(), stop() and any_running() take a registry's name and see that registry's children only; a registry calls
+    them through its `Children`. A child is running while its waiter is alive: the waiter records the exit through the
+    `on_exit(child_id, code, stopped)` given to start(), under the lock, so a registry that reads its record and asks
+    running() under the lock reads a record without the exit code only as running, unless the waiter stopped without
+    recording it (`wait()` or `on_exit` raised; tests/test_web_procs.py,
+    test_a_child_whose_waiter_stopped_without_recording_its_exit_is_no_longer_running)."""
 
     def __init__(self) -> None:
         self.lock = threading.RLock()
         self.closed = False  # set once, by shutdown(), and never cleared
-        self._members: list[Children] = []
+        self._children: dict[tuple[str, str], _Child] = {}  # by (registry name, child id)
+
+    def start(self, name: str, child_id: str, argv: list[str], *, cwd: Path, log_path: Path, env: dict[str, str],
+              tag: str | None, on_exit: Callable[[str, int, bool], None], starter: Callable[..., Any] | None) -> int:
+        """Start `argv` through `starter`, else `spawn` as this module has it when called, and its waiter thread
+        `mara-<name>-<child_id>`; the child's pid. An OSError of the starter propagates, and nothing is registered."""
+        with self.lock:
+            proc = (starter or spawn)(argv, cwd=cwd, log_path=log_path, env=env)
+            waiter = threading.Thread(target=self._wait, args=(name, child_id, proc, on_exit), name=f"mara-{name}-{child_id}",
+                                      daemon=True)
+            self._children[(name, child_id)] = _Child(proc, waiter, tag)
+            waiter.start()
+            return int(proc.pid)
+
+    def _wait(self, name: str, child_id: str, proc: Any, on_exit: Callable[[str, int, bool], None]) -> None:
+        code = proc.wait()
+        with self.lock:
+            child = self._children[(name, child_id)]
+            on_exit(child_id, code, child.stopped)
+            child.proc = None
+
+    def running(self, name: str, child_id: str) -> bool:
+        with self.lock:
+            child = self._children.get((name, child_id))
+            return child is not None and child.waiter.is_alive()
+
+    def stop(self, name: str, child_id: str) -> Literal["stopped", "exited", "unknown"]:
+        """Stop a child still running, its exit then recorded as stopped ("stopped"); a child no longer running, one that
+        exited by itself or was stopped before, is not stopped again ("exited"). Either way its waiter gets up to
+        WAITER_JOIN_SECONDS to record the exit. "unknown": no child of that id was started."""
+        with self.lock:
+            child = self._children.get((name, child_id))
+            if child is None:
+                return "unknown"
+            to_stop = child.proc if child.proc is not None and child.proc.poll() is None else None
+            if to_stop is not None:
+                child.stopped = True
+        if to_stop is not None:
+            stop(to_stop)
+        child.waiter.join(timeout=WAITER_JOIN_SECONDS)
+        return "exited" if to_stop is None else "stopped"
+
+    def any_running(self, name: str, tags: Collection[str] | None = None) -> bool:
+        with self.lock:
+            return any(n == name and c.waiter.is_alive() and (tags is None or c.tag in tags) for (n, _), c in self._children.items())
 
     def running_tags(self) -> set[str]:
         """The tags of every child running, whichever registry's it is."""
         with self.lock:
-            return {tag for children in self._members for tag in children._running_tags()}
+            return {c.tag for c in self._children.values() if c.waiter.is_alive() and c.tag is not None}
 
     def shutdown(self, grace: float = STOP_GRACE_SECONDS) -> None:
         """Server exit: stop every child still running, whichever registry's it is, its exit then recorded as stopped;
@@ -161,95 +222,46 @@ class ChildTable:
         closed in the same step as the children are taken, so a launch that gets the lock after it starts nothing."""
         with self.lock:
             self.closed = True
-            taken = [children._taken_for_shutdown() for children in self._members]
-        _stop_all([p for _, ps in taken for p in ps], grace)
-        for waiters, _ in taken:
-            for w in waiters:
-                w.join(timeout=WAITER_JOIN_SECONDS)
+            waiters = [c.waiter for c in self._children.values() if c.waiter.is_alive()]
+            to_stop = [c for c in self._children.values() if c.proc is not None and c.proc.poll() is None]
+            for c in to_stop:
+                c.stopped = True
+        _stop_all([c.proc for c in to_stop], grace)
+        for w in waiters:
+            w.join(timeout=WAITER_JOIN_SECONDS)
 
 
 class Children:
-    """The children of one registry and their waiters, in `table` (a table of their own when none is given), whose
-    lock, shared by every registry in the table, is the one exits are recorded under. Every method but `held()` sees
-    this registry's children only. A child is running while its waiter is alive: the waiter records the exit through
-    `on_exit(child_id, code, stopped)` under that lock, so a registry that reads its record and asks `running()` under
-    `held()` reads a record without the exit code only as running, unless the waiter stopped without recording it
-    (`wait()` or `on_exit` raised; tests/test_web_procs.py,
-    test_a_child_whose_waiter_stopped_without_recording_its_exit_is_no_longer_running)."""
+    """One registry's view of `table` (a table of its own when none is given): the registry's name, the `on_exit` its
+    children's exits are recorded through and its starter, given to the table's operations, which see this registry's
+    children only (ChildTable)."""
 
     def __init__(self, name: str, on_exit: Callable[[str, int, bool], None], *, start: Callable[..., Any] | None = None,
                  table: ChildTable | None = None) -> None:
         self.name, self.on_exit, self._start = name, on_exit, start
         self.table = table or ChildTable()
-        self._lock = self.table.lock
-        self._procs: dict[str, Any] = {}
-        self._waiters: dict[str, threading.Thread] = {}
-        self._tags: dict[str, str | None] = {}
-        self._stopped: set[str] = set()
-        with self._lock:
-            self.table._members.append(self)
 
     def held(self) -> threading.RLock:
         """The table's lock (reentrant), shared by every registry in it and the one exits are recorded under: hold it
         to read a record and ask `running()` in one step, or to ask `admission.refusal()` about the table's running tags
         and start a child in one step."""
-        return self._lock
+        return self.table.lock
 
     def start(self, child_id: str, argv: list[str], *, cwd: Path, log_path: Path, env: dict[str, str],
               tag: str | None = None) -> int:
-        """Start `argv` through the starter given at construction, else `spawn` as this module has it when called, and its
-        waiter thread `mara-<name>-<child_id>`; the child's pid. An OSError of the starter propagates, and nothing is
-        registered."""
-        with self._lock:
-            proc = (self._start or spawn)(argv, cwd=cwd, log_path=log_path, env=env)
-            self._procs[child_id] = proc
-            self._tags[child_id] = tag
-            waiter = threading.Thread(target=self._wait, args=(child_id, proc), name=f"mara-{self.name}-{child_id}", daemon=True)
-            self._waiters[child_id] = waiter
-            waiter.start()
-            return int(proc.pid)
-
-    def _wait(self, child_id: str, proc: Any) -> None:
-        code = proc.wait()
-        with self._lock:
-            self.on_exit(child_id, code, child_id in self._stopped)
-            self._procs.pop(child_id, None)
+        """ChildTable.start() through the starter given at construction."""
+        return self.table.start(self.name, child_id, argv, cwd=cwd, log_path=log_path, env=env, tag=tag, on_exit=self.on_exit,
+                                starter=self._start)
 
     def running(self, child_id: str) -> bool:
-        with self._lock:
-            waiter = self._waiters.get(child_id)
-            return waiter is not None and waiter.is_alive()
+        return self.table.running(self.name, child_id)
 
     def stop(self, child_id: str) -> Literal["stopped", "exited", "unknown"]:
-        """Stop a child still running, its exit then recorded as stopped ("stopped"); a child no longer running, one that
-        exited by itself or was stopped before, is not stopped again ("exited"). Either way its waiter gets up to
-        WAITER_JOIN_SECONDS to record the exit. "unknown": no child of that id was started."""
-        with self._lock:
-            waiter, proc = self._waiters.get(child_id), self._procs.get(child_id)
-            if waiter is None:
-                return "unknown"
-            to_stop = proc if proc is not None and proc.poll() is None else None
-            if to_stop is not None:
-                self._stopped.add(child_id)
-        if to_stop is not None:
-            stop(to_stop)
-        waiter.join(timeout=WAITER_JOIN_SECONDS)
-        return "exited" if to_stop is None else "stopped"
-
-    def _taken_for_shutdown(self) -> tuple[list[threading.Thread], list[Any]]:
-        """Under the table's lock: every live waiter, and every child still running, now marked stopped
-        (ChildTable.shutdown)."""
-        waiters = [w for w in self._waiters.values() if w.is_alive()]
-        to_stop = [(c, p) for c, p in self._procs.items() if p.poll() is None]
-        self._stopped.update(c for c, _ in to_stop)
-        return waiters, [p for _, p in to_stop]
-
-    def _running_tags(self) -> set[str]:
-        return {tag for c, w in self._waiters.items() if w.is_alive() and (tag := self._tags.get(c)) is not None}
+        """ChildTable.stop()."""
+        return self.table.stop(self.name, child_id)
 
     def any_running(self, tags: Collection[str] | None = None) -> bool:
-        with self._lock:
-            return any(w.is_alive() and (tags is None or self._tags.get(c) in tags) for c, w in self._waiters.items())
+        return self.table.any_running(self.name, tags)
 
 
 def tail(path: Path, *, max_bytes: int = 256 * 1024, lines: int = 400) -> str:
