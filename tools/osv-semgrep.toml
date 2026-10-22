@@ -12,8 +12,18 @@
 # One such entry since 2026-10-16: semgrep 1.179.0 through 1.181.0 (the newest release, checked that day)
 # pin mcp==1.29.0, so the closure cannot take the fixed mcp 1.30.0. Remove it, instead of renewing it, at
 # the semgrep release that relaxes the pin, and relock.
+#
+# A second since 2026-10-23: semgrep 1.179.0 through 1.182.1 (the newest release, checked that day) pin
+# opentelemetry-api~=1.37.0, and the closure's opentelemetry-sdk 1.37.0 pins opentelemetry-api==1.37.0, so the
+# closure cannot take the fixed opentelemetry-api 1.45.1. Remove it, instead of renewing it, at the semgrep release
+# that relaxes the pin, and relock.
 
 [[IgnoredVulns]]
 id = "CVE-2026-59951"
 ignoreUntil = 2026-12-31
 reason = "MCP Python SDK unbounded session accumulation in the StreamableHTTP transport (GHSA-84m7-p3x7-pcfv, CVSS 4.0 VA:L); fixed in mcp 1.30.0, but semgrep 1.179.0-1.181.0 pin mcp==1.29.0 so the closure cannot take it. MARA runs semgrep scan only and never starts semgrep's MCP server, so the transport is not reached. Re-check at a semgrep release that relaxes the pin."
+
+[[IgnoredVulns]]
+id = "CVE-2026-114603"
+ignoreUntil = 2026-12-31
+reason = "OpenTelemetry Python unbounded tracestate parsing in opentelemetry-api (GHSA-xcq7-p3pf-p88h, CVSS 3.1 A:L); fixed in opentelemetry-api 1.45.1, but semgrep 1.179.0-1.182.1 pin opentelemetry-api~=1.37.0 so the closure cannot take it. The parser (TraceState.from_header) runs only on a carrier holding a tracestate. semgrep 1.179.0 extracts a context only in Telemetry.extract(), only under --trace (no envvar, no auto envvar prefix), from a carrier holding a traceparent it builds from SEMGREP_TRACE_PARENT_TRACE_ID and SEMGREP_TRACE_PARENT_SPAN_ID and never a tracestate. MARA runs semgrep scan without --trace, with runner.tool_env, which passes no SEMGREP_* or OTEL_* variable, and never semgrep ci or mcp. Re-check at a semgrep release that relaxes the pin."
