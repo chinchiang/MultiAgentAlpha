@@ -139,7 +139,8 @@ def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> No
 
 
 class ChildTable:
-    """The children of the registries that share one lock, so that a launch of one checks what the others run."""
+    """The children of the registries that share one lock, so that a launch of one checks what the others run, and
+    that are stopped at once at server exit (shutdown())."""
 
     def __init__(self) -> None:
         self.lock = threading.RLock()

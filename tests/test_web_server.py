@@ -432,7 +432,7 @@ def test_closing_a_serving_server_stops_serving_and_its_children(tmp_path, monke
 
 
 def test_closing_a_server_stops_serving_then_its_children_then_closes_its_socket(tmp_path, monkeypatch):
-    """Serving stopped first, so that no launch starts a child after the children are stopped."""
+    """Serving stopped first, so that no request is accepted while the children are stopped."""
     httpd = make_server(port=0, workspace=ROOT, out_dir=tmp_path / "out")
     steps = []
     for obj, method, step in ((httpd, "shutdown", "serving"), (httpd.table, "shutdown", "children"),
