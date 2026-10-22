@@ -366,8 +366,9 @@ def test_a_review_and_a_job_replacing_the_tools_launched_at_once_one_is_refused(
         return procs.spawn([sys.executable, "-c", "import time; time.sleep(60)"], **kw)
 
     monkeypatch.setattr(admission, "refusal", admitted_then_slow)
-    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=sleeping)
-    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg, start=sleeping)
+    table = procs.ChildTable()  # the two registries' children, as the server shares one between them
+    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=sleeping, table=table)
+    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", start=sleeping, table=table)
     create = {"review": lambda: reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock")),
               "job": lambda: job_reg.create(jobs_mod.JobRequest(kind="trivy_db_download"))}
     outcomes: dict[str, str] = {}
@@ -421,8 +422,9 @@ def test_no_run_or_job_starts_once_the_server_exit_began(tmp_path, monkeypatch, 
         started.append(argv)
         return procs.spawn([sys.executable, "-c", _SLOW_TO_STOP, str(tmp_path / "ready")], **kw)
 
-    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=slow_to_stop)
-    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg, start=slow_to_stop)
+    table = procs.ChildTable()  # the two registries' children, as the server shares one between them
+    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=slow_to_stop, table=table)
+    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", start=slow_to_stop, table=table)
     create = {"run": lambda: reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock")),
               "job": lambda: job_reg.create(jobs_mod.JobRequest(kind="trivy_db_status"))}
     create["job" if launched == "run" else "run"]()
@@ -639,8 +641,9 @@ def _exited_job(tmp_path, monkeypatch, child_type, kind="trivy_db_download"):
         children.append(child_type(real([sys.executable, "-c", "pass"], **kw)))
         return children[-1]
 
-    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=spawn)
-    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg, start=spawn)
+    table = procs.ChildTable()  # the two registries' children, as the server shares one between them
+    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=spawn, table=table)
+    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", start=spawn, table=table)
     job_id = job_reg.create(jobs_mod.JobRequest(kind=kind))["id"]
     (child,) = children
     assert child.proc.wait(timeout=60) == 0

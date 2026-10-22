@@ -24,7 +24,11 @@ mutations:
     file: src/mara/web/jobs.py
     old: "            if refused := admission.refusal(req.kind, self.children.table.running_tags()):\n"
     new: "            if refused := None:\n"
-  - name: a job registry with a table of its own, not the runs'
-    file: src/mara/web/jobs.py
-    old: "table=table or runs.children.table)"
-    new: "table=table)"
+  - name: a job registry with a table of its own, not the server's
+    file: src/mara/web/server.py
+    old: "        self.jobs = JobRegistry(self.workspace, self.out_dir, table=self.table)\n"
+    new: "        self.jobs = JobRegistry(self.workspace, self.out_dir)\n"
+  - name: a run registry with a table of its own, not the server's
+    file: src/mara/web/server.py
+    old: "        self.runs = RunRegistry(self.workspace, self.out_dir, table=self.table)\n"
+    new: "        self.runs = RunRegistry(self.workspace, self.out_dir)\n"

@@ -75,6 +75,27 @@ def config_dirs(workspace: Path) -> tuple[Path, Path]:
     return (workspace / "config").resolve(), (workspace / "config" / "examples").resolve()
 
 
+def resolve_path(workspace: Path, value: str) -> Path:
+    """`value` resolved, relative to `workspace` unless absolute; LaunchError bad_path when it is not a usable path."""
+    try:
+        p = Path(value.strip()).expanduser()
+        return (p if p.is_absolute() else workspace / p).resolve()
+    except (ValueError, RuntimeError, OSError) as e:  # a NUL byte, a symlink loop, an unknown ~user
+        raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path ({type(e).__name__})") from e
+
+
+def resolve_config(workspace: Path, value: str, provider: str) -> Path:
+    """The config file `value` names, or the provider's default when it is empty, if it is a YAML file under config/ or
+    config/examples/ of `workspace`; LaunchError config_not_found otherwise (bad_path, from resolve_path)."""
+    if value:
+        cfg_path = resolve_path(workspace, value)
+    else:
+        cfg_path = (workspace / "config" / ("mara.mock.yaml" if provider == "mock" else "mara.yaml")).resolve()
+    if cfg_path.parent not in config_dirs(workspace) or cfg_path.suffix not in (".yaml", ".yml") or not cfg_path.is_file():
+        raise LaunchError("config_not_found", f"{value or cfg_path}: not a config file under config/ or config/examples/")
+    return cfg_path
+
+
 class RunRegistry:
     def __init__(self, workspace: Path, out_dir: Path, *, start: Callable[..., Any] | None = None,
                  table: procs.ChildTable | None = None) -> None:
@@ -86,38 +107,22 @@ class RunRegistry:
         self._reports: dict[str, tuple[int, int, ReviewReport]] = {}
 
     # ------------------------------------------------------------------ validation
-    def _path(self, value: str) -> Path:
-        try:
-            p = Path(value.strip()).expanduser()
-            return (p if p.is_absolute() else self.workspace / p).resolve()
-        except (ValueError, RuntimeError, OSError) as e:  # a NUL byte, a symlink loop, an unknown ~user
-            raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path ({type(e).__name__})") from e
-
     def _inside_workspace(self, p: Path) -> bool:
         return p == self.workspace or self.workspace in p.parents
-
-    def resolve_config(self, value: str, provider: str) -> Path:
-        if value:
-            cfg_path = self._path(value)
-        else:
-            cfg_path = (self.workspace / "config" / ("mara.mock.yaml" if provider == "mock" else "mara.yaml")).resolve()
-        if cfg_path.parent not in config_dirs(self.workspace) or cfg_path.suffix not in (".yaml", ".yml") or not cfg_path.is_file():
-            raise LaunchError("config_not_found", f"{value or cfg_path}: not a config file under config/ or config/examples/")
-        return cfg_path
 
     def prepare(self, req: LaunchRequest) -> tuple[list[str], dict[str, Any]]:
         """argv and the manifest fields of a valid request; LaunchError otherwise."""
         from ..config import load_config
 
-        target = self._path(req.target)
+        target = resolve_path(self.workspace, req.target)
         if not target.is_dir():
             raise LaunchError("target_not_dir", f"{target}: not a directory")
-        cfg_path = self.resolve_config(req.config, req.provider)
+        cfg_path = resolve_config(self.workspace, req.config, req.provider)
         dirs: dict[str, Path] = {}
         inputs = (("--sarif-dir", req.sarif_dir, "sarif_dir_not_dir"), ("--mock-fixtures", req.mock_fixtures, "mock_fixtures_not_dir"))
         for flag, value, code in inputs:
             if value:
-                p = self._path(value)
+                p = resolve_path(self.workspace, value)
                 if not p.is_dir():
                     raise LaunchError(code, f"{p}: not a directory")
                 if not self._inside_workspace(p):

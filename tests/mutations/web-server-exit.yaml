@@ -18,8 +18,8 @@ mutations:
     new: "        self.table.shutdown()\n"
   - name: the table stops its children one by one
     file: src/mara/web/procs.py
-    old: "        _stop_all([p for _, ps in taken for p in ps], grace)\n"
-    new: "        for p in [p for _, ps in taken for p in ps]:\n            _stop_all([p], grace)\n"
+    old: "        _stop_all([c.proc for c in to_stop], grace)\n"
+    new: "        for c in to_stop:\n            _stop_all([c.proc], grace)\n"
   - name: a stop only kills, never terminates
     file: src/mara/web/procs.py
     old: "    for p in running:\n        terminate(p)\n"
@@ -30,24 +30,24 @@ mutations:
     new: "    for p in to_kill:\n        pass\n"
   - name: the table stops the children of its first registry only
     file: src/mara/web/procs.py
-    old: "            taken = [children._taken_for_shutdown() for children in self._members]\n"
-    new: "            taken = [children._taken_for_shutdown() for children in self._members[:1]]\n"
+    old: "            to_stop = [c for c in self._children.values() if c.proc"
+    new: "            to_stop = [c for (n, _), c in self._children.items() if n == next(iter(self._children))[0] and c.proc"
   - name: the table does not wait for the waiters
     file: src/mara/web/procs.py
-    old: "                w.join(timeout=WAITER_JOIN_SECONDS)\n"
-    new: "                pass\n"
+    old: "            w.join(timeout=WAITER_JOIN_SECONDS)\n"
+    new: "            pass\n"
   - name: the table does not mark the children it stops
     file: src/mara/web/procs.py
-    old: "        self._stopped.update(c for c, _ in to_stop)\n"
+    old: "            for c in to_stop:\n                c.stopped = True\n"
     new: ""
   - name: the table waits only for the waiters of children it stops
     file: src/mara/web/procs.py
-    old: "        waiters = [w for w in self._waiters.values() if w.is_alive()]\n"
-    new: "        waiters = [self._waiters[c] for c, p in self._procs.items() if p.poll() is None]\n"
+    old: "            waiters = [c.waiter for c in self._children.values() if c.waiter.is_alive()]\n"
+    new: "            waiters = [c.waiter for c in self._children.values() if c.proc is not None and c.proc.poll() is None]\n"
   - name: the table stops the children inside the lock
     file: src/mara/web/procs.py
-    old: "            taken = [children._taken_for_shutdown() for children in self._members]\n        _stop_all([p for _, ps in taken for p in ps], grace)\n"
-    new: "            taken = [children._taken_for_shutdown() for children in self._members]\n            _stop_all([p for _, ps in taken for p in ps], grace)\n"
+    old: "                c.stopped = True\n        _stop_all([c.proc for c in to_stop], grace)\n"
+    new: "                c.stopped = True\n            _stop_all([c.proc for c in to_stop], grace)\n"
   - name: a cancel never kills after the grace
     file: src/mara/web/procs.py
     old: "    _stop_all([proc], grace)\n"

@@ -10,8 +10,8 @@ mutations:
   new: ''
 - name: the table is closed only once its children are stopped and their exits recorded
   file: src/mara/web/procs.py
-  old: "        with self.lock:\n            self.closed = True\n            taken = [children._taken_for_shutdown() for children in self._members]\n        _stop_all([p for _, ps in taken for p in ps], grace)\n        for waiters, _ in taken:\n            for w in waiters:\n                w.join(timeout=WAITER_JOIN_SECONDS)\n"
-  new: "        with self.lock:\n            taken = [children._taken_for_shutdown() for children in self._members]\n        _stop_all([p for _, ps in taken for p in ps], grace)\n        for waiters, _ in taken:\n            for w in waiters:\n                w.join(timeout=WAITER_JOIN_SECONDS)\n        self.closed = True\n"
+  old: "        with self.lock:\n            self.closed = True\n            waiters = [c.waiter for c in self._children.values() if c.waiter.is_alive()]\n            to_stop = [c for c in self._children.values() if c.proc is not None and c.proc.poll() is None]\n            for c in to_stop:\n                c.stopped = True\n        _stop_all([c.proc for c in to_stop], grace)\n        for w in waiters:\n            w.join(timeout=WAITER_JOIN_SECONDS)\n"
+  new: "        with self.lock:\n            waiters = [c.waiter for c in self._children.values() if c.waiter.is_alive()]\n            to_stop = [c for c in self._children.values() if c.proc is not None and c.proc.poll() is None]\n            for c in to_stop:\n                c.stopped = True\n        _stop_all([c.proc for c in to_stop], grace)\n        for w in waiters:\n            w.join(timeout=WAITER_JOIN_SECONDS)\n        self.closed = True\n"
 - name: a run is launched whether the table is closed or not
   file: src/mara/web/runs.py
   old: "            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"

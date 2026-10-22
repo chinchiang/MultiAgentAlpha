@@ -125,9 +125,9 @@ class WorkbenchServer(ThreadingHTTPServer):
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.token = token or secrets.token_urlsafe(32)
         self.started_at = procs.now()
-        self.runs = RunRegistry(self.workspace, self.out_dir)
-        self.jobs = JobRegistry(self.workspace, self.out_dir, self.runs)
-        self.table = self.runs.children.table  # the children of both registries, stopped together at exit
+        self.table = procs.ChildTable()  # the children of both registries, stopped together at exit
+        self.runs = RunRegistry(self.workspace, self.out_dir, table=self.table)
+        self.jobs = JobRegistry(self.workspace, self.out_dir, table=self.table)
         self.page, self.csp = build_page()
         host = address[0]
         port = self.port

@@ -71,17 +71,17 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
 
 ## The workbench (`src/mara/web/`)
 
-- `RunRegistry(workspace, out_dir, start=..., table=...)`,
-  `JobRegistry(workspace, out_dir, runs, start=..., table=...)`: tests pass no table. A test that builds a registry
-  and starts children passes it a starter or patches `procs.spawn` (as the HTTP-level tests, which build the server,
-  and `test_server_exit_cancels_a_running_run` do). Each registry hands its starter and its table to its
-  `procs.Children`, which calls the starter as `start(argv, cwd=..., log_path=..., env=...)` and keeps the child it
-  returns for its `pid`, `poll()` and `wait()`: a Popen of the subprocess module, or one wrapped by
-  `tests/held_children.py` so that it has exited while its exit is not yet recorded. With no starter, `Children` calls
+- `RunRegistry(workspace, out_dir, start=..., table=...)`, `JobRegistry(workspace, out_dir, start=..., table=...)`: a
+  test passes a table only to build the two over one. A test that builds a registry and starts children passes it a
+  starter or patches `procs.spawn` (as the HTTP-level tests, which build the server, and
+  `test_server_exit_cancels_a_running_run` do). Each registry hands its starter and its table to its `procs.Children`,
+  which gives the starter to `ChildTable.start`; the table calls it as `start(argv, cwd=..., log_path=..., env=...)` and
+  keeps the child it returns for its `pid`, `poll()` and `wait()`: a Popen of the subprocess module, or one wrapped by
+  `tests/held_children.py` so that it has exited while its exit is not yet recorded. With no starter, the table calls
   `procs.spawn` as the module has it at that moment, so a test patching `procs.spawn` after the server was built still
-  reaches it. With no table, a `RunRegistry`'s children get a table of their own and a `JobRegistry`'s join the table
-  of the `RunRegistry` it is given, so a test building the two sees the admission between runs and jobs without wiring
-  it. `test_web_server.py`.
+  reaches it. With no table, a registry's children get a table of their own; the server builds one table
+  (`procs.ChildTable()`) and passes it to both, so a test building the two passes them one table to see the admission
+  between runs and jobs. `test_web_server.py`.
 - `procs.Children(name, on_exit, start=..., table=...)`: driven at its own interface (`start`, `running`, `any_running`,
   `stop`, which see one registry's children only, and `held`, the lock of its whole table). Its waiters are threads
   named after the registry and the child (`"mara-run-" + run_id`), the name tests find one by to join it.
