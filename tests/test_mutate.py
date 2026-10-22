@@ -78,6 +78,25 @@ def test_a_wrong_list_is_refused_before_any_file_is_touched(tmp_path, capsys):
     assert mutate.main([str(_list(tmp_path, wrong[:0])), "--root", str(root), "--only", "nothing"]) == 2
 
 
+def test_a_list_with_a_mutation_that_changes_nothing_or_two_that_make_the_same_mutant_is_refused(tmp_path, capsys):
+    """A mutation that leaves its file as it was, or one that makes the same file as another of the list (a mis-aligned
+    copy of it), is refused. Two of the same `new` that make different files are not, nor the same text made of two
+    files."""
+    root = _repo(tmp_path)
+    (root / "src" / "door.py").write_text(SOURCE, encoding="utf-8")
+    mutations = [{"name": "unchanged", "file": "src/window.py", "old": "return 3", "new": "return 3"},
+                 {"name": "four", "file": "src/window.py", "old": "return 3", "new": "return 4"},
+                 {"name": "four again", "file": "src/window.py", "old": "3  # the", "new": "4  # the"},
+                 {"name": "renamed", "file": "src/window.py", "old": "limit", "new": "lim"},
+                 {"name": "comment renamed", "file": "src/window.py", "old": "window", "new": "lim"},
+                 {"name": "a wider door", "file": "src/door.py", "old": "return 3", "new": "return 4"}]
+    assert mutate.main([str(_list(tmp_path, mutations)), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
+    err = capsys.readouterr().err
+    assert "unchanged: new is old, so the file is unchanged" in err and "four, four again: the same mutant of src/window.py" in err
+    assert "renamed" not in err and "door" not in err
+    assert not (tmp_path / "runs").exists()
+
+
 def test_a_focused_test_that_does_not_exist_is_refused_before_any_file_is_touched(tmp_path, capsys):
     """pytest exits 4 on a path it cannot find, which a failed test's exit 1 must not be mistaken for."""
     root = _repo(tmp_path)

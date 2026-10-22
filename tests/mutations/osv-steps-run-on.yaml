@@ -1,0 +1,14 @@
+focused: [tests/test_security_regressions.py]
+mutations:
+  - name: the garak closure is not scanned once an earlier closure's scan failed
+    file: .github/workflows/mara-review.yml
+    old: "      - name: osv-scanner on the isolated model-evaluation closure only\n        if: ${{ !cancelled() }}  # scanned even when an earlier closure's scan failed\n"
+    new: "      - name: osv-scanner on the isolated model-evaluation closure only\n"
+  - name: the semgrep closure is not scanned once an earlier closure's scan failed
+    file: .github/workflows/mara-review.yml
+    old: "      - name: osv-scanner on the semgrep closure only (dated exceptions in tools/osv-semgrep.toml)\n        if: ${{ !cancelled() }}  # scanned even when an earlier closure's scan failed\n"
+    new: "      - name: osv-scanner on the semgrep closure only (dated exceptions in tools/osv-semgrep.toml)\n"
+  - name: the garak closure is scanned even in a cancelled run
+    file: .github/workflows/mara-review.yml
+    old: "      - name: osv-scanner on the isolated model-evaluation closure only\n        if: ${{ !cancelled() }}  # scanned even when an earlier closure's scan failed\n"
+    new: "      - name: osv-scanner on the isolated model-evaluation closure only\n        if: always()\n"

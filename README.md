@@ -498,8 +498,7 @@ differs from the lock:
 - The bootstrap, dev, typecheck and build closures use `tools/osv-scanner.toml` with no advisory
   exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`
   (its dated exceptions cover garak's nltk/datasets/fsspec pins); the semgrep tool closure is scanned with
-  `tools/osv-semgrep.toml`, which has been exception-free since semgrep 1.179.0 relaxed the
-  `pyjwt[crypto]~=2.13.0` pin and the closure relocked to pyjwt 2.15.1. These scans
+  `tools/osv-semgrep.toml`, whose dated exceptions, if any, that file lists and explains. These scans
   also run weekly and on manual workflow dispatch.
 
 semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories

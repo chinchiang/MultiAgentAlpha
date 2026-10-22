@@ -934,6 +934,10 @@ def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():
     assert upload["permissions"]["security-events"] == "write"
     assert all("run" not in step and "checkout@" not in step.get("uses", "") for step in upload["steps"])
     runs = [s.get("run", "") for s in data["jobs"]["deterministic-tools"]["steps"]]
+    later = [s for s in data["jobs"]["deterministic-tools"]["steps"] if "osv_ci.py" in s.get("run", "")
+             and ("osv-model-eval.toml" in s["run"] or "osv-semgrep.toml" in s["run"])]
+    assert len(later) == 2 and all(s.get("if") == "${{ !cancelled() }}" for s in later), \
+        "the garak and semgrep closures are scanned even when an earlier closure's scan failed"
     model_scan = [s for s in runs if "osv_ci.py" in s and "osv-model-eval.toml" in s]
     assert len(model_scan) == 1 and model_scan[0].count("--lockfile") == 1
     semgrep_scan = [s for s in runs if "osv_ci.py" in s and "osv-semgrep.toml" in s]
