@@ -16,9 +16,10 @@ Types, so the script can only build the DOM through text and element APIs (docs/
 `render_page` also builds the workbench demo's page when `scripts/build_workbench_demo.py` gives it the demo's data.
 
 Not pure: it listens on a socket, handles SIGTERM and SIGHUP while it serves, reads the clock, draws its token at
-random, opens a browser and reads the packaged page; through `runs`, `jobs` and `env` it starts and stops runs and jobs
-and reads the workspace; it creates the output directory and reads, writes and removes files in it, and reads the
-reports `mara review` wrote into `<workspace>/out/`.
+random, opens a browser and reads the packaged page; through `runs`, `jobs` and `env` it starts runs and jobs, cancels
+runs and reads the workspace, and at exit it stops every child still running through the table the registries share
+(`procs.ChildTable`); it creates the output directory and reads, writes and removes files in it, and reads the reports
+`mara review` wrote into `<workspace>/out/`.
 """
 
 from __future__ import annotations
@@ -118,6 +119,7 @@ class WorkbenchServer(ThreadingHTTPServer):
 
     def __init__(self, address: tuple[str, int], *, workspace: Path, out_dir: Path, token: str | None = None) -> None:
         super().__init__(address, Handler)
+        self._serving = False  # serve_forever() is running, on some thread; close() then has to shut it down
         self.workspace = workspace.resolve()
         self.out_dir = out_dir.resolve()
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -125,6 +127,7 @@ class WorkbenchServer(ThreadingHTTPServer):
         self.started_at = procs.now()
         self.runs = RunRegistry(self.workspace, self.out_dir)
         self.jobs = JobRegistry(self.workspace, self.out_dir, self.runs)
+        self.table = self.runs.children.table  # the children of both registries, stopped together at exit
         self.page, self.csp = build_page()
         host = address[0]
         port = self.port
@@ -150,9 +153,24 @@ class WorkbenchServer(ThreadingHTTPServer):
         except ValidationError:
             return Settings().model_dump()
 
-    def shutdown_children(self) -> None:
-        self.runs.shutdown()
-        self.jobs.shutdown()
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
+        self._serving = True
+        try:
+            super().serve_forever(poll_interval)
+        finally:
+            self._serving = False
+
+    def close(self) -> None:
+        """Server exit: stop serving when serve_forever() still runs on another thread (socketserver's shutdown() would
+        wait forever for one that never ran); stop every child still running, so that a stopped run is recorded
+        cancelled, not orphaned, and a stopped job with the exit code the stop gave (failed, or finished if it is 0); give
+        the waiter of every run or job still running, one whose child exited by itself included, up to
+        `procs.WAITER_JOIN_SECONDS` to record the exit, a waiter still alive then leaving run.json or job.json without it
+        (ChildTable.shutdown); then close the socket."""
+        if self._serving:
+            self.shutdown()
+        self.table.shutdown()
+        self.server_close()
 
 
 class WorkbenchServer6(WorkbenchServer):
@@ -435,7 +453,7 @@ def _stop_on_signals() -> dict[int, Any]:
 def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser: bool, echo: Any = print) -> None:
     """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); then every child still running is stopped, and each run or job
     still running gets up to `procs.WAITER_JOIN_SECONDS` to be recorded: a stopped run cancelled, a stopped job with the
-    exit code the stop gave (RunRegistry.shutdown, JobRegistry.shutdown)."""
+    exit code the stop gave (WorkbenchServer.close)."""
     httpd = make_server(host=host, port=port, workspace=workspace, out_dir=out_dir)
     url = f"{httpd.url}#token={httpd.token}"
     echo(f"MARA workbench {__version__} · workspace {httpd.workspace} · runs in {httpd.runs.runs_dir}")
@@ -456,8 +474,7 @@ def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser:
         for sig in previous:
             signal.signal(sig, signal.SIG_IGN)  # a second signal must not cut the cleanup short
         echo("stopping: cancelling any running review and stopping any running job")
-        httpd.shutdown_children()
-        httpd.server_close()
+        httpd.close()
         if redirect is not None:
             redirect.unlink(missing_ok=True)
         for sig, handler in previous.items():

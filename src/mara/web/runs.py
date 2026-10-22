@@ -228,12 +228,6 @@ class RunRegistry:
             raise LaunchError("not_found", f"run {run_id} has no request to repeat", status=404)
         return self.create(LaunchRequest.model_validate(manifest["request"]))
 
-    def shutdown(self) -> None:
-        """Server exit: stop the child of every run whose child still runs, so that the run is recorded cancelled, not
-        orphaned; then give the waiter of every run still running, one whose child exited by itself included, up to
-        `procs.WAITER_JOIN_SECONDS` to record the exit. A waiter still alive then leaves run.json without the exit code."""
-        self.children.shutdown()
-
     # ------------------------------------------------------------------ reading
     def run_dir(self, run_id: str) -> Path | None:
         if run_id == IMPORTED_ID:

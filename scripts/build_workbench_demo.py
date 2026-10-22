@@ -84,9 +84,7 @@ def capture(timeout: float = 900) -> dict[str, Any]:
             api = {r: json.loads(get("GET", r + ("?tail=600" if r.endswith("/log") else ""))) for r in routes}
             files = {n: get("GET", f"/api/runs/{run_id}/files/{n}").decode("utf-8") for n in DOWNLOADS}
         finally:
-            httpd.shutdown()
-            httpd.shutdown_children()
-            httpd.server_close()
+            httpd.close()
         raw = {"api": api, "files": files}
         return scrub(raw, run_id, out_dir)
 

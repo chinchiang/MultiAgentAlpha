@@ -30,6 +30,11 @@ def _start(children, tmp_path, child_id="a", code="pass", tag=None):
                           env=dict(os.environ), tag=tag)
 
 
+# a child that touches the file argv[1] names once it ignores SIGTERM, then sleeps
+_IGNORING_SIGTERM = ("import signal, sys, time\nfrom pathlib import Path\n"
+                     "signal.signal(signal.SIGTERM, signal.SIG_IGN)\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n")
+
+
 def _until(condition, timeout):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline and not condition():
@@ -76,6 +81,21 @@ def test_stopping_a_running_child_records_its_exit_as_stopped(tmp_path):
     assert (child_id, code != 0, stopped) == ("a", True, True)
 
 
+def test_stopping_a_child_still_running_after_the_grace_kills_it(tmp_path):
+    """What a cancel does through Children.stop(), with the grace shortened."""
+    ready = tmp_path / "ready"
+    proc = procs.spawn([sys.executable, "-c", _IGNORING_SIGTERM, str(ready)], cwd=tmp_path, log_path=tmp_path / "a.log",
+                       env=dict(os.environ))
+    try:
+        assert _until(ready.exists, 30)
+        began = time.monotonic()
+        procs.stop(proc, grace=0.5)
+        assert time.monotonic() - began < 5
+        assert proc.poll() == -9
+    finally:
+        procs.kill(proc)  # a child left running when the test fails
+
+
 def test_stopping_a_child_that_exited_by_itself_waits_for_its_exit_to_be_recorded_and_does_not_record_it_stopped(tmp_path):
     records = []
     children, made = _children(UnrecordedExit, records)
@@ -100,7 +120,7 @@ def test_shutting_down_stops_every_running_child_its_exit_recorded_as_stopped(tm
     records = []
     children, _ = _children(lambda proc: proc, records)
     _start(children, tmp_path, code="import time; time.sleep(60)")
-    children.shutdown()
+    children.table.shutdown()
     assert _until(lambda: records, 10)
     ((child_id, code, stopped),) = records
     assert (child_id, code != 0, stopped) == ("a", True, True)
@@ -115,7 +135,7 @@ def test_shutting_down_waits_for_the_exit_of_a_child_that_exited_by_itself_and_d
     release = threading.Timer(0.5, child.released.set)
     release.start()
     try:
-        children.shutdown()
+        children.table.shutdown()
         assert records == [("a", 0, False)]
     finally:
         release.cancel()
@@ -163,7 +183,7 @@ def test_a_child_that_cannot_be_started_is_not_registered(tmp_path):
 
 @pytest.mark.parametrize("stopping", ["stop", "shutdown"])
 def test_while_a_child_is_being_stopped_whether_it_runs_is_answered_at_once(tmp_path, stopping):
-    """procs.stop waits for the child to exit, which may take its whole grace: it runs outside the lock reads take."""
+    """Stopping waits for the child to exit, which may take its whole grace: it runs outside the lock reads take."""
     records = []
     children = procs.Children("test", lambda child_id, code, stopped: records.append((child_id, code, stopped)))
     ready = tmp_path / "ready"
@@ -171,7 +191,7 @@ def test_while_a_child_is_being_stopped_whether_it_runs_is_answered_at_once(tmp_
             "signal.signal(signal.SIGTERM, lambda *_: (time.sleep(2), sys.exit(0)))\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n")
     children.start("a", [sys.executable, "-c", code, str(ready)], cwd=tmp_path, log_path=tmp_path / "a.log", env=dict(os.environ))
     assert _until(ready.exists, 30)
-    stopper = threading.Thread(target=lambda: children.stop("a") if stopping == "stop" else children.shutdown())
+    stopper = threading.Thread(target=lambda: children.stop("a") if stopping == "stop" else children.table.shutdown())
     stopper.start()
     time.sleep(0.5)  # the child got SIGTERM and takes 2 s to exit
     asked = time.monotonic()
@@ -203,6 +223,37 @@ def test_children_of_one_table_share_its_lock(tmp_path):
         assert jobs.running("j")
     assert _until(lambda: records, 30)
     assert records == [("j", 0, False)]
+
+
+def test_a_table_stops_every_running_child_at_once(tmp_path):
+    """Each child takes 2 s to exit after SIGTERM: stopped one by one, the second would get it only after the first exited."""
+    table, records = procs.ChildTable(), []
+    record = lambda child_id, code, stopped: records.append((child_id, code, stopped))  # noqa: E731
+    runs, jobs = procs.Children("run", record, table=table), procs.Children("job", record, table=table)
+    code = ("import signal, sys, time\nfrom pathlib import Path\n"
+            "signal.signal(signal.SIGTERM, lambda *_: (Path(sys.argv[2]).touch(), time.sleep(2), sys.exit(0)))\n"
+            "Path(sys.argv[1]).touch()\ntime.sleep(60)\n")
+    for children, name in ((runs, "r"), (jobs, "j")):
+        children.start(name, [sys.executable, "-c", code, str(tmp_path / f"{name}.ready"), str(tmp_path / f"{name}.term")],
+                       cwd=tmp_path, log_path=tmp_path / f"{name}.log", env=dict(os.environ))
+    assert _until(lambda: (tmp_path / "r.ready").exists() and (tmp_path / "j.ready").exists(), 30)
+    stopper = threading.Thread(target=table.shutdown)
+    stopper.start()
+    assert _until(lambda: (tmp_path / "r.term").exists() and (tmp_path / "j.term").exists(), 1)
+    stopper.join(30)
+    assert sorted(records) == [("j", 0, True), ("r", 0, True)]
+
+
+def test_a_child_still_running_after_the_grace_is_killed(tmp_path):
+    records = []
+    children = procs.Children("test", lambda child_id, code, stopped: records.append((child_id, code, stopped)))
+    ready = tmp_path / "ready"
+    children.start("a", [sys.executable, "-c", _IGNORING_SIGTERM, str(ready)], cwd=tmp_path, log_path=tmp_path / "a.log", env=dict(os.environ))
+    assert _until(ready.exists, 30)
+    began = time.monotonic()
+    children.table.shutdown(grace=0.5)
+    assert time.monotonic() - began < 5
+    assert records == [("a", -9, True)]
 
 
 def test_a_table_tells_the_tags_of_every_child_running_and_each_registry_sees_only_its_own(tmp_path):

@@ -7,6 +7,7 @@ import http.client
 import json
 import os
 import re
+import socket
 import sys
 import threading
 import time
@@ -34,9 +35,7 @@ def server(tmp_path_factory):
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     yield httpd
-    httpd.shutdown()
-    httpd.shutdown_children()
-    httpd.server_close()
+    httpd.close()
     for k, v in old.items():
         if v is None:
             os.environ.pop(k, None)
@@ -339,7 +338,7 @@ def test_a_job_replacing_the_tools_holds_reviews_back(server, monkeypatch):
         res, busy, _ = c.request("POST", "/api/runs", body={"target": "fixtures/vuln-sample", "provider": "mock"})
         assert res.status == 409 and _error(busy) == "busy"
     finally:
-        server.jobs.shutdown()
+        server.table.shutdown()
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline and server.jobs.children.any_running():
         time.sleep(0.1)
@@ -390,18 +389,46 @@ def test_a_review_and_a_job_replacing_the_tools_launched_at_once_one_is_refused(
             t.join(15)
         assert outcomes == {first: "launched", second: "busy"}
     finally:
-        reg.shutdown()
-        job_reg.shutdown()
+        reg.children.table.shutdown()  # the job registry's too: they share the table
 
 
-def test_stopping_the_registry_cancels_a_running_review(tmp_path, monkeypatch):
+def test_server_exit_cancels_a_running_run(tmp_path, monkeypatch):
     monkeypatch.setenv("MARA_HOME", str(ROOT))
     monkeypatch.setattr(runs.procs, "spawn", _slow_review(procs.spawn))
     reg = runs.RunRegistry(ROOT, tmp_path / "out")
     run = reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))
     assert reg.busy()
-    reg.shutdown()
+    reg.children.table.shutdown()
     assert not reg.busy() and reg.get(run["id"])["status"] == "cancelled"
+
+
+def test_closing_a_server_that_never_served_returns(tmp_path):
+    """socketserver's shutdown() waits forever for a serve_forever() that never ran: close() asks it of a server that
+    serves only."""
+    httpd = make_server(port=0, workspace=ROOT, out_dir=tmp_path / "out")
+    closer = threading.Thread(target=httpd.close, daemon=True)
+    closer.start()
+    closer.join(5)
+    assert not closer.is_alive()
+
+
+def test_closing_a_serving_server_stops_serving_and_its_children(tmp_path, monkeypatch):
+    monkeypatch.setenv("MARA_HOME", str(ROOT))
+    monkeypatch.setattr(runs.procs, "spawn", _slow_review(procs.spawn))
+    httpd = make_server(port=0, workspace=ROOT, out_dir=tmp_path / "out")
+    serving = threading.Thread(target=httpd.serve_forever, daemon=True)
+    serving.start()
+    run = httpd.runs.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))
+    try:
+        assert httpd.runs.busy()
+        httpd.close()
+        serving.join(5)
+        assert not serving.is_alive()
+        assert httpd.runs.get(run["id"])["status"] == "cancelled"
+        with pytest.raises(OSError):
+            socket.create_connection(("127.0.0.1", httpd.port), timeout=2).close()
+    finally:
+        httpd.runs.children.stop(run["id"])  # a child left running when the test fails
 
 
 def test_a_failed_run_is_failed_not_finished(server, monkeypatch):
