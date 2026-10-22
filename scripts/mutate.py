@@ -1,10 +1,10 @@
 """Mutation checks: apply each mutation of a list to the source, run the tests that should catch it, and restore it.
 
-  .venv/bin/python scripts/mutate.py mutations.yaml                  # every mutation of the list
-  .venv/bin/python scripts/mutate.py mutations.yaml --only "a name"  # some of them, by name
-  .venv/bin/python scripts/mutate.py mutations.yaml --focused-only   # the focused tests alone, never the whole suite
+  .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml                  # every mutation of the list
+  .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --only "a name"  # some of them, by name
+  .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --focused-only   # the focused tests alone, never the whole suite
 
-The list is a YAML file:
+A list is a YAML file in tests/mutations/, where tests/test_mutation_lists.py checks that each one loads:
 
   focused: [tests/test_tool_evidence.py, ...]   # run first; the whole suite runs only for a mutation they miss
   mutations:

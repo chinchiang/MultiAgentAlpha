@@ -1,0 +1,30 @@
+focused:
+- tests/test_web_server.py
+- tests/test_web_procs.py
+mutations:
+- name: the table is never closed
+  file: src/mara/web/procs.py
+  old: '            self.closed = True
+
+    '
+  new: ''
+- name: the table is closed only once its children are stopped and their exits recorded
+  file: src/mara/web/procs.py
+  old: "        with self.lock:\n            self.closed = True\n            taken = [children._taken_for_shutdown() for children in self._members]\n        _stop_all([p for _, ps in taken for p in ps], grace)\n        for waiters, _ in taken:\n            for w in waiters:\n                w.join(timeout=WAITER_JOIN_SECONDS)\n"
+  new: "        with self.lock:\n            taken = [children._taken_for_shutdown() for children in self._members]\n        _stop_all([p for _, ps in taken for p in ps], grace)\n        for waiters, _ in taken:\n            for w in waiters:\n                w.join(timeout=WAITER_JOIN_SECONDS)\n        self.closed = True\n"
+- name: a run is launched whether the table is closed or not
+  file: src/mara/web/runs.py
+  old: "            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"
+  new: "            if False:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"
+- name: a job is launched whether the table is closed or not
+  file: src/mara/web/jobs.py
+  old: "            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"
+  new: "            if False:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"
+- name: a run's directory is made before the closed table refuses it
+  file: src/mara/web/runs.py
+  old: "            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n            if refused := admission.refusal(\"run\", self.children.table.running_tags()):\n                raise LaunchError(\"busy\", refused, status=409)\n            run_id = procs.new_id()\n            run_dir = self.runs_dir / run_id\n            run_dir.mkdir(parents=True)\n"
+  new: "            if refused := admission.refusal(\"run\", self.children.table.running_tags()):\n                raise LaunchError(\"busy\", refused, status=409)\n            run_id = procs.new_id()\n            run_dir = self.runs_dir / run_id\n            run_dir.mkdir(parents=True)\n            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"
+- name: a job's directory is made before the closed table refuses it
+  file: src/mara/web/jobs.py
+  old: "            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n            if refused := admission.refusal(req.kind, self.children.table.running_tags()):\n                raise LaunchError(\"busy\", refused, status=409)\n            job_id = procs.new_id()\n            d = self.jobs_dir / job_id\n            d.mkdir(parents=True)\n"
+  new: "            if refused := admission.refusal(req.kind, self.children.table.running_tags()):\n                raise LaunchError(\"busy\", refused, status=409)\n            job_id = procs.new_id()\n            d = self.jobs_dir / job_id\n            d.mkdir(parents=True)\n            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"
