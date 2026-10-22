@@ -49,7 +49,8 @@ row.
 The mutations a behaviour change's tests were checked against (`scripts/mutate.py`) are committed with the change, as
 `tests/mutations/<name>.yaml`. A change that makes a committed list stale re-aligns each `old` to the code in the same
 commit, or drops a mutation that no longer means anything; `tests/test_mutation_lists.py` goes red on a list that does
-not load.
+not load. A re-aligned mutation still makes the fault its name says: a review compares each re-aligned `old`/`new` with
+the list's previous version, and a mutation that now makes another fault is renamed or re-aligned again.
 
 ## Lines are wrapped by hand
 

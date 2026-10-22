@@ -16,8 +16,9 @@ A list is a YAML file in tests/mutations/, where tests/test_mutation_lists.py ch
 Quote every value with a ` #` in it: YAML ends an unquoted value at ` #` and reads the rest as a comment, so
 `name: the PR #141 rule` loads as "the PR".
 
-Every `old` must occur exactly once in its file and every focused path must exist; the list is checked before any file
-is touched. Then the focused tests and the whole suite run once without a mutation, and must pass. A mutation is caught
+Every `old` must occur exactly once in its file and differ from its `new`, no two mutations of a file may make the same
+mutant (one of them is a mis-aligned copy of the other), and every focused path must exist; the list is checked before
+any file is touched. Then the focused tests and the whole suite run once without a mutation, and must pass. A mutation is caught
 when a test fails on it (pytest exits 1): the focused tests first (all of them, or until one fails), then, if they
 pass, the whole suite. Any other exit, such as a mutant that does not import (2), is an error: nothing caught the
 mutation, and the whole suite does not run after the focused tests. Tests run with GITHUB_ACTIONS=true and without
@@ -54,20 +55,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
-    """(the focused tests, the mutations) of a list, every focused path checked to exist and every `old` to occur exactly
-    once; ValueError otherwise."""
+    """(the focused tests, the mutations) of a list, every focused path checked to exist, every `old` to occur exactly
+    once and to differ from its `new`, and no two mutations of a file to make the same mutant; ValueError otherwise."""
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     focused = list(data.get("focused") or [])
     mutations = data.get("mutations") or []
     problems = [f"focused: no {t}" for t in focused if not isinstance(t, str) or not (root / t.split("::")[0]).exists()]
+    mutants: dict[tuple[str, str], list[str]] = {}  # (file, its text once mutated): the mutations that make it
     for m in mutations:
         missing = [k for k in ("name", "file", "old", "new") if not isinstance(m.get(k), str)]
         if missing:
             problems.append(f"{m.get('name', m)}: no {', '.join(missing)}")
             continue
-        n = (root / m["file"]).read_text(encoding="utf-8").count(m["old"]) if (root / m["file"]).is_file() else -1
+        text = (root / m["file"]).read_text(encoding="utf-8") if (root / m["file"]).is_file() else None
+        n = text.count(m["old"]) if text is not None else -1
         if n != 1:
             problems.append(f"{m['name']}: `old` occurs {n} times in {m['file']}" if n >= 0 else f"{m['name']}: no file {m['file']}")
+        elif m["new"] == m["old"]:
+            problems.append(f"{m['name']}: new is old, so the file is unchanged")
+        else:
+            mutants.setdefault((m["file"], text.replace(m["old"], m["new"], 1)), []).append(m["name"])
+    problems += [f"{', '.join(same)}: the same mutant of {file}" for (file, _), same in mutants.items() if len(same) > 1]
     names = [m.get("name") for m in mutations]
     problems += [f"{n}: named twice" for n in sorted({n for n in names if names.count(n) > 1})]
     if problems:

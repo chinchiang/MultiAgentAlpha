@@ -1,0 +1,18 @@
+focused: [tests/test_mutate.py]
+mutations:
+  - name: a mutation that changes nothing is not refused
+    file: scripts/mutate.py
+    old: "        elif m[\"new\"] == m[\"old\"]:\n            problems.append(f\"{m['name']}: new is old, so the file is unchanged\")\n"
+    new: ""
+  - name: two mutations that make the same mutant are not refused
+    file: scripts/mutate.py
+    old: "    problems += [f\"{', '.join(same)}: the same mutant of {file}\" for (file, _), same in mutants.items() if len(same) > 1]\n"
+    new: ""
+  - name: the same mutant compared across files
+    file: scripts/mutate.py
+    old: "mutants.setdefault((m[\"file\"], text.replace("
+    new: "mutants.setdefault((\"\", text.replace("
+  - name: the same mutant compared by new alone, not by the file it makes
+    file: scripts/mutate.py
+    old: "text.replace(m[\"old\"], m[\"new\"], 1)), []).append"
+    new: "m[\"new\"]), []).append"
