@@ -22,7 +22,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import admission, procs
-from .runs import LaunchError, RunRegistry
+from .runs import LaunchError, resolve_config
 
 JobKind = Literal["install_tools", "trivy_db_download", "trivy_db_status", "check_config"]
 SCRIPTS = {"install_tools": "scripts/install_tools.py", "trivy_db_download": "scripts/trivy_db.py", "trivy_db_status": "scripts/trivy_db.py"}
@@ -51,12 +51,11 @@ def available(workspace: Path) -> dict[str, bool]:
 
 
 class JobRegistry:
-    def __init__(self, workspace: Path, out_dir: Path, runs: RunRegistry, *, start: Callable[..., Any] | None = None,
+    def __init__(self, workspace: Path, out_dir: Path, *, start: Callable[..., Any] | None = None,
                  table: procs.ChildTable | None = None) -> None:
         self.workspace = workspace.resolve()
         self.jobs_dir = out_dir.resolve() / "jobs"
-        self.runs = runs  # for the config allowlist; and the table its children are in, unless another is given
-        self.children = procs.Children("job", self._record_exit, start=start, table=table or runs.children.table)
+        self.children = procs.Children("job", self._record_exit, start=start, table=table)
 
     def argv(self, req: JobRequest) -> list[str]:
         if req.kind in SCRIPTS and not available(self.workspace)[req.kind]:
@@ -69,7 +68,7 @@ class JobRegistry:
             return [sys.executable, str(self.workspace / SCRIPTS["install_tools"]), *(["--only", *req.only] if req.only else [])]
         if req.kind in ("trivy_db_download", "trivy_db_status"):
             return [sys.executable, str(self.workspace / SCRIPTS[req.kind]), "download" if req.kind == "trivy_db_download" else "status"]
-        cfg = self.runs.resolve_config(req.config, "live")
+        cfg = resolve_config(self.workspace, req.config, "live")
         return [sys.executable, "-m", "mara.cli", "check-config", str(cfg)]
 
     def create(self, req: JobRequest) -> dict[str, Any]:
