@@ -1,0 +1,76 @@
+focused: [tests/test_web_procs.py, tests/test_web_server.py]
+mutations:
+  - name: close shuts serving down unconditionally
+    file: src/mara/web/server.py
+    old: "        if self._serving:\n            self.shutdown()\n"
+    new: "        if True:\n            self.shutdown()\n"
+  - name: close never shuts serving down
+    file: src/mara/web/server.py
+    old: "        if self._serving:\n            self.shutdown()\n"
+    new: "        if False:\n            self.shutdown()\n"
+  - name: close stops no child
+    file: src/mara/web/server.py
+    old: "        self.table.shutdown()\n        self.server_close()\n"
+    new: "        self.server_close()\n"
+  - name: close does not close the socket
+    file: src/mara/web/server.py
+    old: "        self.table.shutdown()\n        self.server_close()\n"
+    new: "        self.table.shutdown()\n"
+  - name: the table stops its children one by one
+    file: src/mara/web/procs.py
+    old: "        _stop_all([p for _, ps in taken for p in ps], grace)\n"
+    new: "        for p in [p for _, ps in taken for p in ps]:\n            _stop_all([p], grace)\n"
+  - name: a stop only kills, never terminates
+    file: src/mara/web/procs.py
+    old: "    for p in running:\n        terminate(p)\n"
+    new: "    for p in running:\n        pass\n"
+  - name: a stop kills no child after the grace
+    file: src/mara/web/procs.py
+    old: "    for p in to_kill:\n        kill(p)\n"
+    new: "    for p in to_kill:\n        pass\n"
+  - name: the table stops the children of its first registry only
+    file: src/mara/web/procs.py
+    old: "            taken = [children._taken_for_shutdown() for children in self._members]\n"
+    new: "            taken = [children._taken_for_shutdown() for children in self._members[:1]]\n"
+  - name: the table does not wait for the waiters
+    file: src/mara/web/procs.py
+    old: "                w.join(timeout=WAITER_JOIN_SECONDS)\n"
+    new: "                pass\n"
+  - name: the table does not mark the children it stops
+    file: src/mara/web/procs.py
+    old: "        self._stopped.update(c for c, _ in to_stop)\n"
+    new: ""
+  - name: the table waits only for the waiters of children it stops
+    file: src/mara/web/procs.py
+    old: "        waiters = [w for w in self._waiters.values() if w.is_alive()]\n"
+    new: "        waiters = [self._waiters[c] for c, p in self._procs.items() if p.poll() is None]\n"
+  - name: the table stops the children inside the lock
+    file: src/mara/web/procs.py
+    old: "            taken = [children._taken_for_shutdown() for children in self._members]\n        _stop_all([p for _, ps in taken for p in ps], grace)\n"
+    new: "            taken = [children._taken_for_shutdown() for children in self._members]\n            _stop_all([p for _, ps in taken for p in ps], grace)\n"
+  - name: a cancel never kills after the grace
+    file: src/mara/web/procs.py
+    old: "    _stop_all([proc], grace)\n"
+    new: "    terminate(proc)\n    _wait_until([proc], time.monotonic() + grace)\n"
+  - name: G1 one grace deadline per child, not one for all
+    file: src/mara/web/procs.py
+    old: "    _wait_until(running, time.monotonic() + grace)\n"
+    new: "    for p in running:\n        _wait_until([p], time.monotonic() + grace)\n"
+  - name: G9 every child killed after the grace, running or not
+    file: src/mara/web/procs.py
+    old: "    to_kill = [p for p in running if p.poll() is None]\n"
+    new: "    to_kill = list(running)\n"
+  - name: G6 close stops the children before it stops serving
+    file: src/mara/web/server.py
+    old: "        if self._serving:\n            self.shutdown()\n        self.table.shutdown()\n"
+    new: "        self.table.shutdown()\n        if self._serving:\n            self.shutdown()\n"
+  - name: G7 close closes the socket before stopping the children
+    file: src/mara/web/server.py
+    old: "        self.table.shutdown()\n        self.server_close()\n"
+    new: "        self.server_close()\n        self.table.shutdown()\n"
+# Equivalent, so not listed (the Spec reviewer's G2, G3, G8 on #166; scratch/design-web-stop-sequence.md):
+# - G2, one KILL_WAIT_SECONDS deadline per child: SIGKILL takes effect at once, so the second wait never waits.
+# - G3, no wait after the kill: ChildTable.shutdown() then joins every waiter, which waits for the exit anyway, and a
+#   cancel's Children.stop() joins its waiter too.
+# - G8, serve_forever() never clearing _serving: once serve_forever() returned, socketserver has set its
+#   __is_shut_down, so close()'s second shutdown() returns at once.

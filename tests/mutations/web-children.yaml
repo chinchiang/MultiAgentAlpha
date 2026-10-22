@@ -1,0 +1,58 @@
+focused: [tests/test_web_procs.py]
+mutations:
+  - name: the exit recorded outside the lock
+    file: src/mara/web/procs.py
+    old: "        code = proc.wait()\n        with self._lock:\n            self.on_exit("
+    new: "        code = proc.wait()\n        if True:\n            self.on_exit("
+  - name: running read from the child, not the waiter
+    file: src/mara/web/procs.py
+    old: "            waiter = self._waiters.get(child_id)\n            return waiter is not None and waiter.is_alive()\n"
+    new: "            proc = self._procs.get(child_id)\n            return proc is not None and proc.poll() is None\n"
+  - name: any_running ignores the tags
+    file: src/mara/web/procs.py
+    old: "w.is_alive() and (tags is None or self._tags.get(c) in tags)"
+    new: "w.is_alive()"
+  - name: any_running read from the children, not the waiters
+    file: src/mara/web/procs.py
+    old: "            return any(w.is_alive() and (tags is None or self._tags.get(c) in tags) for c, w in self._waiters.items())\n"
+    new: "            return any(p.poll() is None and (tags is None or self._tags.get(c) in tags) for c, p in self._procs.items())\n"
+  - name: the exit never recorded as stopped
+    file: src/mara/web/procs.py
+    old: "self.on_exit(child_id, code, child_id in self._stopped)"
+    new: "self.on_exit(child_id, code, False)"
+  - name: stop marks a child that exited by itself as stopped
+    file: src/mara/web/procs.py
+    old: "            if to_stop is not None:\n                self._stopped.add(child_id)\n"
+    new: "            self._stopped.add(child_id)\n"
+  - name: stop does not wait for the waiter
+    file: src/mara/web/procs.py
+    old: "            stop(to_stop)\n        waiter.join(timeout=WAITER_JOIN_SECONDS)\n"
+    new: "            stop(to_stop)\n"
+  - name: a lost exit recorded as -1
+    file: src/mara/web/procs.py
+    old: "        code = proc.wait()\n        with self._lock:\n"
+    new: "        try:\n            code = proc.wait()\n        except OSError:\n            code = -1\n        with self._lock:\n"
+  - name: a child that cannot be started is registered first
+    file: src/mara/web/procs.py
+    old: "        with self._lock:\n            proc = (self._start or spawn)(argv, cwd=cwd, log_path=log_path, env=env)\n"
+    new: "        with self._lock:\n            self._waiters[child_id] = threading.current_thread()\n            proc = (self._start or spawn)(argv, cwd=cwd, log_path=log_path, env=env)\n"
+  - name: stop stops the child inside the lock
+    file: src/mara/web/procs.py
+    old: "                self._stopped.add(child_id)\n        if to_stop is not None:\n            stop(to_stop)\n"
+    new: "                self._stopped.add(child_id)\n            if to_stop is not None:\n                stop(to_stop)\n"
+  - name: a registry's children keep a lock of their own, not the table's
+    file: src/mara/web/procs.py
+    old: "        self._lock = self.table.lock\n"
+    new: "        self._lock = threading.RLock()\n"
+  - name: a registry's children never join the table
+    file: src/mara/web/procs.py
+    old: "            self.table._members.append(self)\n"
+    new: "            pass\n"
+  - name: the table tells the tags of its first registry only
+    file: src/mara/web/procs.py
+    old: "            return {tag for children in self._members for tag in children._running_tags()}\n"
+    new: "            return {tag for children in self._members[:1] for tag in children._running_tags()}\n"
+  - name: the table tells the tags of children no longer running
+    file: src/mara/web/procs.py
+    old: "        return {tag for c, w in self._waiters.items() if w.is_alive() and (tag := self._tags.get(c)) is not None}\n"
+    new: "        return {tag for c, w in self._waiters.items() if (tag := self._tags.get(c)) is not None}\n"

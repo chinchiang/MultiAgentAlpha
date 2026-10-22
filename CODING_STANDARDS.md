@@ -44,6 +44,13 @@ counts `scripts/check_citations.py` gives; when the report body did not change, 
 previous row's. `mara.__version__` equals the newest row's version (`tests/test_version.py`). A pure refactor adds no
 row.
 
+## A behaviour change commits its mutation list
+
+The mutations a behaviour change's tests were checked against (`scripts/mutate.py`) are committed with the change, as
+`tests/mutations/<name>.yaml`. A change that makes a committed list stale re-aligns each `old` to the code in the same
+commit, or drops a mutation that no longer means anything; `tests/test_mutation_lists.py` goes red on a list that does
+not load.
+
 ## Lines are wrapped by hand
 
 `ruff format` is not part of the checks. Code is wrapped by hand within 150 columns, the way the code around it is; a
