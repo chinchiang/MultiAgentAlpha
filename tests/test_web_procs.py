@@ -256,6 +256,49 @@ def test_a_child_still_running_after_the_grace_is_killed(tmp_path):
     assert records == [("a", -9, True)]
 
 
+def _start_in_table(codes, tmp_path, records):
+    """A run's and a job's Children in one table, the first starting the first child of `codes` (name: code), the second
+    the second, each child given a file it touches once ready (argv[1]), waiting until both are; the table and the pid
+    of each child."""
+    table = procs.ChildTable()
+    record = lambda child_id, code, stopped: records.append((child_id, code, stopped))  # noqa: E731
+    pids = {}
+    for kind, (name, code) in zip(("run", "job"), codes.items(), strict=True):
+        pids[name] = procs.Children(kind, record, table=table).start(
+            name, [sys.executable, "-c", code, str(tmp_path / f"{name}.ready")], cwd=tmp_path, log_path=tmp_path / f"{name}.log",
+            env=dict(os.environ))
+    assert _until(lambda: all((tmp_path / f"{name}.ready").exists() for name in codes), 30)
+    return table, pids
+
+
+def test_children_still_running_after_the_grace_share_one_deadline(tmp_path):
+    """Both ignore SIGTERM: a deadline for each child in turn would take twice the grace."""
+    records = []
+    table, _ = _start_in_table({"r": _IGNORING_SIGTERM, "j": _IGNORING_SIGTERM}, tmp_path, records)
+    began = time.monotonic()
+    table.shutdown(grace=1)
+    waited = round(time.monotonic() - began, 1)
+    assert waited < 1.8
+    assert sorted(records) == [("j", -9, True), ("r", -9, True)]
+
+
+def test_only_the_children_still_running_after_the_grace_are_killed(tmp_path, monkeypatch):
+    """A child that exited on SIGTERM is not killed: its pid may be another process's by then."""
+    killed, real = [], procs.kill
+
+    def kill(proc):
+        killed.append(proc.pid)
+        real(proc)
+
+    monkeypatch.setattr(procs, "kill", kill)
+    records = []
+    exits = "import sys, time\nfrom pathlib import Path\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n"
+    table, pids = _start_in_table({"e": exits, "i": _IGNORING_SIGTERM}, tmp_path, records)
+    table.shutdown(grace=1)
+    assert killed == [pids["i"]]
+    assert sorted(records) == [("e", -15, True), ("i", -9, True)]
+
+
 def test_a_table_tells_the_tags_of_every_child_running_and_each_registry_sees_only_its_own(tmp_path):
     table, made = procs.ChildTable(), []
 

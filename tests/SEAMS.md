@@ -85,6 +85,12 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
   `ChildTable.running_tags` answers the tags of every child running in it, and `ChildTable.shutdown` stops every one of
   them at server exit; a test reaches the table as the `table` of a registry's `children` or of the server, and
   `WorkbenchServer.close()` calls it. `test_web_procs.py`, `test_web_server.py`.
+- `procs.kill`: wrapped as an attribute of `mara.web.procs` by a function that records the child it is given, then
+  calls the real one; `ChildTable.shutdown` looks it up in its module when it kills, so the wrapper sees every kill.
+  `test_web_procs.py::test_only_the_children_still_running_after_the_grace_are_killed`.
+- `WorkbenchServer.close`: on a server's own instance, its `shutdown` and `server_close` and its `table`'s `shutdown`
+  are replaced by functions that record which step ran, then call the real ones, so a test reads the order `close()`
+  takes them in. `test_web_server.py::test_closing_a_server_stops_serving_then_its_children_then_closes_its_socket`.
 - `admission.refusal(kind, running)`: pure, called directly with a kind and a set of kinds. Also patched as an attribute
   of `mara.web.admission`, which both registries call through the module under `held()`.
   `test_web_admission.py`,
