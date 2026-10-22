@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import py_compile
+import signal
+import subprocess
 import sys
+import time
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -46,6 +52,8 @@ def test_a_mutation_a_test_catches_and_one_none_does_are_told_apart_and_the_sour
                                                                           ("another comment", False, "suite")]
     assert results[0]["by"] == "tests/test_window.py::test_limit"
     assert (run / "another_comment.suite.log").is_file(), "the whole suite's output is kept for a missed mutation"
+    assert (run / "mutations.yaml").read_text(encoding="utf-8") == (tmp_path / "mutations.yaml").read_text(encoding="utf-8")
+    assert not (run / "original").exists() and not (run / "mutant").exists(), "the copies go once every file is restored"
     assert "1 of 2 caught" in capsys.readouterr().out
 
 
@@ -122,7 +130,8 @@ def test_focused_only_runs_the_focused_tests_alone_and_a_mutation_they_miss_is_m
     results = json.loads((run / "results.json").read_text(encoding="utf-8"))
     assert [(r["mutation"], r["caught"], r["where"]) for r in results] == [("a wider window", True, "focused"),
                                                                           ("another comment", False, "focused")]
-    assert sorted(p.name for p in run.iterdir()) == ["baseline.focused.log", "results.json"], "no run of the whole suite"
+    assert sorted(p.name for p in run.iterdir()) == ["baseline.focused.log", "mutations.yaml", "pid", "results.json"], \
+        "no run of the whole suite"
     assert "MISSED another comment  (focused)" in capsys.readouterr().out
     assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
 
@@ -147,3 +156,76 @@ def test_focused_only_without_focused_tests_is_refused(tmp_path, capsys):
     assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs"), "--focused-only"]) == 2
     assert "--focused-only needs focused tests" in capsys.readouterr().err
     assert not (tmp_path / "runs").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGKILL to a process group")
+def test_a_mutant_left_by_a_killed_run_is_restored_before_the_next_run(tmp_path, capsys):
+    """Killed, a run never reaches the finally that restores the file: the next one restores it from the run's copy."""
+    root = _repo(tmp_path)
+    test = (root / "tests" / "test_window.py").read_text(encoding="utf-8")
+    running = tmp_path / "mutant-running"
+    (root / "tests" / "test_window.py").write_text(
+        "import time\nfrom pathlib import Path\nfrom window import limit\n\n\ndef test_limit():\n    if limit() != 3:\n"
+        f"        Path({str(running)!r}).touch()\n        time.sleep(60)\n    assert limit() == 3\n", encoding="utf-8")
+    path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"}],
+                 ["tests/test_window.py"])
+    args = [str(path), "--root", str(root), "--runs", str(tmp_path / "runs"), "--focused-only"]
+    proc = subprocess.Popen([sys.executable, str(ROOT / "scripts" / "mutate.py"), *args], start_new_session=True,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        deadline = time.monotonic() + 60
+        while not running.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert running.exists(), "the focused test ran on the mutant"
+    finally:
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait(30)
+    (killed,) = (tmp_path / "runs").iterdir()
+    assert "return 4" in (root / "src" / "window.py").read_text(encoding="utf-8"), "the mutant is left in place"
+    assert (killed / "original" / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+    (root / "tests" / "test_window.py").write_text(test, encoding="utf-8")
+    assert mutate.main(args) == 0
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+    assert f"restored src/window.py, left mutated by the run {killed}" in capsys.readouterr().out
+    assert not (killed / "original").exists() and not (killed / "mutant").exists()
+
+
+def _left(tmp_path: Path, root: Path, current: str, pid: int) -> Path:
+    """A run that left src/window.py mutated, its copies kept, run by `pid`; the file now holding `current`."""
+    run = tmp_path / "runs" / "20261022T000000000000Z"
+    for kind, text in (("original", SOURCE), ("mutant", SOURCE.replace("return 3", "return 4"))):
+        (run / kind / "src").mkdir(parents=True)
+        (run / kind / "src" / "window.py").write_text(text, encoding="utf-8")
+    (run / "pid").write_text(str(pid), encoding="utf-8")
+    (root / "src" / "window.py").write_text(current, encoding="utf-8")
+    return run
+
+
+def _gone_pid() -> int:
+    done = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"], capture_output=True, text=True, check=True)
+    return int(done.stdout)
+
+
+def test_a_file_changed_since_a_killed_run_left_it_is_not_restored_and_no_run_starts(tmp_path, capsys):
+    """Neither the original nor the mutant: someone edited it since, and restoring it would lose that edit."""
+    root = _repo(tmp_path)
+    edited = SOURCE.replace("return 3", "return 5")
+    run = _left(tmp_path, root, edited, _gone_pid())
+    path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 5", "new": "return 6"}])
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
+    err = capsys.readouterr().err
+    assert f"src/window.py is neither the original nor the mutant the run {run} left" in err
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == edited
+    assert (run / "original" / "src" / "window.py").is_file(), "the copies stay until the file is sorted out"
+    assert [p.name for p in (tmp_path / "runs").iterdir()] == [run.name], "no run starts"
+
+
+def test_the_copies_of_a_run_still_going_are_left_to_it_and_no_run_starts(tmp_path, capsys):
+    """Its copies are not a leftover: restoring the file under it would end its mutation for it."""
+    root = _repo(tmp_path)
+    mutant = SOURCE.replace("return 3", "return 4")
+    run = _left(tmp_path, root, mutant, os.getpid())
+    path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 4", "new": "return 5"}])
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
+    assert f"the run {run} is still going (pid {os.getpid()})" in capsys.readouterr().err
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == mutant
