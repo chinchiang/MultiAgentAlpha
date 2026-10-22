@@ -48,4 +48,14 @@ vulnerabilities:
       semgrep scan only and never starts semgrep's MCP server. Mirrors tools/osv-semgrep.toml; re-check at
       a semgrep release that relaxes the pin.
     expired_at: 2026-12-31
+  - id: CVE-2026-114603
+    paths: ["tools/semgrep-requirements.txt"]
+    statement: >-
+      opentelemetry-api 1.37.0 in the semgrep closure (GHSA-xcq7-p3pf-p88h, published 2026-10-22): unbounded
+      tracestate parsing, fixed in opentelemetry-api 1.45.1. semgrep 1.179.0 through 1.182.1 (the newest
+      release, checked 2026-10-23) pin opentelemetry-api~=1.37.0, so relocking cannot reach the fix. semgrep
+      extracts a trace context only under --trace and never from a tracestate; MARA runs semgrep scan without
+      --trace and passes it no SEMGREP_* or OTEL_* variable. Mirrors tools/osv-semgrep.toml; re-check at a
+      semgrep release that relaxes the pin.
+    expired_at: 2026-12-31
 misconfigurations: []
