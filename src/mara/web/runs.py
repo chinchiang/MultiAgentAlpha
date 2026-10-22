@@ -9,6 +9,9 @@ config at launch (the config file may change later, and the report keeps only th
 and exit code. The exit code alone is ambiguous (2 is a usage error and an enforced gate alike), so a run counts
 as finished only when its progress record says the reports were written.
 
+The config is one `configs` allows, the configs the page lists (`configs.allowed`); `resolve_config` and
+`resolve_path` turn a request's value into it, and a check_config job resolves its config with them too.
+
 PSIRT hand-off options (`--notify-psirt`, `--psirt-event`) are not offered: they start EU CRA Article 14 clocks
 and stay a deliberate command-line step.
 
@@ -32,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .. import progress as progress_mod
 from ..schemas import ReviewReport
 from ..workspace import WorkspaceInsideTarget, check_outside
-from . import admission, procs, views
+from . import admission, configs, procs, views
 
 ARTIFACTS = ("report.md", "report.json", "report.sarif", "human_queue.md", "human_queue.json", "context.json",
              "psirt-notifications.json", "pipeline.log", "run.log", "progress.json")
@@ -71,10 +74,6 @@ def clean_title(text: str) -> str:
     return " ".join(kept.split())[:120]
 
 
-def config_dirs(workspace: Path) -> tuple[Path, Path]:
-    return (workspace / "config").resolve(), (workspace / "config" / "examples").resolve()
-
-
 def resolve_path(workspace: Path, value: str) -> Path:
     """`value` resolved, relative to `workspace` unless absolute; LaunchError bad_path when it is not a usable path."""
     try:
@@ -85,13 +84,13 @@ def resolve_path(workspace: Path, value: str) -> Path:
 
 
 def resolve_config(workspace: Path, value: str, provider: str) -> Path:
-    """The config file `value` names, or the provider's default when it is empty, if it is a YAML file under config/ or
-    config/examples/ of `workspace`; LaunchError config_not_found otherwise (bad_path, from resolve_path)."""
+    """The config file `value` names, or the provider's default when it is empty, if `configs.allowed()` accepts it;
+    LaunchError config_not_found otherwise (bad_path, from resolve_path)."""
     if value:
         cfg_path = resolve_path(workspace, value)
     else:
         cfg_path = (workspace / "config" / ("mara.mock.yaml" if provider == "mock" else "mara.yaml")).resolve()
-    if cfg_path.parent not in config_dirs(workspace) or cfg_path.suffix not in (".yaml", ".yml") or not cfg_path.is_file():
+    if not configs.allowed(workspace, cfg_path):
         raise LaunchError("config_not_found", f"{value or cfg_path}: not a config file under config/ or config/examples/")
     return cfg_path
 
