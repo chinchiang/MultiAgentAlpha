@@ -192,7 +192,7 @@ class ChildTable:
     def stop(self, name: str, child_id: str) -> Literal["stopped", "exited", "unknown"]:
         """Stop a child still running, its exit then recorded as stopped ("stopped"); a child no longer running, one that
         exited by itself or was stopped before, is not stopped again ("exited"). Either way its waiter gets up to
-        WAITER_JOIN_SECONDS to record the exit. "unknown": no child of that id was started."""
+        WAITER_JOIN_SECONDS to record the exit. "unknown": the registry `name` started no child of that id."""
         with self.lock:
             child = self._children.get((name, child_id))
             if child is None:

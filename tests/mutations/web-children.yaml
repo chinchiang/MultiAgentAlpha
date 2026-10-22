@@ -42,9 +42,9 @@ mutations:
     new: "                child.stopped = True\n            if to_stop is not None:\n                stop(to_stop)\n"
   - name: a registry's children keep a lock of their own, not the table's
     file: src/mara/web/procs.py
-    old: "        return self.table.lock\n"
-    new: "        return threading.RLock()\n"
-  - name: a registry's children never join the table
+    old: "        self.table = table or ChildTable()\n\n    def held(self) -> threading.RLock:\n        \"\"\"The table's lock (reentrant), shared by every registry in it and the one exits are recorded under: hold it\n        to read a record and ask `running()` in one step, or to ask `admission.refusal()` about the table's running tags\n        and start a child in one step.\"\"\"\n        return self.table.lock\n"
+    new: "        self.table = table or ChildTable()\n        self._lock = threading.RLock()\n\n    def held(self) -> threading.RLock:\n        \"\"\"The table's lock (reentrant), shared by every registry in it and the one exits are recorded under: hold it\n        to read a record and ask `running()` in one step, or to ask `admission.refusal()` about the table's running tags\n        and start a child in one step.\"\"\"\n        return self._lock\n"
+  - name: a registry's children ignore the table they are given
     file: src/mara/web/procs.py
     old: "        self.table = table or ChildTable()\n"
     new: "        self.table = ChildTable()\n"
