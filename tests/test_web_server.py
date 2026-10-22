@@ -338,7 +338,7 @@ def test_a_job_replacing_the_tools_holds_reviews_back(server, monkeypatch):
         res, busy, _ = c.request("POST", "/api/runs", body={"target": "fixtures/vuln-sample", "provider": "mock"})
         assert res.status == 409 and _error(busy) == "busy"
     finally:
-        server.table.shutdown()
+        server.jobs.children.stop(data["job"]["id"])  # not table.shutdown(): it would close the module's server
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline and server.jobs.children.any_running():
         time.sleep(0.1)
@@ -400,6 +400,53 @@ def test_server_exit_cancels_a_running_run(tmp_path, monkeypatch):
     assert reg.busy()
     reg.children.table.shutdown()
     assert not reg.busy() and reg.get(run["id"])["status"] == "cancelled"
+
+
+# a child that touches the file argv[1] names once its SIGTERM handler is set, which takes 2 s to exit
+_SLOW_TO_STOP = ("import signal, sys, time\nfrom pathlib import Path\n"
+                 "signal.signal(signal.SIGTERM, lambda *_: (time.sleep(2), sys.exit(0)))\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n")
+
+
+@pytest.mark.parametrize("launched", ["run", "job"])
+def test_no_run_or_job_starts_once_the_server_exit_began(tmp_path, monkeypatch, launched):
+    """A launch still being handled when the exit took the children (the server does not wait for its request threads):
+    refused, nothing written, no child started. The child being stopped is the other registry's, of a kind admission
+    lets run beside the launch."""
+    from mara.web import jobs as jobs_mod
+
+    monkeypatch.setenv("MARA_HOME", str(ROOT))
+    started = []
+
+    def slow_to_stop(argv, **kw):
+        started.append(argv)
+        return procs.spawn([sys.executable, "-c", _SLOW_TO_STOP, str(tmp_path / "ready")], **kw)
+
+    reg = runs.RunRegistry(ROOT, tmp_path / "out", start=slow_to_stop)
+    job_reg = jobs_mod.JobRegistry(ROOT, tmp_path / "out", reg, start=slow_to_stop)
+    create = {"run": lambda: reg.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock")),
+              "job": lambda: job_reg.create(jobs_mod.JobRequest(kind="trivy_db_status"))}
+    create["job" if launched == "run" else "run"]()
+    deadline = time.monotonic() + 30
+    while not (tmp_path / "ready").exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    records = lambda: sorted(p for d in ("runs", "jobs") if (tmp_path / "out" / d).is_dir() for p in (tmp_path / "out" / d).iterdir())  # noqa: E731
+    written = records()
+    stopper = threading.Thread(target=reg.children.table.shutdown)  # the job registry's too: they share the table
+    stopper.start()
+    try:
+        for when in ("while the children are being stopped", "once the exit stopped them"):
+            if when == "once the exit stopped them":
+                stopper.join(30)
+            else:
+                time.sleep(0.5)  # the child got SIGTERM and takes 2 s to exit
+            assert stopper.is_alive() == (when == "while the children are being stopped"), when
+            with pytest.raises(runs.LaunchError) as refused:
+                create[launched]()
+            assert (refused.value.code, refused.value.status) == ("stopping", 503), when
+            assert records() == written and len(started) == 1, when
+    finally:
+        stopper.join(30)
+        reg.children.table.shutdown()  # a child the launch started when the test fails
 
 
 def test_closing_a_server_that_never_served_returns(tmp_path):

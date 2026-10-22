@@ -206,6 +206,7 @@
  "error.provider_mismatch": "The mode does not match the config's model providers.",
  "error.sarif_dir_not_dir": "The SARIF directory does not exist.",
  "error.spawn_failed": "Could not start the subprocess.",
+ "error.stopping": "The local service is stopping; no review or maintenance job is started.",
  "error.target_not_dir": "The target is not an existing directory.",
  "error.target_required": "Enter the source directory to review.",
  "error.unauthenticated": "The session is not valid; open the URL printed by mara.",

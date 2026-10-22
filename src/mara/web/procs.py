@@ -140,10 +140,12 @@ def stop(proc: subprocess.Popen[bytes], grace: float = STOP_GRACE_SECONDS) -> No
 
 class ChildTable:
     """The children of the registries that share one lock, so that a launch of one checks what the others run, and
-    that are stopped at once at server exit (shutdown())."""
+    that are stopped at once at server exit (shutdown()), which closes the table: a registry refuses every launch once
+    `closed`, which it reads under the lock."""
 
     def __init__(self) -> None:
         self.lock = threading.RLock()
+        self.closed = False  # set once, by shutdown(), and never cleared
         self._members: list[Children] = []
 
     def running_tags(self) -> set[str]:
@@ -155,8 +157,10 @@ class ChildTable:
         """Server exit: stop every child still running, whichever registry's it is, its exit then recorded as stopped;
         then give the waiter of every child still running, one whose child exited by itself included, up to
         WAITER_JOIN_SECONDS each to record it. The children are stopped at once: each is terminated, those still
-        running `grace` seconds later are killed, and those get up to KILL_WAIT_SECONDS more to exit."""
+        running `grace` seconds later are killed, and those get up to KILL_WAIT_SECONDS more to exit. The table is
+        closed in the same step as the children are taken, so a launch that gets the lock after it starts nothing."""
         with self.lock:
+            self.closed = True
             taken = [children._taken_for_shutdown() for children in self._members]
         _stop_all([p for _, ps in taken for p in ps], grace)
         for waiters, _ in taken:

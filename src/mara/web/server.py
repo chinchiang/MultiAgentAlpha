@@ -165,7 +165,8 @@ class WorkbenchServer(ThreadingHTTPServer):
         shutdown() would wait forever for one that never ran), so that no request is accepted while the children are
         stopped; stop every child still running and give the exits time to be recorded (ChildTable.shutdown says how
         long), a stopped run recorded cancelled, not orphaned, and a stopped job with the exit code the stop gave
-        (failed, or finished if it is 0); then close the socket."""
+        (failed, or finished if it is 0), a launch still being handled then refused, since the stop closes the table;
+        then close the socket."""
         if self._serving:
             self.shutdown()
         self.table.shutdown()

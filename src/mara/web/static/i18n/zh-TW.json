@@ -206,6 +206,7 @@
  "error.provider_mismatch": "執行模式與設定檔的模型提供者不一致。",
  "error.sarif_dir_not_dir": "SARIF 目錄不存在。",
  "error.spawn_failed": "無法啟動子程序。",
+ "error.stopping": "本地服務正在停止，不會再啟動審查或維護工作。",
  "error.target_not_dir": "目標不是存在的目錄。",
  "error.target_required": "請填寫要審查的原始碼目錄。",
  "error.unauthenticated": "工作階段無效，請開啟 mara 印出的網址。",

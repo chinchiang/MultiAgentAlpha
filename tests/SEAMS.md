@@ -83,7 +83,8 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
   `test_web_procs.py`, `test_web_server.py`.
 - `procs.ChildTable`: the children of the registries given one table share its lock (`held()` of any of them),
   `ChildTable.running_tags` answers the tags of every child running in it, and `ChildTable.shutdown` stops every one of
-  them at server exit; a test reaches the table as the `table` of a registry's `children` or of the server, and
+  them at server exit and sets `closed`, after which both registries refuse a launch (`LaunchError` `stopping`, 503)
+  and write nothing; a test reaches the table as the `table` of a registry's `children` or of the server, and
   `WorkbenchServer.close()` calls it. `test_web_procs.py`, `test_web_server.py`.
 - `procs.kill`: wrapped as an attribute of `mara.web.procs` by a function that records the child it is given, then
   calls the real one; `ChildTable.shutdown` looks it up in its module when it kills, so the wrapper sees every kill.

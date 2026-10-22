@@ -75,6 +75,8 @@ class JobRegistry:
     def create(self, req: JobRequest) -> dict[str, Any]:
         argv = self.argv(req)
         with self.children.held():  # the lock of every registry's children: the check and the start are one step
+            if self.children.table.closed:  # the server exit took the children: before anything is written
+                raise LaunchError("stopping", "the server is stopping: no review or job is started", status=503)
             if refused := admission.refusal(req.kind, self.children.table.running_tags()):
                 raise LaunchError("busy", refused, status=409)
             job_id = procs.new_id()
