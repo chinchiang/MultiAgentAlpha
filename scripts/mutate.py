@@ -1,7 +1,7 @@
 """Mutation checks: apply each mutation of a list to the source, run the tests that should catch it, and restore it.
 
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml                  # every mutation of the list
-  .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --only "a name"  # some of them, by name
+  .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --only "a name" --only "another"  # some of them, by name
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --focused-only   # the focused tests alone, never the whole suite
 
 A list is a YAML file in tests/mutations/, where tests/test_mutation_lists.py checks that each one loads:
@@ -182,7 +182,7 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("mutations", type=Path, help="the YAML list")
-    ap.add_argument("--only", nargs="+", default=None, help="the names of the mutations to run")
+    ap.add_argument("--only", action="extend", nargs="+", default=None, help="the names of the mutations to run; repeats")
     ap.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)  # a repository other than this one (tests)
     ap.add_argument("--runs", type=Path, default=None, help="default: <root>/out/mutations")
     ap.add_argument("--focused-only", action="store_true", help="run the focused tests alone, never the whole suite")

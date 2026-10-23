@@ -65,6 +65,20 @@ def test_every_run_keeps_its_own_results(tmp_path):
     assert len(list((tmp_path / "runs").iterdir())) == 2
 
 
+def test_a_repeated_only_runs_every_name_it_gives(tmp_path):
+    """`--only A --only B` once ran B alone; it runs what `--only A B` runs, in the list's order."""
+    root = _repo(tmp_path)
+    path = _list(tmp_path, [{"name": n, "file": "src/window.py", "old": "return 3", "new": f"return {k}"}
+                            for n, k in (("four", 4), ("five", 5), ("six", 6))], ["tests/test_window.py"])
+    ran = []
+    for only in (["--only", "six", "--only", "four"], ["--only", "six", "four"]):
+        runs = tmp_path / f"runs{len(ran)}"
+        assert mutate.main([str(path), "--root", str(root), "--runs", str(runs), "--focused-only", *only]) == 0
+        (run,) = runs.iterdir()
+        ran.append([r["mutation"] for r in json.loads((run / "results.json").read_text(encoding="utf-8"))])
+    assert ran == [["four", "six"], ["four", "six"]]
+
+
 def test_a_wrong_list_is_refused_before_any_file_is_touched(tmp_path, capsys):
     root = _repo(tmp_path)
     (root / "src" / "window.py").write_text(SOURCE + "# return 3\n", encoding="utf-8")
