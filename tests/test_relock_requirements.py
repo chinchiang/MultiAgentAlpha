@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -111,6 +112,15 @@ def test_the_typecheck_closure_agrees_with_the_312_closure_it_is_installed_over(
     assert shared, "expected shared packages (typing_extensions, referencing, ...)"
     assert all(base[n.lower()] == (v, h) for n, v, h in shared), "relock with --same-versions-as tools/dev-requirements-py312.txt"
     assert "--same-versions-as tools/dev-requirements-py312.txt" in text.splitlines()[2]
+
+
+def test_the_build_system_requires_the_build_closures_pins():
+    """pyproject.toml's [build-system] and tools/build-requirements.in pin the same setuptools and wheel: a bump of one
+    alone builds the package with a setuptools the closure, and its advisory scan, does not hold."""
+    requires = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["build-system"]["requires"]
+    pins = [line.strip() for line in (ROOT / "tools/build-requirements.in").read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")]
+    assert sorted(requires) == sorted(pins) and len(pins) == 2, "pin setuptools and wheel alike in both"
 
 
 def test_pins_from_lock_and_python_choice(tmp_path):
