@@ -6,9 +6,9 @@ mutations:
     new: 'ap.add_argument("--only", nargs="+",'
   - name: no --only runs no check
     file: scripts/check_local.py
-    old: 'a.only = list(dict.fromkeys(a.only or CHECKS))'
-    new: 'a.only = list(dict.fromkeys(a.only or []))'
+    old: 'for given in a.only or DEFAULT_CHECKS for'
+    new: 'for given in a.only or () for'
   - name: a repeated check runs twice
     file: scripts/check_local.py
-    old: 'a.only = list(dict.fromkeys(a.only or CHECKS))'
-    new: 'a.only = list(a.only or CHECKS)'
+    old: 'a.only = list(dict.fromkeys(name for given in a.only or DEFAULT_CHECKS for name in GROUPS.get(given, (given,))))'
+    new: 'a.only = list(name for given in a.only or DEFAULT_CHECKS for name in GROUPS.get(given, (given,)))'

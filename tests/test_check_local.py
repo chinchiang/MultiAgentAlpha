@@ -1,7 +1,9 @@
-"""scripts/check_local.py: five of the checks a pull request's CI runs, run before the push with every output kept."""
+"""scripts/check_local.py: five of the checks a pull request's CI runs, and on request its three osv-scanner scans, run
+before the push with every output kept."""
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -16,6 +18,22 @@ WORKFLOW = (ROOT / ".github" / "workflows" / "mara-review.yml").read_text(encodi
 
 def test_the_lint_is_the_one_ci_runs():
     assert f"run: ruff check {' '.join(check_local.RUFF_PATHS)}\n" in WORKFLOW
+
+
+def test_the_osv_scans_are_the_three_closure_scans_ci_runs_and_report_into_the_logs(tmp_path):
+    """L0 scans each hash-locked closure with its own config; a lock or config changed there and not here fails."""
+    def without_report(args):
+        i = args.index("--report")
+        return tuple(args[:i] + args[i + 2:]), args[i + 1]
+
+    ci = {without_report(line.split())[0] for line in re.findall(r"run: python3 scripts/osv_ci\.py (--lockfile .*)\n", WORKFLOW)}
+    here = set()
+    for name in check_local.GROUPS["osv"]:
+        argv, env, first = check_local.CHECKS[name](argparse.Namespace(logs=tmp_path))
+        args, report = without_report(argv[argv.index(str(ROOT / "scripts" / "osv_ci.py")) + 1:])
+        assert report == str(tmp_path / f"{name}.sarif") and env == {} and first is None
+        here.add(args)
+    assert len(ci) == 3 and here == ci
 
 
 def test_the_suite_runs_with_the_options_ci_runs_it_with():
@@ -84,10 +102,24 @@ def test_a_repeated_only_runs_every_check_it_names_once(tmp_path, monkeypatch):
     assert ran == ["b", "a", "a"]
 
 
-def test_without_only_every_check_runs_in_its_order(tmp_path, monkeypatch):
-    ran = _recording(monkeypatch, ["a", "b", "c"])
+EIGHT = ["ruff", "lines", "mypy", "pytest", "gitleaks", "osv-runtime", "osv-model-eval", "osv-semgrep"]
+
+
+def test_only_osv_runs_the_three_osv_scans(tmp_path, monkeypatch):
+    """`osv` names L0's three osv-scanner closure scans; a scan named again runs once."""
+    ran = _recording(monkeypatch, EIGHT)
+    assert check_local.main(["--only", "osv", "--logs", str(tmp_path / "1")]) == 0
+    assert ran == ["osv-runtime", "osv-model-eval", "osv-semgrep"]
+    ran.clear()
+    assert check_local.main(["--only", "osv", "--only", "osv-semgrep", "--only", "ruff", "--logs", str(tmp_path / "2")]) == 0
+    assert ran == ["osv-runtime", "osv-model-eval", "osv-semgrep", "ruff"]
+
+
+def test_without_only_the_five_checks_run_in_their_order_and_no_osv_scan(tmp_path, monkeypatch):
+    """The osv scans need the network: they run when named, never by default."""
+    ran = _recording(monkeypatch, EIGHT)
     assert check_local.main(["--logs", str(tmp_path)]) == 0
-    assert ran == ["a", "b", "c"]
+    assert ran == ["ruff", "lines", "mypy", "pytest", "gitleaks"]
 
 
 def _git(repo, *args):
