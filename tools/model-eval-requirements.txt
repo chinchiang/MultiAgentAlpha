@@ -4,7 +4,7 @@
 # Install: python3 -m pip install --require-hashes --no-build-isolation -r <this file>
 # Preinstall the hash-pinned tools/build-requirements.txt closure before resolving or installing sdists.
 # Source distributions (no wheel published; built at install time, see scripts/relock_requirements.py): ecoji==0.1.1, langdetect==1.0.9
-# Hand-applied, the five exceptions to the rule above (a full relock could not run: the CUDA wheels download at ~50 KB/s from
+# Hand-applied, the seven exceptions to the rule above (a full relock could not run: the CUDA wheels download at ~50 KB/s from
 # the authoring host; the .in file's floors keep them, and the next relock drops these notes). Each takes the index's SHA-256
 # of the cp311-cp311-manylinux2014_x86_64 wheel unless another wheel is named, verified by pip --require-hashes for CPython
 # 3.11 / manylinux x86_64:
@@ -21,6 +21,17 @@
 #   opentelemetry_api-1.45.1-py3-none-any.whl; it requires typing-extensions>=4.5.0, as 1.44.0 did, which the closure's
 #   typing_extensions 4.16.0 meets, and google-api-core 2.37.0 (opentelemetry-api<2.0.0,>=1.44.0), its one dependent outside
 #   extras the closure does not install, accepts it.
+# - 2026-10-24: setuptools 84.0.0 -> 84.1.0 (GHSA-xmj3-9gf7-h52w), the SHA-256 of its one wheel,
+#   setuptools-84.1.0-py3-none-any.whl, the version tools/build-requirements.txt (installed first) pins; it requires nothing,
+#   and its dependents outside extras, grpcio-tools 1.84.0 (>=77.0.1), llm 0.32.1, nvidia-riva-client 2.16.0 (>=65) and
+#   torch 2.14.0 (>=77.0.3), accept it.
+# - 2026-10-24: filelock 3.32.7 -> 4.2.1 (GHSA-567q-5qvw-pf92 / CVE-2026-112907, GHSA-9vhv-jxww-xfm5 / CVE-2026-112913,
+#   GHSA-v4x8-3wr5-3wq8 / CVE-2026-112940; no 3.x release fixes them), the SHA-256 of its one wheel,
+#   filelock-4.2.1-py3-none-any.whl; it requires nothing and Python >= 3.11. Its dependents outside extras, datasets 3.6.0,
+#   huggingface_hub 1.31.0 (>=3.10.0) and torch 2.14.0, accept it; a major version, but 4.0's breaking changes
+#   (SoftReadWriteLock's on-disk protocol, a singleton built again with other arguments) reach none of the names they
+#   import (FileLock, Timeout, BaseFileLock, SoftFileLock, UnixFileLock, __version__), and a lock taken and released
+#   through huggingface_hub's and datasets' own lock code with 4.2.1 works.
 accelerate==1.15.0 \
     --hash=sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec
 aiohappyeyeballs==2.7.1 \
@@ -97,8 +108,8 @@ fastavro==1.12.2 \
     --hash=sha256:2b73d50978d5e57416fa68461f9f3c8f39ea39e761cb1e12f919745adefe26a7
 fastuuid==0.14.0 \
     --hash=sha256:bbb0c4b15d66b435d2538f3827f05e44e2baafcc003dd7d8472dc67807ab8fd8
-filelock==3.32.7 \
-    --hash=sha256:65ff0d0190ea42038b32bda4b77834fb05be2cad4c5b9b01aa4dfb3614536e52
+filelock==4.2.1 \
+    --hash=sha256:7be2662e9e826b9bba28afc0f843a123280d799a2ea44bb5d35ccec67905ae44
 frozenlist==1.8.0 \
     --hash=sha256:2552f44204b744fba866e573be4c1f9048d6a324dfe14475103fd51613eb1d1f
 fsspec==2025.3.0 \
@@ -337,8 +348,8 @@ safetensors==0.8.0 \
     --hash=sha256:fd6f3f93c9a0a7cc2788ee63fb763353d4bd2e89b0751bc78fcf7dda00bea774
 sentencepiece==0.2.2 \
     --hash=sha256:1416b92f2f010333786fe6306ed2631121d5ea492219b0841e967b6765e64107
-setuptools==84.0.0 \
-    --hash=sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670
+setuptools==84.1.0 \
+    --hash=sha256:5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9
 shellingham==1.5.4 \
     --hash=sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686
 six==1.17.0 \
