@@ -1,0 +1,10 @@
+focused: [tests/test_version.py]
+mutations:
+  - name: two rows take one version
+    file: docs/CHANGELOG.md
+    old: "| v0.13.16 |"
+    new: "| v0.13.17 |"
+  - name: an older row's version above a newer one
+    file: docs/CHANGELOG.md
+    old: "| v0.13.10 |"
+    new: "| v0.13.19 |"
