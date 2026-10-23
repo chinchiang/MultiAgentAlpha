@@ -133,11 +133,13 @@ def _last_line(log: Path) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--only", nargs="+", choices=list(CHECKS), default=list(CHECKS))
+    ap.add_argument("--only", action="extend", nargs="+", choices=list(CHECKS), default=None,
+                    help="the checks to run, every one by default; repeats")
     ap.add_argument("--base", default="origin/main", help="the line width and gitleaks checks read the commits since the merge base with this")
     ap.add_argument("--python312", default=shutil.which("python3.12") or "python3.12", help="builds .venv-typecheck")
     ap.add_argument("--logs", type=Path, default=None, help="default: out/check-local/<UTC time>")
     a = ap.parse_args(argv)
+    a.only = list(dict.fromkeys(a.only or CHECKS))
     a.logs = a.logs or ROOT / "out" / "check-local" / dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
     a.logs.mkdir(parents=True, exist_ok=True)
     failed = []

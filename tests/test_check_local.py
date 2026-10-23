@@ -62,6 +62,34 @@ def test_a_check_that_cannot_be_set_up_fails_with_why(tmp_path, monkeypatch, cap
     assert "FAIL broken" in capsys.readouterr().out
 
 
+def _recording(monkeypatch, names):
+    """CHECKS replaced by checks that pass, each recording its name when it runs; the names in the order they ran."""
+    ran = []
+
+    def check(name):
+        def set_up(a):
+            ran.append(name)
+            return [sys.executable, "-c", "pass"], {}, None
+        return set_up
+
+    monkeypatch.setattr(check_local, "CHECKS", {name: check(name) for name in names})
+    return ran
+
+
+def test_a_repeated_only_runs_every_check_it_names_once(tmp_path, monkeypatch):
+    """`--only a --only b` once ran b alone; a check named twice runs once."""
+    ran = _recording(monkeypatch, ["a", "b", "c"])
+    assert check_local.main(["--only", "b", "--only", "a", "--logs", str(tmp_path / "1")]) == 0
+    assert check_local.main(["--only", "a", "--only", "a", "--logs", str(tmp_path / "2")]) == 0
+    assert ran == ["b", "a", "a"]
+
+
+def test_without_only_every_check_runs_in_its_order(tmp_path, monkeypatch):
+    ran = _recording(monkeypatch, ["a", "b", "c"])
+    assert check_local.main(["--logs", str(tmp_path)]) == 0
+    assert ran == ["a", "b", "c"]
+
+
 def _git(repo, *args):
     return subprocess.run(["git", "-c", "commit.gpgsign=false", *args], cwd=repo, capture_output=True, text=True, check=True).stdout
 
