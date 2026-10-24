@@ -44,6 +44,15 @@ counts `scripts/check_citations.py` gives; when the report body did not change, 
 previous row's. `mara.__version__` equals the newest row's version (`tests/test_version.py`). A pure refactor adds no
 row.
 
+## A doc names no version Dependabot bumps
+
+A GitHub Action that `.github/dependabot.yml` keeps up to date is pinned by commit SHA with a `# vX.Y.Z` comment, and
+Dependabot rewrites both in each bump; it cannot edit docs. So a living doc that names such an action names no
+version: it says the action is pinned by SHA and points at the workflows' `# vX.Y.Z` comments
+(`docs/tools-provenance.md`'s Code Scanning table). A dated record (`docs/actions-inventory-<date>.md` and the like)
+names the version of its date. The tools in `tools/versions.lock` are relocked by hand, not by Dependabot, and their
+docs keep naming their versions.
+
 ## A behaviour change commits its mutation list
 
 The mutations a behaviour change's tests were checked against (`scripts/mutate.py`) are committed with the change, as
