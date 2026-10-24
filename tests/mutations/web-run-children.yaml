@@ -1,0 +1,34 @@
+focused: [tests/test_web_server.py]
+mutations:
+  - name: run.json read outside the lock
+    file: src/mara/web/runs.py
+    old: "        with self.children.held():  # a run's exit is recorded under this lock: read run.json and whether it runs in one step\n            manifest = self._manifest(run_id)\n"
+    new: "        manifest = self._manifest(run_id)\n        with self.children.held():\n"
+  - name: whether the run runs asked outside the lock
+    file: src/mara/web/runs.py
+    old: "            manifest = self._manifest(run_id)\n            owned = self.children.running(run_id)\n        if manifest is None:"
+    new: "            manifest = self._manifest(run_id)\n        owned = self.children.running(run_id)\n        if manifest is None:"
+  - name: a stopped run not recorded cancelled
+    file: src/mara/web/runs.py
+    old: "        status = \"cancelled\" if stopped else \"finished\" if finished else \"failed\"\n"
+    new: "        status = \"finished\" if finished else \"failed\"\n"
+  - name: cancelling a run whose child exited by itself answers as if it stopped it
+    file: src/mara/web/runs.py
+    old: "        if self.children.stop(run_id) != \"stopped\":\n"
+    new: "        if self.children.stop(run_id) == \"unknown\":\n"
+  - name: busy ignores a run whose exit is not recorded yet
+    file: src/mara/web/runs.py
+    old: "        return self.children.any_running()\n"
+    new: "        return False\n"
+  - name: a run admitted outside the lock it starts under
+    file: src/mara/web/runs.py
+    old: "        with self.children.held():  # the lock of every registry's children: the check and the start are one step\n            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n            if refused := admission.refusal(\"run\", self.children.table.running_tags()):\n                raise LaunchError(\"busy\", refused, status=409)\n"
+    new: "        if refused := admission.refusal(\"run\", self.children.table.running_tags()):\n            raise LaunchError(\"busy\", refused, status=409)\n        with self.children.held():  # the lock of every registry's children: the check and the start are one step\n            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"
+  - name: a run launched without asking for admission
+    file: src/mara/web/runs.py
+    old: "            if refused := admission.refusal(\"run\", self.children.table.running_tags()):\n"
+    new: "            if refused := None:\n"
+  - name: a run's child not tagged as a run
+    file: src/mara/web/runs.py
+    old: "env=procs.child_env(self.workspace), tag=\"run\")"
+    new: "env=procs.child_env(self.workspace))"

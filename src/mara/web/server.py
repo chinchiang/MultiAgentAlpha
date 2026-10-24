@@ -1,4 +1,5 @@
-"""The workbench's HTTP server: `http.server` on a loopback address, one page and a small JSON API.
+"""The workbench's HTTP server (GLOSSARY.md: workbench, workbench demo, run; docs/adr/0006-local-web-workbench.md):
+`http.server` on a loopback address, one page and a small JSON API.
 
 Access: `mara serve` prints a URL whose fragment carries a random token that exists for this server's lifetime
 (`#token=...`; a fragment never reaches a server, a log or a Referer). The page keeps it in this origin's
@@ -12,6 +13,13 @@ naming another site is refused. The page itself holds no data and needs no token
 The page is assembled once at start-up from the packaged template, stylesheet, script and the two dictionaries;
 its Content-Security-Policy allows exactly that script and that stylesheet by SHA-256, no other origin, and Trusted
 Types, so the script can only build the DOM through text and element APIs (docs/adr/0006-local-web-workbench.md).
+`render_page` also builds the workbench demo's page when `scripts/build_workbench_demo.py` gives it the demo's data.
+
+Not pure: it listens on a socket, handles SIGTERM and SIGHUP while it serves, reads the clock, draws its token at
+random, opens a browser and reads the packaged page; through `runs`, `jobs` and `env` it starts runs and jobs, cancels
+runs and reads the workspace, and at exit it stops every child still running through the table the registries share
+(`procs.ChildTable`); it creates the output directory and reads, writes and removes files in it, and reads the reports
+`mara review` wrote into `<workspace>/out/`.
 """
 
 from __future__ import annotations
@@ -111,14 +119,15 @@ class WorkbenchServer(ThreadingHTTPServer):
 
     def __init__(self, address: tuple[str, int], *, workspace: Path, out_dir: Path, token: str | None = None) -> None:
         super().__init__(address, Handler)
+        self._serving = False  # serve_forever() is running, on some thread; close() then has to shut it down
         self.workspace = workspace.resolve()
         self.out_dir = out_dir.resolve()
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.token = token or secrets.token_urlsafe(32)
         self.started_at = procs.now()
-        self.runs = RunRegistry(self.workspace, self.out_dir)
-        self.jobs = JobRegistry(self.workspace, self.out_dir, self.runs)
-        self.runs.blocked_by = self.jobs.changing_tools  # a review never runs while the tools it executes are replaced
+        self.table = procs.ChildTable()  # the children of both registries, stopped together at exit
+        self.runs = RunRegistry(self.workspace, self.out_dir, table=self.table)
+        self.jobs = JobRegistry(self.workspace, self.out_dir, table=self.table)
         self.page, self.csp = build_page()
         host = address[0]
         port = self.port
@@ -144,9 +153,24 @@ class WorkbenchServer(ThreadingHTTPServer):
         except ValidationError:
             return Settings().model_dump()
 
-    def shutdown_children(self) -> None:
-        self.runs.shutdown()
-        self.jobs.shutdown()
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
+        self._serving = True
+        try:
+            super().serve_forever(poll_interval)
+        finally:
+            self._serving = False
+
+    def close(self) -> None:
+        """Server exit, in this order: stop serving when serve_forever() still runs on another thread (socketserver's
+        shutdown() would wait forever for one that never ran), so that no request is accepted while the children are
+        stopped; stop every child still running and give the exits time to be recorded (ChildTable.shutdown says how
+        long), a stopped run recorded cancelled, not orphaned, and a stopped job with the exit code the stop gave
+        (failed, or finished if it is 0), a launch still being handled then refused, since the stop closes the table;
+        then close the socket."""
+        if self._serving:
+            self.shutdown()
+        self.table.shutdown()
+        self.server_close()
 
 
 class WorkbenchServer6(WorkbenchServer):
@@ -283,7 +307,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.NOT_FOUND, "not_found")
             return
         if not self._token_ok():
-            self._error(HTTPStatus.UNAUTHORIZED, "unauthenticated", "open the URL printed by `mara serve`")
+            self._error(HTTPStatus.UNAUTHORIZED, "unauthenticated", "open the URL printed by `mara`")
             return
         if method != "GET":
             if not self._same_origin():
@@ -409,9 +433,9 @@ def open_file(out_dir: Path, url: str, port: int) -> Path:
 
 
 def _stop_on_signals() -> dict[int, Any]:
-    """SIGTERM and SIGHUP (a `kill`, a service stop, a closed terminal) end the server like Ctrl-C does, so the reviews
-    it started are stopped and recorded instead of running on unseen: they live in their own process groups and would
-    not receive the signal themselves."""
+    """SIGTERM and SIGHUP (a `kill`, a service stop, a closed terminal) end the server like Ctrl-C does, so the runs and
+    jobs it started are stopped as serve() says instead of running on unseen: they live in their own process groups and
+    would not receive the signal themselves."""
     previous: dict[int, Any] = {}
     if threading.current_thread() is not threading.main_thread():
         return previous
@@ -427,13 +451,14 @@ def _stop_on_signals() -> dict[int, Any]:
 
 
 def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser: bool, echo: Any = print) -> None:
-    """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); reviews and jobs still running then are stopped and recorded
-    as cancelled."""
+    """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); then every child still running is stopped, and each run or job
+    still running gets up to `procs.WAITER_JOIN_SECONDS` to be recorded: a stopped run cancelled, a stopped job with the
+    exit code the stop gave (WorkbenchServer.close)."""
     httpd = make_server(host=host, port=port, workspace=workspace, out_dir=out_dir)
     url = f"{httpd.url}#token={httpd.token}"
     echo(f"MARA workbench {__version__} · workspace {httpd.workspace} · runs in {httpd.runs.runs_dir}")
     echo(f"open: {url}")
-    echo("the link is the key to this server: do not share it; Ctrl-C stops the server and any running review")
+    echo("the link is the key to this server: do not share it; Ctrl-C stops the server and any running review or job")
     previous = _stop_on_signals()
     redirect: Path | None = None
     try:
@@ -448,9 +473,8 @@ def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser:
     finally:
         for sig in previous:
             signal.signal(sig, signal.SIG_IGN)  # a second signal must not cut the cleanup short
-        echo("stopping: cancelling any running review or job")
-        httpd.shutdown_children()
-        httpd.server_close()
+        echo("stopping: cancelling any running review and stopping any running job")
+        httpd.close()
         if redirect is not None:
             redirect.unlink(missing_ok=True)
         for sig, handler in previous.items():

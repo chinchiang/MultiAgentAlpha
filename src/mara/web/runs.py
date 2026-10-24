@@ -1,4 +1,5 @@
-"""Runs of the workbench: one `mara review` subprocess per run, one directory per run under `<out>/runs/<run-id>/`.
+"""Runs of the workbench (GLOSSARY.md: run, progress record, workbench; docs/adr/0006-local-web-workbench.md): one
+`mara review` subprocess per run, one directory per run under `<out>/runs/<run-id>/`.
 
 A launch is validated here exactly as the command line validates it (paths resolved, `workspace.check_outside`
 with the config, output, evidence and progress paths, the config loaded under policies P1-P8, the provider mode
@@ -6,10 +7,16 @@ matching the config) so a browser gets a clear refusal instead of a failed run, 
 check anyway. `run.json` is the record of a run: the request as given, the argv, the roles and models of the
 config at launch (the config file may change later, and the report keeps only the provider manifest), status
 and exit code. The exit code alone is ambiguous (2 is a usage error and an enforced gate alike), so a run counts
-as finished only when its progress file says the reports were written.
+as finished only when its progress record says the reports were written.
+
+The config is one `configs` allows, the configs the page lists (`configs.allowed`); `resolve_config` and
+`resolve_path` turn a request's value into it, and a check_config job resolves its config with them too.
 
 PSIRT hand-off options (`--notify-psirt`, `--psirt-event`) are not offered: they start EU CRA Article 14 clocks
 and stay a deliberate command-line step.
+
+Not pure: it starts and stops children through `procs.Children`, whose waiter threads record each exit through it,
+reads the config and the workspace, and reads and writes the files under `<out>/runs/`.
 """
 
 from __future__ import annotations
@@ -28,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .. import progress as progress_mod
 from ..schemas import ReviewReport
 from ..workspace import WorkspaceInsideTarget, check_outside
-from . import procs, views
+from . import admission, configs, procs, views
 
 ARTIFACTS = ("report.md", "report.json", "report.sarif", "human_queue.md", "human_queue.json", "context.json",
              "psirt-notifications.json", "pipeline.log", "run.log", "progress.json")
@@ -67,55 +74,54 @@ def clean_title(text: str) -> str:
     return " ".join(kept.split())[:120]
 
 
-def config_dirs(workspace: Path) -> tuple[Path, Path]:
-    return (workspace / "config").resolve(), (workspace / "config" / "examples").resolve()
+def resolve_path(workspace: Path, value: str) -> Path:
+    """`value` resolved, relative to `workspace` unless absolute; LaunchError bad_path when it is not a usable path."""
+    try:
+        p = Path(value.strip()).expanduser()
+        return (p if p.is_absolute() else workspace / p).resolve()
+    except (ValueError, RuntimeError, OSError) as e:  # a NUL byte, a symlink loop, an unknown ~user
+        raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path ({type(e).__name__})") from e
+
+
+def resolve_config(workspace: Path, value: str, provider: str) -> Path:
+    """The config file `value` names, or the provider's default when it is empty, if `configs.allowed()` accepts it;
+    LaunchError config_not_found otherwise (bad_path, from resolve_path)."""
+    if value:
+        cfg_path = resolve_path(workspace, value)
+    else:
+        cfg_path = (workspace / "config" / ("mara.mock.yaml" if provider == "mock" else "mara.yaml")).resolve()
+    if not configs.allowed(workspace, cfg_path):
+        raise LaunchError("config_not_found", f"{value or cfg_path}: not a config file under config/ or config/examples/")
+    return cfg_path
 
 
 class RunRegistry:
-    def __init__(self, workspace: Path, out_dir: Path) -> None:
+    def __init__(self, workspace: Path, out_dir: Path, *, start: Callable[..., Any] | None = None,
+                 table: procs.ChildTable | None = None) -> None:
         self.workspace = workspace.resolve()
         self.out_dir = out_dir.resolve()
         self.runs_dir = self.out_dir / "runs"
-        self._lock = threading.RLock()
-        self._procs: dict[str, Any] = {}
-        self._waiters: dict[str, threading.Thread] = {}
-        self._cancelled: set[str] = set()
+        self.children = procs.Children("run", self._record_exit, start=start, table=table)
+        self._reports_lock = threading.Lock()
         self._reports: dict[str, tuple[int, int, ReviewReport]] = {}
-        self.blocked_by: Callable[[], bool] | None = None  # set by the server: an environment job changing the tools
 
     # ------------------------------------------------------------------ validation
-    def _path(self, value: str) -> Path:
-        try:
-            p = Path(value.strip()).expanduser()
-            return (p if p.is_absolute() else self.workspace / p).resolve()
-        except (ValueError, RuntimeError, OSError) as e:  # a NUL byte, a symlink loop, an unknown ~user
-            raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path ({type(e).__name__})") from e
-
     def _inside_workspace(self, p: Path) -> bool:
         return p == self.workspace or self.workspace in p.parents
-
-    def resolve_config(self, value: str, provider: str) -> Path:
-        if value:
-            cfg_path = self._path(value)
-        else:
-            cfg_path = (self.workspace / "config" / ("mara.mock.yaml" if provider == "mock" else "mara.yaml")).resolve()
-        if cfg_path.parent not in config_dirs(self.workspace) or cfg_path.suffix not in (".yaml", ".yml") or not cfg_path.is_file():
-            raise LaunchError("config_not_found", f"{value or cfg_path}: not a config file under config/ or config/examples/")
-        return cfg_path
 
     def prepare(self, req: LaunchRequest) -> tuple[list[str], dict[str, Any]]:
         """argv and the manifest fields of a valid request; LaunchError otherwise."""
         from ..config import load_config
 
-        target = self._path(req.target)
+        target = resolve_path(self.workspace, req.target)
         if not target.is_dir():
             raise LaunchError("target_not_dir", f"{target}: not a directory")
-        cfg_path = self.resolve_config(req.config, req.provider)
+        cfg_path = resolve_config(self.workspace, req.config, req.provider)
         dirs: dict[str, Path] = {}
         inputs = (("--sarif-dir", req.sarif_dir, "sarif_dir_not_dir"), ("--mock-fixtures", req.mock_fixtures, "mock_fixtures_not_dir"))
         for flag, value, code in inputs:
             if value:
-                p = self._path(value)
+                p = resolve_path(self.workspace, value)
                 if not p.is_dir():
                     raise LaunchError(code, f"{p}: not a directory")
                 if not self._inside_workspace(p):
@@ -165,16 +171,15 @@ class RunRegistry:
 
     # ------------------------------------------------------------------ lifecycle
     def busy(self) -> bool:
-        with self._lock:
-            return any(p.poll() is None for p in self._procs.values())
+        return self.children.any_running()
 
     def create(self, req: LaunchRequest) -> dict[str, Any]:
         argv, fields = self.prepare(req)
-        with self._lock:
-            if self.busy():
-                raise LaunchError("busy", "a review is already running; wait for it or cancel it", status=409)
-            if self.blocked_by is not None and self.blocked_by():
-                raise LaunchError("busy", "an environment job is replacing the tools or the trivy database; wait for it", status=409)
+        with self.children.held():  # the lock of every registry's children: the check and the start are one step
+            if self.children.table.closed:  # the server exit took the children: before anything is written
+                raise LaunchError("stopping", "the server is stopping: no review or job is started", status=503)
+            if refused := admission.refusal("run", self.children.table.running_tags()):
+                raise LaunchError("busy", refused, status=409)
             run_id = procs.new_id()
             run_dir = self.runs_dir / run_id
             run_dir.mkdir(parents=True)
@@ -195,47 +200,32 @@ class RunRegistry:
             }
             procs.write_json(run_dir / "run.json", manifest)
             try:
-                proc = procs.spawn(argv, cwd=self.workspace, log_path=run_dir / "run.log", env=procs.child_env(self.workspace))
+                pid = self.children.start(run_id, argv, cwd=self.workspace, log_path=run_dir / "run.log",
+                                          env=procs.child_env(self.workspace), tag="run")
             except OSError as e:
                 manifest.update(status="failed", finished_at=procs.now(), error=type(e).__name__)
                 procs.write_json(run_dir / "run.json", manifest)
                 raise LaunchError("spawn_failed", str(e), status=500) from e
-            manifest["pid"] = proc.pid
+            manifest["pid"] = pid
             procs.write_json(run_dir / "run.json", manifest)
-            self._procs[run_id] = proc
-            waiter = threading.Thread(target=self._wait, args=(run_id, proc), name=f"mara-run-{run_id}", daemon=True)
-            self._waiters[run_id] = waiter
-            waiter.start()
         return self.get(run_id) or manifest
 
-    def _wait(self, run_id: str, proc: Any) -> None:
-        code = proc.wait()
+    def _record_exit(self, run_id: str, code: int, stopped: bool) -> None:
         run_dir = self.runs_dir / run_id
-        with self._lock:
-            manifest = procs.read_json(run_dir / "run.json") or {"id": run_id}
-            prog = progress_mod.read(run_dir / "progress.json")
-            finished = bool(prog and prog.get("status") == "finished")
-            if run_id in self._cancelled:
-                status = "cancelled"
-            else:
-                status = "finished" if finished else "failed"
-            if not finished:
-                progress_mod.close_abandoned(run_dir / "progress.json", "cancelled" if status == "cancelled" else f"exit {code}")
-            manifest.update(status=status, exit_code=code, finished_at=procs.now(),
-                            gate_enforced=finished and _gate_enforced(run_dir, code), psirt_failed=finished and code == 3)
-            procs.write_json(run_dir / "run.json", manifest)
-            self._procs.pop(run_id, None)
+        manifest = procs.read_json(run_dir / "run.json") or {"id": run_id}
+        prog = progress_mod.read(run_dir / "progress.json")
+        finished = bool(prog and prog.get("status") == "finished")
+        status = "cancelled" if stopped else "finished" if finished else "failed"
+        if not finished:
+            progress_mod.close_abandoned(run_dir / "progress.json", "cancelled" if status == "cancelled" else f"exit {code}")
+        manifest.update(status=status, exit_code=code, finished_at=procs.now(),
+                        gate_enforced=finished and _gate_enforced(run_dir, code), psirt_failed=finished and code == 3)
+        procs.write_json(run_dir / "run.json", manifest)
 
     def cancel(self, run_id: str) -> dict[str, Any]:
-        with self._lock:
-            proc = self._procs.get(run_id)
-            if proc is None or proc.poll() is not None:
-                raise LaunchError("not_running", f"run {run_id} is not running", status=409)
-            self._cancelled.add(run_id)
-        procs.stop(proc)
-        waiter = self._waiters.get(run_id)
-        if waiter is not None:
-            waiter.join(timeout=15)
+        # a run whose child exited by itself has nothing to stop and is not cancelled: stop() waits for its exit to be recorded
+        if self.children.stop(run_id) != "stopped":
+            raise LaunchError("not_running", f"run {run_id} is not running", status=409)
         return self.get(run_id) or {"id": run_id, "status": "cancelled"}
 
     def rerun(self, run_id: str) -> dict[str, Any]:
@@ -243,17 +233,6 @@ class RunRegistry:
         if manifest is None or not isinstance(manifest.get("request"), dict):
             raise LaunchError("not_found", f"run {run_id} has no request to repeat", status=404)
         return self.create(LaunchRequest.model_validate(manifest["request"]))
-
-    def shutdown(self) -> None:
-        """Stop every running review (server exit): a review nobody can follow any more is cancelled, not orphaned."""
-        with self._lock:
-            running = [(rid, p) for rid, p in self._procs.items() if p.poll() is None]
-            self._cancelled.update(rid for rid, _ in running)
-        for rid, p in running:
-            procs.stop(p)
-            w = self._waiters.get(rid)
-            if w is not None:
-                w.join(timeout=15)
 
     # ------------------------------------------------------------------ reading
     def run_dir(self, run_id: str) -> Path | None:
@@ -289,7 +268,7 @@ class RunRegistry:
             st = path.stat()
         except OSError:
             return None
-        with self._lock:
+        with self._reports_lock:
             cached = self._reports.get(run_id)
             if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
                 return cached[2]
@@ -297,19 +276,19 @@ class RunRegistry:
             report = ReviewReport.model_validate_json(path.read_bytes())
         except (OSError, ValueError):
             return None
-        with self._lock:
+        with self._reports_lock:
             self._reports[run_id] = (st.st_mtime_ns, st.st_size, report)
         return report
 
     def get(self, run_id: str) -> dict[str, Any] | None:
-        manifest = self._manifest(run_id)
+        with self.children.held():  # a run's exit is recorded under this lock: read run.json and whether it runs in one step
+            manifest = self._manifest(run_id)
+            owned = self.children.running(run_id)
         if manifest is None:
             return None
         prog = self.progress(run_id)
-        with self._lock:
-            owned = run_id in self._procs and self._procs[run_id].poll() is None
         if manifest.get("status") == "running" and not owned:
-            # a run of an earlier server, or one whose waiter has not written yet: the progress file decides
+            # a run of an earlier server, or one whose waiter stopped without recording its exit: the progress record decides
             st = (prog or {}).get("status")
             manifest["status"] = "finished" if st == "finished" else "failed" if st == "failed" else "interrupted"
         manifest["current_stage"] = (prog or {}).get("current")

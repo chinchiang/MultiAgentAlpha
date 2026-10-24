@@ -118,13 +118,17 @@ The first line runs the whole test suite (a few tool-integration tests skip whil
 Available once section 2 is done; no further package is needed:
 
 ```bash
-mara serve                 # 印出並開啟 http://127.0.0.1:8765/#token=… / prints and opens http://127.0.0.1:8765/#token=…
+mara                       # 印出並開啟 http://127.0.0.1:8765/#token=… / prints and opens http://127.0.0.1:8765/#token=…
 mara serve --no-browser    # 只印出網址（遠端主機、WSL）/ print the URL only (remote host, WSL)
 ```
 
-從 repo 根目錄（或設好 `MARA_HOME` 後）執行。開啟印出的網址，在「新建評估」按「合成示範」，就能以內建的刻意弱點範例與三個 mock 模型家族離線跑完整流程，並在瀏覽器中看九個階段、發現、審查小組與驗證缺口；右上角可切換中文與英文。每次執行的報告都寫在 `out/runs/<run-id>/`。服務只聽本機位址（127.0.0.1、localhost 或 ::1），網址中的權杖就是這次服務的登入鑰匙，不要分享；要從另一台電腦使用，請用 SSH 通道（`ssh -L 8765:127.0.0.1:8765 主機`）。「工具與執行環境」頁的安裝與下載按鈕執行的就是第 3 節的 `scripts/install_tools.py` 與 `scripts/trivy_db.py`；實際評估需要的金鑰環境變數，要在啟動 `mara serve` 的終端機先設好（第 4 節）。細節見 README 的「Local web workbench」與 `docs/adr/0006-local-web-workbench.md`。
+單獨執行 `mara`（不加指令與選項）就啟動工作台，等於不加選項的 `mara serve`；要加選項，例如改埠號（`--port`）或不開瀏覽器（`--no-browser`），用 `mara serve`。
 
-Run it from the repository root (or with `MARA_HOME` set). Open the printed URL, choose *Offline demo* under *New review*, and the built-in deliberately vulnerable sample runs through the whole pipeline offline with three mock model families; the browser shows the nine stages, the findings, the review panel and the verification gaps, and the switch at the top right changes between Chinese and English. Each run's reports are written to `out/runs/<run-id>/`. The server listens on a loopback address only (127.0.0.1, localhost or ::1), and the token in the URL is the key to this server: do not share it; from another machine, use an SSH tunnel (`ssh -L 8765:127.0.0.1:8765 host`). The install and download buttons on the *Tools & environment* page run section 3's `scripts/install_tools.py` and `scripts/trivy_db.py`; the key variables a live review needs must be set in the terminal that starts `mara serve` (section 4). See "Local web workbench" in the README and `docs/adr/0006-local-web-workbench.md`.
+`mara` alone (no command, no option) starts the workbench, as `mara serve` with no option does; for an option, such as another port (`--port`) or no browser (`--no-browser`), use `mara serve`.
+
+從 repo 根目錄（或設好 `MARA_HOME` 後）執行。開啟印出的網址，在「新建評估」按「合成示範」，就能以內建的刻意弱點範例與三個 mock 模型家族離線跑完整流程，並在瀏覽器中看九個階段、發現、審查小組與驗證缺口；右上角可切換中文與英文。每次執行的報告都寫在 `out/runs/<run-id>/`。服務只聽本機位址（127.0.0.1、localhost 或 ::1），網址中的權杖就是這次服務的登入鑰匙，不要分享；要從另一台電腦使用，請用 SSH 通道（`ssh -L 8765:127.0.0.1:8765 主機`）。「工具與執行環境」頁的安裝與下載按鈕執行的就是第 3 節的 `scripts/install_tools.py` 與 `scripts/trivy_db.py`；實際評估需要的金鑰環境變數，要在啟動 `mara`（或 `mara serve`）的終端機先設好（第 4 節）。細節見 README 的「Local web workbench」與 `docs/adr/0006-local-web-workbench.md`。
+
+Run it from the repository root (or with `MARA_HOME` set). Open the printed URL, choose *Offline demo* under *New review*, and the built-in deliberately vulnerable sample runs through the whole pipeline offline with three mock model families; the browser shows the nine stages, the findings, the review panel and the verification gaps, and the switch at the top right changes between Chinese and English. Each run's reports are written to `out/runs/<run-id>/`. The server listens on a loopback address only (127.0.0.1, localhost or ::1), and the token in the URL is the key to this server: do not share it; from another machine, use an SSH tunnel (`ssh -L 8765:127.0.0.1:8765 host`). The install and download buttons on the *Tools & environment* page run section 3's `scripts/install_tools.py` and `scripts/trivy_db.py`; the key variables a live review needs must be set in the terminal that starts `mara` or `mara serve` (section 4). See "Local web workbench" in the README and `docs/adr/0006-local-web-workbench.md`.
 
 ## 3. L0 掃描工具（可選）/ L0 scanning tools (optional)
 

@@ -1,0 +1,42 @@
+focused: [tests/test_web_admission.py]
+mutations:
+  - name: a run admitted while a run runs
+    file: src/mara/web/admission.py
+    old: "    if kind == \"run\" and \"run\" in running:\n"
+    new: "    if False:\n"
+  - name: a run admitted while a job replacing the tools runs
+    file: src/mara/web/admission.py
+    old: "    if kind == \"run\" and CHANGES_TOOLS & set(running):\n"
+    new: "    if False:\n"
+  - name: a run refused while any job runs
+    file: src/mara/web/admission.py
+    old: "    if kind == \"run\" and CHANGES_TOOLS & set(running):\n"
+    new: "    if kind == \"run\" and set(running) - {\"run\"}:\n"
+  - name: a job admitted while a job runs
+    file: src/mara/web/admission.py
+    old: "    if kind != \"run\" and set(running) - {\"run\"}:\n"
+    new: "    if False:\n"
+  - name: a job refused while a run runs
+    file: src/mara/web/admission.py
+    old: "    if kind != \"run\" and set(running) - {\"run\"}:\n"
+    new: "    if kind != \"run\" and running:\n"
+  - name: a job replacing the tools admitted while a run runs
+    file: src/mara/web/admission.py
+    old: "    if kind in CHANGES_TOOLS and \"run\" in running:\n"
+    new: "    if False:\n"
+  - name: every job refused while a run runs
+    file: src/mara/web/admission.py
+    old: "    if kind in CHANGES_TOOLS and \"run\" in running:\n"
+    new: "    if kind != \"run\" and \"run\" in running:\n"
+  - name: a job replacing the tools told of the run before the job
+    file: src/mara/web/admission.py
+    old: "    if kind != \"run\" and set(running) - {\"run\"}:\n        return \"an environment job is already running\"\n    if kind in CHANGES_TOOLS and \"run\" in running:\n        return \"a review is running with the installed tools; wait for it or cancel it\"\n"
+    new: "    if kind in CHANGES_TOOLS and \"run\" in running:\n        return \"a review is running with the installed tools; wait for it or cancel it\"\n    if kind != \"run\" and set(running) - {\"run\"}:\n        return \"an environment job is already running\"\n"
+  - name: the two run messages swapped
+    file: src/mara/web/admission.py
+    old: "        return \"a review is already running; wait for it or cancel it\"\n    if kind == \"run\" and CHANGES_TOOLS & set(running):\n        return \"an environment job is replacing the tools or the trivy database; wait for it\"\n"
+    new: "        return \"an environment job is replacing the tools or the trivy database; wait for it\"\n    if kind == \"run\" and CHANGES_TOOLS & set(running):\n        return \"a review is already running; wait for it or cancel it\"\n"
+  - name: a tool-replacing kind dropped from CHANGES_TOOLS
+    file: src/mara/web/admission.py
+    old: "CHANGES_TOOLS = frozenset({\"install_tools\", \"trivy_db_download\"})"
+    new: "CHANGES_TOOLS = frozenset({\"install_tools\"})"

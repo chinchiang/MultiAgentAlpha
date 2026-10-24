@@ -109,7 +109,7 @@ def test_run_redteam_all_code_preconditions_become_the_placeholder():
     assert notes[0].source_family == provider.family
 
 
-def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkeypatch):
+def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path):
     """Full mock run: one surviving finding, red team stripped code → bias audit counts it and the
     report is incomplete (the same fail-closed treatment as reviewer refusals or canary echoes)."""
     import json as jsonlib
@@ -134,10 +134,10 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path, monkey
         def complete(self, **kwargs):
             return RawReply(STOP_END, answer_text=jsonlib.dumps(review_data))
 
-    pipe = Pipeline(load_config(root / "config" / "mara.mock.yaml"), out_dir=tmp_path / "out")
+    pipe = Pipeline(load_config(root / "config" / "mara.mock.yaml"), out_dir=tmp_path / "out",
+                    run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     (tmp_path / "app.py").write_text("unsafe()\n")
     pipe.providers = {n: Reply(p.spec) for n, p in pipe.providers.items()}
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     # a note for every finding, the first one's preconditions a shell command
     Panel.seated_in(pipe).always("redteam", items(lambda i: {"exploitable": "conditional",
                                                              "preconditions": "$ curl http://target/x" if i == "F-0001" else "none"}))

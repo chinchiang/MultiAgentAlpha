@@ -1,0 +1,53 @@
+focused:
+- tests/test_mutate.py
+mutations:
+- name: the copies stay after the file is restored
+  file: scripts/mutate.py
+  old: "    _drop_copies(run_dir)\n    return {"
+  new: '    return {'
+- name: no copies are kept before a file is mutated
+  file: scripts/mutate.py
+  old: '        (run_dir / kind / m["file"]).write_bytes(data)
+
+    '
+  new: '        pass
+
+    '
+- name: a run does not look for copies a killed run left
+  file: scripts/mutate.py
+  old: '    if why := restore_left(root, runs):
+
+    '
+  new: '    if why := "":
+
+    '
+- name: a file edited since is restored over
+  file: scripts/mutate.py
+  old: '            if mutant.is_file() and now == mutant.read_bytes():
+
+    '
+  new: '            if True:
+
+    '
+- name: the copies of a run still going are taken for a leftover
+  file: scripts/mutate.py
+  old: '        if pid.isdigit() and _alive(int(pid)):
+
+    '
+  new: '        if False:
+
+    '
+- name: the copies are removed though a file was neither
+  file: scripts/mutate.py
+  old: '            return (f"{rel.as_posix()} is neither'
+  new: "            _drop_copies(run_dir)\n            return (f\"{rel.as_posix()} is neither"
+- name: the list is not kept in its run
+  file: scripts/mutate.py
+  old: '    shutil.copyfile(a.mutations, run_dir / a.mutations.name)
+
+    '
+  new: ''
+- name: a dead run's pid reads as alive
+  file: scripts/mutate.py
+  old: "    except ProcessLookupError:\n        return False\n"
+  new: "    except ProcessLookupError:\n        return True\n"

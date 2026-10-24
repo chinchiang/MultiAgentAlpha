@@ -1,0 +1,22 @@
+focused: [tests/test_cli_default.py]
+mutations:
+  - name: the workbench starts before every command
+    file: src/mara/cli.py
+    old: '    if ctx.invoked_subcommand is None:'
+    new: '    if True:'
+  - name: mara alone starts nothing
+    file: src/mara/cli.py
+    old: '            serve_cmd.invoke(sub)'
+    new: '            pass'
+  - name: back to ctx.invoke(serve_cmd), which parses sys.argv
+    file: src/mara/cli.py
+    old: "        with serve_cmd.make_context(\"serve\", [], parent=ctx) as sub:\n            serve_cmd.invoke(sub)\n"
+    new: "        ctx.invoke(serve_cmd)\n"
+  - name: the callback not run without a command
+    file: src/mara/cli.py
+    old: '@app.callback(invoke_without_command=True)'
+    new: '@app.callback(invoke_without_command=False)'
+  - name: the help sentence removed
+    file: src/mara/cli.py
+    old: ' `mara` alone starts the local web workbench, as `mara serve` does.'
+    new: ''

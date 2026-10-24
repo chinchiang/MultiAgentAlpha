@@ -3,6 +3,8 @@ tools reported on a review's target, and the rules that read it."""
 
 from pathlib import Path
 
+import pytest
+
 from mara.config import load_config
 from mara.pipeline import Pipeline
 from mara.schemas import Provenance
@@ -103,12 +105,32 @@ def test_today_an_incomplete_scan_can_still_corroborate():
     assert corroborates(finding(), evidence.results)
 
 
-def test_a_review_reads_its_required_tools_and_each_dimension_s_tool_from_the_evidence(tmp_path, monkeypatch):
+@pytest.mark.parametrize("sarif_dir", [None, ROOT / "fixtures" / "vuln-sample-sarif"],
+                         ids=["no pre-recorded SARIF", "pre-recorded SARIF, mock mode"])
+def test_a_review_takes_its_tool_runs_from_the_runner_it_is_given(tmp_path, sarif_dir):
+    """Without pre-recorded SARIF the tools are run once, into out/tools; with it, in mock mode, they are not run."""
+    (tmp_path / "app.py").write_text("print(1)\n")
+    calls = []
+
+    def runner(target, out_dir, enabled=None):
+        calls.append((target, out_dir, enabled))
+        return [ToolRun("semgrep", True, [], "from the runner")]
+
+    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=runner)
+    report = pipe.run(tmp_path, mode="mock", sarif_dir=sarif_dir)
+    if sarif_dir is None:
+        assert calls == [(tmp_path.resolve(), tmp_path / "out" / "tools", None)]
+        assert report.tool_health == [{"tool": "semgrep", "ran": True, "note": "from the runner"}]
+    else:
+        assert calls == []
+        assert {t["note"] for t in report.tool_health} == {"prerecorded"}
+
+
+def test_a_review_reads_its_required_tools_and_each_dimension_s_tool_from_the_evidence(tmp_path):
     (tmp_path / "app.py").write_text("print(1)\n")
 
     def review(runs):
-        pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
-        monkeypatch.setattr(pipe, "run_tools", lambda *_: runs)
+        pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=lambda *_a, **_k: runs)
         return pipe.run(tmp_path, mode="mock")
 
     every = [ToolRun(t, True) for t in TOOL_DIMENSIONS]

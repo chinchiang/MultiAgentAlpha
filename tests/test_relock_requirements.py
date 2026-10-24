@@ -6,6 +6,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -111,6 +112,45 @@ def test_the_typecheck_closure_agrees_with_the_312_closure_it_is_installed_over(
     assert shared, "expected shared packages (typing_extensions, referencing, ...)"
     assert all(base[n.lower()] == (v, h) for n, v, h in shared), "relock with --same-versions-as tools/dev-requirements-py312.txt"
     assert "--same-versions-as tools/dev-requirements-py312.txt" in text.splitlines()[2]
+
+
+def test_the_build_system_requires_the_build_closures_pins():
+    """pyproject.toml's [build-system] and tools/build-requirements.in pin the same setuptools and wheel: a bump of one
+    alone builds the package with a setuptools the closure, and its advisory scan, does not hold."""
+    requires = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["build-system"]["requires"]
+    pins = [line.strip() for line in (ROOT / "tools/build-requirements.in").read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")]
+    assert sorted(requires) == sorted(pins) and len(pins) == 2, "pin setuptools and wheel alike in both"
+
+
+def _parse_uv_lock(text: str) -> dict[str, tuple[str, set[str]]]:
+    """tools/build-requirements.txt is uv pip compile output: each entry carries a hash per file (wheel and sdist),
+    then `# via` lines, which are skipped."""
+    pins: dict[str, tuple[str, set[str]]] = {}
+    name = ""
+    for line in text.splitlines():
+        if m := LINE_RE.match(line):
+            name = m.group(1).lower()
+            pins[name] = (m.group(2), set())
+        elif m := re.match(r"^    --hash=sha256:([0-9a-f]{64})(?: \\)?$", line):
+            pins[name][1].add(m.group(1))
+    return pins
+
+
+@pytest.mark.parametrize("lock", ["tools/dev-requirements.txt", "tools/dev-requirements-py312.txt", "tools/model-eval-requirements.txt"])
+def test_the_closures_installed_with_the_build_closure_pin_its_shared_packages_alike(lock):
+    """Installed in one environment with tools/build-requirements.txt (dev then build in the workflows' jobs, py312 in
+    the type-check job, build then garak in docs/model-eval-runbook.md): the later install of a shared package with
+    another pin replaces the earlier one, so every shared name carries the build closure's version and one of its
+    hashes. The semgrep closure is installed in its own venv and is not checked."""
+    build = _parse_uv_lock((ROOT / "tools/build-requirements.txt").read_text(encoding="utf-8"))
+    shared = [(n, v, h) for n, v, h in _parse_lock((ROOT / lock).read_text(encoding="utf-8")) if n.lower() in build]
+    assert shared, f"expected {lock} to share packages (packaging, ...) with tools/build-requirements.txt"
+    for n, v, h in shared:
+        version, hashes = build[n.lower()]
+        assert v == version and h in hashes, (
+            f"{lock} pins {n}=={v} (sha256 {h[:12]}…), tools/build-requirements.txt {n}=={version}: "
+            "pin it as tools/build-requirements.txt does")
 
 
 def test_pins_from_lock_and_python_choice(tmp_path):

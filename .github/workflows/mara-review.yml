@@ -141,8 +141,10 @@ jobs:
       - name: osv-scanner on the hash-locked closures this repository installs; any un-ignored advisory fails the job
         run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/dev-requirements-py312.txt --lockfile tools/typecheck-requirements.txt --lockfile tools/build-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
       - name: osv-scanner on the isolated model-evaluation closure only
+        if: ${{ !cancelled() }}  # scanned even when an earlier closure's scan failed
         run: python3 scripts/osv_ci.py --lockfile tools/model-eval-requirements.txt --config tools/osv-model-eval.toml --report osv-model-eval.sarif
-      - name: osv-scanner on the semgrep closure only (tools/osv-semgrep.toml, exception-free since semgrep 1.179.0)
+      - name: osv-scanner on the semgrep closure only (dated exceptions in tools/osv-semgrep.toml)
+        if: ${{ !cancelled() }}  # scanned even when an earlier closure's scan failed
         run: python3 scripts/osv_ci.py --lockfile tools/semgrep-requirements.txt --config tools/osv-semgrep.toml --report osv-semgrep.sarif
       - name: trivy offline database — fetch once, record its digests, refuse a stale or tampered copy
         run: |

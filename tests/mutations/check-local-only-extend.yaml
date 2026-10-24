@@ -1,0 +1,14 @@
+focused: [tests/test_check_local.py]
+mutations:
+  - name: a repeated --only keeps the last
+    file: scripts/check_local.py
+    old: 'ap.add_argument("--only", action="extend", nargs="+",'
+    new: 'ap.add_argument("--only", nargs="+",'
+  - name: no --only runs no check
+    file: scripts/check_local.py
+    old: 'for given in a.only or DEFAULT_CHECKS for'
+    new: 'for given in a.only or () for'
+  - name: a repeated check runs twice
+    file: scripts/check_local.py
+    old: 'a.only = list(dict.fromkeys(name for given in a.only or DEFAULT_CHECKS for name in GROUPS.get(given, (given,))))'
+    new: 'a.only = list(name for given in a.only or DEFAULT_CHECKS for name in GROUPS.get(given, (given,)))'

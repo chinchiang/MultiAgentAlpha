@@ -19,7 +19,7 @@ from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provide
 from mara.report.markdown_out import render_markdown
 from mara.report.psirt_out import legal_deadlines
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
-from mara.tools.runner import ToolRun
+from mara.tools.runner import ToolRun, run_all
 from mara.tools.sarif import ToolResult
 from tests.fake_panel import REFUSAL, Panel
 from tests.scored_rows import MOCK, policy, score, tool_corroborated
@@ -39,8 +39,8 @@ class Reply(Provider):
         return RawReply(STOP_REFUSAL) if self.data is None else RawReply(STOP_END, answer_text=json.dumps(self.data))
 
 
-def pipeline(tmp_path):
-    return Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out")
+def pipeline(tmp_path, run_tools=run_all):
+    return Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=run_tools)
 
 
 def finding():
@@ -117,15 +117,26 @@ def test_line_number_overhead_is_bounded_and_redacted_changes_invalidate_revisio
     assert before.revision != after.revision
 
 
-def test_prerecorded_secret_scan_cannot_authorize_live_egress(tmp_path, monkeypatch):
-    import mara.pipeline as mod
-    pipe = pipeline(tmp_path)
+def test_prerecorded_secret_scan_cannot_authorize_live_egress(tmp_path):
+    """A pre-recorded gitleaks scan that found nothing does not let the source leave in live mode: gitleaks is run
+    again on the working tree, into out/live-secret-preflight, and here it is not installed."""
+    calls = []
+
+    def runner(target, out_dir, enabled=None):
+        calls.append((target, out_dir, enabled))
+        return [ToolRun(tool="gitleaks", ran=False, note="not installed")] if enabled == ["gitleaks"] else []
+
+    pipe = pipeline(tmp_path, run_tools=runner)
     (tmp_path / "app.py").write_text("print(1)")
+    sarif_dir = tmp_path / "sarif"
+    sarif_dir.mkdir()
+    (sarif_dir / "gitleaks.sarif").write_text(json.dumps({"runs": [{"tool": {"driver": {"name": "gitleaks"}}, "results": []}]}))
     for name, provider in list(pipe.providers.items()):
         pipe.providers[name] = Reply(provider.spec.model_copy(update={"provider": "openai_compatible"}))
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(tool="gitleaks", ran=True)])
-    monkeypatch.setattr(mod, "run_all", lambda *_a, **_k: [ToolRun(tool="gitleaks", ran=False, note="not installed")])
-    report = pipe.run(tmp_path, mode="live", sarif_dir=tmp_path)
+    report = pipe.run(tmp_path, mode="live", sarif_dir=sarif_dir)
+    assert calls == [(tmp_path.resolve(), tmp_path / "out" / "live-secret-preflight", ["gitleaks"])]
+    gitleaks = [t for t in report.tool_health if t["tool"] == "gitleaks"]
+    assert gitleaks == [{"tool": "gitleaks", "ran": False, "note": "not installed"}], "the live scan replaces the pre-recorded one"
     assert "source_egress_blocked_by_secret_preflight" in report.incomplete_reasons
     assert not any(p.requests for p in pipe.providers.values())
 
@@ -338,12 +349,11 @@ def test_quorum_requires_two_independent_families_and_both_passes():
         score([f.model_copy(update={"cvss4_vector": "CVSS:4.0/invalid"})], finders, full)
 
 
-def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path, monkeypatch):
-    pipe = pipeline(tmp_path)
+def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path):
+    tool = ToolResult("semgrep", "sql", "error", "SQL injection", "app.py", 1, "CWE-89")
+    pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun("semgrep", True, [tool])])
     pipe.providers = {n: Reply(p.spec) for n, p in pipe.providers.items()}
     (tmp_path / "app.py").write_text("unsafe()")
-    tool = ToolResult("semgrep", "sql", "error", "SQL injection", "app.py", 1, "CWE-89")
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun("semgrep", True, [tool])])
     report = pipe.run(tmp_path, mode="mock")
     assert not report.gate_passed and report.overall_score is None and report.review_status == "incomplete"
     assert len(report.tool_results) == 1 and report.tool_results[0]["rule_id"] == "sql"
@@ -355,11 +365,10 @@ class Truncated(Provider):
         return RawReply(STOP_MAX_TOKENS, answer_text='{"findings": [')
 
 
-def test_truncated_reviewer_replies_block_the_gate(tmp_path, monkeypatch):
-    pipe = pipeline(tmp_path)
+def test_truncated_reviewer_replies_block_the_gate(tmp_path):
+    pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     pipe.providers = {n: Truncated(p.spec) for n, p in pipe.providers.items()}
     (tmp_path / "app.py").write_text("unsafe()")
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["reviewer_truncations"] == 33 and report.bias_audit["reviewer_refusals"] == 0
     assert not report.gate_passed and report.overall_score is None and report.review_status == "incomplete"
@@ -397,10 +406,9 @@ def test_missing_config_is_a_usage_error_not_a_traceback(tmp_path, monkeypatch):
         assert "config file not found" in res.output
 
 
-def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path, monkeypatch):
-    pipe = pipeline(tmp_path)
+def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path):
+    pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     (tmp_path / "app.py").write_text("unsafe()")
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     Panel.seated_in(pipe).always("skeptic", REFUSAL)
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["skeptic_refusals"] == report.bias_audit["skeptic_calls"] >= 1
@@ -410,10 +418,9 @@ def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path, monkeypat
     assert all(c.tier != EvidenceTier.B for c in report.consensus)  # the independent challenge is missing
 
 
-def test_judge_refusal_is_counted_separately_from_invalid_output(tmp_path, monkeypatch):
-    pipe = pipeline(tmp_path)
+def test_judge_refusal_is_counted_separately_from_invalid_output(tmp_path):
+    pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     (tmp_path / "app.py").write_text("unsafe()")
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     Panel.seated_in(pipe).always("judge", REFUSAL)
     report = pipe.run(tmp_path, mode="mock")
     # every judge call refused: 3 families x 2 chunks (30 findings, MAX_PASS_FINDINGS per pass) x 2 passes
@@ -605,12 +612,11 @@ def test_live_egress_with_the_exemption_passes_only_declared_secrets(tmp_path, m
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
 
     def run(extra_secret):
-        pipe = pipeline(tmp_path)
-        pipe.providers = {n: Reply(p.spec, {"findings": []}) for n, p in pipe.providers.items()}
         results = [ToolResult("gitleaks", "generic-api-key", "error", "secret", "app.py", 3, "CWE-798")]
         if extra_secret:
             results.append(ToolResult("gitleaks", "aws-access-token", "error", "secret", "app.py", 1, "CWE-798"))
-        monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun("gitleaks", True, results)])
+        pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun("gitleaks", True, results)])
+        pipe.providers = {n: Reply(p.spec, {"findings": []}) for n, p in pipe.providers.items()}
         report = pipe.run(sample, mode="mock", calibration_sample=True)
         return pipe, report
 
@@ -654,11 +660,10 @@ def test_one_verified_quote_cannot_launder_an_invalid_primary_location():
     assert "unverified_provenance" in c.human_reasons
 
 
-def test_live_secret_preflight_stops_all_provider_requests(tmp_path, monkeypatch):
-    pipe = pipeline(tmp_path)
+def test_live_secret_preflight_stops_all_provider_requests(tmp_path):
+    pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun("gitleaks", False)])
     pipe.providers = {n: Reply(p.spec.model_copy(update={"provider": "anthropic"})) for n, p in pipe.providers.items()}
     (tmp_path / "app.py").write_text("unsafe()")
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun("gitleaks", False)])
     report = pipe.run(tmp_path, mode="live")
     assert not report.gate_passed and not any(p.requests for p in pipe.providers.values())
     assert "source_egress_blocked_by_secret_preflight" in report.incomplete_reasons
@@ -669,10 +674,9 @@ def test_mock_cannot_be_labelled_live(tmp_path):
         pipeline(tmp_path).run(tmp_path, mode="live")
 
 
-def test_nonempty_model_bom_does_not_crash_completed_report(tmp_path, monkeypatch):
-    pipe = pipeline(tmp_path)
+def test_nonempty_model_bom_does_not_crash_completed_report(tmp_path):
+    pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [])
     pipe.ml_bom_status = {"selfhosted": SimpleNamespace(model_id="example", status="pending", component_name="x", component_version="1", digest="")}
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [])
     report = pipe.run(tmp_path, mode="mock")
     assert report.ml_bom["selfhosted"].status == "pending"
     assert any("ML-BOM" in line for line in pipe.log)
@@ -703,11 +707,10 @@ class Failing(Provider):
         raise RuntimeError("provider_http_error:429")
 
 
-def test_provider_errors_block_the_gate_and_are_not_counted_as_refusals(tmp_path, monkeypatch):
-    pipe = pipeline(tmp_path)
+def test_provider_errors_block_the_gate_and_are_not_counted_as_refusals(tmp_path):
+    pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     pipe.providers = {n: Failing(p.spec) for n, p in pipe.providers.items()}
     (tmp_path / "app.py").write_text("unsafe()")
-    monkeypatch.setattr(pipe, "run_tools", lambda *_: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     report = pipe.run(tmp_path, mode="mock")
     assert report.bias_audit["reviewer_errors"] == 33 and report.bias_audit["reviewer_refusals"] == 0
     assert not report.gate_passed and report.overall_score is None and "reviewer_errors" in report.incomplete_reasons
@@ -931,6 +934,10 @@ def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():
     assert upload["permissions"]["security-events"] == "write"
     assert all("run" not in step and "checkout@" not in step.get("uses", "") for step in upload["steps"])
     runs = [s.get("run", "") for s in data["jobs"]["deterministic-tools"]["steps"]]
+    later = [s for s in data["jobs"]["deterministic-tools"]["steps"] if "osv_ci.py" in s.get("run", "")
+             and ("osv-model-eval.toml" in s["run"] or "osv-semgrep.toml" in s["run"])]
+    assert len(later) == 2 and all(s.get("if") == "${{ !cancelled() }}" for s in later), \
+        "the garak and semgrep closures are scanned even when an earlier closure's scan failed"
     model_scan = [s for s in runs if "osv_ci.py" in s and "osv-model-eval.toml" in s]
     assert len(model_scan) == 1 and model_scan[0].count("--lockfile") == 1
     semgrep_scan = [s for s in runs if "osv_ci.py" in s and "osv-semgrep.toml" in s]

@@ -1,0 +1,6 @@
+focused: [tests/test_mutate.py]
+mutations:
+  - name: scripts is not cleared of bytecode
+    file: scripts/mutate.py
+    old: 'for top in ("src", "tests", "scripts"):'
+    new: 'for top in ("src", "tests"):'

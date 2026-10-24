@@ -209,7 +209,7 @@ _Avoid_: anonymised ID (the in-country team can map it back), hashed ID (an unke
 ## Workbench
 
 **Workbench**:
-The local web page `mara serve` serves on a loopback address (評估工作台), from which reviews are started, followed and read; a view on `mara review`, never a second way to review. See docs/adr/0006-local-web-workbench.md.
+The local web page that `mara` alone, or `mara serve` with its options, serves on a loopback address (評估工作台), from which reviews are started, followed and read; a view on `mara review`, never a second way to review. See docs/adr/0006-local-web-workbench.md.
 _Avoid_: dashboard (it also starts reviews), web app, portal
 
 **Workbench demo**:
