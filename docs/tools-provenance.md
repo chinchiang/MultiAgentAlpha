@@ -86,7 +86,7 @@ repo 改成 public 之後 GitHub Code Scanning 免費，報告第三部 L5 設�
 
 | 項目 | 做法 | 為什麼 |
 |---|---|---|
-| 上傳哪些 | `mara-review.yml` 新 job `code-scanning`（`needs: deterministic-tools`）把 `l0-sarif` artifact 裡對本 repo 的八份掃描（semgrep、osv-scanner 對 runtime／build、model-eval 與 semgrep 三個閉包、trivy、gitleaks、zizmor、csp-evaluator）經 `scripts/code_scanning_prep.py` 整理後，以 `github/codeql-action/upload-sarif`（v4.39.0，SHA 固定）一次上傳目錄 | 只有描述本 repo 的結果才該變成 Security 分頁的警報 |
+| 上傳哪些 | `mara-review.yml` 新 job `code-scanning`（`needs: deterministic-tools`）把 `l0-sarif` artifact 裡對本 repo 的八份掃描（semgrep、osv-scanner 對 runtime／build、model-eval 與 semgrep 三個閉包、trivy、gitleaks、zizmor、csp-evaluator）經 `scripts/code_scanning_prep.py` 整理後，以 `github/codeql-action/upload-sarif`（v4.39.1，SHA 固定）一次上傳目錄 | 只有描述本 repo 的結果才該變成 Security 分頁的警報 |
 | 不上傳哪些 | 四份 `fixture-*.sarif`（對 `fixtures/vuln-sample` 的漂移檢查）與 `mara review` 的 mock 報告 `out/report.sarif` | 它們描述的是刻意種下的漏洞材料，上傳只會製造假警報 |
 | `code_scanning_prep.py` 做的事 | 丟掉帶 `suppressions` 的 result（triage 檔已接受的 finding，理由留在 repo 內，不依賴 GitHub 對該欄位的處理）、丟掉沒有檔案位置的 result、把 `uri` 正規化成 repo 相對路徑、每個 run 設 `automationDetails.id = mara-l0/<tool>/`、超過 GitHub 上限（25,000 個 result 或 10 MB）即拒絕 | `automationDetails.id` 就是 Code Scanning 的 category：八份上傳各自一個分析，後一次上傳沒再回報的警報會被自動關閉；0 個結果的上傳也要送，這樣修掉的問題才會關 |
 | 權限 | 只有 `code-scanning` job 有 `security-events: write`；它不執行任何 repo 內的掃描腳本，只讀 artifact。L0 job 維持 `contents: read` | 執行 PR 程式碼的 job 不該拿到能寫警報的 token |
