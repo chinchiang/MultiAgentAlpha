@@ -9,6 +9,14 @@
 # branch-pinned on purpose, part of the material the review pipeline is calibrated against). Dependabot
 # pull requests that touch fixtures/ or calib/ must be closed without merging; the L0 job fails such pull
 # requests outright (guard step in mara-review.yml) and CODEOWNERS routes them to the maintainer.
+#
+# Two GitHub settings this file relies on, neither in the tree. The repository ruleset R1 applies deletion,
+# non_fast_forward and update to every branch (~ALL): anyone with write access can create a branch, but only
+# R1's bypass actors can update, force-push or delete one. Dependabot is one of them (Integration 29110, bypass
+# mode always, since 2026-10-24), so it can rebase and update its own pull requests' branches; before that it
+# could open a pull request but not bring it up to date with main (#151).
+# The labels below were created on GitHub with gh label create (2026-10-24); no workflow creates them, so a
+# deleted label must be created again, or Dependabot opens its pull requests unlabelled and says so.
 version: 2
 updates:
   - package-ecosystem: github-actions
