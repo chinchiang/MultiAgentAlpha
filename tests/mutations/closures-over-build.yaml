@@ -1,0 +1,18 @@
+focused: [tests/test_relock_requirements.py]
+mutations:
+  - name: the garak closure's setuptools is not the build closure's
+    file: tools/model-eval-requirements.txt
+    old: 'setuptools==84.1.0 \'
+    new: 'setuptools==84.0.0 \'
+  - name: a shared pin carries a hash the build closure does not
+    file: tools/model-eval-requirements.txt
+    old: |-
+      setuptools==84.1.0 \
+          --hash=sha256:5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9
+    new: |-
+      setuptools==84.1.0 \
+          --hash=sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670
+  - name: dev's packaging is not the build closure's
+    file: tools/dev-requirements.txt
+    old: 'packaging==26.3 \'
+    new: 'packaging==26.2 \'
