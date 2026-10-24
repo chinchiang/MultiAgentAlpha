@@ -123,6 +123,36 @@ def test_the_build_system_requires_the_build_closures_pins():
     assert sorted(requires) == sorted(pins) and len(pins) == 2, "pin setuptools and wheel alike in both"
 
 
+def _parse_uv_lock(text: str) -> dict[str, tuple[str, set[str]]]:
+    """tools/build-requirements.txt is uv pip compile output: each entry carries a hash per file (wheel and sdist),
+    then `# via` lines, which are skipped."""
+    pins: dict[str, tuple[str, set[str]]] = {}
+    name = ""
+    for line in text.splitlines():
+        if m := LINE_RE.match(line):
+            name = m.group(1).lower()
+            pins[name] = (m.group(2), set())
+        elif m := re.match(r"^    --hash=sha256:([0-9a-f]{64})(?: \\)?$", line):
+            pins[name][1].add(m.group(1))
+    return pins
+
+
+@pytest.mark.parametrize("lock", ["tools/dev-requirements.txt", "tools/dev-requirements-py312.txt", "tools/model-eval-requirements.txt"])
+def test_the_closures_installed_with_the_build_closure_pin_its_shared_packages_alike(lock):
+    """Installed in one environment with tools/build-requirements.txt (dev then build in the workflows' jobs, py312 in
+    the type-check job, build then garak in docs/model-eval-runbook.md): the later install of a shared package with
+    another pin replaces the earlier one, so every shared name carries the build closure's version and one of its
+    hashes. The semgrep closure is installed in its own venv and is not checked."""
+    build = _parse_uv_lock((ROOT / "tools/build-requirements.txt").read_text(encoding="utf-8"))
+    shared = [(n, v, h) for n, v, h in _parse_lock((ROOT / lock).read_text(encoding="utf-8")) if n.lower() in build]
+    assert shared, f"expected {lock} to share packages (packaging, ...) with tools/build-requirements.txt"
+    for n, v, h in shared:
+        version, hashes = build[n.lower()]
+        assert v == version and h in hashes, (
+            f"{lock} pins {n}=={v} (sha256 {h[:12]}…), tools/build-requirements.txt {n}=={version}: "
+            "pin it as tools/build-requirements.txt does")
+
+
 def test_pins_from_lock_and_python_choice(tmp_path):
     assert rl.pins_from_lock(ROOT / "tools/dev-requirements.txt")[0].startswith("annotated-doc==")
     bad = tmp_path / "x.txt"
