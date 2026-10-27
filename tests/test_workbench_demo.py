@@ -59,7 +59,8 @@ def test_it_answers_every_route_the_page_reads_and_holds_its_downloads():
     assert set(DATA["files"][rid]) == set(DATA["api"][f"/api/runs/{rid}"]["run"]["artifacts"]) == set(demo.DOWNLOADS)
 
 
-def test_the_capture_scrub_replaces_this_machines_paths_and_times():
+def test_the_capture_scrub_replaces_this_machines_paths_and_times(tmp_path):
+    out_dir = tmp_path / "mara-demo-x"
     raw = {"api": {
         "/api/configs": {"configs": [{"path": "config/mara.yaml", "provider_mode": "live"},
                                      {"path": "config/mara.mock.yaml", "provider_mode": "mock",
@@ -70,14 +71,15 @@ def test_the_capture_scrub_replaces_this_machines_paths_and_times():
         "/api/runs": {"runs": [{"id": "20990101-000000-abcdef", "artifacts": ["report.json", "report.md"], "pid": 7,
                                 "started_at": "2099-01-01T00:00:00+00:00"}, {"id": "workspace-out"}]},
         "/api/runs/20990101-000000-abcdef": {"run": {"id": "20990101-000000-abcdef", "artifacts": ["report.md"], "pid": 7,
-                                                      "finished_at": "2099-01-01T00:01:30+00:00", "out": "/tmp/mara-demo-x/runs"}}},
+                                                      "finished_at": "2099-01-01T00:01:30+00:00", "out": str(out_dir / "runs")}}},
         "files": {"report.md": "# x"}}
-    data = demo.scrub(raw, "20990101-000000-abcdef", Path("/tmp/mara-demo-x"))
+    data = demo.scrub(raw, "20990101-000000-abcdef", out_dir)
     text = json.dumps(data)
     assert "20990101" not in text and "/tmp/" not in text and str(demo.ROOT) not in text and "llm.example" not in text
     assert [r["id"] for r in data["api"]["/api/runs"]["runs"]] == [demo.DEMO_ID]
     run = data["api"][f"/api/runs/{demo.DEMO_ID}"]["run"]
-    assert run["finished_at"] == "2026-10-14T09:01:30+00:00" and run["pid"] is None and run["out"] == "~/MultiAgentAlpha/out/runs"
+    assert run["finished_at"] == "2026-10-14T09:01:30+00:00" and run["pid"] is None
+    assert run["out"] == "~/MultiAgentAlpha/out" + os.sep + "runs"
     assert data["api"]["/api/env"]["platform"] == "Linux-x86_64" and data["api"]["/api/jobs"] == {"jobs": []}
 
 

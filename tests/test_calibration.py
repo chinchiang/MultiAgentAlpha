@@ -150,6 +150,36 @@ def test_the_families_measured_are_the_ones_that_reviewed():
     stats, families = calibrate.family_metrics([("s", rep, [{"file": "a.py", "line": 1, "cwe": "CWE-89"}])])
     assert families == ["anthropic"] and set(stats) == {"anthropic"}
 
+
+def test_family_metrics_pairs_overlapping_labels_independently_of_order():
+    import calibrate
+
+    labels = [{"file": "a.py", "line": n, "cwe": "CWE-89"} for n in (12, 10)]
+    findings = [{"provenance": [{"file": "a.py", "line": n}], "cwe": "CWE-89", "finder_families": ["anthropic"]}
+                for n in (10, 14)]
+    for ordered_labels in (labels, labels[::-1]):
+        for ordered_findings in (findings, findings[::-1]):
+            rep = {"findings": ordered_findings, "bias_audit": {}}
+            stats, _ = calibrate.family_metrics([("s", rep, ordered_labels)])
+            assert stats["anthropic"]["CWE-89"] == {"tp": 2, "fp": 0, "fn": 0}
+
+
+def test_family_metrics_counts_duplicates_and_unmatched_findings_per_family():
+    import calibrate
+
+    labels = [{"file": "a.py", "line": 10, "cwe": "CWE-89"}, {"file": "a.py", "line": 30, "cwe": "CWE-79"}]
+    findings = [
+        {"provenance": [{"file": "a.py", "line": 10}], "cwe": "CWE-89", "finder_families": ["anthropic", "glm"]},
+        {"provenance": [{"file": "a.py", "line": 11}], "cwe": "CWE-89", "finder_families": ["anthropic"]},
+        {"provenance": [{"file": "other.py", "line": 10}], "cwe": "CWE-89", "finder_families": ["anthropic"]},
+    ]
+    rep = {"findings": findings, "bias_audit": {}}
+    stats, _ = calibrate.family_metrics([("s", rep, labels)])
+    assert stats["anthropic"]["CWE-89"] == {"tp": 1, "fp": 1, "fn": 0}
+    assert stats["glm"]["CWE-89"] == {"tp": 1, "fp": 0, "fn": 0}
+    assert stats["anthropic"]["CWE-79"] == stats["glm"]["CWE-79"] == {"tp": 0, "fp": 0, "fn": 1}
+
+
 def test_refutation_rates_are_per_finder_family():
     import calibrate
 

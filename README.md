@@ -426,8 +426,9 @@ for s in calib/samples/*/; do mara review "$s" --provider mock --out calib-out/$
 python scripts/calibrate.py --mode mock
 ```
 
-For a live run point the same commands at `config/mara.yaml` (three reachable family endpoints,
-ZDR enabled) and pass `--mode live`. `scripts/fetch_calib_corpora.sh` fetches OWASP Juice Shop
+For a live run point the same commands at `config/mara.yaml` (three reachable family endpoints: Bedrock declared
+ZDR, Gemini with its recorded retention approval, and on-premises GLM) and pass `--mode live`.
+`scripts/fetch_calib_corpora.sh` fetches OWASP Juice Shop
 and WebGoat, each at the commit of a pinned release tag (`scripts/fetch_calib_corpora.py`: Juice Shop v20.3.0,
 WebGoat v2026.4; a checkout at another commit is refused), so labels stay tied to the code they describe; they need human-authored `labels.json` files before they count. A sample's
 `labels.json` is its answer key and never reaches a model: the bundle excludes it (coverage reason
@@ -435,6 +436,11 @@ WebGoat v2026.4; a checkout at another commit is refused), so labels stay tied t
 the label-driven mocks read it from disk, and `calibrate.py --mode live` refuses any run whose bundle
 included it. A `calib-out/<sample>` without its own `labels.json` is skipped with a message, never
 scored against other labels.
+
+Per-family finding-to-label scores use maximum one-to-one pairing on the same file and CWE within three lines;
+extra findings with a matching label are not counted again. The 2026-10-08 report predates this correction and
+its original per-sample reports have not been found, so its precision, recall and weights remain to be checked
+against those reports. See [the calibration review](docs/calibration-review-2026-10-27.md).
 
 The Alternative Annotator Test that policy P8 relies on has two parts, both required. Agreement: the
 unsupervised label against the human decisions, at least 0.8 on at least 10 items and better than the
@@ -673,9 +679,10 @@ rejected non-D finding in the human queue). Nothing is
 marked passed before the fact. `docs/governance-check-2026-09-12.md` was regenerated in place as those
 mechanisms landed (last on 2026-09-17), so it shows the later state rather than the first run;
 `docs/governance-check-2026-09-26.md` was likewise regenerated in place on 2026-10-03 and still shows the
-former Claude/DeepSeek/Nemotron panel. `docs/governance-check-2026-10-12.md` is the current record (the same
-table the weekly run posted that day): G-2, G-3, G-5, G-6, G-9 and G-11 pass, the other seven fail for the
-reasons above, none is MANUAL.
+former Claude/DeepSeek/Nemotron panel. `docs/governance-check-2026-10-12.md` records the table posted that day:
+six pass and seven fail. The later [2026-10-19 tracking issue comment](https://github.com/chinchiang/MultiAgentAlpha/issues/22#issuecomment-6257686304)
+applies the strengthened G-11 check and records five pass and eight fail: a configured ticket sync alone is no longer
+enough. These are dated snapshots, not a claim about the current environment; run the governance check for a fresh result.
 
 ## PSIRT hand-off (governance item G-12)
 

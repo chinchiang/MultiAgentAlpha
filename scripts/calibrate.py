@@ -117,6 +117,42 @@ def _match(f: dict, lab: dict) -> bool:
     return same_place(p["file"], p["line"], f["cwe"], lab["file"], lab["line"], lab["cwe"])  # mara.identity: same file and weakness, lines within NEAR_LINES
 
 
+def _pair_labels(findings: list[dict], labels: list[dict]) -> tuple[set[int], list[int]]:
+    """Maximise one-to-one finding/label pairs; return paired label indices and findings with no candidate."""
+    candidates = [[i for i, label in enumerate(labels) if _match(finding, label)] for finding in findings]
+    label_to_finding: dict[int, int] = {}
+    finding_to_label: dict[int, int] = {}
+    for start, edges in enumerate(candidates):
+        if not edges:
+            continue
+        # An alternating path can move an earlier finding to another label, freeing one for this finding.
+        pending = [start]
+        seen_findings = {start}
+        parent: dict[int, int] = {}
+        free_label = None
+        for finding in pending:
+            for label in candidates[finding]:
+                if label in parent:
+                    continue
+                parent[label] = finding
+                owner = label_to_finding.get(label)
+                if owner is None:
+                    free_label = label
+                    break
+                if owner not in seen_findings:
+                    seen_findings.add(owner)
+                    pending.append(owner)
+            if free_label is not None:
+                break
+        while free_label is not None:
+            finding = parent[free_label]
+            previous = finding_to_label.get(finding)
+            label_to_finding[free_label] = finding
+            finding_to_label[finding] = free_label
+            free_label = previous
+    return set(label_to_finding), [i for i, edges in enumerate(candidates) if not edges]
+
+
 def family_metrics(runs):
     """Per family, per CWE: tp, fp, fn (a label counts as found by a family if that family is among finder_families)."""
     stats = defaultdict(lambda: defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0}))
@@ -131,17 +167,11 @@ def family_metrics(runs):
             if fam not in called and not any(fam in f.get("finder_families", []) for f in rep["findings"]):
                 continue
             found = [f for f in rep["findings"] if fam in f["finder_families"]]
-            matched_labels = set()
-            for f in found:
-                hit = next((i for i, lab in enumerate(labels) if _match(f, lab)), None)
-                if hit is None:
-                    stats[fam][f["cwe"]]["fp"] += 1
-                elif hit not in matched_labels:  # a label counts once even if two findings land on it
-                    matched_labels.add(hit)
-                    stats[fam][f["cwe"]]["tp"] += 1
+            matched_labels, unmatched_findings = _pair_labels(found, labels)
+            for i in unmatched_findings:
+                stats[fam][found[i]["cwe"]]["fp"] += 1
             for i, lab in enumerate(labels):
-                if i not in matched_labels:
-                    stats[fam][lab["cwe"]]["fn"] += 1
+                stats[fam][lab["cwe"]]["tp" if i in matched_labels else "fn"] += 1
     return stats, sorted(families)
 
 

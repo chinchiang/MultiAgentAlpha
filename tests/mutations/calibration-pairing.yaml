@@ -1,0 +1,10 @@
+focused: [tests/test_calibration.py::test_family_metrics_pairs_overlapping_labels_independently_of_order, tests/test_calibration.py::test_family_metrics_counts_duplicates_and_unmatched_findings_per_family]
+mutations:
+  - name: an occupied label cannot be reassigned
+    file: scripts/calibrate.py
+    old: '                if owner not in seen_findings:'
+    new: '                if False:'
+  - name: a duplicate finding counts as a false positive
+    file: scripts/calibrate.py
+    old: '    return set(label_to_finding), [i for i, edges in enumerate(candidates) if not edges]'
+    new: '    return set(label_to_finding), [i for i, edges in enumerate(candidates) if i not in finding_to_label]'
