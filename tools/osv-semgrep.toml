@@ -17,6 +17,10 @@
 # opentelemetry-api~=1.37.0, and the closure's opentelemetry-sdk 1.37.0 pins opentelemetry-api==1.37.0, so the
 # closure cannot take the fixed opentelemetry-api 1.45.1. Remove it, instead of renewing it, at the semgrep release
 # that relaxes the pin, and relock.
+#
+# Three more since 2026-10-28, for the same mcp==1.29.0 pin (semgrep 1.179.0 through 1.182.1, the newest release,
+# checked that day): CVE-2026-116684, -116685 and -116686, all fixed in mcp 1.30.0. Remove them with CVE-2026-59951,
+# at the semgrep release that relaxes the pin, and relock.
 
 [[IgnoredVulns]]
 id = "CVE-2026-59951"
@@ -27,3 +31,18 @@ reason = "MCP Python SDK unbounded session accumulation in the StreamableHTTP tr
 id = "CVE-2026-114603"
 ignoreUntil = 2026-12-31
 reason = "OpenTelemetry Python unbounded tracestate parsing in opentelemetry-api (GHSA-xcq7-p3pf-p88h, CVSS 3.1 A:L); fixed in opentelemetry-api 1.45.1, but semgrep 1.179.0-1.182.1 pin opentelemetry-api~=1.37.0 so the closure cannot take it. The parser (TraceState.from_header) runs only on a carrier holding a tracestate. semgrep 1.179.0 extracts a context only in Telemetry.extract(), only under --trace (no envvar, no auto envvar prefix), from a carrier holding a traceparent it builds from SEMGREP_TRACE_PARENT_TRACE_ID and SEMGREP_TRACE_PARENT_SPAN_ID and never a tracestate. MARA runs semgrep scan without --trace, with runner.tool_env, which passes no SEMGREP_* or OTEL_* variable, and never semgrep ci or mcp. Re-check at a semgrep release that relaxes the pin."
+
+[[IgnoredVulns]]
+id = "CVE-2026-116684"
+ignoreUntil = 2026-12-31
+reason = "MCP Python SDK server bearer-token authentication accepts a token issued for another resource server (GHSA-w4fh-qvv9-3v23, CVSS 3.1 6.8); fixed in mcp 1.30.0, but semgrep 1.179.0-1.182.1 pin mcp==1.29.0 so the closure cannot take it. semgrep builds the auth settings and token verifier only in setup_mcp_server(), under semgrep mcp; semgrep scan imports the mcp server modules but runs none of it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."
+
+[[IgnoredVulns]]
+id = "CVE-2026-116685"
+ignoreUntil = 2026-12-31
+reason = "MCP Python SDK client HTTP transports follow cross-origin redirects carrying custom headers and bodies (GHSA-5h93-6whr-6q8j, CVSS 3.1 5.9); fixed in mcp 1.30.0, but semgrep 1.179.0-1.182.1 pin mcp==1.29.0 so the closure cannot take it. semgrep contains no MCP client code (no ClientSession, streamablehttp_client or sse_client), so no semgrep command reaches it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."
+
+[[IgnoredVulns]]
+id = "CVE-2026-116686"
+ignoreUntil = 2026-12-31
+reason = "MCP Python SDK client fetches server-chosen $ref URLs while validating tool output schemas (GHSA-rwrf-2pqf-9j8j, CVSS 3.1 6.5); fixed in mcp 1.30.0, but semgrep 1.179.0-1.182.1 pin mcp==1.29.0 so the closure cannot take it. semgrep contains no MCP client code (no ClientSession, streamablehttp_client or sse_client), so no semgrep command reaches it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."

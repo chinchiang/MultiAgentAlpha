@@ -8,12 +8,7 @@
 # reason = "not reachable from semgrep's CLI use; tracked in issue #NN until the upstream fix is released"
 
 [[IgnoredVulns]]
-id = "CVE-2026-81726"   # aliases (GHSA/PYSEC ids) match too: osv-scanner checks every alias of a group
-ignoreUntil = 2026-12-17
-reason = "nltk 3.10.3 path traversal in model-artifact loading; no fixed release exists (re-checked 2026-10-03: 3.10.3 is still the newest nltk) and garak 0.17.0 requires >=3.10.3, so relocking cannot remove it. tools/model-eval-requirements.txt is installed only on the isolated G-8 evaluation host, never in CI or the review pipeline. Same entry in tools/trivyignore.yaml."
-
-[[IgnoredVulns]]
-id = "CVE-2026-104851"   # GHSA-27vj-qcqg-25rc
+id = "CVE-2026-104851"   # GHSA-27vj-qcqg-25rc; aliases (GHSA/PYSEC ids) match too: osv-scanner checks every alias of a group
 ignoreUntil = 2026-12-17
 reason = "fsspec 2025.3.0 in the garak closure (published 2026-10-02): template injection in ReferenceFileSystem (reference:// / Kerchunk documents rendered through jinja2), fixed in 2026.6.0. garak 0.17.0 (the newest release, checked 2026-10-06) pins datasets>=3.0.0,<4.0, and datasets 3.6.0 pins fsspec[http]<=2025.3.0, so relocking cannot reach the fix without a garak upgrade. Neither garak nor datasets opens reference:// filesystems on the evaluation path, and tools/model-eval-requirements.txt is installed only on the isolated G-8 evaluation host, never in CI or the review pipeline. Same entry in tools/trivyignore.yaml."
 
