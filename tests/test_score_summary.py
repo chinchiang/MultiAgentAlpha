@@ -214,6 +214,8 @@ def test_the_summary_never_overwrites_the_report_it_came_from(mock_review, tmp_p
 def test_an_unreadable_report_is_a_usage_error_not_a_traceback(mock_review, tmp_path):
     import os
 
+    if os.name == "nt":
+        pytest.skip("Windows chmod cannot make a file unreadable in this test")
     if os.geteuid() == 0:
         pytest.skip("root reads files regardless of their mode")
     source = live_copy(mock_review, tmp_path)
