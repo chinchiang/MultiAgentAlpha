@@ -1,0 +1,30 @@
+focused: [tests/test_cli_provider_mode.py]
+mutations:
+  - name: --provider a plain string again
+    file: src/mara/cli.py
+    old: '    provider: ProviderMode = typer.Option(ProviderMode.live, "--provider"),'
+    new: '    provider: str = typer.Option("live", "--provider"),'
+  - name: a third provider mode accepted
+    file: src/mara/cli.py
+    old: "    live = \"live\"\n    mock = \"mock\"\n"
+    new: "    live = \"live\"\n    mock = \"mock\"\n    foo = \"foo\"\n"
+  - name: the live check removed
+    file: src/mara/cli.py
+    old: '    if provider == "live" and any(m.provider == "mock" for m in cfg.models):'
+    new: '    if False:'
+  - name: the live check without its hint
+    file: src/mara/cli.py
+    old: 'no mock model", param_hint="--provider")'
+    new: 'no mock model")'
+  - name: the mock check removed
+    file: src/mara/cli.py
+    old: '    if provider == "mock" and any(m.provider != "mock" for m in cfg.models):'
+    new: '    if False:'
+  - name: the mock check without its hint
+    file: src/mara/cli.py
+    old: 'all use provider: mock", param_hint="--provider")'
+    new: 'all use provider: mock")'
+  - name: the live check refuses only an all-mock config
+    file: src/mara/cli.py
+    old: '    if provider == "live" and any(m.provider == "mock" for m in cfg.models):'
+    new: '    if provider == "live" and all(m.provider == "mock" for m in cfg.models):'

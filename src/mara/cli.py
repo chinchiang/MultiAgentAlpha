@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from enum import StrEnum
 from pathlib import Path
 from typing import cast
 
@@ -22,6 +23,13 @@ app = typer.Typer(add_completion=False,
 console = Console()
 
 
+class ProviderMode(StrEnum):
+    """`mara review --provider`: any other value is a usage error on --provider, before the config is read."""
+
+    live = "live"
+    mock = "mock"
+
+
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     """Without a command, start the workbench as `mara serve` with no options does."""
@@ -38,7 +46,7 @@ def review(
     target: Path = typer.Argument(..., help="Repository or directory to review"),
     config: Path | None = typer.Option(None, "--config", "-c", show_default=False,
                                        help="default: <workspace>/config/mara.yaml (config/mara.mock.yaml with --provider mock)"),
-    provider: str = typer.Option("live", "--provider", help="live | mock"),
+    provider: ProviderMode = typer.Option(ProviderMode.live, "--provider"),
     out: Path | None = typer.Option(None, "--out", "-o", show_default=False, help="default: <workspace>/out"),
     sarif_dir: Path | None = typer.Option(None, "--sarif-dir", help="Ingest pre-recorded L0 SARIF instead of running tools"),
     mock_fixtures: Path | None = typer.Option(None, "--mock-fixtures"),
@@ -80,7 +88,7 @@ def review(
                                  param_hint="--config")
     progress = Progress(progress_file)  # a no-op without --progress-file
     try:
-        report, cfg, psirt_failed = _review(target, cfg_path, provider, out, sarif_dir, mock_fixtures, fail_on_gate, notify_psirt,
+        report, cfg, psirt_failed = _review(target, cfg_path, provider.value, out, sarif_dir, mock_fixtures, fail_on_gate, notify_psirt,
                                             psirt_event, psirt_resend, base, calibration_sample, progress)
     except BaseException as e:
         # the reports were not all written: the workbench must not read a usage error's exit 2 as a blocked gate
@@ -114,7 +122,9 @@ def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: P
 
     cfg = load_config(cfg_path)
     if provider == "mock" and any(m.provider != "mock" for m in cfg.models):
-        raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock")
+        raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock", param_hint="--provider")
+    if provider == "live" and any(m.provider == "mock" for m in cfg.models):
+        raise typer.BadParameter("--provider live requires a config with no mock model", param_hint="--provider")
     pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out, progress=progress)
     event = None
     if psirt_event:
