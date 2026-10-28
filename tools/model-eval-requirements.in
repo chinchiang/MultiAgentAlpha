@@ -15,3 +15,9 @@ litellm>=1.101.3  # GHSA-7hp6-4w63-5g45 / CVE-2026-114612 (the proxy's salt key 
 #   an authenticated user forges a proxy-admin token), fixed in 1.101.3
 nltk>=3.10.4  # GHSA-j456-xh4h-cpf2 / CVE-2026-109956 (WekaClassifier model path bypasses nltk.pathsec) and
 #   GHSA-8mgp-746c-j5xp / CVE-2026-81726 (path traversal in model-artifact loading), fixed in 3.10.4
+opentelemetry-api>=1.45.1  # GHSA-xcq7-p3pf-p88h / CVE-2026-114603 (unbounded tracestate parsing), fixed in 1.45.1
+setuptools>=84.1.0  # GHSA-xmj3-9gf7-h52w (path escape through namespace_packages.txt when installing a legacy wheel on
+#   Windows), fixed in 84.1.0; also tools/build-requirements.txt's pin, installed first
+filelock>=4.2.1  # GHSA-567q-5qvw-pf92 / CVE-2026-112907, GHSA-9vhv-jxww-xfm5 / CVE-2026-112913,
+#   GHSA-v4x8-3wr5-3wq8 / CVE-2026-112940 (Windows oplock, ReadWriteLock's SQLite side file, symlinks), fixed in 4.2.1;
+#   no 3.x release fixes them
