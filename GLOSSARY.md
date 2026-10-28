@@ -164,6 +164,10 @@ _Avoid_: tool match, confirmation (a judge's vote is not corroboration)
 What one review covered: the whole target (full) or the files changed against a base together with the modules related to them (incremental); unknown for a report written before reviews recorded their scope. Scores of reviews with different scopes cannot be compared.
 _Avoid_: mode (the provider mode is a different thing), diff review
 
+**Provider mode**:
+Whether a review's models are mock providers, which replay canned answers and ask no model, or live providers, which send each exchange to a real model; every model the config names must be of the review's provider mode, and the report records it. A mock review scores seeded material, so its score summary is exported only on explicit request.
+_Avoid_: mode alone (the review scope is a different thing)
+
 **Review facts**:
 What a review gathered, stage by stage, that its review status and gate are decided from: whether the bundle covered the target, whether source egress was blocked, whether every required tool ran, whether the context view is missing, whether the ML-BOM signature verified, which audit counters make it incomplete, the rollout phase and whether the operator asked to enforce the gate.
 _Avoid_: inputs, state
