@@ -4,7 +4,7 @@
 # Install: python3 -m pip install --require-hashes --no-build-isolation -r <this file>
 # Preinstall the hash-pinned tools/build-requirements.txt closure before resolving or installing sdists.
 # Source distributions (no wheel published; built at install time, see scripts/relock_requirements.py): ecoji==0.1.1, langdetect==1.0.9
-# Hand-applied, the nine exceptions to the rule above (a full relock could not run: the CUDA wheels download at ~50 KB/s from
+# Hand-applied, the eleven exceptions to the rule above (a full relock could not run: the CUDA wheels download at ~50 KB/s from
 # the authoring host; the .in file's floors keep them, and the next relock drops these notes). Each takes the index's SHA-256
 # of the cp311-cp311-manylinux2014_x86_64 wheel unless another wheel is named, verified by pip --require-hashes for CPython
 # 3.11 / manylinux x86_64:
@@ -39,6 +39,11 @@
 #   whose dated exceptions it ends), the SHA-256 of its one wheel, nltk-3.10.4-py3-none-any.whl; its requirements are
 #   3.10.3's (defusedxml, click, joblib, regex>=2021.8.3, tqdm), which the closure meets, and garak 0.17.0 (nltk>=3.10.3),
 #   its one dependent outside extras the closure does not install, accepts it.
+# - 2026-10-29: langgraph 1.2.11 -> 1.2.14 and langgraph-sdk 0.4.4 -> 0.4.6 (GHSA-3fx2-cqw9-xr3c / CVE-2026-118667), the
+#   SHA-256 of each one's only wheel, langgraph-1.2.14-py3-none-any.whl and langgraph_sdk-0.4.6-py3-none-any.whl. Their
+#   requirements are the old ones' but langgraph's langgraph-sdk>=0.4.6, which 0.4.6 meets. Outside extras the closure
+#   does not install, langgraph's one dependent, langchain 1.4.1 (langgraph<1.3.0,>=1.2.11), accepts 1.2.14, and
+#   langgraph-sdk's one dependent is langgraph itself.
 accelerate==1.15.0 \
     --hash=sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec
 aiohappyeyeballs==2.7.1 \
@@ -195,14 +200,14 @@ langchain-protocol==0.0.19 \
     --hash=sha256:4cdf879a492a35980fd859ae792d3c65458ccaae504e183c9a10d7eac1f0720f
 langdetect==1.0.9 \
     --hash=sha256:cbc1fef89f8d062739774bd51eda3da3274006b3661d199c2655f6b3f6d605a0
-langgraph==1.2.11 \
-    --hash=sha256:8bab70de7b2d00b5300fb289bcf38d8b241400f3184c1e95e8ce706fb0e8686b
+langgraph==1.2.14 \
+    --hash=sha256:e3f5f8ff4259f9281b73ff50fc9ef5cc3b025b8936b8283ecdca7cc0c4128690
 langgraph-checkpoint==4.2.0 \
     --hash=sha256:0547fd228935a0b758865de3a3d6d7a2537c308895d0f9ab092ce9151b5da942
 langgraph-prebuilt==1.1.0 \
     --hash=sha256:51e311747d755b751d5c6b39b0c1446124d3a7643d2515017e6714b323508fc9
-langgraph-sdk==0.4.4 \
-    --hash=sha256:39afe416c91742925e6f8a93715f566d499b36e1b636b804a4ffe3190e4f4e64
+langgraph-sdk==0.4.6 \
+    --hash=sha256:57122b02bda41d37a97a5e09eb018aa8c9b3dc85c433880073779bd9324b7eea
 langsmith==0.12.6 \
     --hash=sha256:5782b38dd259b2a6a1933dc9ca2beba4fb2899ad05e2ab10d61568dc49ce1d35
 litellm==1.101.3 \
