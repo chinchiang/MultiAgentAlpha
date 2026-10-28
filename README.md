@@ -88,6 +88,82 @@ HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-fa
 lack two independent judge families when several reviewers find the same issue; add independently
 operated families or complete human review instead of weakening the quorum.
 
+## Architecture
+
+Every review runs as `mara review`, whether started from the command line, from CI or from the local web workbench,
+which starts it as a subprocess and only reads what it writes (docs/adr/0006-local-web-workbench.md). What MARA trusts
+(the config, the decisions, the training register, the ML-BOM, the calibration results) comes from the MARA workspace
+(`MARA_HOME`), never from the repository under review.
+
+```mermaid
+flowchart LR
+  subgraph entry["Entry points"]
+    cli["mara review (CLI)"]
+    wb["Workbench: mara / mara serve<br/>loopback only"]
+    ci["CI: mara-review.yml"]
+  end
+  wb -- "starts a run (subprocess)" --> cli
+  ci --> cli
+
+  subgraph ws["MARA workspace (MARA_HOME)"]
+    cfg["config/*.yaml<br/>policies P1–P8"]
+    dec["calib/decisions<br/>training register"]
+    bom["ML-BOM, model evaluations,<br/>calib/latest.json"]
+  end
+
+  target[("Repository under review")]
+
+  subgraph mara["MARA pipeline (src/mara)"]
+    pipe["Pipeline.run<br/>L0 → L5"]
+  end
+
+  cli --> pipe
+  cfg --> pipe
+  dec --> pipe
+  bom --> pipe
+  target -- "repository data, fenced" --> pipe
+
+  pipe <--> tools["L0 deterministic tools<br/>semgrep, gitleaks, osv-scanner,<br/>zizmor, trivy, csp-evaluator"]
+  pipe <-- "exchanges" --> prov["Model providers<br/>Bedrock (Claude), Gemini,<br/>OpenAI-compatible (GLM), mock"]
+
+  subgraph out["Outputs (out/ or the run's directory)"]
+    rep["report.json, report.sarif, report.md"]
+    hq["human queue"]
+    ps["PSIRT hand-off"]
+    prog["progress record"]
+  end
+  pipe --> rep
+  pipe --> hq
+  pipe --> ps
+  pipe --> prog
+
+  hq -- "G-11: scripts/human_queue_issues.py" --> tickets["Tickets (GitHub issues)"]
+  tickets -- "closed with a decision label" --> dec
+  rep -- "mara export-summary" --> sum["Score summary<br/>(no finding detail)"]
+  prog -. "read by" .-> wb
+  rep -. "read by" .-> wb
+```
+
+One review, stage by stage. In the ballot round the skeptic rules first, the red team then rules on the findings the
+skeptic did not refute, and each judge rules in a forward and a mirrored reverse pass. A finding's jury outcome is
+decided from its jury signals alone; a usable decision, where one exists, gives its final outcome.
+
+```mermaid
+flowchart TB
+  bundle["bundle<br/>repo map, coverage, review scope"] --> l0["tools · L0<br/>tool evidence (SARIF)"]
+  l0 --> pre{"secret preflight<br/>(gitleaks)"}
+  pre -- "egress blocked" --> skip["context and reviewers skipped:<br/>the review is incomplete"]
+  pre -- "egress allowed" --> ctx["context · L1<br/>context view (verified facts)"]
+  ctx --> rv["reviewers · L2<br/>findings per dimension, ≥ 2 families,<br/>deduplicated"]
+  rv --> sk["skeptic · L3<br/>refutes or leaves unchallenged"]
+  sk --> rt["red team · L3<br/>exploitability notes"]
+  rt --> jy["jury · L4<br/>blinded, forward + reverse pass"]
+  jy --> sc["scoring · L5<br/>CVSS 4.0, evidence tier A–D,<br/>jury outcome, usable decisions"]
+  skip --> sc
+  sc --> st["review status and gate<br/>(docs/adr/0007)"]
+  st --> rpt["report<br/>bias audit, report metadata,<br/>human queue, PSIRT"]
+```
+
 ## The six layers
 
 | Layer | What it does | Where |
