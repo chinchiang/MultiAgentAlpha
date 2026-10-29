@@ -579,9 +579,17 @@ differs from the lock:
   fixture's `requests==2.19.0` flagged, so a silent scanner or database regression is caught.
 - The bootstrap, dev, typecheck and build closures use `tools/osv-scanner.toml` with no advisory
   exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`
-  (its dated exceptions cover garak's nltk/datasets/fsspec pins); the semgrep tool closure is scanned with
+  (its dated exceptions cover garak's datasets/fsspec pins); the semgrep tool closure is scanned with
   `tools/osv-semgrep.toml`, whose dated exceptions, if any, that file lists and explains. These scans
   also run weekly and on manual workflow dispatch.
+
+New advisories arrive between those runs and turn every pull request's L0 red, so
+`.github/workflows/osv-watch.yml` runs the same three closure scans (`scripts/osv_watch.py`) every
+day at 04:00 UTC and on manual dispatch, with `contents: read` and `issues: write` only. It keeps one
+tracking issue labelled `l0-advisory`: un-ignored advisories open it, a changed list comments on it, a
+clean run closes it; the issue lists each advisory with its closure and lockfile, the run, whether the
+scan found advisories or did not complete, and the `scripts/advisory_facts.py` command that gathers
+what a relock or a dated exception needs. A run that finds advisories is red as well.
 
 semgrep runs with `--metrics=off --disable-version-check` and explicit local rule directories
 (never `--config auto`), so nothing is sent to semgrep.dev; osv-scanner runs `scan source

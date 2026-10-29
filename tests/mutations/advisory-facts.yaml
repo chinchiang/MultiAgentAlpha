@@ -46,11 +46,11 @@ mutations:
     new: '    if missing := []:'
   - name: osv_ci names no command for one lockfile
     file: scripts/osv_ci.py
-    old: '            hits = live if len(a.lockfile) == 1 else'
-    new: '            hits = [] if len(a.lockfile) == 1 else'
+    old: '        hits = live if len(lockfiles) == 1 else'
+    new: '        hits = [] if len(lockfiles) == 1 else'
   - name: osv_ci gives every lockfile every finding
     file: scripts/osv_ci.py
-    old: 'else [x for x in live if x["uri"].endswith("/" + lf.as_posix())]'
+    old: 'else [x for x in live if x["uri"].endswith("/" + lf)]'
     new: 'else live'
   - name: the network adapter opens any URL
     file: scripts/advisory_facts.py

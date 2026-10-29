@@ -1,0 +1,47 @@
+# Daily osv-scanner watch on L0's hash-locked tool closures (scripts/osv_watch.py). New advisories land between
+# mara-review.yml's weekly scheduled runs and turn every pull request's L0 red; this finds them first and keeps one
+# tracking issue, labelled l0-advisory, in step: a new advisory opens it, a changed list comments on it, a clean scan
+# closes it. The three scans are L0's own (scripts/check_local.py OSV_SCANS, kept equal to mara-review.yml by tests).
+#
+# Hardening, as in mara-review.yml: top-level permissions {}; the one job has contents: read and issues: write (the
+# tracking issue, nothing else); actions pinned to commit SHAs; persist-credentials: false; only the two tools the
+# scans need are installed, each verified as tools/versions.lock says (SHA-256, publisher checksums, SLSA provenance).
+# tests/test_osv_watch.py checks the triggers, the permissions and the step that runs the watch.
+name: osv-watch
+
+on:
+  schedule:
+    - cron: "0 4 * * *"   # 04:00 UTC daily
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: osv-watch
+  cancel-in-progress: false   # a scheduled and a manual run must not edit the tracking issue at once
+
+jobs:
+  osv-watch:
+    name: osv-scanner watch on the locked closures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write   # gh label create, gh issue create / comment / close on the l0-advisory tracking issue; nothing else
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install the pinned, verified osv-scanner (tools/versions.lock)
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
+          python3 scripts/install_tools.py --only slsa-verifier osv-scanner
+      - name: Scan the three closures and open, update or close the l0-advisory issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 scripts/osv_watch.py --repo "$REPO" --run-url "$RUN_URL"

@@ -1,0 +1,42 @@
+focused: [tests/test_osv_watch.py]
+mutations:
+  - name: the same list commented on again
+    file: scripts/osv_watch.py
+    old: '    elif last_state(issues[0]) != state_of(results):'
+    new: '    elif True:'
+  - name: a changed list never commented on
+    file: scripts/osv_watch.py
+    old: '    elif last_state(issues[0]) != state_of(results):'
+    new: '    elif False:'
+  - name: the first recorded state compared instead of the last
+    file: scripts/osv_watch.py
+    old: '    return found[-1] if found else None'
+    new: '    return found[0] if found else None'
+  - name: a clean scan leaves the issue open
+    file: scripts/osv_watch.py
+    old: '            gh.close(issue["number"], f"All three scans are clean as of {run_url}; closing.")'
+    new: '            pass'
+  - name: a scan that did not complete exits 2
+    file: scripts/osv_watch.py
+    old: '    return 1 if broken else 2'
+    new: '    return 2'
+  - name: a scan that did not complete reported as advisories
+    file: scripts/osv_watch.py
+    old: '        kind = "un-ignored advisories (exit 2)" if code == 2 else'
+    new: '        kind = "un-ignored advisories (exit 2)" if True else'
+  - name: one of the three scans skipped
+    file: scripts/osv_watch.py
+    old: '    results = {name: scan(name, list(args)) for name, args in OSV_SCANS.items()}'
+    new: '    results = {name: scan(name, list(args)) for name, args in list(OSV_SCANS.items())[:2]}'
+  - name: the facts command left out of the issue
+    file: scripts/osv_watch.py
+    old: 'for c in facts_commands(lockfiles, live)), ""]'
+    new: 'for c in []), ""]'
+  - name: the workflow runs weekly
+    file: .github/workflows/osv-watch.yml
+    old: '    - cron: "0 4 * * *"   # 04:00 UTC daily'
+    new: '    - cron: "0 4 * * 3"   # 04:00 UTC daily'
+  - name: the job given another write permission
+    file: .github/workflows/osv-watch.yml
+    old: "      contents: read\n      issues: write"
+    new: "      contents: read\n      actions: write\n      issues: write"
