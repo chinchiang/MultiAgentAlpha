@@ -1,0 +1,42 @@
+focused: [tests/test_renumber.py]
+mutations:
+  - name: a stale REBASE_HEAD taken for a rebase in progress
+    file: scripts/renumber.py
+    old: '    return any(Path(_git("rev-parse", "--git-path", d).stdout.strip()).is_dir() for d in ("rebase-merge", "rebase-apply"))'
+    new: '    return _git("rev-parse", "-q", "--verify", "REBASE_HEAD", check=False).returncode == 0'
+  - name: more commits to apply not refused
+    file: scripts/renumber.py
+    old: '    if left := _commits_left():'
+    new: '    if left := 0:'
+  - name: a conflict in another file not refused
+    file: scripts/renumber.py
+    old: '    if others := sorted(conflicted - {CHANGELOG, VERSION_FILE, DEMO}):'
+    new: '    if others := []:'
+  - name: a file that drifted in the rebase not refused
+    file: scripts/renumber.py
+    old: '    if drifted := _drifted():'
+    new: '    if drifted := []:'
+  - name: the branch's row below main's
+    file: scripts/renumber.py
+    old: '    return text[:blocks[0].start()] + branch_row + main_rows + text[blocks[0].end():]'
+    new: '    return text[:blocks[0].start()] + main_rows + branch_row + text[blocks[0].end():]'
+  - name: the branch's row keeps its old version
+    file: scripts/renumber.py
+    old: '    branch_row = ROW_RE.sub(lambda m: m.group(1) + target + m.group(3), branch_rows, count=1)'
+    new: '    branch_row = branch_rows'
+  - name: the default not main's version plus one
+    file: scripts/renumber.py
+    old: '    return f"{major}.{minor}.{patch + 1}"'
+    new: '    return f"{major}.{minor}.{patch + 2}"'
+  - name: --to ignored
+    file: scripts/renumber.py
+    old: '    target = target or _next(_version(main_version_file))'
+    new: '    target = _next(_version(main_version_file))'
+  - name: the conflicted demo not taken from main
+    file: scripts/renumber.py
+    old: '        _git("checkout", "--ours", DEMO)'
+    new: '        pass'
+  - name: the commit message keeps the old version
+    file: scripts/renumber.py
+    old: '    if renamed != message:'
+    new: '    if False:'
