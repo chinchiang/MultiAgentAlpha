@@ -1,6 +1,6 @@
-"""Before a push, five of the checks CI runs on a pull request, and on request its three osv-scanner scans, run here with every output kept.
+"""Before a push, six of the checks CI runs on a pull request, and on request its three osv-scanner scans, run here with every output kept.
 
-  .venv/bin/python scripts/check_local.py                     # ruff, line width, mypy, the whole suite, gitleaks
+  .venv/bin/python scripts/check_local.py                     # ruff, line width, mypy, semgrep, the whole suite, gitleaks
   .venv/bin/python scripts/check_local.py --only ruff mypy    # some of them
   .venv/bin/python scripts/check_local.py --only osv          # the three osv-scanner scans (the network)
   .venv/bin/python scripts/check_local.py --base origin/main  # the base of the branch's change (default origin/main)
@@ -15,6 +15,8 @@ head (the short summary of -rs lists skips only). The checks, as .github/workflo
   mypy      python -m mypy from .venv-typecheck: CPython 3.12 with the hash-pinned closure CI installs (the 3.12 dev
             requirements, the build requirements, this package without its dependencies, the typecheck requirements),
             built on first use and again whenever one of those requirement files changes
+  semgrep   scripts/semgrep_ci.py --target . --triage tools/semgrep-triage.yaml: L0's scan of the repository with the
+            locked semgrep and rules, every finding triaged or the check fails (offline: metrics off, local rules)
   pytest    GITHUB_ACTIONS=true pytest -q -rs (CI colours CLI output), after clearing src/ and tests/ of compiled
             bytecode, which can keep a same-size edit made within a second from taking effect
   gitleaks  scripts/gitleaks_ci.py --event pull_request over the commits since the merge base with --base
@@ -23,7 +25,7 @@ the hash-locked closures, each with its own config:
   osv-runtime     scripts/osv_ci.py on the five closures this repository installs, with tools/osv-scanner.toml
   osv-model-eval  scripts/osv_ci.py on tools/model-eval-requirements.txt, with tools/osv-model-eval.toml
   osv-semgrep     scripts/osv_ci.py on tools/semgrep-requirements.txt, with tools/osv-semgrep.toml
-Not run here: the whole suite on CPython 3.12, the repository scanners (semgrep, trivy, zizmor, csp-evaluator, and
+Not run here: the whole suite on CPython 3.12, the other repository scanners (trivy, zizmor, csp-evaluator, and
 osv-scanner on the seeded fixture), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
 When a check that reads the branch's commits (lines, gitleaks) ran and the working tree has changes git status lists,
 the summary warns that it did not see them. Exit 0 when every check passed, 1 otherwise; the warning changes neither.
@@ -100,11 +102,13 @@ CHECKS: dict[str, Check] = {
     "mypy": lambda a: ([str(typecheck_python(a.python312)), "-m", "mypy"], {}, None),
     "pytest": lambda a: ([sys.executable, "-m", "pytest", "-q", "-rs"], {"GITHUB_ACTIONS": "true"},
                          _clear_bytecode),
+    "semgrep": lambda a: ([sys.executable, str(ROOT / "scripts" / "semgrep_ci.py"), "--target", ".", "--report",
+                           str(a.logs / "semgrep.sarif"), "--triage", "tools/semgrep-triage.yaml"], {}, None),
     "gitleaks": lambda a: ([sys.executable, str(ROOT / "scripts" / "gitleaks_ci.py"), "--base", a.base, "--head", "HEAD",
                             "--event", "pull_request", "--report", str(a.logs / "gitleaks.sarif")], {}, None),
     **{name: _osv(name) for name in OSV_SCANS},
 }
-DEFAULT_CHECKS = ("ruff", "lines", "mypy", "pytest", "gitleaks")  # the osv scans need the network, so run by name
+DEFAULT_CHECKS = ("ruff", "lines", "mypy", "semgrep", "pytest", "gitleaks")  # the osv scans need the network, so run by name
 OSV_CHECKS = tuple(OSV_SCANS)
 GROUPS = {"osv": OSV_CHECKS}
 
