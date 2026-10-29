@@ -1,0 +1,14 @@
+focused: [tests/test_relock_requirements.py]
+mutations:
+  - name: a hand-applied bump without its floor
+    file: tools/model-eval-requirements.in
+    old: 'nltk>=3.10.4  # GHSA-j456-xh4h-cpf2'
+    new: '#   nltk 3.10.4  GHSA-j456-xh4h-cpf2'
+  - name: a floor below the pin
+    file: tools/model-eval-requirements.in
+    old: 'filelock>=4.2.1  # GHSA-567q-5qvw-pf92'
+    new: 'filelock>=4.2.0  # GHSA-567q-5qvw-pf92'
+  - name: the second package of a two-package bullet without its floor
+    file: tools/model-eval-requirements.in
+    old: 'langgraph-sdk>=0.4.6  # the same advisory'
+    new: '#   langgraph-sdk 0.4.6, the same advisory'

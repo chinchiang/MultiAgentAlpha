@@ -39,10 +39,10 @@ what holds instead; those sentences are left as they were decided.
 `docs/CHANGELOG.md` has one row per version, newest first, in Traditional Chinese with Taiwan usage, under its five
 columns (日期, 版本, 變更摘要, 變更者, 查證狀態) and its version rules ("## 版本規則"). The summary opens with the kind
 of change and the ADR it follows, numbers its parts (1), (2), …, says which tests were added or changed, whether the
-workbench demo was recaptured, and ends with whether the report body changed ("報告正文未變"). 查證狀態 carries the
-counts `scripts/check_citations.py` gives; when the report body did not change, the evidence and word counts repeat the
-previous row's. `mara.__version__` equals the newest row's version (`tests/test_version.py`). A pure refactor adds no
-row.
+workbench demo was recaptured, and ends with whether the report body changed ("報告正文未變", or "報告正文變更：" and
+what changed). 查證狀態 carries the counts `scripts/check_citations.py` gives; when the report body did not change, the
+evidence and word counts repeat the previous row's. `mara.__version__` equals the newest row's version, and the newest
+row has its demo sentence and its last sentence (`tests/test_version.py`). A pure refactor adds no row.
 
 ## A doc names no version Dependabot bumps
 

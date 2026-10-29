@@ -1,6 +1,7 @@
 """scripts/relock_requirements.py turns a pip --report into a hash-pinned closure: every entry carries the
 index's SHA-256, entries are sorted, sdists are named in the header and refused unless allowed, an
-entry without a hash aborts, and the repository's own lockfiles are complete and consistent."""
+entry without a hash aborts, and the repository's own lockfiles are complete and consistent, the garak closure's
+hand-applied bumps kept by its .in file's floors."""
 
 import json
 import re
@@ -175,3 +176,27 @@ def test_workflows_never_pip_install_without_hashes():
             if not ok:
                 offenders.append(f"{wf.name}:{n}: {line.strip()}")
     assert not offenders, "pip install without --require-hashes (or --no-deps -e .): " + "; ".join(offenders)
+
+
+def test_the_garak_closures_hand_applied_bumps_are_kept_by_the_in_files_floors():
+    """Each bump the lockfile's header lists as hand-applied has a floor in tools/model-eval-requirements.in at or above
+    the version the lockfile pins: the header says the floors keep them, so a full relock cannot go back."""
+    from packaging.requirements import Requirement
+    from packaging.utils import canonicalize_name
+    from packaging.version import Version
+
+    lock_text = (ROOT / "tools/model-eval-requirements.txt").read_text(encoding="utf-8")
+    header = lock_text.split("\n# Hand-applied", 1)[1].split("\n", 1)[1]
+    bullets = [line for line in header.splitlines() if re.match(r"^# - \d{4}-\d\d-\d\d: ", line)]
+    bumped = {canonicalize_name(m.group(1)) for line in bullets
+              for m in re.finditer(r"([A-Za-z0-9_.\-]+) \S+ -> \S+", line.split(": ", 1)[1])}
+    assert len(bumped) >= 11, bullets
+    pins = {canonicalize_name(name): Version(version) for name, version, _ in _parse_lock(lock_text)}
+    floors: dict[str, Version] = {}
+    for line in (ROOT / "tools/model-eval-requirements.in").read_text(encoding="utf-8").splitlines():
+        if line.strip() and not line.startswith("#"):
+            req = Requirement(line.split("#", 1)[0].strip())
+            floors.update({canonicalize_name(req.name): Version(s.version) for s in req.specifier if s.operator == ">="})
+    missing = sorted(name for name in bumped if name not in floors)
+    below = sorted(f"{name} {floors[name]} < {pins[name]}" for name in bumped if name in floors and floors[name] < pins[name])
+    assert not missing and not below, {"no floor": missing, "floor below the pin": below}
