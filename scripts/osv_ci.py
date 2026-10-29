@@ -148,6 +148,11 @@ def main() -> int:
         return 0
     if live:
         print(f"VULNERABILITIES: {len(live)} un-ignored advisory(ies); bump the dependency (relock) or add an IgnoredVulns entry with a reason and ignoreUntil")
+        for lf in a.lockfile:  # one lockfile takes every finding; several are told apart by the finding's path
+            hits = live if len(a.lockfile) == 1 else [x for x in live if x["uri"].endswith("/" + lf.as_posix())]
+            names = sorted({n for x in hits for n, _ in x["packages"]})
+            if names:
+                print(f"  the facts for that choice: python3 scripts/advisory_facts.py --lockfile {lf.as_posix()} {' '.join(names)}")
         return 2
     print(f"no un-ignored known vulnerabilities ({len(rows) - len(live)} ignored)")
     return 0

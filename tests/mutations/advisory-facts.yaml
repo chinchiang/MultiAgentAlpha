@@ -1,0 +1,58 @@
+focused: [tests/test_advisory_facts.py, tests/test_osv_ci.py]
+mutations:
+  - name: the interval check off by one at the fixed end
+    file: scripts/advisory_facts.py
+    old: 'pinned < end if kind == "fixed"'
+    new: 'pinned <= end if kind == "fixed"'
+  - name: the last affected release itself taken as unaffected
+    file: scripts/advisory_facts.py
+    old: 'else pinned <= end):'
+    new: 'else pinned < end):'
+  - name: an advisory naming only its last affected release ignored
+    file: scripts/advisory_facts.py
+    old: '                elif ("fixed" in event or "last_affected" in event) and introduced is not None:'
+    new: '                elif "fixed" in event and introduced is not None:'
+  - name: a fix not above a last affected release still proposed
+    file: scripts/advisory_facts.py
+    old: ' and all(max(fixed) > v for v in last) else None'
+    new: ' else None'
+  - name: only a range's first interval read
+    file: scripts/advisory_facts.py
+    old: '                    introduced = None'
+    new: '                    break'
+  - name: the lowest fix taken instead of the one that fixes all
+    file: scripts/advisory_facts.py
+    old: '        target = max(fixed) if fixed and all(ends)'
+    new: '        target = min(fixed) if fixed and all(ends)'
+  - name: a requirement inside an extra counted as a dependent
+    file: scripts/advisory_facts.py
+    old: '        if req.marker is None or "extra" not in str(req.marker):'
+    new: '        if True:'
+  - name: every dependent said to accept the fix
+    file: scripts/advisory_facts.py
+    old: '                    accepts = target is None or req.specifier.contains(target, prereleases=True)'
+    new: '                    accepts = True'
+  - name: the first wheel taken whatever its platform
+    file: scripts/advisory_facts.py
+    old: '        if (tags is None and u["packagetype"] == "sdist") or (tags is not None and _tags(u["filename"]) == tags):'
+    new: '        if True:'
+  - name: a requirement change shown one way only
+    file: scripts/advisory_facts.py
+    old: '            change = " ".join([*(f"- {t}" for t in sorted(before - after)), *(f"+ {t}" for t in sorted(after - before))])'
+    new: '            change = " ".join(f"+ {t}" for t in sorted(after - before))'
+  - name: a package missing from the lockfile not refused
+    file: scripts/advisory_facts.py
+    old: '    if missing := [p for p in packages if canonicalize_name(p) not in pins]:'
+    new: '    if missing := []:'
+  - name: osv_ci names no command for one lockfile
+    file: scripts/osv_ci.py
+    old: '            hits = live if len(a.lockfile) == 1 else'
+    new: '            hits = [] if len(a.lockfile) == 1 else'
+  - name: osv_ci gives every lockfile every finding
+    file: scripts/osv_ci.py
+    old: 'else [x for x in live if x["uri"].endswith("/" + lf.as_posix())]'
+    new: 'else live'
+  - name: the network adapter opens any URL
+    file: scripts/advisory_facts.py
+    old: '    if not url.startswith(ALLOWED):'
+    new: '    if False:'

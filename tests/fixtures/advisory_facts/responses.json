@@ -1,0 +1,1593 @@
+{
+ "GET https://pypi.org/pypi/langchain/1.4.1/json": {
+  "info": {
+   "name": "langchain",
+   "requires_dist": [
+    "langchain-core<2.0.0,>=1.6.0",
+    "langgraph<1.3.0,>=1.2.11",
+    "pydantic<3.0.0,>=2.7.4",
+    "langchain-anthropic; extra == \"anthropic\"",
+    "langchain-aws; extra == \"aws\"",
+    "langchain-azure-ai; extra == \"azure-ai\"",
+    "langchain-baseten>=0.2.0; extra == \"baseten\"",
+    "langchain-community; extra == \"community\"",
+    "langchain-deepseek; extra == \"deepseek\"",
+    "langchain-fireworks; extra == \"fireworks\"",
+    "langchain-google-genai; extra == \"google-genai\"",
+    "langchain-google-vertexai; extra == \"google-vertexai\"",
+    "langchain-groq; extra == \"groq\"",
+    "langchain-huggingface; extra == \"huggingface\"",
+    "fastmcp<5.0.0,>=4.0.1; extra == \"mcp\"",
+    "langchain-meta; extra == \"meta\"",
+    "langchain-mistralai; extra == \"mistralai\"",
+    "langchain-ollama; extra == \"ollama\"",
+    "langchain-openai; extra == \"openai\"",
+    "langchain-perplexity; extra == \"perplexity\"",
+    "langchain-together; extra == \"together\"",
+    "langchain-xai; extra == \"xai\""
+   ],
+   "version": "1.4.1"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "1286dd89c7fe2c552ba5b058fae16576e0acc8b0a5c1d060edc24d7d1f9230b7"
+    },
+    "filename": "langchain-1.4.1-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "5080fc66792a4c97ec20898006b740dc008f8777a46ff8c6f05b4ff8132928af"
+    },
+    "filename": "langchain-1.4.1.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/langgraph-sdk/0.4.4/json": {
+  "info": {
+   "name": "langgraph-sdk",
+   "requires_dist": [
+    "httpx>=0.25.2",
+    "langchain-core<2,>=1.4.0",
+    "langchain-protocol>=0.0.15",
+    "orjson>=3.11.5",
+    "websockets<17,>=14"
+   ],
+   "version": "0.4.4"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "39afe416c91742925e6f8a93715f566d499b36e1b636b804a4ffe3190e4f4e64"
+    },
+    "filename": "langgraph_sdk-0.4.4-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "4e651ffa09de695681579396375377bdde23bedbc8e35b070e615cbd5af7da8b"
+    },
+    "filename": "langgraph_sdk-0.4.4.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/langgraph-sdk/0.4.6/json": {
+  "info": {
+   "name": "langgraph-sdk",
+   "requires_dist": [
+    "httpx>=0.25.2",
+    "langchain-core<2,>=1.4.0",
+    "langchain-protocol>=0.0.15",
+    "orjson>=3.11.5",
+    "websockets<17,>=14"
+   ],
+   "version": "0.4.6"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "57122b02bda41d37a97a5e09eb018aa8c9b3dc85c433880073779bd9324b7eea"
+    },
+    "filename": "langgraph_sdk-0.4.6-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "ea5b1749d70987d741c9b9fe2b7e1c5f7da7e4d102f64e390333c1890c9bbd5b"
+    },
+    "filename": "langgraph_sdk-0.4.6.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/langgraph/1.2.11/json": {
+  "info": {
+   "name": "langgraph",
+   "requires_dist": [
+    "langchain-core<2,>=1.4.7",
+    "langgraph-checkpoint<5.0.0,>=4.1.0",
+    "langgraph-prebuilt<1.2.0,>=1.1.0",
+    "langgraph-sdk<0.5.0,>=0.4.2",
+    "pydantic>=2.7.4",
+    "xxhash>=3.5.0"
+   ],
+   "version": "1.2.11"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "8bab70de7b2d00b5300fb289bcf38d8b241400f3184c1e95e8ce706fb0e8686b"
+    },
+    "filename": "langgraph-1.2.11-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "9ecfe11e50d338b34b15cf4d8a442642de103e8ae6971320efba84e4542eb363"
+    },
+    "filename": "langgraph-1.2.11.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/langgraph/1.2.14/json": {
+  "info": {
+   "name": "langgraph",
+   "requires_dist": [
+    "langchain-core<2,>=1.4.7",
+    "langgraph-checkpoint<5.0.0,>=4.1.0",
+    "langgraph-prebuilt<1.2.0,>=1.1.0",
+    "langgraph-sdk<0.5.0,>=0.4.6",
+    "pydantic>=2.7.4",
+    "xxhash>=3.5.0"
+   ],
+   "version": "1.2.14"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "e3f5f8ff4259f9281b73ff50fc9ef5cc3b025b8936b8283ecdca7cc0c4128690"
+    },
+    "filename": "langgraph-1.2.14-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "5b1a72b7a7f994ac6947b7751fbbe00e949f8bb44d9ab78881604b703247ae55"
+    },
+    "filename": "langgraph-1.2.14.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/litellm/1.101.0/json": {
+  "info": {
+   "name": "litellm",
+   "requires_dist": [
+    "fastuuid<1.0,>=0.14.0",
+    "httpx<1.0,>=0.28.0",
+    "openai<3.0.0,>=2.20.0",
+    "python-dotenv<2.0,>=1.0.0",
+    "tiktoken<1.0,>=0.8.0",
+    "importlib-metadata<9.0,>=8.0.0",
+    "tokenizers<1.0,>=0.21.0",
+    "click<9.0,>=8.0.0",
+    "jinja2<4.0,>=3.1.6",
+    "aiohttp<4.0,>=3.14.2",
+    "pydantic<3.0.0,>=2.10.0",
+    "pydantic-settings<3.0,>=2.14.1",
+    "jsonschema<5.0,>=4.0.0",
+    "boto3<2.0,>=1.43.1",
+    "gunicorn<24.0,>=23.0.0; extra == \"proxy\"",
+    "uvicorn<1.0,>=0.33.0; extra == \"proxy\"",
+    "granian<3.0,>=2.7.4; extra == \"proxy\"",
+    "uvloop<1.0,>=0.22.1; sys_platform != \"win32\" and extra == \"proxy\"",
+    "fastapi<1.0,>=0.136.3; extra == \"proxy\"",
+    "starlette<2.0,>=1.0.1; extra == \"proxy\"",
+    "backoff<3.0,>=2.2.1; extra == \"proxy\"",
+    "pyyaml<7.0,>=6.0.3; extra == \"proxy\"",
+    "rq<3.0,>=2.7.0; extra == \"proxy\"",
+    "orjson<4.0,>=3.11.6; extra == \"proxy\"",
+    "hiredis<4.0,>=3.0.0; extra == \"proxy\"",
+    "apscheduler<4.0,>=3.11.2; extra == \"proxy\"",
+    "fastapi-sso<1.0,>=0.19.0; extra == \"proxy\"",
+    "pyjwt<3.0,>=2.13.0; extra == \"proxy\"",
+    "python-multipart<1.0,>=0.0.27; extra == \"proxy\"",
+    "cryptography<51.0,>=49.0.0; extra == \"proxy\"",
+    "pynacl<2.0,>=1.6.2; extra == \"proxy\"",
+    "websockets<16.0,>=15.0.1; extra == \"proxy\"",
+    "boto3<2.0,>=1.43.1; extra == \"proxy\"",
+    "azure-identity<2.0,>=1.25.2; extra == \"proxy\"",
+    "azure-storage-blob<13.0,>=12.28.0; extra == \"proxy\"",
+    "mcp<2.0,>=1.28.1; extra == \"proxy\"",
+    "litellm-proxy-extras==0.4.94; extra == \"proxy\"",
+    "litellm-enterprise==0.1.65; extra == \"proxy\"",
+    "restrictedpython<9.0,>=8.5; extra == \"proxy\"",
+    "rich<14.0,>=13.9.4; extra == \"proxy\"",
+    "inquirerpy<1.0,>=0.3.4; extra == \"proxy\"",
+    "polars<2.0,>=1.38.1; extra == \"proxy\"",
+    "soundfile<1.0,>=0.12.1; extra == \"proxy\"",
+    "pyroscope-io<1.0,>=0.8.16; sys_platform != \"win32\" and extra == \"proxy\"",
+    "expression<6.0,>=5.6.0; extra == \"proxy\"",
+    "rich<14.0,>=13.9.4; extra == \"cli\"",
+    "pyyaml<7.0,>=6.0.3; extra == \"cli\"",
+    "requests<3.0,>=2.32.0; extra == \"cli\"",
+    "inquirerpy<1.0,>=0.3.4; extra == \"cli\"",
+    "keyring<26.0,>=25.6.0; extra == \"cli\"",
+    "prisma<1.0,>=0.11.0; extra == \"extra-proxy\"",
+    "psycopg<4.0,>=3.2; extra == \"extra-proxy\"",
+    "psycopg-binary<4.0,>=3.2; extra == \"extra-proxy\"",
+    "azure-identity<2.0,>=1.25.2; extra == \"extra-proxy\"",
+    "azure-keyvault-secrets<5.0,>=4.10.0; extra == \"extra-proxy\"",
+    "google-cloud-kms<3.0,>=2.24.2; extra == \"extra-proxy\"",
+    "google-cloud-iam<3.0,>=2.19.1; extra == \"extra-proxy\"",
+    "resend<3.0,>=2.23.0; extra == \"extra-proxy\"",
+    "redisvl<1.0,>=0.4.1; extra == \"extra-proxy\"",
+    "a2a-sdk<2.0,>=1.1.0; extra == \"extra-proxy\"",
+    "numpydoc<2.0,>=1.8.0; extra == \"utils\"",
+    "diskcache<6.0,>=5.6.3; extra == \"caching\"",
+    "mcp<2.0,>=1.28.1; extra == \"mcp\"",
+    "python3-saml<2.0,>=1.16.0; extra == \"saml\"",
+    "semantic-router<1.0,>=0.1.15; python_full_version < \"3.14\" and extra == \"semantic-router\"",
+    "aurelio-sdk<1.0,>=0.0.19; python_full_version < \"3.14\" and extra == \"semantic-router\"",
+    "mlflow<4.0,>=3.11.1; extra == \"mlflow\"",
+    "grpcio==1.78.0; extra == \"grpc\"",
+    "nvidia-riva-client>=2.15.0; extra == \"stt-nvidia-riva\"",
+    "soundfile>=0.12.1; extra == \"stt-nvidia-riva\"",
+    "audioread>=3.0.1; extra == \"stt-nvidia-riva\"",
+    "numpy>=1.26.0; extra == \"stt-nvidia-riva\"",
+    "google-cloud-aiplatform<2.0,>=1.133.0; extra == \"google\"",
+    "aws-sdk-bedrock-runtime<0.8.0,>=0.7.0; python_full_version >= \"3.12\" and extra == \"bedrock-realtime\"",
+    "google-cloud-aiplatform<2.0,>=1.133.0; extra == \"proxy-runtime\"",
+    "google-genai<2.0,>=1.37.0; extra == \"proxy-runtime\"",
+    "anthropic[vertex]<1.0,>=0.84.0; extra == \"proxy-runtime\"",
+    "grpcio==1.78.0; extra == \"proxy-runtime\"",
+    "prometheus-client<1.0,>=0.20.0; extra == \"proxy-runtime\"",
+    "langfuse<3.0,>=2.59.7; extra == \"proxy-runtime\"",
+    "opentelemetry-api==1.28.0; extra == \"proxy-runtime\"",
+    "opentelemetry-sdk==1.28.0; extra == \"proxy-runtime\"",
+    "opentelemetry-exporter-otlp==1.28.0; extra == \"proxy-runtime\"",
+    "opentelemetry-instrumentation-fastapi==0.49b0; extra == \"proxy-runtime\"",
+    "ddtrace<5.0,>=4.8.2; extra == \"proxy-runtime\"",
+    "sentry-sdk<3.0,>=2.21.0; extra == \"proxy-runtime\"",
+    "mangum<1.0,>=0.17.0; extra == \"proxy-runtime\"",
+    "azure-ai-contentsafety<2.0,>=1.0.0; extra == \"proxy-runtime\"",
+    "azure-storage-file-datalake<13.0,>=12.20.0; extra == \"proxy-runtime\"",
+    "pypdf<7.0,>=6.16.1; extra == \"proxy-runtime\"",
+    "llm-sandbox<1.0,>=0.3.39; extra == \"proxy-runtime\"",
+    "detect-secrets<2.0,>=1.5.0; extra == \"proxy-runtime\""
+   ],
+   "version": "1.101.0"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "7cc623a224c6f11a04367a682b095a1e08e5f6da75c990a650910db5f9777819"
+    },
+    "filename": "litellm-1.101.0-cp310-abi3-macosx_10_12_x86_64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "d4064024151ff2877e542b56c6bb6a39e0c3e6651abf4639af9346a678586e52"
+    },
+    "filename": "litellm-1.101.0-cp310-abi3-macosx_11_0_arm64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "cdf3351e394206e785bf339f1a39d9358ddf4e4f38129750bfdb5e4f5ceab8ef"
+    },
+    "filename": "litellm-1.101.0-cp310-abi3-manylinux_2_28_aarch64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "140ee0997324b8fd2405f7f8c26f42c0f364996dc4030187344a90cf27916667"
+    },
+    "filename": "litellm-1.101.0-cp310-abi3-manylinux_2_28_x86_64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "ad013161074676fc91b91d828f696300132cf3936d3f386c4701a41710d70aa3"
+    },
+    "filename": "litellm-1.101.0-cp310-abi3-musllinux_1_2_aarch64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "85d88053148c5c6e016e495273eeaf8f3a29779b60d18977ec42e2a6bbd2d8eb"
+    },
+    "filename": "litellm-1.101.0-cp310-abi3-musllinux_1_2_x86_64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "e5601ae404b0f1e38ce1e65c75f880254485942d9c824453e3926f2323457fd5"
+    },
+    "filename": "litellm-1.101.0-cp310-abi3-win_amd64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "734ab2b8cad6a3b582d52d9c9c5fcab759eb382b93935ef808fda0e16d822ac3"
+    },
+    "filename": "litellm-1.101.0.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/litellm/1.101.3/json": {
+  "info": {
+   "name": "litellm",
+   "requires_dist": [
+    "fastuuid<1.0,>=0.14.0",
+    "httpx<1.0,>=0.28.0",
+    "openai<3.0.0,>=2.20.0",
+    "python-dotenv<2.0,>=1.0.0",
+    "tiktoken<1.0,>=0.8.0",
+    "importlib-metadata<9.0,>=8.0.0",
+    "tokenizers<1.0,>=0.21.0",
+    "click<9.0,>=8.0.0",
+    "jinja2<4.0,>=3.1.6",
+    "aiohttp<4.0,>=3.14.2",
+    "pydantic<3.0.0,>=2.10.0",
+    "pydantic-settings<3.0,>=2.14.1",
+    "jsonschema<5.0,>=4.0.0",
+    "boto3<2.0,>=1.43.1",
+    "gunicorn<24.0,>=23.0.0; extra == \"proxy\"",
+    "uvicorn<1.0,>=0.33.0; extra == \"proxy\"",
+    "granian<3.0,>=2.7.4; extra == \"proxy\"",
+    "uvloop<1.0,>=0.22.1; sys_platform != \"win32\" and extra == \"proxy\"",
+    "fastapi<1.0,>=0.136.3; extra == \"proxy\"",
+    "starlette<2.0,>=1.0.1; extra == \"proxy\"",
+    "backoff<3.0,>=2.2.1; extra == \"proxy\"",
+    "pyyaml<7.0,>=6.0.3; extra == \"proxy\"",
+    "rq<3.0,>=2.7.0; extra == \"proxy\"",
+    "orjson<4.0,>=3.11.6; extra == \"proxy\"",
+    "hiredis<4.0,>=3.0.0; extra == \"proxy\"",
+    "apscheduler<4.0,>=3.11.2; extra == \"proxy\"",
+    "fastapi-sso<1.0,>=0.19.0; extra == \"proxy\"",
+    "pyjwt<3.0,>=2.13.0; extra == \"proxy\"",
+    "python-multipart<1.0,>=0.0.27; extra == \"proxy\"",
+    "cryptography<51.0,>=49.0.0; extra == \"proxy\"",
+    "pynacl<2.0,>=1.6.2; extra == \"proxy\"",
+    "websockets<16.0,>=15.0.1; extra == \"proxy\"",
+    "boto3<2.0,>=1.43.1; extra == \"proxy\"",
+    "azure-identity<2.0,>=1.25.2; extra == \"proxy\"",
+    "azure-storage-blob<13.0,>=12.28.0; extra == \"proxy\"",
+    "mcp<2.0,>=1.28.1; extra == \"proxy\"",
+    "litellm-proxy-extras==0.4.94; extra == \"proxy\"",
+    "litellm-enterprise==0.1.65; extra == \"proxy\"",
+    "restrictedpython<9.0,>=8.5; extra == \"proxy\"",
+    "rich<14.0,>=13.9.4; extra == \"proxy\"",
+    "inquirerpy<1.0,>=0.3.4; extra == \"proxy\"",
+    "polars<2.0,>=1.38.1; extra == \"proxy\"",
+    "soundfile<1.0,>=0.12.1; extra == \"proxy\"",
+    "pyroscope-io<1.0,>=0.8.16; sys_platform != \"win32\" and extra == \"proxy\"",
+    "expression<6.0,>=5.6.0; extra == \"proxy\"",
+    "rich<14.0,>=13.9.4; extra == \"cli\"",
+    "pyyaml<7.0,>=6.0.3; extra == \"cli\"",
+    "requests<3.0,>=2.32.0; extra == \"cli\"",
+    "inquirerpy<1.0,>=0.3.4; extra == \"cli\"",
+    "keyring<26.0,>=25.6.0; extra == \"cli\"",
+    "prisma<1.0,>=0.11.0; extra == \"extra-proxy\"",
+    "psycopg<4.0,>=3.2; extra == \"extra-proxy\"",
+    "psycopg-binary<4.0,>=3.2; extra == \"extra-proxy\"",
+    "azure-identity<2.0,>=1.25.2; extra == \"extra-proxy\"",
+    "azure-keyvault-secrets<5.0,>=4.10.0; extra == \"extra-proxy\"",
+    "google-cloud-kms<3.0,>=2.24.2; extra == \"extra-proxy\"",
+    "google-cloud-iam<3.0,>=2.19.1; extra == \"extra-proxy\"",
+    "resend<3.0,>=2.23.0; extra == \"extra-proxy\"",
+    "redisvl<1.0,>=0.4.1; extra == \"extra-proxy\"",
+    "a2a-sdk<2.0,>=1.1.0; extra == \"extra-proxy\"",
+    "numpydoc<2.0,>=1.8.0; extra == \"utils\"",
+    "diskcache<6.0,>=5.6.3; extra == \"caching\"",
+    "mcp<2.0,>=1.28.1; extra == \"mcp\"",
+    "python3-saml<2.0,>=1.16.0; extra == \"saml\"",
+    "semantic-router<1.0,>=0.1.15; python_full_version < \"3.14\" and extra == \"semantic-router\"",
+    "aurelio-sdk<1.0,>=0.0.19; python_full_version < \"3.14\" and extra == \"semantic-router\"",
+    "mlflow<4.0,>=3.11.1; extra == \"mlflow\"",
+    "grpcio==1.78.0; extra == \"grpc\"",
+    "nvidia-riva-client>=2.15.0; extra == \"stt-nvidia-riva\"",
+    "soundfile>=0.12.1; extra == \"stt-nvidia-riva\"",
+    "audioread>=3.0.1; extra == \"stt-nvidia-riva\"",
+    "numpy>=1.26.0; extra == \"stt-nvidia-riva\"",
+    "google-cloud-aiplatform<2.0,>=1.133.0; extra == \"google\"",
+    "aws-sdk-bedrock-runtime<0.8.0,>=0.7.0; python_full_version >= \"3.12\" and extra == \"bedrock-realtime\"",
+    "google-cloud-aiplatform<2.0,>=1.133.0; extra == \"proxy-runtime\"",
+    "google-genai<2.0,>=1.37.0; extra == \"proxy-runtime\"",
+    "anthropic[vertex]<1.0,>=0.84.0; extra == \"proxy-runtime\"",
+    "grpcio==1.78.0; extra == \"proxy-runtime\"",
+    "prometheus-client<1.0,>=0.20.0; extra == \"proxy-runtime\"",
+    "langfuse<3.0,>=2.59.7; extra == \"proxy-runtime\"",
+    "opentelemetry-api==1.28.0; extra == \"proxy-runtime\"",
+    "opentelemetry-sdk==1.28.0; extra == \"proxy-runtime\"",
+    "opentelemetry-exporter-otlp==1.28.0; extra == \"proxy-runtime\"",
+    "opentelemetry-instrumentation-fastapi==0.49b0; extra == \"proxy-runtime\"",
+    "ddtrace<5.0,>=4.8.2; extra == \"proxy-runtime\"",
+    "sentry-sdk<3.0,>=2.21.0; extra == \"proxy-runtime\"",
+    "mangum<1.0,>=0.17.0; extra == \"proxy-runtime\"",
+    "azure-ai-contentsafety<2.0,>=1.0.0; extra == \"proxy-runtime\"",
+    "azure-storage-file-datalake<13.0,>=12.20.0; extra == \"proxy-runtime\"",
+    "pypdf<7.0,>=6.16.1; extra == \"proxy-runtime\"",
+    "llm-sandbox<1.0,>=0.3.39; extra == \"proxy-runtime\"",
+    "detect-secrets<2.0,>=1.5.0; extra == \"proxy-runtime\""
+   ],
+   "version": "1.101.3"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "d8e37c8b2c2a5e01fe7b79dd12cd2e38be5e9729951bfd741cc59cf8f907e192"
+    },
+    "filename": "litellm-1.101.3-cp310-abi3-macosx_10_12_x86_64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "e5143a62f8a3250b9ead1b7e344d179d4d20631143cd4a94a5753c30fa5423c7"
+    },
+    "filename": "litellm-1.101.3-cp310-abi3-macosx_11_0_arm64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "b69d7721266851d4832946c80004eb7d01fb770f37b8323cc665c05ac5e58d78"
+    },
+    "filename": "litellm-1.101.3-cp310-abi3-manylinux_2_28_aarch64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "f6d4781771a209b74162d3f44ac7f894974ed61184702cdc5903442916869cf2"
+    },
+    "filename": "litellm-1.101.3-cp310-abi3-manylinux_2_28_x86_64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "5b77a3cff91305d8ab8e831ea0ef97ddf306f18b5f4b32a9469599ff8b623c76"
+    },
+    "filename": "litellm-1.101.3-cp310-abi3-musllinux_1_2_aarch64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "9a34f0b753c635c30889673e3611a07be2b51a7f5b1fdd2e53dac6e9ec74974e"
+    },
+    "filename": "litellm-1.101.3-cp310-abi3-musllinux_1_2_x86_64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "eb7bdb640b1e9d6db2813491282b5238778516032c04bc6cb93d0f41b3aa17b4"
+    },
+    "filename": "litellm-1.101.3-cp310-abi3-win_amd64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "bd077c39d408b5b52682e165ed94e5c69e9fd62e2c1ab67b701c9de99a3adee0"
+    },
+    "filename": "litellm-1.101.3.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/mcp/1.29.0/json": {
+  "info": {
+   "name": "mcp",
+   "requires_dist": [
+    "anyio>=4.5",
+    "httpx-sse>=0.4",
+    "httpx<1.0.0,>=0.27.1",
+    "jsonschema>=4.20.0",
+    "pydantic-settings>=2.5.2",
+    "pydantic<3.0.0,>=2.11.0; python_version < \"3.14\"",
+    "pydantic<3.0.0,>=2.12.0; python_version >= \"3.14\"",
+    "pyjwt[crypto]>=2.10.1",
+    "python-multipart>=0.0.9",
+    "pywin32>=310; sys_platform == \"win32\" and python_version < \"3.14\"",
+    "pywin32>=311; sys_platform == \"win32\" and python_version >= \"3.14\"",
+    "sse-starlette>=1.6.1",
+    "starlette>=0.27; python_version < \"3.14\"",
+    "starlette>=0.48.0; python_version >= \"3.14\"",
+    "typing-extensions>=4.9.0",
+    "typing-inspection>=0.4.1",
+    "uvicorn>=0.31.1; sys_platform != \"emscripten\"",
+    "python-dotenv>=1.0.0; extra == \"cli\"",
+    "typer>=0.16.0; extra == \"cli\"",
+    "rich>=13.9.4; extra == \"rich\"",
+    "websockets>=15.0.1; extra == \"ws\""
+   ],
+   "version": "1.29.0"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "f5a075bb611f23d6f4d080c6a1699fa62772eebc562ba9e66b306ddde1c755f7"
+    },
+    "filename": "mcp-1.29.0-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "52d01f334de1868cc3bb2d6604931126a67631f99a6c5d3b82ba47290315ec36"
+    },
+    "filename": "mcp-1.29.0.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/mcp/1.30.0/json": {
+  "info": {
+   "name": "mcp",
+   "requires_dist": [
+    "anyio>=4.5",
+    "httpx-sse>=0.4",
+    "httpx<1.0.0,>=0.27.1",
+    "jsonschema>=4.20.0",
+    "pydantic-settings>=2.5.2",
+    "pydantic<3.0.0,>=2.11.0; python_version < \"3.14\"",
+    "pydantic<3.0.0,>=2.12.0; python_version >= \"3.14\"",
+    "pyjwt[crypto]>=2.10.1",
+    "python-multipart>=0.0.9",
+    "pywin32>=310; sys_platform == \"win32\" and python_version < \"3.14\"",
+    "pywin32>=311; sys_platform == \"win32\" and python_version >= \"3.14\"",
+    "sse-starlette>=1.6.1",
+    "starlette>=0.27; python_version < \"3.14\"",
+    "starlette>=0.48.0; python_version >= \"3.14\"",
+    "typing-extensions>=4.9.0",
+    "typing-inspection>=0.4.1",
+    "uvicorn>=0.31.1; sys_platform != \"emscripten\"",
+    "python-dotenv>=1.0.0; extra == \"cli\"",
+    "typer>=0.16.0; extra == \"cli\"",
+    "rich>=13.9.4; extra == \"rich\"",
+    "websockets>=15.0.1; extra == \"ws\""
+   ],
+   "version": "1.30.0"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0"
+    },
+    "filename": "mcp-1.30.0-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "445414625fce5c295faa505bb11bacece661ab6f4028d57c935db57820b7a3e4"
+    },
+    "filename": "mcp-1.30.0.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/nltk/3.10.3/json": {
+  "info": {
+   "name": "nltk",
+   "requires_dist": [
+    "defusedxml",
+    "click",
+    "joblib",
+    "regex>=2021.8.3",
+    "tqdm",
+    "numpy; extra == \"machine-learning\"",
+    "python-crfsuite; extra == \"machine-learning\"",
+    "scikit-learn; extra == \"machine-learning\"",
+    "scipy; extra == \"machine-learning\"",
+    "matplotlib; extra == \"plot\"",
+    "pyparsing; extra == \"tgrep\"",
+    "twython; extra == \"twitter\"",
+    "requests; extra == \"corenlp\"",
+    "scipy; extra == \"all\"",
+    "pyparsing; extra == \"all\"",
+    "twython; extra == \"all\"",
+    "numpy; extra == \"all\"",
+    "requests; extra == \"all\"",
+    "python-crfsuite; extra == \"all\"",
+    "matplotlib; extra == \"all\"",
+    "scikit-learn; extra == \"all\""
+   ],
+   "version": "3.10.3"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "ff9598a8e20518ee0d557745890cc4435b9578489e2dcbc69c4f81fa060caf7c"
+    },
+    "filename": "nltk-3.10.3-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "bb9327a461c3811c2fa4900e03840401f2126adfb30c0072827c433bd2444ea4"
+    },
+    "filename": "nltk-3.10.3.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/nltk/3.10.4/json": {
+  "info": {
+   "name": "nltk",
+   "requires_dist": [
+    "defusedxml",
+    "click",
+    "joblib",
+    "regex>=2021.8.3",
+    "tqdm",
+    "numpy; extra == \"machine-learning\"",
+    "python-crfsuite; extra == \"machine-learning\"",
+    "scikit-learn; extra == \"machine-learning\"",
+    "scipy; extra == \"machine-learning\"",
+    "matplotlib; extra == \"plot\"",
+    "pyparsing; extra == \"tgrep\"",
+    "twython; extra == \"twitter\"",
+    "requests; extra == \"corenlp\"",
+    "requests; extra == \"all\"",
+    "twython; extra == \"all\"",
+    "python-crfsuite; extra == \"all\"",
+    "numpy; extra == \"all\"",
+    "scipy; extra == \"all\"",
+    "scikit-learn; extra == \"all\"",
+    "matplotlib; extra == \"all\"",
+    "pyparsing; extra == \"all\""
+   ],
+   "version": "3.10.4"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "769ba5413f265b7d3e87cd163cc28efa01e29eeef8bb6080bc907949d9fcfb51"
+    },
+    "filename": "nltk-3.10.4-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "44679f4e9220abfd496d2c8cdb22f8425ccbe557604f9aa5cacb1c44003dabc1"
+    },
+    "filename": "nltk-3.10.4.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/semgrep/1.179.0/json": {
+  "info": {
+   "name": "semgrep",
+   "requires_dist": [
+    "attrs>=21.3",
+    "boltons~=21.0",
+    "click-option-group~=0.5",
+    "click~=8.4.2",
+    "colorama~=0.4.0",
+    "exceptiongroup~=1.2.0",
+    "glom>=23.3",
+    "jsonschema~=4.25.1",
+    "mcp==1.29.0",
+    "opentelemetry-api~=1.37.0",
+    "opentelemetry-sdk~=1.37.0",
+    "opentelemetry-exporter-otlp-proto-http~=1.37.0",
+    "opentelemetry-instrumentation-requests~=0.58b0",
+    "opentelemetry-instrumentation-threading~=0.58b0",
+    "packaging>=21.0",
+    "peewee~=3.14",
+    "pyjwt[crypto]<3,>=2.15.0",
+    "requests~=2.22",
+    "rich>=13.5.2",
+    "ruamel.yaml>=0.18.15",
+    "ruamel.yaml.clib==0.2.15",
+    "semantic-version~=2.10.0",
+    "tomli~=2.4.0",
+    "typing-extensions~=4.2",
+    "urllib3~=2.0",
+    "wcmatch~=8.3",
+    "pywin32==311; sys_platform == \"win32\""
+   ],
+   "version": "1.179.0"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "34b5e801e3f4325c93014124ccfab6da96857f74aae68458d2a07defd4727b0f"
+    },
+    "filename": "semgrep-1.179.0-cp310.cp311.cp312.cp313.cp314.py310.py311.py312.py313.py314-none-macosx_10_14_x86_64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "9b57026f587a4bc7833bca2b6e4d6778072a79dcf0b9f2e5e01d3d5df39c7759"
+    },
+    "filename": "semgrep-1.179.0-cp310.cp311.cp312.cp313.cp314.py310.py311.py312.py313.py314-none-macosx_11_0_arm64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "c23d79c4839540372acc39b59aad167c1c7f3dc21bacacb27f19aa2edd79d271"
+    },
+    "filename": "semgrep-1.179.0-cp310.cp311.cp312.cp313.cp314.py310.py311.py312.py313.py314-none-manylinux_2_34_aarch64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "b529c4db63f293918989b84ce4640f12f1b1e4680d9e7fcab5f3554f9113dfc5"
+    },
+    "filename": "semgrep-1.179.0-cp310.cp311.cp312.cp313.cp314.py310.py311.py312.py313.py314-none-manylinux_2_34_x86_64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "dc6317fbfad49b1dbe396df7da7d9702cffc5ea9ea62cb3b4b2209824496b425"
+    },
+    "filename": "semgrep-1.179.0-cp310.cp311.cp312.cp313.cp314.py310.py311.py312.py313.py314-none-musllinux_1_2_aarch64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "69bce348296374df6c51e72758801ce06dd18d6dfb307bc73d24b9de53bbe5f1"
+    },
+    "filename": "semgrep-1.179.0-cp310.cp311.cp312.cp313.cp314.py310.py311.py312.py313.py314-none-musllinux_1_2_x86_64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "6c6cf104ad0959c0b11de56d15c5d31f56949c620b4bd130c5d1fb899f2bb5a3"
+    },
+    "filename": "semgrep-1.179.0-cp310.cp311.cp312.cp313.cp314.py310.py311.py312.py313.py314-none-win_amd64.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "c7e32b952990434b591003547f26b46c89a5bd56033715b00ff26327a8abe8c5"
+    },
+    "filename": "semgrep-1.179.0.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "GET https://pypi.org/pypi/transformers/5.17.0/json": {
+  "info": {
+   "name": "transformers",
+   "requires_dist": [
+    "huggingface-hub<2.0,>=1.5.0",
+    "numpy>=1.17",
+    "packaging>=20.0",
+    "pyyaml>=5.1",
+    "regex>=2025.10.22",
+    "tokenizers<0.24.0,>=0.23.1",
+    "typer",
+    "safetensors>=0.8.0",
+    "tqdm>=4.60",
+    "torch>=2.5; extra == \"torch\"",
+    "accelerate>=1.1.0; extra == \"torch\"",
+    "torchvision; extra == \"vision\"",
+    "Pillow<=15.0,>=10.0.1; extra == \"vision\"",
+    "torchaudio; extra == \"audio\"",
+    "librosa; extra == \"audio\"",
+    "pyctcdecode>=0.4.0; extra == \"audio\"",
+    "phonemizer; extra == \"audio\"",
+    "av; extra == \"video\"",
+    "timm>=1.0.23; extra == \"timm\"",
+    "datasets>=2.15.0; extra == \"quality\"",
+    "ruff==0.14.10; extra == \"quality\"",
+    "GitPython<3.1.19; extra == \"quality\"",
+    "urllib3<2.0.0; extra == \"quality\"",
+    "libcst; extra == \"quality\"",
+    "rich; extra == \"quality\"",
+    "ty==0.0.20; extra == \"quality\"",
+    "tomli; extra == \"quality\"",
+    "transformers-mlinter==0.1.5; extra == \"quality\"",
+    "hf-doc-builder; extra == \"docs\"",
+    "kernels<0.17,>=0.16.0; extra == \"kernels\"",
+    "sentencepiece!=0.1.92,>=0.1.91; extra == \"sentencepiece\"",
+    "protobuf; extra == \"sentencepiece\"",
+    "tiktoken; extra == \"tiktoken\"",
+    "blobfile; extra == \"tiktoken\"",
+    "mistral-common[image]>=1.11.7; extra == \"mistral-common\"",
+    "jinja2>=3.1.0; extra == \"chat-template\"",
+    "scikit-learn; extra == \"sklearn\"",
+    "accelerate>=1.1.0; extra == \"accelerate\"",
+    "faiss-cpu; extra == \"retrieval\"",
+    "datasets>=2.15.0; extra == \"retrieval\"",
+    "sagemaker>=2.31.0; extra == \"sagemaker\"",
+    "deepspeed>=0.9.3; extra == \"deepspeed\"",
+    "accelerate>=1.1.0; extra == \"deepspeed\"",
+    "optuna; extra == \"optuna\"",
+    "kernels<0.17,>=0.16.0; extra == \"integrations\"",
+    "optuna; extra == \"integrations\"",
+    "codecarbon>=2.8.1; extra == \"integrations\"",
+    "ray[tune]>=2.7.0; extra == \"integrations\"",
+    "ray[tune]>=2.7.0; extra == \"ray\"",
+    "codecarbon>=2.8.1; extra == \"codecarbon\"",
+    "openai>=1.98.0; extra == \"serving\"",
+    "pydantic>=2; extra == \"serving\"",
+    "uvicorn; extra == \"serving\"",
+    "fastapi; extra == \"serving\"",
+    "starlette; extra == \"serving\"",
+    "rich; extra == \"serving\"",
+    "torch>=2.5; extra == \"serving\"",
+    "accelerate>=1.1.0; extra == \"serving\"",
+    "num2words; extra == \"num2words\"",
+    "optimum-benchmark>=0.3.0; extra == \"benchmark\"",
+    "fugashi>=1.0; extra == \"ja\"",
+    "ipadic<2.0,>=1.0.0; extra == \"ja\"",
+    "unidic_lite>=1.0.7; extra == \"ja\"",
+    "unidic>=1.0.2; extra == \"ja\"",
+    "rhoknp<1.3.1,>=1.1.0; extra == \"ja\"",
+    "sudachipy>=0.6.6; extra == \"ja\"",
+    "sudachidict_core>=20220729; extra == \"ja\"",
+    "pytest<9.0.0,>=7.2.0; extra == \"testing\"",
+    "pytest-asyncio>=1.2.0; extra == \"testing\"",
+    "pytest-random-order; extra == \"testing\"",
+    "pytest-rich; extra == \"testing\"",
+    "pytest-xdist; extra == \"testing\"",
+    "pytest-order; extra == \"testing\"",
+    "pytest-rerunfailures<16.0; extra == \"testing\"",
+    "pytest-timeout; extra == \"testing\"",
+    "pytest-env; extra == \"testing\"",
+    "timeout-decorator; extra == \"testing\"",
+    "parameterized>=0.9; extra == \"testing\"",
+    "psutil; extra == \"testing\"",
+    "dill<0.3.5; extra == \"testing\"",
+    "diffusers==0.35.2; extra == \"testing\"",
+    "evaluate>=0.4.6; extra == \"testing\"",
+    "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1; extra == \"testing\"",
+    "nltk<=3.8.1; extra == \"testing\"",
+    "sacremoses; extra == \"testing\"",
+    "rjieba; extra == \"testing\"",
+    "beautifulsoup4; extra == \"testing\"",
+    "tensorboard; extra == \"testing\"",
+    "sacrebleu<2.0.0,>=1.4.12; extra == \"testing\"",
+    "filelock; extra == \"testing\"",
+    "hf-doc-builder; extra == \"testing\"",
+    "datasets>=2.15.0; extra == \"testing\"",
+    "ruff==0.14.10; extra == \"testing\"",
+    "GitPython<3.1.19; extra == \"testing\"",
+    "urllib3<2.0.0; extra == \"testing\"",
+    "libcst; extra == \"testing\"",
+    "rich; extra == \"testing\"",
+    "ty==0.0.20; extra == \"testing\"",
+    "tomli; extra == \"testing\"",
+    "transformers-mlinter==0.1.5; extra == \"testing\"",
+    "faiss-cpu; extra == \"testing\"",
+    "datasets>=2.15.0; extra == \"testing\"",
+    "sentencepiece!=0.1.92,>=0.1.91; extra == \"testing\"",
+    "protobuf; extra == \"testing\"",
+    "openai>=1.98.0; extra == \"testing\"",
+    "pydantic>=2; extra == \"testing\"",
+    "uvicorn; extra == \"testing\"",
+    "fastapi; extra == \"testing\"",
+    "starlette; extra == \"testing\"",
+    "rich; extra == \"testing\"",
+    "torch>=2.5; extra == \"testing\"",
+    "accelerate>=1.1.0; extra == \"testing\"",
+    "mistral-common[image]>=1.11.7; extra == \"testing\"",
+    "deepspeed>=0.9.3; extra == \"deepspeed-testing\"",
+    "accelerate>=1.1.0; extra == \"deepspeed-testing\"",
+    "pytest<9.0.0,>=7.2.0; extra == \"deepspeed-testing\"",
+    "pytest-asyncio>=1.2.0; extra == \"deepspeed-testing\"",
+    "pytest-random-order; extra == \"deepspeed-testing\"",
+    "pytest-rich; extra == \"deepspeed-testing\"",
+    "pytest-xdist; extra == \"deepspeed-testing\"",
+    "pytest-order; extra == \"deepspeed-testing\"",
+    "pytest-rerunfailures<16.0; extra == \"deepspeed-testing\"",
+    "pytest-timeout; extra == \"deepspeed-testing\"",
+    "pytest-env; extra == \"deepspeed-testing\"",
+    "timeout-decorator; extra == \"deepspeed-testing\"",
+    "parameterized>=0.9; extra == \"deepspeed-testing\"",
+    "psutil; extra == \"deepspeed-testing\"",
+    "dill<0.3.5; extra == \"deepspeed-testing\"",
+    "diffusers==0.35.2; extra == \"deepspeed-testing\"",
+    "evaluate>=0.4.6; extra == \"deepspeed-testing\"",
+    "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1; extra == \"deepspeed-testing\"",
+    "nltk<=3.8.1; extra == \"deepspeed-testing\"",
+    "sacremoses; extra == \"deepspeed-testing\"",
+    "rjieba; extra == \"deepspeed-testing\"",
+    "beautifulsoup4; extra == \"deepspeed-testing\"",
+    "tensorboard; extra == \"deepspeed-testing\"",
+    "sacrebleu<2.0.0,>=1.4.12; extra == \"deepspeed-testing\"",
+    "filelock; extra == \"deepspeed-testing\"",
+    "hf-doc-builder; extra == \"deepspeed-testing\"",
+    "datasets>=2.15.0; extra == \"deepspeed-testing\"",
+    "ruff==0.14.10; extra == \"deepspeed-testing\"",
+    "GitPython<3.1.19; extra == \"deepspeed-testing\"",
+    "urllib3<2.0.0; extra == \"deepspeed-testing\"",
+    "libcst; extra == \"deepspeed-testing\"",
+    "rich; extra == \"deepspeed-testing\"",
+    "ty==0.0.20; extra == \"deepspeed-testing\"",
+    "tomli; extra == \"deepspeed-testing\"",
+    "transformers-mlinter==0.1.5; extra == \"deepspeed-testing\"",
+    "faiss-cpu; extra == \"deepspeed-testing\"",
+    "datasets>=2.15.0; extra == \"deepspeed-testing\"",
+    "sentencepiece!=0.1.92,>=0.1.91; extra == \"deepspeed-testing\"",
+    "protobuf; extra == \"deepspeed-testing\"",
+    "openai>=1.98.0; extra == \"deepspeed-testing\"",
+    "pydantic>=2; extra == \"deepspeed-testing\"",
+    "uvicorn; extra == \"deepspeed-testing\"",
+    "fastapi; extra == \"deepspeed-testing\"",
+    "starlette; extra == \"deepspeed-testing\"",
+    "rich; extra == \"deepspeed-testing\"",
+    "torch>=2.5; extra == \"deepspeed-testing\"",
+    "accelerate>=1.1.0; extra == \"deepspeed-testing\"",
+    "mistral-common[image]>=1.11.7; extra == \"deepspeed-testing\"",
+    "optuna; extra == \"deepspeed-testing\"",
+    "sentencepiece!=0.1.92,>=0.1.91; extra == \"deepspeed-testing\"",
+    "protobuf; extra == \"deepspeed-testing\"",
+    "torch>=2.5; extra == \"all\"",
+    "accelerate>=1.1.0; extra == \"all\"",
+    "torchvision; extra == \"all\"",
+    "Pillow<=15.0,>=10.0.1; extra == \"all\"",
+    "torchaudio; extra == \"all\"",
+    "librosa; extra == \"all\"",
+    "pyctcdecode>=0.4.0; extra == \"all\"",
+    "phonemizer; extra == \"all\"",
+    "av; extra == \"all\"",
+    "kernels<0.17,>=0.16.0; extra == \"all\"",
+    "timm>=1.0.23; extra == \"all\"",
+    "sentencepiece!=0.1.92,>=0.1.91; extra == \"all\"",
+    "protobuf; extra == \"all\"",
+    "tiktoken; extra == \"all\"",
+    "blobfile; extra == \"all\"",
+    "jinja2>=3.1.0; extra == \"all\"",
+    "num2words; extra == \"all\"",
+    "mistral-common[image]>=1.11.7; extra == \"all\"",
+    "torch>=2.5; extra == \"dev\"",
+    "accelerate>=1.1.0; extra == \"dev\"",
+    "torchvision; extra == \"dev\"",
+    "Pillow<=15.0,>=10.0.1; extra == \"dev\"",
+    "torchaudio; extra == \"dev\"",
+    "librosa; extra == \"dev\"",
+    "pyctcdecode>=0.4.0; extra == \"dev\"",
+    "phonemizer; extra == \"dev\"",
+    "av; extra == \"dev\"",
+    "kernels<0.17,>=0.16.0; extra == \"dev\"",
+    "timm>=1.0.23; extra == \"dev\"",
+    "sentencepiece!=0.1.92,>=0.1.91; extra == \"dev\"",
+    "protobuf; extra == \"dev\"",
+    "tiktoken; extra == \"dev\"",
+    "blobfile; extra == \"dev\"",
+    "jinja2>=3.1.0; extra == \"dev\"",
+    "num2words; extra == \"dev\"",
+    "mistral-common[image]>=1.11.7; extra == \"dev\"",
+    "pytest<9.0.0,>=7.2.0; extra == \"dev\"",
+    "pytest-asyncio>=1.2.0; extra == \"dev\"",
+    "pytest-random-order; extra == \"dev\"",
+    "pytest-rich; extra == \"dev\"",
+    "pytest-xdist; extra == \"dev\"",
+    "pytest-order; extra == \"dev\"",
+    "pytest-rerunfailures<16.0; extra == \"dev\"",
+    "pytest-timeout; extra == \"dev\"",
+    "pytest-env; extra == \"dev\"",
+    "timeout-decorator; extra == \"dev\"",
+    "parameterized>=0.9; extra == \"dev\"",
+    "psutil; extra == \"dev\"",
+    "dill<0.3.5; extra == \"dev\"",
+    "diffusers==0.35.2; extra == \"dev\"",
+    "evaluate>=0.4.6; extra == \"dev\"",
+    "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1; extra == \"dev\"",
+    "nltk<=3.8.1; extra == \"dev\"",
+    "sacremoses; extra == \"dev\"",
+    "rjieba; extra == \"dev\"",
+    "beautifulsoup4; extra == \"dev\"",
+    "tensorboard; extra == \"dev\"",
+    "sacrebleu<2.0.0,>=1.4.12; extra == \"dev\"",
+    "filelock; extra == \"dev\"",
+    "hf-doc-builder; extra == \"dev\"",
+    "datasets>=2.15.0; extra == \"dev\"",
+    "ruff==0.14.10; extra == \"dev\"",
+    "GitPython<3.1.19; extra == \"dev\"",
+    "urllib3<2.0.0; extra == \"dev\"",
+    "libcst; extra == \"dev\"",
+    "rich; extra == \"dev\"",
+    "ty==0.0.20; extra == \"dev\"",
+    "tomli; extra == \"dev\"",
+    "transformers-mlinter==0.1.5; extra == \"dev\"",
+    "faiss-cpu; extra == \"dev\"",
+    "datasets>=2.15.0; extra == \"dev\"",
+    "sentencepiece!=0.1.92,>=0.1.91; extra == \"dev\"",
+    "protobuf; extra == \"dev\"",
+    "openai>=1.98.0; extra == \"dev\"",
+    "pydantic>=2; extra == \"dev\"",
+    "uvicorn; extra == \"dev\"",
+    "fastapi; extra == \"dev\"",
+    "starlette; extra == \"dev\"",
+    "rich; extra == \"dev\"",
+    "torch>=2.5; extra == \"dev\"",
+    "accelerate>=1.1.0; extra == \"dev\"",
+    "mistral-common[image]>=1.11.7; extra == \"dev\"",
+    "fugashi>=1.0; extra == \"dev\"",
+    "ipadic<2.0,>=1.0.0; extra == \"dev\"",
+    "unidic_lite>=1.0.7; extra == \"dev\"",
+    "unidic>=1.0.2; extra == \"dev\"",
+    "rhoknp<1.3.1,>=1.1.0; extra == \"dev\"",
+    "sudachipy>=0.6.6; extra == \"dev\"",
+    "sudachidict_core>=20220729; extra == \"dev\"",
+    "scikit-learn; extra == \"dev\""
+   ],
+   "version": "5.17.0"
+  },
+  "urls": [
+   {
+    "digests": {
+     "sha256": "78ec1ce21579b38dfb83950a0658cd119f87212a2fcfdff478096ce9d6c03801"
+    },
+    "filename": "transformers-5.17.0-py3-none-any.whl",
+    "packagetype": "bdist_wheel"
+   },
+   {
+    "digests": {
+     "sha256": "a153be279169b55b92d8000bf4af294aed684503d091cca7804da2dd8a9de000"
+    },
+    "filename": "transformers-5.17.0.tar.gz",
+    "packagetype": "sdist"
+   }
+  ]
+ },
+ "POST https://api.osv.dev/v1/query {\"package\": {\"ecosystem\": \"PyPI\", \"name\": \"langchain\"}, \"version\": \"1.4.1\"}": {},
+ "POST https://api.osv.dev/v1/query {\"package\": {\"ecosystem\": \"PyPI\", \"name\": \"langgraph\"}, \"version\": \"1.2.11\"}": {
+  "vulns": [
+   {
+    "affected": [
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "langgraph-sdk",
+       "purl": "pkg:pypi/langgraph-sdk"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "0.4.0"
+         },
+         {
+          "fixed": "0.4.6"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "langgraph",
+       "purl": "pkg:pypi/langgraph"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.2.3"
+         },
+         {
+          "fixed": "1.2.14"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     }
+    ],
+    "aliases": [
+     "CVE-2026-118667"
+    ],
+    "id": "GHSA-3fx2-cqw9-xr3c",
+    "published": "2026-10-28T21:05:47Z",
+    "severity": [
+     {
+      "score": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N",
+      "type": "CVSS_V3"
+     }
+    ],
+    "summary": "LangGraph: Unencoded identifiers in LangGraph SDK v3 streaming can redirect authenticated GET requests"
+   }
+  ]
+ },
+ "POST https://api.osv.dev/v1/query {\"package\": {\"ecosystem\": \"PyPI\", \"name\": \"langgraph-sdk\"}, \"version\": \"0.4.4\"}": {
+  "vulns": [
+   {
+    "affected": [
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "langgraph-sdk",
+       "purl": "pkg:pypi/langgraph-sdk"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "0.4.0"
+         },
+         {
+          "fixed": "0.4.6"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "langgraph",
+       "purl": "pkg:pypi/langgraph"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.2.3"
+         },
+         {
+          "fixed": "1.2.14"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     }
+    ],
+    "aliases": [
+     "CVE-2026-118667"
+    ],
+    "id": "GHSA-3fx2-cqw9-xr3c",
+    "published": "2026-10-28T21:05:47Z",
+    "severity": [
+     {
+      "score": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N",
+      "type": "CVSS_V3"
+     }
+    ],
+    "summary": "LangGraph: Unencoded identifiers in LangGraph SDK v3 streaming can redirect authenticated GET requests"
+   }
+  ]
+ },
+ "POST https://api.osv.dev/v1/query {\"package\": {\"ecosystem\": \"PyPI\", \"name\": \"litellm\"}, \"version\": \"1.101.0\"}": {
+  "vulns": [
+   {
+    "affected": [
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "litellm",
+       "purl": "pkg:pypi/litellm"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.91.0"
+         },
+         {
+          "fixed": "1.100.4"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "litellm",
+       "purl": "pkg:pypi/litellm"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.101.0"
+         },
+         {
+          "fixed": "1.101.3"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "litellm",
+       "purl": "pkg:pypi/litellm"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.102.0"
+         },
+         {
+          "fixed": "1.102.2"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "litellm",
+       "purl": "pkg:pypi/litellm"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.103.0"
+         },
+         {
+          "fixed": "1.103.1"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "litellm",
+       "purl": "pkg:pypi/litellm"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.104.0rc1"
+         },
+         {
+          "fixed": "1.104.0rc2"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     }
+    ],
+    "aliases": [
+     "CVE-2026-114612"
+    ],
+    "id": "GHSA-7hp6-4w63-5g45",
+    "published": "2026-10-27T15:04:14Z",
+    "severity": [
+     {
+      "score": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+      "type": "CVSS_V3"
+     },
+     {
+      "score": "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+      "type": "CVSS_V4"
+     }
+    ],
+    "summary": "LiteLLM: Privilege Escalation to Proxy Admin via Cross-Domain Reuse of the Salt Key"
+   }
+  ]
+ },
+ "POST https://api.osv.dev/v1/query {\"package\": {\"ecosystem\": \"PyPI\", \"name\": \"mcp\"}, \"version\": \"1.29.0\"}": {
+  "vulns": [
+   {
+    "affected": [
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "mcp",
+       "purl": "pkg:pypi/mcp"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "2.0.0"
+         },
+         {
+          "fixed": "2.2.0"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "mcp",
+       "purl": "pkg:pypi/mcp"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.8.0"
+         },
+         {
+          "fixed": "1.30.0"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     }
+    ],
+    "aliases": [
+     "CVE-2026-116685"
+    ],
+    "id": "GHSA-5h93-6whr-6q8j",
+    "published": "2026-10-27T21:05:34Z",
+    "severity": [
+     {
+      "score": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N",
+      "type": "CVSS_V3"
+     }
+    ],
+    "summary": "Model Context Protocol Python SDK: HTTP client transports followed cross-origin redirects carrying custom headers and bodies"
+   },
+   {
+    "affected": [
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "mcp",
+       "purl": "pkg:pypi/mcp"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.8.0"
+         },
+         {
+          "fixed": "1.30.0"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "mcp",
+       "purl": "pkg:pypi/mcp"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "2.0.0"
+         },
+         {
+          "fixed": "2.2.0"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     }
+    ],
+    "aliases": [
+     "CVE-2026-59951"
+    ],
+    "id": "GHSA-84m7-p3x7-pcfv",
+    "published": "2026-10-15T20:13:13Z",
+    "severity": [
+     {
+      "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+      "type": "CVSS_V3"
+     },
+     {
+      "score": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N",
+      "type": "CVSS_V4"
+     }
+    ],
+    "summary": "MCP Python SDK: Unbounded Session Accumulation in StreamableHTTP Transport Enables Resource Exhaustion"
+   },
+   {
+    "affected": [
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "mcp",
+       "purl": "pkg:pypi/mcp"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "2.0.0"
+         },
+         {
+          "fixed": "2.2.0"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "mcp",
+       "purl": "pkg:pypi/mcp"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.10.0"
+         },
+         {
+          "fixed": "1.30.0"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     }
+    ],
+    "aliases": [
+     "CVE-2026-116686"
+    ],
+    "id": "GHSA-rwrf-2pqf-9j8j",
+    "published": "2026-10-27T21:05:29Z",
+    "severity": [
+     {
+      "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H",
+      "type": "CVSS_V3"
+     }
+    ],
+    "summary": "Model Context Protocol Python SDK: Client fetched server-chosen $ref URLs while validating tool results against output schemas"
+   },
+   {
+    "affected": [
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "mcp",
+       "purl": "pkg:pypi/mcp"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "2.0.0"
+         },
+         {
+          "fixed": "2.2.0"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     },
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "mcp",
+       "purl": "pkg:pypi/mcp"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "1.10.0"
+         },
+         {
+          "fixed": "1.30.0"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     }
+    ],
+    "aliases": [
+     "CVE-2026-116684"
+    ],
+    "id": "GHSA-w4fh-qvv9-3v23",
+    "published": "2026-10-27T21:06:59Z",
+    "severity": [
+     {
+      "score": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:N",
+      "type": "CVSS_V3"
+     }
+    ],
+    "summary": "Model Context Protocol Python SDK: Server bearer-token authentication accepts tokens issued for a different resource server"
+   }
+  ]
+ },
+ "POST https://api.osv.dev/v1/query {\"package\": {\"ecosystem\": \"PyPI\", \"name\": \"nltk\"}, \"version\": \"3.10.3\"}": {
+  "vulns": [
+   {
+    "affected": [
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "nltk",
+       "purl": "pkg:pypi/nltk"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "0"
+         },
+         {
+          "last_affected": "3.10.3"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     }
+    ],
+    "aliases": [
+     "CVE-2026-81726",
+     "PYSEC-2026-3740"
+    ],
+    "id": "GHSA-8mgp-746c-j5xp",
+    "published": "2026-09-02T14:35:04Z",
+    "severity": [
+     {
+      "score": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:L/A:L",
+      "type": "CVSS_V3"
+     },
+     {
+      "score": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:H/VI:L/VA:L/SC:N/SI:N/SA:N",
+      "type": "CVSS_V4"
+     }
+    ],
+    "summary": "NLTK: Model-artifact APIs bypass pathsec and touch files outside allowed roots"
+   },
+   {
+    "affected": [
+     {
+      "package": {
+       "ecosystem": "PyPI",
+       "name": "nltk",
+       "purl": "pkg:pypi/nltk"
+      },
+      "ranges": [
+       {
+        "events": [
+         {
+          "introduced": "0"
+         },
+         {
+          "fixed": "3.10.4"
+         }
+        ],
+        "type": "ECOSYSTEM"
+       }
+      ]
+     }
+    ],
+    "aliases": [
+     "CVE-2026-109956"
+    ],
+    "id": "GHSA-j456-xh4h-cpf2",
+    "published": "2026-10-27T14:50:30Z",
+    "severity": [
+     {
+      "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:L",
+      "type": "CVSS_V3"
+     }
+    ],
+    "summary": "NLTK: WekaClassifier passes an unvalidated caller-controlled model path to the weka JVM, bypassing nltk.pathsec containment"
+   }
+  ]
+ },
+ "POST https://api.osv.dev/v1/query {\"package\": {\"ecosystem\": \"PyPI\", \"name\": \"semgrep\"}, \"version\": \"1.179.0\"}": {},
+ "POST https://api.osv.dev/v1/query {\"package\": {\"ecosystem\": \"PyPI\", \"name\": \"transformers\"}, \"version\": \"5.17.0\"}": {}
+}

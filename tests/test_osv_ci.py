@@ -147,3 +147,25 @@ def test_runner_does_not_count_a_failed_osv_scan_as_a_clean_one(tmp_path, monkey
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tools))
     (run,) = runner.run_all(target, tmp_path / "out2", enabled=["osv-scanner"])
     assert run.ran and run.results[0].rule_id == "CVE-1" and "scan source" in (tools / "argv.txt").read_text()
+
+
+def test_a_failing_lockfile_scan_names_the_command_that_gathers_the_facts(tmp_path):
+    """The un-ignored advisories' packages, with the lockfile scanned, in the scripts/advisory_facts.py command line that
+    gathers what a relock or a dated exception needs."""
+    tools = _tools(tmp_path, _sarif(_result("GHSA-1", "certifi", "2020.1"), _result("GHSA-3", "idna", "2.8"),
+                                    _result("GHSA-2", "urllib3", "1.0", suppressed=True)), exit_code=1)
+    r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--report", str(tmp_path / "o.sarif"))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "python3 scripts/advisory_facts.py --lockfile tools/bootstrap-requirements.txt certifi idna" in r.stdout
+
+
+def test_with_several_lockfiles_each_command_names_only_the_packages_found_in_it(tmp_path):
+    """L0 scans five closures in one run; each finding's path tells which lockfile's command it belongs to."""
+    in_dev = _result("GHSA-4", "certifi", "2020.1")
+    in_dev["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = "file:///w/tools/dev-requirements.txt"
+    tools = _tools(tmp_path, _sarif(in_dev), exit_code=1)
+    r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--lockfile", "tools/dev-requirements.txt",
+             "--report", str(tmp_path / "o.sarif"))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "python3 scripts/advisory_facts.py --lockfile tools/dev-requirements.txt certifi" in r.stdout
+    assert "--lockfile tools/bootstrap-requirements.txt certifi" not in r.stdout
