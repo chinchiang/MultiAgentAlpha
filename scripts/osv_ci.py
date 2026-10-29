@@ -77,6 +77,18 @@ def summarize(doc: dict) -> list[dict]:
     return rows
 
 
+def facts_commands(lockfiles: list[str], live: list[dict]) -> list[str]:
+    """The scripts/advisory_facts.py command for each lockfile with un-ignored findings: one lockfile takes every finding,
+    several are told apart by the finding's path."""
+    out = []
+    for lf in lockfiles:
+        hits = live if len(lockfiles) == 1 else [x for x in live if x["uri"].endswith("/" + lf)]
+        names = sorted({n for x in hits for n, _ in x["packages"]})
+        if names:
+            out.append(f"python3 scripts/advisory_facts.py --lockfile {lf} {' '.join(names)}")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--target", type=Path, help="directory to scan recursively")
@@ -148,11 +160,8 @@ def main() -> int:
         return 0
     if live:
         print(f"VULNERABILITIES: {len(live)} un-ignored advisory(ies); bump the dependency (relock) or add an IgnoredVulns entry with a reason and ignoreUntil")
-        for lf in a.lockfile:  # one lockfile takes every finding; several are told apart by the finding's path
-            hits = live if len(a.lockfile) == 1 else [x for x in live if x["uri"].endswith("/" + lf.as_posix())]
-            names = sorted({n for x in hits for n, _ in x["packages"]})
-            if names:
-                print(f"  the facts for that choice: python3 scripts/advisory_facts.py --lockfile {lf.as_posix()} {' '.join(names)}")
+        for command in facts_commands([lf.as_posix() for lf in a.lockfile], live):
+            print(f"  the facts for that choice: {command}")
         return 2
     print(f"no un-ignored known vulnerabilities ({len(rows) - len(live)} ignored)")
     return 0
