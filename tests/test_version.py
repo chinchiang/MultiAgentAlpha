@@ -35,6 +35,18 @@ def test_the_changelog_versions_decrease_down_the_rows():
     assert not wrong, f"each row takes a version above the next: {', '.join(wrong)}"
 
 
+def test_the_newest_changelog_row_says_whether_the_report_body_and_the_demo_changed():
+    """CODING_STANDARDS.md, "A CHANGELOG row records one version": the summary says whether the workbench demo was
+    recaptured and ends with whether the report body changed, "報告正文未變" or "報告正文變更：" and what changed."""
+    row = next(line for line in (ROOT / "docs" / "CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+               if re.match(r"^\| \d{4}-\d{2}-\d{2} \| v\d+\.\d+\.\d+ \|", line))
+    summary = row.split(" | ", 2)[2].rsplit(" | ", 2)[0]
+    sentences = [s.strip() for s in summary.split("。") if s.strip()]
+    last = sentences[-1]
+    assert last == "報告正文未變" or (last.startswith("報告正文變更：") and len(last) > len("報告正文變更：")), last
+    assert any("展示頁" in s and "擷取" in s for s in sentences), "no sentence says whether the demo was recaptured"
+
+
 def test_pyproject_takes_the_version_from_the_package():
     meta = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert "version" not in meta["project"] and meta["project"]["dynamic"] == ["version"]
