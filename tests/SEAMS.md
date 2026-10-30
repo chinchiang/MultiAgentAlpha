@@ -48,8 +48,9 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   `test_governance_leftovers.py`, `test_security_regressions.py`.
 - `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]`. `cli._review` builds
   `Pipeline(cfg, out_dir=..., ...)`, the config positional and the rest keywords. `test_security_regressions.py`.
-- `invocation.load_config`: patched as a module name. `cli._review` calls `invocation.load(...)`, which calls
-  `load_config(...)`; `review` calls `check_paths` first, so a config inside the target is never read.
+- `invocation.load_config`: patched as a module name. `cli._review` calls `load(...)`, which `cli` imports by name from
+  `mara.invocation` (a patch of `load` itself goes in `cli.load`); `load` calls `load_config(...)`. `review` calls
+  `check_paths` first, so a config inside the target is never read.
   `test_security_regressions.py`.
 - `cli.console`: patched as a module name; output goes through the module's `console`. `test_policy.py`.
 
