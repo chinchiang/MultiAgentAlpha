@@ -161,8 +161,12 @@ _Avoid_: tool match, confirmation (a judge's vote is not corroboration)
 ## Reviews
 
 **Review invocation**:
-One call of `mara review`: the target, the config, the provider mode, the output directory and the options it is given, the refusals it can meet before the review starts, and what it leaves, the reports in its output directory and an exit code. The command line, the pipeline and the workbench share one definition of it, so a refusal reads the same wherever it is met.
+One call of `mara review`: the target, the config, the provider mode, the output directory and the options it is given, the usage errors it can meet, and what it leaves, the reports in its output directory and an exit code. The command line, the pipeline and the workbench share one definition of it, so a usage error reads the same wherever it is met.
 _Avoid_: launch (the workbench's request that becomes one), arguments, command line (the invocation is the same from the workbench)
+
+**Usage error**:
+A review invocation whose options cannot make a review, named with the option at fault: a config or output path inside the target, a config not found or that fails to load, a provider mode its models do not have, or another option's value the review cannot use (an unreadable PSIRT event, a base that is not a git ref). The command line exits 2 on it, which a blocked gate also does; the workbench names the ones it can check before it starts a run.
+_Avoid_: refusal (a model's declined reply), rejection (a jury outcome), launch error
 
 **Review scope**:
 What one review covered: the whole target (full) or the files changed against a base together with the modules related to them (incremental); unknown for a report written before reviews recorded their scope. Scores of reviews with different scopes cannot be compared.

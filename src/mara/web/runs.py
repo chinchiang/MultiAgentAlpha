@@ -4,11 +4,12 @@
 A launch is checked first for what only the workbench asks (a target directory, a config `configs` allows, evidence
 inputs inside the workspace, a git ref for `--base`), then with the command line's own checks (GLOSSARY.md: Review
 invocation): `invocation.check_paths` (the config, output and evidence paths outside the target) and `invocation.load`
-(the config loaded under policies P1-P8, the provider mode matching its models). A browser gets a clear refusal
-instead of a failed run, and the subprocess repeats every check anyway. `run.json` is the record of a run: the request
-as given, the argv, the roles and models of the config at launch (the config file may change later, and the report
-keeps only the provider manifest), status and exit code. The exit code alone is ambiguous (2 is a usage error and an
-enforced gate alike), so a run counts as finished only when its progress record says the reports were written.
+(the config loaded under policies P1-P8, the provider mode matching its models). A browser is told why a launch is
+refused instead of seeing a failed run, and the subprocess repeats every check anyway. `run.json` is the record of a
+run: the request as given, the argv, the roles and models of the config at launch (the config file may change later,
+and the report keeps only the provider manifest), status and exit code. The exit code alone is ambiguous (2 is a usage
+error and an enforced gate alike), so a run counts as finished only when its progress record says the reports were
+written.
 
 The config is one `configs` allows, the configs the page lists (`configs.allowed`); `resolve_config` and
 `resolve_path` turn a request's value into it, and a check_config job resolves its config with them too.
