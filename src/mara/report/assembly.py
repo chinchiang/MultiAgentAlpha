@@ -15,6 +15,7 @@ from .psirt_out import build_notifications
 
 if TYPE_CHECKING:
     from ..config import MaraConfig
+    from ..invocation import ProviderMode
     from ..pipeline import Stages
     from ..review_status import Assessment
 
@@ -32,7 +33,7 @@ class ReportMetadata:
     model_eval: dict[str, ModelEvalStatus]
 
 
-def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *, cfg: MaraConfig, target: Path, provider_mode: str,
+def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *, cfg: MaraConfig, target: Path, provider_mode: ProviderMode,
              generated_at: str, provider_manifest: list[dict], bias_audit: dict, psirt_event: dict | None) -> ReviewReport:
     """The report of the review of `target` in provider mode `provider_mode`, generated at `generated_at`: its findings, ballots, jury
     scoring and dimension scores as `stages` gives them, its status and gate as `assessment` decided them, `metadata`,

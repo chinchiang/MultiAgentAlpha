@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 import yaml
 
@@ -48,7 +48,7 @@ def config_provider_mode(kinds: Iterable[str]) -> Literal["mock", "live", "mixed
     return "mock" if kinds == {"mock"} else "live" if "mock" not in kinds else "mixed"
 
 
-def check_provider_mode(kinds: Iterable[str], provider_mode: str) -> None:
+def check_provider_mode(kinds: Iterable[str], provider_mode: ProviderMode) -> None:
     """Nothing when `provider_mode` is live or mock and the provider kinds classify as it; InvocationError
     provider_mismatch on --provider otherwise."""
     if provider_mode not in tuple(ProviderMode):
@@ -62,13 +62,14 @@ def check_provider_mode(kinds: Iterable[str], provider_mode: str) -> None:
                               param="--provider", kind="provider_mismatch")
 
 
-def default_config(provider_mode: str, root: Path) -> Path:
+def default_config(provider_mode: ProviderMode, root: Path) -> Path:
     """The workspace `root`'s config for a review without --config: config/mara.mock.yaml for mock, config/mara.yaml
     otherwise, whether or not the file exists."""
     return root / "config" / ("mara.mock.yaml" if provider_mode == "mock" else "mara.yaml")
 
 
-def check_paths(target: Path, config: Path | None, out: Path, inputs: dict[str, Path], *, provider_mode: str, root: Path) -> Path:
+def check_paths(target: Path, config: Path | None, out: Path, inputs: dict[str, Path], *, provider_mode: ProviderMode,
+                root: Path) -> Path:
     """The config file, `config` or else the workspace `root`'s default for `provider_mode`, when it, the output
     directory and `inputs` (each path by its option) lie outside `target` and it exists; reads no config.
     InvocationError inside_target on TARGET, else config_not_found on --config."""
@@ -86,7 +87,7 @@ def check_paths(target: Path, config: Path | None, out: Path, inputs: dict[str, 
     return config
 
 
-def load(config: Path, provider_mode: str) -> MaraConfig:
+def load(config: Path, provider_mode: ProviderMode) -> MaraConfig:
     """The config file `config`, validated (structure and policies), whose models' providers classify as
     `provider_mode`. InvocationError config_invalid on --config for a file load_config refuses, else
     check_provider_mode's provider_mismatch."""
@@ -113,12 +114,19 @@ def exit_code(psirt_failed: bool, gate_enforced: bool) -> int:
     return EXIT_PSIRT if psirt_failed else EXIT_GATE if gate_enforced else 0
 
 
-def outcome(code: int, report: dict[str, Any]) -> tuple[bool, bool]:
-    """(gate enforced, PSIRT hand-off failed) of a finished review, from its exit code and its report.json: the report's
-    gate_enforced when it records one (the exit code cannot say, since EXIT_PSIRT outranks EXIT_GATE), else
-    code == EXIT_GATE."""
+class FinishedReview(NamedTuple):
+    """What a finished review's exit code and report.json say about it beside its reports."""
+
+    gate_enforced: bool
+    psirt_failed: bool
+
+
+def outcome(code: int, report: dict[str, Any]) -> FinishedReview:
+    """Whether a finished review's gate was enforced and its PSIRT hand-off failed, from its exit code and its
+    report.json: the report's gate_enforced when it records one (the exit code cannot say, since EXIT_PSIRT outranks
+    EXIT_GATE), else code == EXIT_GATE."""
     recorded = report.get("gate_enforced")
-    return (recorded if isinstance(recorded, bool) else code == EXIT_GATE), code == EXIT_PSIRT
+    return FinishedReview(gate_enforced=recorded if isinstance(recorded, bool) else code == EXIT_GATE, psirt_failed=code == EXIT_PSIRT)
 
 
 @dataclass(frozen=True)
@@ -127,7 +135,7 @@ class ReviewInvocation:
 
     target: Path
     config: Path
-    provider: str
+    provider: ProviderMode
     out: Path
     sarif_dir: Path | None = None
     mock_fixtures: Path | None = None

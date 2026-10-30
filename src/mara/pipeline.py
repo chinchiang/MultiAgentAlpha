@@ -19,7 +19,7 @@ from .audit import Audit, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
 from .identity import NEAR_LINES, norm_path
-from .invocation import check_provider_mode
+from .invocation import ProviderMode, check_provider_mode
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
@@ -206,7 +206,7 @@ class Pipeline:
                 self.audit[f"human_decisions_not_usable[{why}]"] = n
 
     # ------------------------------------------------------------------ run
-    def run(self, target: str | Path, *, sarif_dir: Path | None = None, provider_mode: str = "live",
+    def run(self, target: str | Path, *, sarif_dir: Path | None = None, provider_mode: ProviderMode = ProviderMode.live,
             base_ref: str | None = None, calibration_sample: bool = False, psirt_event: dict | None = None,
             fail_on_gate: bool = False) -> ReviewReport:
         # the providers it will call, not the config's models: tests replace self.providers after Pipeline(cfg)
@@ -264,7 +264,7 @@ class Pipeline:
         prog.done("bundle", f"{len(ctx.content)} file(s) in the bundle, {len(ctx.omitted)} omitted, {len(ctx.excluded)} excluded")
         return ctx
 
-    def _tools(self, target: Path, sarif_dir: Path | None, provider_mode: str,
+    def _tools(self, target: Path, sarif_dir: Path | None, provider_mode: ProviderMode,
                answer_key: list[dict] | None) -> tuple[ToolEvidence, SecretPreflight]:
         prog = self.progress
         prog.begin("tools")

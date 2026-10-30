@@ -17,6 +17,7 @@ from .tools.sarif import ToolResult
 
 if TYPE_CHECKING:
     from .config import MaraConfig, RolloutPhase
+    from .invocation import ProviderMode
 
 
 @dataclass(frozen=True)
@@ -42,7 +43,7 @@ class SecretPreflight:
     unexplained: tuple[ToolResult, ...] = ()  # every other secret found
 
 
-def secret_preflight(provider_mode: str, secret_runs: list[ToolRun], answer_key: list[dict] | None) -> SecretPreflight:
+def secret_preflight(provider_mode: ProviderMode, secret_runs: list[ToolRun], answer_key: list[dict] | None) -> SecretPreflight:
     """Live source egress is blocked before any provider sees data when the trusted local secret scan (gitleaks) is
     missing, did not run, or found a secret. Calibration only (`answer_key`, mara.pipeline.calibration_answer_key): a
     seeded secret the sample's answer key declares at the same file and line is expected and does not block; anything
