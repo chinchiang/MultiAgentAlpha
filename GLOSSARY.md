@@ -161,7 +161,7 @@ _Avoid_: tool match, confirmation (a judge's vote is not corroboration)
 ## Reviews
 
 **Review invocation**:
-One call of `mara review`: the target, the config, the provider mode, the output directory and the options it is given, the usage errors it can meet, and what it leaves, the reports in its output directory and an exit code. The command line, the pipeline and the workbench share one definition of it, so a usage error reads the same wherever it is met.
+One call of `mara review`: the target, the config, the provider mode, the output directory and the options it is given, the usage errors it can meet, and what it leaves, the reports in its output directory and an exit code. The command line, the pipeline and the workbench share one definition of it, so a usage error's message is worded once: the command line shows it on the option at fault, the workbench after its code's label, at times with the config file's name before it or cut short.
 _Avoid_: launch (the workbench's request that becomes one), arguments, command line (the invocation is the same from the workbench)
 
 **Usage error**:
