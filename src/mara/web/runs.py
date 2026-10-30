@@ -1,13 +1,14 @@
 """Runs of the workbench (GLOSSARY.md: run, progress record, workbench; docs/adr/0006-local-web-workbench.md): one
 `mara review` subprocess per run, one directory per run under `<out>/runs/<run-id>/`.
 
-A launch is validated here exactly as the command line validates it (paths resolved, `workspace.check_outside`
-with the config, output, evidence and progress paths, the config loaded under policies P1-P8, the provider mode
-matching the config) so a browser gets a clear refusal instead of a failed run, and the subprocess repeats every
-check anyway. `run.json` is the record of a run: the request as given, the argv, the roles and models of the
-config at launch (the config file may change later, and the report keeps only the provider manifest), status
-and exit code. The exit code alone is ambiguous (2 is a usage error and an enforced gate alike), so a run counts
-as finished only when its progress record says the reports were written.
+A launch is checked first for what only the workbench asks (a target directory, a config `configs` allows, evidence
+inputs inside the workspace, a git ref for `--base`), then with the command line's own checks (GLOSSARY.md: Review
+invocation): `invocation.check_paths` (the config, output and evidence paths outside the target) and `invocation.load`
+(the config loaded under policies P1-P8, the provider mode matching its models). A browser gets a clear refusal
+instead of a failed run, and the subprocess repeats every check anyway. `run.json` is the record of a run: the request
+as given, the argv, the roles and models of the config at launch (the config file may change later, and the report
+keeps only the provider manifest), status and exit code. The exit code alone is ambiguous (2 is a usage error and an
+enforced gate alike), so a run counts as finished only when its progress record says the reports were written.
 
 The config is one `configs` allows, the configs the page lists (`configs.allowed`); `resolve_config` and
 `resolve_path` turn a request's value into it, and a check_config job resolves its config with them too.
@@ -21,6 +22,7 @@ reads the config and the workspace, and reads and writes the files under `<out>/
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import sys
 import threading
@@ -33,12 +35,11 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import progress as progress_mod
+from ..invocation import REVIEW_ARTIFACTS, InvocationError, ReviewInvocation, argv, check_paths, default_config, load, outcome
 from ..schemas import ReviewReport
-from ..workspace import WorkspaceInsideTarget, check_outside
 from . import admission, configs, procs, views
 
-ARTIFACTS = ("report.md", "report.json", "report.sarif", "human_queue.md", "human_queue.json", "context.json",
-             "psirt-notifications.json", "pipeline.log", "run.log", "progress.json")
+ARTIFACTS = (*REVIEW_ARTIFACTS, "run.log")
 IMPORTED_ID = "workspace-out"  # a review written by `mara review` into <workspace>/out, shown read-only
 BASE_REF_RE = re.compile(r"^[A-Za-z0-9._/@^~{}-]{1,200}$")
 STATUSES = ("running", "finished", "failed", "cancelled", "interrupted")
@@ -89,7 +90,7 @@ def resolve_config(workspace: Path, value: str, provider: str) -> Path:
     if value:
         cfg_path = resolve_path(workspace, value)
     else:
-        cfg_path = (workspace / "config" / ("mara.mock.yaml" if provider == "mock" else "mara.yaml")).resolve()
+        cfg_path = default_config(provider, workspace).resolve()
     if not configs.allowed(workspace, cfg_path):
         raise LaunchError("config_not_found", f"{value or cfg_path}: not a config file under config/ or config/examples/")
     return cfg_path
@@ -109,10 +110,9 @@ class RunRegistry:
     def _inside_workspace(self, p: Path) -> bool:
         return p == self.workspace or self.workspace in p.parents
 
-    def prepare(self, req: LaunchRequest) -> tuple[list[str], dict[str, Any]]:
-        """argv and the manifest fields of a valid request; LaunchError otherwise."""
-        from ..config import load_config
-
+    def prepare(self, req: LaunchRequest) -> tuple[ReviewInvocation, dict[str, Any]]:
+        """The review invocation (its output directory the runs directory, until create gives the run its own) and the
+        manifest fields of a valid request; LaunchError otherwise."""
         target = resolve_path(self.workspace, req.target)
         if not target.is_dir():
             raise LaunchError("target_not_dir", f"{target}: not a directory")
@@ -131,18 +131,11 @@ class RunRegistry:
         if base and (base.startswith("-") or not BASE_REF_RE.match(base)):
             raise LaunchError("bad_base_ref", f"{base!r}: not a git ref")
         try:
-            check_outside(target, {f"the config file {cfg_path}": cfg_path, f"the output directory {self.runs_dir}": self.runs_dir,
-                                   **{f"{flag} {p}": p for flag, p in dirs.items()}})
-        except WorkspaceInsideTarget as e:
-            raise LaunchError("inside_target", str(e)) from e
-        try:
-            cfg = load_config(cfg_path)
-        except Exception as e:  # pydantic, YAML or policy refusal: the CLI would refuse the same file
-            raise LaunchError("config_invalid", " ".join(str(e).split())[:800]) from e
-        kinds = {m.provider for m in cfg.models}
-        if (req.provider == "mock") != (kinds == {"mock"}) or (req.provider == "live" and "mock" in kinds):
-            raise LaunchError("provider_mismatch", f"{cfg_path.name} has {sorted(kinds)} providers; provider {req.provider} needs "
-                              + ("only mock models" if req.provider == "mock" else "no mock model"))
+            check_paths(target, cfg_path, self.runs_dir, dirs)
+            cfg = load(cfg_path, req.provider)
+        except InvocationError as e:  # the command line would refuse the same launch, on e.param
+            message = {"provider_mismatch": f"{cfg_path.name}: {e}", "config_invalid": str(e)[:800]}.get(e.kind, str(e))
+            raise LaunchError(e.kind, message) from e
         models = [{"name": m.name, "family": m.family.value, "provider": m.provider, "model": m.model, "data_residency": m.data_residency,
                    "region": m.region, "api_key_env": m.api_key_env, "endpoint_host": urlparse(m.base_url).hostname if m.base_url else None}
                   for m in cfg.models]
@@ -158,23 +151,17 @@ class RunRegistry:
             "gate": {"min_dimension_score": cfg.gate.min_dimension_score, "block_on_tiers": list(cfg.gate.block_on_tiers),
                      "block_on_severity": list(cfg.gate.block_on_severity), "accept_threshold": cfg.gate.accept_threshold},
         }
-        argv = [sys.executable, "-m", "mara.cli", "review", str(target), "--provider", req.provider, "--config", str(cfg_path)]
-        for flag, p in dirs.items():
-            argv += [flag, str(p)]
-        if base:
-            argv.append(f"--base={base}")  # one argument: the ref can never be read as an option
-        if req.fail_on_gate:
-            argv.append("--fail-on-gate")
-        if req.calibration_sample:
-            argv.append("--calibration-sample")
-        return argv, fields
+        inv = ReviewInvocation(target=target, config=cfg_path, provider=req.provider, out=self.runs_dir,
+                               sarif_dir=dirs.get("--sarif-dir"), mock_fixtures=dirs.get("--mock-fixtures"),
+                               fail_on_gate=req.fail_on_gate, base=base or None, calibration_sample=req.calibration_sample)
+        return inv, fields
 
     # ------------------------------------------------------------------ lifecycle
     def busy(self) -> bool:
         return self.children.any_running()
 
     def create(self, req: LaunchRequest) -> dict[str, Any]:
-        argv, fields = self.prepare(req)
+        inv, fields = self.prepare(req)
         with self.children.held():  # the lock of every registry's children: the check and the start are one step
             if self.children.table.closed:  # the server exit took the children: before anything is written
                 raise LaunchError("stopping", "the server is stopping: no review or job is started", status=503)
@@ -183,13 +170,14 @@ class RunRegistry:
             run_id = procs.new_id()
             run_dir = self.runs_dir / run_id
             run_dir.mkdir(parents=True)
-            argv = [*argv, "--out", str(run_dir), "--progress-file", str(run_dir / "progress.json")]
+            inv = dataclasses.replace(inv, out=run_dir, progress_file=run_dir / "progress.json")
+            args = [sys.executable, "-m", "mara.cli", *argv(inv)]
             manifest: dict[str, Any] = {
                 "id": run_id,
                 "title": clean_title(req.title) or Path(fields["target"]).name,
                 **fields,
                 "request": req.model_dump(),
-                "argv": argv,
+                "argv": args,
                 "status": "running",
                 "started_at": procs.now(),
                 "finished_at": None,
@@ -200,7 +188,7 @@ class RunRegistry:
             }
             procs.write_json(run_dir / "run.json", manifest)
             try:
-                pid = self.children.start(run_id, argv, cwd=self.workspace, log_path=run_dir / "run.log",
+                pid = self.children.start(run_id, args, cwd=self.workspace, log_path=run_dir / "run.log",
                                           env=procs.child_env(self.workspace), tag="run")
             except OSError as e:
                 manifest.update(status="failed", finished_at=procs.now(), error=type(e).__name__)
@@ -218,8 +206,8 @@ class RunRegistry:
         status = "cancelled" if stopped else "finished" if finished else "failed"
         if not finished:
             progress_mod.close_abandoned(run_dir / "progress.json", "cancelled" if status == "cancelled" else f"exit {code}")
-        manifest.update(status=status, exit_code=code, finished_at=procs.now(),
-                        gate_enforced=finished and _gate_enforced(run_dir, code), psirt_failed=finished and code == 3)
+        gate_enforced, psirt_failed = outcome(code, procs.read_json(run_dir / "report.json") or {}) if finished else (False, False)
+        manifest.update(status=status, exit_code=code, finished_at=procs.now(), gate_enforced=gate_enforced, psirt_failed=psirt_failed)
         procs.write_json(run_dir / "run.json", manifest)
 
     def cancel(self, run_id: str) -> dict[str, Any]:
@@ -332,12 +320,3 @@ class RunRegistry:
             return None
         p = d / name
         return p if p.is_file() else None
-
-
-def _gate_enforced(run_dir: Path, code: int) -> bool:
-    """Whether the finished review enforced its gate, as its report records it (docs/adr/0007-review-status-and-gate.md):
-    the exit code cannot say, since a failed PSIRT hand-off's 3 outranks the gate's 2. Only a report written before the
-    field leaves the exit code to go by."""
-    report = procs.read_json(run_dir / "report.json") or {}
-    recorded = report.get("gate_enforced")
-    return recorded if isinstance(recorded, bool) else code == 2

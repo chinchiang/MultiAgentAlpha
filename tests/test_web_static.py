@@ -52,8 +52,10 @@ def _enumerations() -> dict[str, set[str]]:
 
     src = ROOT / "src" / "mara"
     web = "".join(p.read_text(encoding="utf-8") for p in (src / "web").glob("*.py"))
+    # a refused review invocation reaches the page as LaunchError(e.kind, ...): its kinds are the workbench's codes too
+    kinds = set(re.findall(r'kind="([a-z_]+)"', (src / "invocation.py").read_text(encoding="utf-8")))
     errors = (set(re.findall(r'LaunchError\(\s*"([a-z_]+)"', web)) | set(re.findall(r'_error\([^,]+,\s*"([a-z_]+)"', web))
-              | {"network", "target_required"})
+              | kinds | {"network", "target_required"})
     return {
         "dimension.": set(DIMENSIONS),
         "stage.": set(progress.STAGES),

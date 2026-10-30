@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-from enum import StrEnum
 from pathlib import Path
 from typing import cast
 
@@ -11,7 +10,8 @@ from rich.console import Console
 from rich.table import Table
 from typer.core import TyperGroup
 
-from .config import MaraConfig, load_config
+from .config import MaraConfig
+from .invocation import InvocationError, ProviderMode, check_paths, default_config, exit_code, load
 from .pipeline import Pipeline
 from .progress import Progress
 from .report.markdown_out import enforcement_wording, write_markdown
@@ -21,13 +21,6 @@ from .schemas import DIMENSION_LABELS, ReviewReport
 app = typer.Typer(add_completion=False,
                   help="MARA - Multi-Agent Review Architecture. `mara` alone starts the local web workbench, as `mara serve` does.")
 console = Console()
-
-
-class ProviderMode(StrEnum):
-    """`mara review --provider`: any other value is a usage error on --provider, before the config is read."""
-
-    live = "live"
-    mock = "mock"
 
 
 @app.callback(invoke_without_command=True)
@@ -63,15 +56,12 @@ def review(
                                               help="Write the review's live progress (stages, log lines) to this JSON file; `mara serve` reads it"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
-    from .workspace import WorkspaceInsideTarget, check_outside, resolve
+    from .workspace import resolve, root
 
     # The defaults are MARA's own files, so they resolve against the workspace (MARA_HOME, else the working
     # directory) like every other trust anchor: with MARA_HOME set and the job running inside the target,
     # a relative default would let the reviewed repository supply the config (models, endpoints, gate).
-    cfg_path = config
-    if cfg_path is None:
-        mock_cfg = resolve("config/mara.mock.yaml")
-        cfg_path = mock_cfg if provider == "mock" and mock_cfg.exists() else resolve("config/mara.yaml")
+    cfg_path = config if config is not None else default_config(provider.value, root())
     out = out if out is not None else resolve("out")
     try:
         # before the config is even read; the pipeline repeats the workspace, tool and trivy checks
@@ -79,13 +69,9 @@ def review(
         # starts legal clocks: from inside the target, the reviewed repository would supply its own verdict
         # the progress file is an output: inside the target it would be bundled into the next review
         inputs = {"--sarif-dir": sarif_dir, "--mock-fixtures": mock_fixtures, "--psirt-event": psirt_event, "--progress-file": progress_file}
-        check_outside(target, {f"the config file {cfg_path}": cfg_path, f"the output directory {out}": out,
-                               **{f"{flag} {p}": p for flag, p in inputs.items() if p is not None}})
-    except WorkspaceInsideTarget as e:
-        raise typer.BadParameter(str(e), param_hint="TARGET") from e
-    if not cfg_path.is_file():
-        raise typer.BadParameter(f"config file not found: {cfg_path} (run from the MARA workspace, set MARA_HOME or pass --config)",
-                                 param_hint="--config")
+        check_paths(target, cfg_path, out, {flag: p for flag, p in inputs.items() if p is not None})
+    except InvocationError as e:
+        raise typer.BadParameter(str(e), param_hint=e.param) from e
     progress = Progress(progress_file)  # a no-op without --progress-file
     try:
         report, cfg, psirt_failed = _review(target, cfg_path, provider.value, out, sarif_dir, mock_fixtures, fail_on_gate, notify_psirt,
@@ -99,12 +85,11 @@ def review(
     # never a green run, and its 3 outranks an enforced gate's 2. The reports are written either way.
     # G-10: whether a blocked gate is enforced (the blocking phase, or --fail-on-gate) was decided by mara.review_status
     # and recorded in report.json; the gate's message says which, and the exit code the command ends with
+    code = exit_code(psirt_failed, bool(report.gate_enforced))
     if psirt_failed:
-        code, why = 3, ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else "")
-    elif report.gate_enforced:
-        code, why = 2, ""
+        why = ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else "")
     else:
-        code, why = 0, ", G-10"
+        why = "" if report.gate_enforced else ", G-10"
     if not report.gate_passed:
         console.print(f"rollout phase [bold]{cfg.rollout.phase}[/bold]: the gate blocked: "
                       f"{enforcement_wording(bool(report.gate_enforced))} (exit {code}{why})")
@@ -120,11 +105,10 @@ def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: P
     """Load the config, run the review and write every report; returns (report, config, PSIRT send failed)."""
     from .workspace import WorkspaceInsideTarget, resolve
 
-    cfg = load_config(cfg_path)
-    if provider == "mock" and any(m.provider != "mock" for m in cfg.models):
-        raise typer.BadParameter("--provider mock requires a config whose models all use provider: mock", param_hint="--provider")
-    if provider == "live" and any(m.provider == "mock" for m in cfg.models):
-        raise typer.BadParameter("--provider live requires a config with no mock model", param_hint="--provider")
+    try:
+        cfg = load(cfg_path, provider)
+    except InvocationError as e:
+        raise typer.BadParameter(str(e), param_hint=e.param) from e
     pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out, progress=progress)
     event = None
     if psirt_event:
