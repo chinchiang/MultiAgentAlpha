@@ -1,30 +1,32 @@
 focused: [tests/test_cli_provider_mode.py]
+# the mode checks are mutated in invocation.load, the command line's call of check_mode, never in check_mode or
+# config_mode: Pipeline.run calls those too, and a mutant without both checks runs a live review on a live config
 mutations:
   - name: --provider a plain string again
     file: src/mara/cli.py
     old: '    provider: ProviderMode = typer.Option(ProviderMode.live, "--provider"),'
     new: '    provider: str = typer.Option("live", "--provider"),'
   - name: a third provider mode accepted
-    file: src/mara/cli.py
+    file: src/mara/invocation.py
     old: "    live = \"live\"\n    mock = \"mock\"\n"
     new: "    live = \"live\"\n    mock = \"mock\"\n    foo = \"foo\"\n"
   - name: the live check removed
-    file: src/mara/cli.py
-    old: '    if provider == "live" and any(m.provider == "mock" for m in cfg.models):'
-    new: '    if False:'
+    file: src/mara/invocation.py
+    old: '    check_mode((m.provider for m in cfg.models), mode)'
+    new: '    check_mode((m.provider for m in cfg.models), mode) if mode != "live" else None'
   - name: the live check without its hint
     file: src/mara/cli.py
-    old: 'no mock model", param_hint="--provider")'
-    new: 'no mock model")'
+    old: "        cfg = load(cfg_path, provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=e.param) from e\n"
+    new: "        cfg = load(cfg_path, provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=None if provider == \"live\" else e.param) from e\n"
   - name: the mock check removed
-    file: src/mara/cli.py
-    old: '    if provider == "mock" and any(m.provider != "mock" for m in cfg.models):'
-    new: '    if False:'
+    file: src/mara/invocation.py
+    old: '    check_mode((m.provider for m in cfg.models), mode)'
+    new: '    check_mode((m.provider for m in cfg.models), mode) if mode != "mock" else None'
   - name: the mock check without its hint
     file: src/mara/cli.py
-    old: 'all use provider: mock", param_hint="--provider")'
-    new: 'all use provider: mock")'
+    old: "        cfg = load(cfg_path, provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=e.param) from e\n"
+    new: "        cfg = load(cfg_path, provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=None if provider == \"mock\" else e.param) from e\n"
   - name: the live check refuses only an all-mock config
-    file: src/mara/cli.py
-    old: '    if provider == "live" and any(m.provider == "mock" for m in cfg.models):'
-    new: '    if provider == "live" and all(m.provider == "mock" for m in cfg.models):'
+    file: src/mara/invocation.py
+    old: '    check_mode((m.provider for m in cfg.models), mode)'
+    new: '    check_mode((m.provider for m in cfg.models), mode) if mode != "live" or all(m.provider == "mock" for m in cfg.models) else None'

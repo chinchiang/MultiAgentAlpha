@@ -1,0 +1,30 @@
+focused: [tests/test_invocation.py, tests/test_cli_provider_mode.py]
+# the mode check is mutated in invocation.load, never in check_mode or config_mode: Pipeline.run calls those too,
+# and a mutant without both checks runs a live review on a live config (tests/mutations/cli-provider-mode.yaml).
+# argv's --base=<ref> as one argument has no mutation: click takes the token after --base as its value whatever it is,
+# so two arguments parse the same
+mutations:
+  - name: drop the mixed refusal
+    file: src/mara/invocation.py
+    old: '    check_mode((m.provider for m in cfg.models), mode)'
+    new: '    check_mode((m.provider for m in cfg.models), mode) if config_mode(m.provider for m in cfg.models) != "mixed" else None'
+  - name: argv drops --fail-on-gate
+    file: src/mara/invocation.py
+    old: '    flags = (("--fail-on-gate", inv.fail_on_gate), ("--notify-psirt", inv.notify_psirt),'
+    new: '    flags = (("--notify-psirt", inv.notify_psirt),'
+  - name: 3 and 2 swapped
+    file: src/mara/invocation.py
+    old: '    return EXIT_PSIRT if psirt_failed else EXIT_GATE if gate_enforced else 0'
+    new: '    return EXIT_GATE if gate_enforced else EXIT_PSIRT if psirt_failed else 0'
+  - name: the old-report fallback removed
+    file: src/mara/invocation.py
+    old: '    return (recorded if isinstance(recorded, bool) else code == EXIT_GATE), code == EXIT_PSIRT'
+    new: '    return recorded is True, code == EXIT_PSIRT'
+  - name: the default-config fallback restored
+    file: src/mara/invocation.py
+    old: '    return root / "config" / ("mara.mock.yaml" if mode == "mock" else "mara.yaml")'
+    new: '    return root / "config" / ("mara.mock.yaml" if mode == "mock" and (root / "config" / "mara.mock.yaml").exists() else "mara.yaml")'
+  - name: an invalid config back to exit 1
+    file: src/mara/invocation.py
+    old: '    except (OSError, ValueError, yaml.YAMLError) as e:'
+    new: '    except OSError as e:'

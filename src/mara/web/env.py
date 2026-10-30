@@ -31,6 +31,7 @@ import yaml
 
 from .. import __version__
 from ..config import MaraConfig, ModelSpec
+from ..invocation import config_mode
 from ..policy import evaluate_policies
 from ..tools import trivy_db
 from ..tools.csp_eval import node_exe
@@ -186,11 +187,10 @@ def configs(workspace: Path) -> list[dict[str, Any]]:
             out.append(entry)
             continue
         results = evaluate_policies(cfg)
-        kinds = {m.provider for m in cfg.models}
         entry.update(
             structure_ok=True,
             loadable=all(r.passed for r in results),
-            provider_mode="mock" if kinds == {"mock"} else "live" if "mock" not in kinds else "mixed",
+            provider_mode=config_mode(m.provider for m in cfg.models),
             policies=[{"id": r.id, "name": r.name, "passed": r.passed, "reason": r.reason} for r in results],
             roles={"context": cfg.roles.context, "reviewers": list(cfg.roles.reviewers), "skeptic": cfg.roles.skeptic,
                    "redteam": cfg.roles.redteam, "judges": list(cfg.roles.judges)},

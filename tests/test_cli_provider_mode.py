@@ -30,7 +30,7 @@ def test_provider_live_with_mock_models_is_a_usage_error_on_provider(tmp_path):
     assert res.exit_code == 2, res.output
     assert isinstance(res.exception, SystemExit), res.exception
     out = plain(res.output)
-    assert "Invalid value for --provider: --provider live requires a config with no mock model" in out, out
+    assert "Invalid value for --provider: the models' providers are ['mock']; --provider live needs no mock model" in out, out
     assert not (tmp_path / "out" / "report.json").exists()
 
 
@@ -40,7 +40,7 @@ def test_provider_mismatch_is_not_reported_as_a_broken_base(tmp_path):
     assert res.exit_code == 2, res.output
     assert isinstance(res.exception, SystemExit), res.exception
     out = plain(res.output)
-    assert "Invalid value for --provider: --provider live requires a config with no mock model" in out, out
+    assert "Invalid value for --provider: the models' providers are ['mock']; --provider live needs no mock model" in out, out
     assert "--base" not in out, out
 
 
@@ -54,7 +54,8 @@ def test_provider_live_with_a_mock_model_among_live_ones_is_a_usage_error_on_pro
     assert res.exit_code == 2, res.output
     assert isinstance(res.exception, SystemExit), res.exception
     out = plain(res.output)
-    assert "Invalid value for --provider: --provider live requires a config with no mock model" in out, out
+    assert ("Invalid value for --provider: the models' providers are ['mock', 'openai_compatible']; --provider live needs no mock model"
+            in out), out
 
 
 def test_provider_mock_with_live_models_is_a_usage_error_on_provider(tmp_path):
@@ -62,7 +63,8 @@ def test_provider_mock_with_live_models_is_a_usage_error_on_provider(tmp_path):
     assert res.exit_code == 2, res.output
     assert isinstance(res.exception, SystemExit), res.exception
     out = plain(res.output)
-    assert "Invalid value for --provider: --provider mock requires a config whose models all use provider: mock" in out, out
+    assert ("Invalid value for --provider: the models' providers are ['bedrock', 'gemini', 'openai_compatible']; --provider mock needs "
+            "only mock models" in out), out
 
 
 def test_provider_neither_live_nor_mock_is_a_usage_error_on_provider(tmp_path):

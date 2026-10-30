@@ -160,12 +160,16 @@ _Avoid_: tool match, confirmation (a judge's vote is not corroboration)
 
 ## Reviews
 
+**Review invocation**:
+One call of `mara review`: the target, the config, the provider mode, the output directory and the options it is given, the refusals it can meet before the review starts, and what it leaves, the reports in its output directory and an exit code. The command line, the pipeline and the workbench share one definition of it, so a refusal reads the same wherever it is met.
+_Avoid_: launch (the workbench's request that becomes one), arguments, command line (the invocation is the same from the workbench)
+
 **Review scope**:
 What one review covered: the whole target (full) or the files changed against a base together with the modules related to them (incremental); unknown for a report written before reviews recorded their scope. Scores of reviews with different scopes cannot be compared.
 _Avoid_: mode (the provider mode is a different thing), diff review
 
 **Provider mode**:
-Whether a review's models are mock providers, which replay canned answers and ask no model, or live providers, which send each exchange to a real model; every model the config names must be of the review's provider mode, and the report records it. A mock review scores seeded material, so its score summary is exported only on explicit request.
+Whether a review's models are mock providers, which replay canned answers and ask no model, or live providers, which send each exchange to a real model; every model the config names must be of the review's provider mode, and the report records it. A config whose models mix both is mixed, and no review runs on it, whichever mode is asked. A mock review scores seeded material, so its score summary is exported only on explicit request.
 _Avoid_: mode alone (the review scope is a different thing)
 
 **Review facts**:
@@ -221,7 +225,7 @@ The read-only copy of the workbench page on GitHub Pages (docs/workbench/, å”¯è®
 _Avoid_: online workbench, hosted workbench (there is none: the workbench runs only on a loopback address)
 
 **Run**:
-One `mara review` subprocess the workbench started, with its own output directory holding the request, the argv, the roles and models of the config at launch, the child's output and every report it wrote. A run is finished only when its progress record says the reports were written; its exit code alone cannot tell a blocked gate from a usage error.
+One `mara review` subprocess the workbench started for one review invocation, with its own output directory holding the request, the argv, the roles and models of the config at launch, the child's output and every report it wrote. A run is finished only when its progress record says the reports were written; its exit code alone cannot tell a blocked gate from a usage error.
 _Avoid_: job (a job is an environment task such as installing the tools), review (the review is what the run performs)
 
 **Progress record**:

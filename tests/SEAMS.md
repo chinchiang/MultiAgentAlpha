@@ -11,10 +11,10 @@ server takes from socketserver, is defined nowhere in it: write it bare, not aft
 
 ## Patch a name where it is looked up
 
-`mara.cli` imports `load_config` by name (`from .config import MaraConfig, load_config`), so a test patches it in the
-module that calls it: `cli.load_config`. A patch of `mara.config.load_config` leaves the cli's own reference in place,
-so the test reads the real config: it fails for another reason, or passes without testing what it names. When a module
-changes between importing a name (`from .config import load_config`) and calling it through its module
+`mara.invocation` imports `load_config` by name (`from .config import load_config`), so a test patches it in the module
+that calls it: `invocation.load_config`. A patch of `mara.config.load_config` leaves the invocation's own reference in
+place, so the test reads the real config: it fails for another reason, or passes without testing what it names. When a
+module changes between importing a name (`from .config import load_config`) and calling it through its module
 (`config.load_config(...)`), the patches of that name move with it. A patch of a class attribute (`cli.Pipeline.run`)
 changes the class itself, the same object wherever it is imported.
 
@@ -48,8 +48,10 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   `test_governance_leftovers.py`, `test_security_regressions.py`.
 - `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]`. `cli._review` builds
   `Pipeline(cfg, out_dir=..., ...)`, the config positional and the rest keywords. `test_security_regressions.py`.
-- `cli.load_config`, `cli.console`: patched as module names. `cli._review` calls `load_config(...)`, and output goes
-  through the module's `console`. `test_security_regressions.py`, `test_policy.py`.
+- `invocation.load_config`: patched as a module name. `cli._review` calls `invocation.load(...)`, which calls
+  `load_config(...)`; `review` calls `check_paths` first, so a config inside the target is never read.
+  `test_security_regressions.py`.
+- `cli.console`: patched as a module name; output goes through the module's `console`. `test_policy.py`.
 
 ## The agents: the Provider seam (`src/mara/providers/base.py`)
 

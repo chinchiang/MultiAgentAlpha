@@ -1,6 +1,7 @@
 """Adversarial regressions from the 2026-09-18 review; no live providers or attack traffic."""
 import dataclasses
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,7 @@ from mara.agents import base, judge
 from mara.config import ModelSpec, load_config
 from mara.context.repo_map import RepoContext, build_context
 from mara.human_queue import build_queue, queue_key
+from mara.invocation import InvocationError
 from mara.pipeline import Pipeline
 from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 from mara.report.markdown_out import render_markdown
@@ -498,7 +500,7 @@ def test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_i
 
     from typer.testing import CliRunner
 
-    from mara import cli
+    from mara import cli, invocation
 
     def words(text):
         # The refusal is the precise WorkspaceInsideTarget text ("the config file … lies inside the review
@@ -528,7 +530,7 @@ def test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_i
         seen["config"] = Path(path)
         raise Stop
 
-    monkeypatch.setattr(cli, "load_config", fake_load)
+    monkeypatch.setattr(invocation, "load_config", fake_load)
     res = CliRunner().invoke(cli.app, ["review", str(target), "--provider", "mock"])
     assert isinstance(res.exception, Stop), res.output
     assert seen["config"] == home / "config" / "mara.mock.yaml", "the default config is the workspace's, not the target's"
@@ -546,7 +548,7 @@ def test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_i
         assert res.exit_code == 2 and words(what) in said and words("lies inside the review target") in said, (args, res.output)
         assert not seen, "refused before the config is read"
     # the default output directory is in the workspace too
-    monkeypatch.setattr(cli, "load_config", load_config)
+    monkeypatch.setattr(invocation, "load_config", load_config)
     monkeypatch.setattr(cli.Pipeline, "run", lambda self, *a, **k: (_ for _ in ()).throw(Stop()))
     seen_out = {}
     real_init = cli.Pipeline.__init__
@@ -670,7 +672,7 @@ def test_live_secret_preflight_stops_all_provider_requests(tmp_path):
 
 
 def test_mock_cannot_be_labelled_live(tmp_path):
-    with pytest.raises(ValueError, match="provider mode"):
+    with pytest.raises(InvocationError, match=re.escape("the models' providers are ['mock']; --provider live needs no mock model")):
         pipeline(tmp_path).run(tmp_path, mode="live")
 
 

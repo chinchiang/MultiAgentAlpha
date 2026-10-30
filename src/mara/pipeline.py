@@ -19,6 +19,7 @@ from .audit import Audit, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
 from .identity import NEAR_LINES, norm_path
+from .invocation import check_mode
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
@@ -208,10 +209,8 @@ class Pipeline:
     def run(self, target: str | Path, *, sarif_dir: Path | None = None, mode: str = "live",
             base_ref: str | None = None, calibration_sample: bool = False, psirt_event: dict | None = None,
             fail_on_gate: bool = False) -> ReviewReport:
-        actual_modes = {p.spec.provider for p in self.providers.values()}
-        actual_mode = "mock" if actual_modes == {"mock"} else "live"
-        if mode not in {"mock", "live"} or actual_mode != mode or (mode == "live" and "mock" in actual_modes):
-            raise ValueError("provider mode does not match the actual provider configuration")
+        # the providers it will call, not the config's models: tests replace self.providers after Pipeline(cfg)
+        check_mode({p.spec.provider for p in self.providers.values()}, mode)
         target = Path(target).resolve()
         # before anything runs: the tools come from, and P8/the backlog were read from, the MARA
         # workspace; none of it may be supplied by the repository under review
