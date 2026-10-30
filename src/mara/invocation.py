@@ -1,6 +1,6 @@
-"""The review invocation (GLOSSARY.md: Review invocation, Provider mode): what one call of `mara review` takes and what
-it leaves, for the command line, the pipeline and the workbench alike (docs/adr/0006-local-web-workbench.md,
-docs/adr/0007-review-status-and-gate.md).
+"""The review invocation (GLOSSARY.md: Review invocation, Usage error, Provider mode): what one call of `mara review`
+takes and what it leaves, for the command line, the pipeline and the workbench alike
+(docs/adr/0006-local-web-workbench.md, docs/adr/0007-review-status-and-gate.md).
 
 A config's models classify as mock, live or mixed by their providers, and a review runs only in the provider mode its
 models have: a mixed config runs in neither. Once its reports are written, a review exits EXIT_PSIRT when an internal
@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 
 
 class InvocationError(ValueError):
-    """A refused review invocation: `param` is the option (or TARGET) at fault, as the command line's usage error names
-    it; `kind` is the workbench's refusal code for it."""
+    """A review invocation's usage error: `param` is the option (or TARGET) at fault, as the command line names it;
+    `kind` is the workbench's code for it."""
 
     def __init__(self, message: str, *, param: str, kind: str) -> None:
         super().__init__(message)
