@@ -141,7 +141,7 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path):
     # a note for every finding, the first one's preconditions a shell command
     Panel.seated_in(pipe).always("redteam", items(lambda i: {"exploitable": "conditional",
                                                              "preconditions": "$ curl http://target/x" if i == "F-0001" else "none"}))
-    report = pipe.run(tmp_path, mode="mock")
+    report = pipe.run(tmp_path, provider_mode="mock")
     assert report.bias_audit["redteam_exploit_code_stripped"] == 1
     assert "redteam_exploit_code_stripped" in report.incomplete_reasons
     assert not report.gate_passed and report.review_status == "incomplete"

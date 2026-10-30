@@ -55,5 +55,5 @@ def mock_report(root, tmp_path_factory):
     cfg = load_config(root / "config" / "mara.mock.yaml")
     out = tmp_path_factory.mktemp("out")
     pipe = Pipeline(cfg, mock_fixtures=str(root / "fixtures" / "mock-responses"), out_dir=out)
-    report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     return pipe, report

@@ -235,7 +235,7 @@ def test_fail_on_gate_given_to_the_review_is_recorded_as_an_enforced_gate(root, 
 
     pipe = Pipeline(load_config(root / "config" / "mara.mock.yaml"), mock_fixtures=str(root / "fixtures" / "mock-responses"),
                     out_dir=tmp_path)
-    report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", mode="mock",
+    report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", provider_mode="mock",
                       fail_on_gate=True)
     assert not report.gate_passed and report.gate_enforced is True
 
@@ -301,7 +301,7 @@ def test_the_pipeline_writes_the_tier_c_blocks_assess_counts_into_the_audit(root
         return replace(reply, structured={"items": votes})
 
     Panel.seated_in(pipe).always("judge", f_0050_true_positive)
-    report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     row = next(c for c in report.consensus if c.finding_id == "F-0050")
     assert (row.tier.value, row.cvss4_severity, row.jury_outcome) == ("C", "Low", "accepted")
     assert row.blocking_reason == "tier_c_while_tightened" and "tier_c_while_tightened" in report.gate_reasons

@@ -19,7 +19,7 @@ from .audit import Audit, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
 from .identity import NEAR_LINES, norm_path
-from .invocation import check_mode
+from .invocation import check_provider_mode
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
@@ -206,11 +206,11 @@ class Pipeline:
                 self.audit[f"human_decisions_not_usable[{why}]"] = n
 
     # ------------------------------------------------------------------ run
-    def run(self, target: str | Path, *, sarif_dir: Path | None = None, mode: str = "live",
+    def run(self, target: str | Path, *, sarif_dir: Path | None = None, provider_mode: str = "live",
             base_ref: str | None = None, calibration_sample: bool = False, psirt_event: dict | None = None,
             fail_on_gate: bool = False) -> ReviewReport:
         # the providers it will call, not the config's models: tests replace self.providers after Pipeline(cfg)
-        check_mode({p.spec.provider for p in self.providers.values()}, mode)
+        check_provider_mode({p.spec.provider for p in self.providers.values()}, provider_mode)
         target = Path(target).resolve()
         # before anything runs: the tools come from, and P8/the backlog were read from, the MARA
         # workspace; none of it may be supplied by the repository under review
@@ -218,7 +218,7 @@ class Pipeline:
         answer_key = calibration_answer_key(target) if calibration_sample else None
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = self._bundle(target, base_ref)
-        tools, egress = self._tools(target, sarif_dir, mode, answer_key)
+        tools, egress = self._tools(target, sarif_dir, provider_mode, answer_key)
         context_view = self._context(ctx, egress)
         reviewed = self._reviewers(ctx, context_view, egress)
         ballots = ballot_round.run(ctx, reviewed.findings, reviewed.finders, cfg=self.cfg, providers=self.providers, audit=self.audit,
@@ -226,7 +226,7 @@ class Pipeline:
         stages = self._score(ctx, tools, egress, context_view, reviewed, ballots, base_ref)
         assessment, signature = self._assess(stages, fail_on_gate)
         self.progress.begin("report")
-        report = assemble(stages, assessment, self._metadata(signature), cfg=self.cfg, target=target, mode=mode,
+        report = assemble(stages, assessment, self._metadata(signature), cfg=self.cfg, target=target, provider_mode=provider_mode,
                           generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
                           provider_manifest=self._provider_manifest(),
                           bias_audit={**self.audit, "exchange_version": exchange.EXCHANGE_VERSION}, psirt_event=psirt_event)
@@ -264,7 +264,7 @@ class Pipeline:
         prog.done("bundle", f"{len(ctx.content)} file(s) in the bundle, {len(ctx.omitted)} omitted, {len(ctx.excluded)} excluded")
         return ctx
 
-    def _tools(self, target: Path, sarif_dir: Path | None, mode: str,
+    def _tools(self, target: Path, sarif_dir: Path | None, provider_mode: str,
                answer_key: list[dict] | None) -> tuple[ToolEvidence, SecretPreflight]:
         prog = self.progress
         prog.begin("tools")
@@ -275,14 +275,14 @@ class Pipeline:
             tool_runs = self._run_tools(target, self.out_dir / "tools")
             for r in tool_runs:
                 self._say(f"L0: {r.tool}: {'ran' if r.ran else 'skipped'} {r.note} ({len(r.results)} results)")
-        if mode == "live" and sarif_dir:
+        if provider_mode == "live" and sarif_dir:
             # Pre-recorded SARIF cannot authorize egress from the current working tree.
             preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])
             tool_runs = [r for r in tool_runs if r.tool != "gitleaks"] + preflight
         tools = ToolEvidence(runs=tool_runs)
         # Live source egress is blocked before any provider sees data if the trusted local
         # secret scan is unavailable or reports secrets (mara.review_status). The masked manifest remains reviewable.
-        egress = secret_preflight(mode, tools.runs_of("gitleaks"), answer_key)
+        egress = secret_preflight(provider_mode, tools.runs_of("gitleaks"), answer_key)
         if answer_key is not None and (egress.exempted or egress.unexplained):
             self.audit["secret_preflight_calibration_exempted"] = len(egress.exempted)
             self._say(f"L0: secret preflight: {len(egress.exempted)} seeded secret(s) declared by the calibration answer key, "

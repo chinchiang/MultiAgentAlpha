@@ -18,7 +18,7 @@ def test_label_driven_mock_and_calibrate(root, tmp_path):
     sample = root / "calib" / "samples" / "s1-fastapi-inventory"
     out = tmp_path / "calib-out" / sample.name
     pipe = Pipeline(cfg, out_dir=out)
-    report = pipe.run(sample, mode="mock")
+    report = pipe.run(sample, provider_mode="mock")
     labels = json.loads((sample / "labels.json").read_text())["labels"]
     assert report.findings, "label-driven mock produced no findings"
     assert all(f.finder_families for f in report.findings)

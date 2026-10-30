@@ -58,7 +58,7 @@ def _event(t0):
 def shipped_report(tmp_path_factory):
     cfg = _mock_cfg()
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path_factory.mktemp("out"))
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     # PSIRT transport tests consume synthetic adjudicated results. The pipeline's independent
     # quorum failures are covered by test_pipeline_mock and must not be bypassed in production.
     _adjudicate_for_psirt_test(report, cfg)
@@ -366,7 +366,7 @@ def _review_with_a_failed_hand_off(monkeypatch, tmp_path, *flags: str):
     monkeypatch.setenv("MARA_HOME", str(home))
     first = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                      out_dir=home / "first").run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif",
-                                                 mode="mock")
+                                                 provider_mode="mock")
     decide(home, next(i for i in first.human_queue if i.finding_id == "F-0002"), "true_positive")
     raw = yaml.safe_load((ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8"))
     raw["psirt"] = PSIRT
@@ -505,7 +505,7 @@ def test_psirt_ops_cli_dry_run_status_record_and_close(tmp_path, monkeypatch):
     cfg = _mock_cfg()
     t0 = dt.datetime(2026, 9, 14, 0, 0, tzinfo=dt.UTC)
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     _adjudicate_for_psirt_test(report, cfg)
     ledger = pl.load_ledger(tmp_path / "ledger.json")
     payloads = build_notifications(report, cfg, now=t0, event=_event(t0))

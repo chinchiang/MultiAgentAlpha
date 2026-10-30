@@ -34,7 +34,7 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   two calls: `test_tool_evidence.py::test_a_review_takes_its_tool_runs_from_the_runner_it_is_given`,
   `test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress`.
 - `Pipeline.providers`: the dict, or its items, replaced after `Pipeline(cfg)` and before `run()`. `Pipeline.run`
-  reads them when it runs (the mode check, binding the target, the ballot round, the provider manifest); nothing built
+  reads them when it runs (the provider mode check, binding the target, the ballot round, the provider manifest); nothing built
   in `Pipeline.__init__` holds them. `fake_panel.py`, `test_exchange.py`, `test_audit.py`,
   `test_redteam_strip.py`, `test_security_regressions.py`.
 - `Pipeline.dedupe`: called on the class, a static method. `test_core_review_fixes_8_13.py`.
@@ -44,7 +44,7 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
 ## The CLI's pipeline (`src/mara/cli.py`)
 
 - `cli.Pipeline.run`: replaced by `run(self, target, **kw)`, which records `kw` and stops. `cli._review` calls it as
-  `run(target, sarif_dir=..., mode=..., ...)`, the target positional and every option a keyword.
+  `run(target, sarif_dir=..., provider_mode=..., ...)`, the target positional and every option a keyword.
   `test_governance_leftovers.py`, `test_security_regressions.py`.
 - `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]`. `cli._review` builds
   `Pipeline(cfg, out_dir=..., ...)`, the config positional and the rest keywords. `test_security_regressions.py`.

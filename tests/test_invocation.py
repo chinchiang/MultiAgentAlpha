@@ -12,31 +12,31 @@ from typer.testing import CliRunner
 
 from mara import progress
 from mara.cli import app
-from mara.invocation import REVIEW_ARTIFACTS, InvocationError, ReviewInvocation, argv, check_mode, config_mode, exit_code, outcome
+from mara.invocation import REVIEW_ARTIFACTS, InvocationError, ReviewInvocation, argv, check_provider_mode, config_provider_mode, exit_code, outcome
 from tests import cli_output
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize(("kinds", "mode"), [({"mock"}, "mock"), ({"bedrock"}, "live"), ({"mock", "bedrock"}, "mixed")])
-def test_a_configs_models_classify_as_mock_live_or_mixed(kinds, mode):
-    assert config_mode(kinds) == mode
+@pytest.mark.parametrize(("kinds", "provider_mode"), [({"mock"}, "mock"), ({"bedrock"}, "live"), ({"mock", "bedrock"}, "mixed")])
+def test_a_configs_models_classify_as_mock_live_or_mixed(kinds, provider_mode):
+    assert config_provider_mode(kinds) == provider_mode
 
 
-@pytest.mark.parametrize(("kinds", "mode"), [({"mock"}, "mock"), ({"bedrock"}, "live")])
-def test_a_review_runs_in_the_provider_mode_its_models_have(kinds, mode):
-    check_mode(kinds, mode)
+@pytest.mark.parametrize(("kinds", "provider_mode"), [({"mock"}, "mock"), ({"bedrock"}, "live")])
+def test_a_review_runs_in_the_provider_mode_its_models_have(kinds, provider_mode):
+    check_provider_mode(kinds, provider_mode)
 
 
-@pytest.mark.parametrize(("kinds", "mode", "message"), [
+@pytest.mark.parametrize(("kinds", "provider_mode", "message"), [
     ({"mock"}, "live", "the models' providers are ['mock']; --provider live needs no mock model"),
     ({"bedrock"}, "mock", "the models' providers are ['bedrock']; --provider mock needs only mock models"),
     ({"mock", "bedrock"}, "live", "the models' providers are ['bedrock', 'mock']; --provider live needs no mock model"),
     ({"mock", "bedrock"}, "mock", "the models' providers are ['bedrock', 'mock']; --provider mock needs only mock models"),
 ])
-def test_any_other_provider_mode_is_refused_on_provider(kinds, mode, message):
+def test_any_other_provider_mode_is_refused_on_provider(kinds, provider_mode, message):
     with pytest.raises(InvocationError) as e:
-        check_mode(kinds, mode)
+        check_provider_mode(kinds, provider_mode)
     assert (e.value.kind, e.value.param, str(e.value)) == ("provider_mismatch", "--provider", message)
 
 
@@ -135,13 +135,13 @@ def duplicate_model_names(tmp_path: Path) -> Path:
     return cfg
 
 
-@pytest.mark.parametrize(("config", "mode", "reason"), [
+@pytest.mark.parametrize(("config", "provider_mode", "reason"), [
     (lambda tmp_path: ROOT / "config" / "examples" / "violating.yaml", "live", "configurationviolatespolicy:"),
     (duplicate_model_names, "mock", "modelnamesmustbeunique"),
 ], ids=["policy", "structure"])
-def test_a_config_that_fails_validation_is_a_usage_error_on_config_with_a_failed_progress_record(tmp_path, config, mode, reason):
+def test_a_config_that_fails_validation_is_a_usage_error_on_config_with_a_failed_progress_record(tmp_path, config, provider_mode, reason):
     out = tmp_path / "out"
-    res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", mode, "--config", str(config(tmp_path)),
+    res = CliRunner().invoke(app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", provider_mode, "--config", str(config(tmp_path)),
                                    "--out", str(out), "--progress-file", str(out / "progress.json")],
                              env={"MARA_HOME": str(ROOT)})
     said = squashed(res.output)

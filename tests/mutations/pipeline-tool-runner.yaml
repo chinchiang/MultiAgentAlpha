@@ -14,11 +14,11 @@ mutations:
     new: 'preflight = self._run_tools(target, self.out_dir / "live-secret-preflight")'
   - name: no secret preflight in live mode with pre-recorded SARIF
     file: src/mara/pipeline.py
-    old: 'if mode == "live" and sarif_dir:'
+    old: 'if provider_mode == "live" and sarif_dir:'
     new: 'if False:'
   - name: the secret preflight in mock mode too
     file: src/mara/pipeline.py
-    old: 'if mode == "live" and sarif_dir:'
+    old: 'if provider_mode == "live" and sarif_dir:'
     new: 'if sarif_dir:'
   - name: the pre-recorded gitleaks kept beside the live one
     file: src/mara/pipeline.py

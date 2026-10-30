@@ -54,7 +54,7 @@ def test_every_exchange_plants_a_canary_of_its_own(tmp_path):
     pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path / "out")
     panel = Panel.seated_in(pipe)
-    pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     planted = [ex for ex in panel.exchanges if ex.role != "judge"]
     assert len(panel.asked("reviewer")) > 1 and panel.asked("context") and panel.asked("skeptic") and panel.asked("redteam") and panel.asked("judge")
     tokens = [ex.canary_token for ex in planted]

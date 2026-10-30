@@ -55,7 +55,7 @@ def _assembled(tmp_path: Path, *, base_ref: str | None = None, psirt_event: dict
     stages = _stages(tmp_path, base_ref)
     assessment = assess(FACTS, stages.scoring.rows, stages.tools.results, stages.dimensions, scored_rows.policy(),
                         GatePolicy.from_config(scored_rows.MOCK))
-    return assemble(stages, assessment, METADATA, cfg=scored_rows.MOCK, target=tmp_path, mode="mock",
+    return assemble(stages, assessment, METADATA, cfg=scored_rows.MOCK, target=tmp_path, provider_mode="mock",
                     generated_at="2026-10-17T00:00:00+00:00", provider_manifest=MANIFEST, bias_audit={"skeptic_calls": 1},
                     psirt_event=psirt_event)
 

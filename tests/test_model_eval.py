@@ -206,7 +206,7 @@ def test_calibration_penalty_front_matter_and_live_guard(tmp_path, monkeypatch):
     no_sarif = tmp_path / "no-sarif"
     no_sarif.mkdir()
     report = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), out_dir=out).run(
-        ROOT / "calib" / "samples" / "s1-fastapi-inventory", sarif_dir=no_sarif, mode="mock")
+        ROOT / "calib" / "samples" / "s1-fastapi-inventory", sarif_dir=no_sarif, provider_mode="mock")
     out.joinpath("report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "calibrate.py"), "--mode", "live", "--out-dir", str(tmp_path / "calib-out"),
                         "--report", str(tmp_path / "c.md")], capture_output=True, text=True)
@@ -264,7 +264,7 @@ def test_governance_g8_g9_fail_here_and_pass_on_live_reports(tmp_path):
 def test_pipeline_records_model_eval_status(tmp_path, monkeypatch):
     cfg = load_config(ROOT / "config" / "mara.mock.yaml")
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     assert report.model_eval == {} and "## Model red-team evaluation" in render_markdown(report)
     assert me.family_eval_status(ROOT, ["deepseek"]) == {"deepseek": {"date": None, "mode": None, "status": "none"}}
 

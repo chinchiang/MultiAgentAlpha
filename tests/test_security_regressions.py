@@ -135,7 +135,7 @@ def test_prerecorded_secret_scan_cannot_authorize_live_egress(tmp_path):
     (sarif_dir / "gitleaks.sarif").write_text(json.dumps({"runs": [{"tool": {"driver": {"name": "gitleaks"}}, "results": []}]}))
     for name, provider in list(pipe.providers.items()):
         pipe.providers[name] = Reply(provider.spec.model_copy(update={"provider": "openai_compatible"}))
-    report = pipe.run(tmp_path, mode="live", sarif_dir=sarif_dir)
+    report = pipe.run(tmp_path, provider_mode="live", sarif_dir=sarif_dir)
     assert calls == [(tmp_path.resolve(), tmp_path / "out" / "live-secret-preflight", ["gitleaks"])]
     gitleaks = [t for t in report.tool_health if t["tool"] == "gitleaks"]
     assert gitleaks == [{"tool": "gitleaks", "ran": False, "note": "not installed"}], "the live scan replaces the pre-recorded one"
@@ -269,7 +269,7 @@ def test_an_empty_ballot_never_passes_silently(tmp_path, role, counter):
     cfg = load_config(ROOT / "config/mara.mock.yaml")
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
     pipe.providers = {n: _OverrideRole(p, role, {"items": []}) for n, p in pipe.providers.items()}
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     assert report.bias_audit[counter] > 0 and counter in report.incomplete_reasons and not report.gate_passed
     if role == "skeptic":
         assert report.bias_audit[counter] == len(report.findings), "one missing verdict per unchallenged finding"
@@ -304,7 +304,7 @@ def test_l3_agents_carry_a_canary_and_an_echo_voids_their_verdicts(tmp_path, rol
     cfg = load_config(ROOT / "config/mara.mock.yaml")
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
     pipe.providers = {n: _EchoRole(p, role, {"items": []}) for n, p in pipe.providers.items()}
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     key = f"{role}_canary_echoes"
     assert report.bias_audit[key] > 0 and key in report.incomplete_reasons and not report.gate_passed
     assert report.bias_audit[f"{role}_invalid_items"] == 0, "an echo is counted as an echo, not as invalid output"
@@ -356,7 +356,7 @@ def test_all_refusals_and_tool_only_findings_block_with_no_score(tmp_path):
     pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun("semgrep", True, [tool])])
     pipe.providers = {n: Reply(p.spec) for n, p in pipe.providers.items()}
     (tmp_path / "app.py").write_text("unsafe()")
-    report = pipe.run(tmp_path, mode="mock")
+    report = pipe.run(tmp_path, provider_mode="mock")
     assert not report.gate_passed and report.overall_score is None and report.review_status == "incomplete"
     assert len(report.tool_results) == 1 and report.tool_results[0]["rule_id"] == "sql"
     assert report.bias_audit["reviewer_refusals"] == 33
@@ -371,7 +371,7 @@ def test_truncated_reviewer_replies_block_the_gate(tmp_path):
     pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     pipe.providers = {n: Truncated(p.spec) for n, p in pipe.providers.items()}
     (tmp_path / "app.py").write_text("unsafe()")
-    report = pipe.run(tmp_path, mode="mock")
+    report = pipe.run(tmp_path, provider_mode="mock")
     assert report.bias_audit["reviewer_truncations"] == 33 and report.bias_audit["reviewer_refusals"] == 0
     assert not report.gate_passed and report.overall_score is None and report.review_status == "incomplete"
     assert "reviewer_truncations" in report.incomplete_reasons
@@ -412,7 +412,7 @@ def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path):
     pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     (tmp_path / "app.py").write_text("unsafe()")
     Panel.seated_in(pipe).always("skeptic", REFUSAL)
-    report = pipe.run(tmp_path, mode="mock")
+    report = pipe.run(tmp_path, provider_mode="mock")
     assert report.bias_audit["skeptic_refusals"] == report.bias_audit["skeptic_calls"] >= 1
     assert report.bias_audit["skeptic_invalid_items"] == 0
     assert "skeptic_refusals" in report.incomplete_reasons and not report.gate_passed
@@ -424,7 +424,7 @@ def test_judge_refusal_is_counted_separately_from_invalid_output(tmp_path):
     pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     (tmp_path / "app.py").write_text("unsafe()")
     Panel.seated_in(pipe).always("judge", REFUSAL)
-    report = pipe.run(tmp_path, mode="mock")
+    report = pipe.run(tmp_path, provider_mode="mock")
     # every judge call refused: 3 families x 2 chunks (30 findings, MAX_PASS_FINDINGS per pass) x 2 passes
     assert report.bias_audit["judge_refusals"] == report.bias_audit["judge_calls"] == 12
     assert report.bias_audit["judge_invalid_items"] == 0
@@ -619,7 +619,7 @@ def test_live_egress_with_the_exemption_passes_only_declared_secrets(tmp_path, m
             results.append(ToolResult("gitleaks", "aws-access-token", "error", "secret", "app.py", 1, "CWE-798"))
         pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun("gitleaks", True, results)])
         pipe.providers = {n: Reply(p.spec, {"findings": []}) for n, p in pipe.providers.items()}
-        report = pipe.run(sample, mode="mock", calibration_sample=True)
+        report = pipe.run(sample, provider_mode="mock", calibration_sample=True)
         return pipe, report
 
     pipe, report = run(extra_secret=False)
@@ -666,20 +666,20 @@ def test_live_secret_preflight_stops_all_provider_requests(tmp_path):
     pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun("gitleaks", False)])
     pipe.providers = {n: Reply(p.spec.model_copy(update={"provider": "anthropic"})) for n, p in pipe.providers.items()}
     (tmp_path / "app.py").write_text("unsafe()")
-    report = pipe.run(tmp_path, mode="live")
+    report = pipe.run(tmp_path, provider_mode="live")
     assert not report.gate_passed and not any(p.requests for p in pipe.providers.values())
     assert "source_egress_blocked_by_secret_preflight" in report.incomplete_reasons
 
 
 def test_mock_cannot_be_labelled_live(tmp_path):
     with pytest.raises(InvocationError, match=re.escape("the models' providers are ['mock']; --provider live needs no mock model")):
-        pipeline(tmp_path).run(tmp_path, mode="live")
+        pipeline(tmp_path).run(tmp_path, provider_mode="live")
 
 
 def test_nonempty_model_bom_does_not_crash_completed_report(tmp_path):
     pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [])
     pipe.ml_bom_status = {"selfhosted": SimpleNamespace(model_id="example", status="pending", component_name="x", component_version="1", digest="")}
-    report = pipe.run(tmp_path, mode="mock")
+    report = pipe.run(tmp_path, provider_mode="mock")
     assert report.ml_bom["selfhosted"].status == "pending"
     assert any("ML-BOM" in line for line in pipe.log)
 
@@ -713,7 +713,7 @@ def test_provider_errors_block_the_gate_and_are_not_counted_as_refusals(tmp_path
     pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     pipe.providers = {n: Failing(p.spec) for n, p in pipe.providers.items()}
     (tmp_path / "app.py").write_text("unsafe()")
-    report = pipe.run(tmp_path, mode="mock")
+    report = pipe.run(tmp_path, provider_mode="mock")
     assert report.bias_audit["reviewer_errors"] == 33 and report.bias_audit["reviewer_refusals"] == 0
     assert not report.gate_passed and report.overall_score is None and "reviewer_errors" in report.incomplete_reasons
     import calibrate

@@ -42,25 +42,26 @@ class ProviderMode(StrEnum):
     mock = "mock"
 
 
-def config_mode(kinds: Iterable[str]) -> Literal["mock", "live", "mixed"]:
+def config_provider_mode(kinds: Iterable[str]) -> Literal["mock", "live", "mixed"]:
     """mock when every provider kind is mock, live when none is, mixed otherwise."""
     kinds = set(kinds)
     return "mock" if kinds == {"mock"} else "live" if "mock" not in kinds else "mixed"
 
 
-def check_mode(kinds: Iterable[str], mode: str) -> None:
-    """Nothing when the provider kinds classify as `mode`; InvocationError provider_mismatch on --provider otherwise."""
+def check_provider_mode(kinds: Iterable[str], provider_mode: str) -> None:
+    """Nothing when the provider kinds classify as `provider_mode`; InvocationError provider_mismatch on --provider
+    otherwise."""
     kinds = set(kinds)
-    if config_mode(kinds) != mode:
-        needs = "needs only mock models" if mode == "mock" else "needs no mock model"
-        raise InvocationError(f"the models' providers are {sorted(kinds)}; --provider {mode} {needs}",
+    if config_provider_mode(kinds) != provider_mode:
+        needs = "needs only mock models" if provider_mode == "mock" else "needs no mock model"
+        raise InvocationError(f"the models' providers are {sorted(kinds)}; --provider {provider_mode} {needs}",
                               param="--provider", kind="provider_mismatch")
 
 
-def default_config(mode: str, root: Path) -> Path:
+def default_config(provider_mode: str, root: Path) -> Path:
     """The workspace `root`'s config for a review without --config: config/mara.mock.yaml for mock, config/mara.yaml
     otherwise, whether or not the file exists."""
-    return root / "config" / ("mara.mock.yaml" if mode == "mock" else "mara.yaml")
+    return root / "config" / ("mara.mock.yaml" if provider_mode == "mock" else "mara.yaml")
 
 
 def check_paths(target: Path, config: Path, out: Path, inputs: dict[str, Path]) -> None:
@@ -79,14 +80,15 @@ def check_paths(target: Path, config: Path, out: Path, inputs: dict[str, Path]) 
                               param="--config", kind="config_not_found")
 
 
-def load(config: Path, mode: str) -> MaraConfig:
-    """The config file `config`, validated (structure and policies), whose models' providers classify as `mode`.
-    InvocationError config_invalid on --config for a file load_config refuses, else check_mode's provider_mismatch."""
+def load(config: Path, provider_mode: str) -> MaraConfig:
+    """The config file `config`, validated (structure and policies), whose models' providers classify as
+    `provider_mode`. InvocationError config_invalid on --config for a file load_config refuses, else
+    check_provider_mode's provider_mismatch."""
     try:
         cfg = load_config(config)
     except (OSError, ValueError, yaml.YAMLError) as e:  # unreadable, or refused: pydantic's ValidationError is a ValueError
         raise InvocationError(" ".join(str(e).split()), param="--config", kind="config_invalid") from e
-    check_mode((m.provider for m in cfg.models), mode)
+    check_provider_mode((m.provider for m in cfg.models), provider_mode)
     return cfg
 
 

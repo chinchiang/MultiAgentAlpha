@@ -117,7 +117,7 @@ def test_a_review_takes_its_tool_runs_from_the_runner_it_is_given(tmp_path, sari
         return [ToolRun("semgrep", True, [], "from the runner")]
 
     pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=runner)
-    report = pipe.run(tmp_path, mode="mock", sarif_dir=sarif_dir)
+    report = pipe.run(tmp_path, provider_mode="mock", sarif_dir=sarif_dir)
     if sarif_dir is None:
         assert calls == [(tmp_path.resolve(), tmp_path / "out" / "tools", None)]
         assert report.tool_health == [{"tool": "semgrep", "ran": True, "note": "from the runner"}]
@@ -131,7 +131,7 @@ def test_a_review_reads_its_required_tools_and_each_dimension_s_tool_from_the_ev
 
     def review(runs):
         pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=lambda *_a, **_k: runs)
-        return pipe.run(tmp_path, mode="mock")
+        return pipe.run(tmp_path, provider_mode="mock")
 
     every = [ToolRun(t, True) for t in TOOL_DIMENSIONS]
     complete = review(every)

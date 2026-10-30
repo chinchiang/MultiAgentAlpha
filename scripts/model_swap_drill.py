@@ -77,7 +77,7 @@ def cmd_rehearse(a: argparse.Namespace) -> int:
     mock_cfg = MaraConfig.model_validate(__import__("yaml").safe_load(_mockify(a.standby).read_text(encoding="utf-8")))
     started = dt.datetime.now(dt.UTC)
     pipe = Pipeline(mock_cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=Path(tempfile.mkdtemp(prefix="mara-rehearsal-out-")))
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     same_dims = [d.dimension for d in report.dimensions] == list(prod.dimensions)
     # a standby without the L1 context seat silently drops the C4-lite view the production panel has
     same_context = bool(mock_cfg.roles.context) == bool(prod.roles.context)

@@ -1,13 +1,14 @@
 focused: [tests/test_invocation.py, tests/test_cli_provider_mode.py]
-# the mode check is mutated in invocation.load, never in check_mode or config_mode: Pipeline.run calls those too,
-# and a mutant without both checks runs a live review on a live config (tests/mutations/cli-provider-mode.yaml).
+# the provider mode check is mutated in invocation.load, never in check_provider_mode or config_provider_mode:
+# Pipeline.run calls those too, and a mutant without both checks runs a live review on a live config
+# (tests/mutations/cli-provider-mode.yaml).
 # argv's --base=<ref> as one argument has no mutation: click takes the token after --base as its value whatever it is,
 # so two arguments parse the same
 mutations:
   - name: drop the mixed refusal
     file: src/mara/invocation.py
-    old: '    check_mode((m.provider for m in cfg.models), mode)'
-    new: '    check_mode((m.provider for m in cfg.models), mode) if config_mode(m.provider for m in cfg.models) != "mixed" else None'
+    old: '    check_provider_mode((m.provider for m in cfg.models), provider_mode)'
+    new: '    check_provider_mode((m.provider for m in cfg.models), provider_mode) if config_provider_mode(m.provider for m in cfg.models) != "mixed" else None'
   - name: argv drops --fail-on-gate
     file: src/mara/invocation.py
     old: '    flags = (("--fail-on-gate", inv.fail_on_gate), ("--notify-psirt", inv.notify_psirt),'
@@ -22,8 +23,8 @@ mutations:
     new: '    return recorded is True, code == EXIT_PSIRT'
   - name: the default-config fallback restored
     file: src/mara/invocation.py
-    old: '    return root / "config" / ("mara.mock.yaml" if mode == "mock" else "mara.yaml")'
-    new: '    return root / "config" / ("mara.mock.yaml" if mode == "mock" and (root / "config" / "mara.mock.yaml").exists() else "mara.yaml")'
+    old: '    return root / "config" / ("mara.mock.yaml" if provider_mode == "mock" else "mara.yaml")'
+    new: '    return root / "config" / ("mara.mock.yaml" if provider_mode == "mock" and (root / "config" / "mara.mock.yaml").exists() else "mara.yaml")'
   - name: an invalid config back to exit 1
     file: src/mara/invocation.py
     old: '    except (OSError, ValueError, yaml.YAMLError) as e:'
