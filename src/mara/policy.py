@@ -315,14 +315,16 @@ def p8_unsupervised_reject(cfg: MaraConfig) -> PolicyResult:
             "unsupervised_reject_allowed is true but calib/latest.json is missing or unreadable; "
             "run scripts/calibrate.py --mode live first",
         )
-    aat = latest.get("aat") or {}
+    aat = latest.get("aat")
+    aat = aat if isinstance(aat, dict) else {}  # evidence of another shape records no passing test
     if latest.get("mode") != "live":
         return PolicyResult("P8", "unsupervised-reject", False,
                             f"the recorded test ran in mode {latest.get('mode')!r}, not live; a mock run can never justify unsupervised rejection")
     if aat.get("method") != AAT_METHOD:
         return PolicyResult("P8", "unsupervised-reject", False,
                             f"the recorded test uses method {aat.get('method')!r}, not {AAT_METHOD!r}; rerun scripts/calibrate.py --mode live")
-    if not aat.get("passed") or not (aat.get("rejection") or {}).get("passed"):
+    rejection = aat.get("rejection")
+    if not aat.get("passed") or not (isinstance(rejection, dict) and rejection.get("passed")):
         return PolicyResult("P8", "unsupervised-reject", False, "the recorded Alternative Annotator Test did not pass")
     try:
         when = dt.date.fromisoformat(str(latest.get("date")))

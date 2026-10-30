@@ -12,7 +12,17 @@ from typer.testing import CliRunner
 
 from mara import progress
 from mara.cli import app
-from mara.invocation import REVIEW_ARTIFACTS, InvocationError, ReviewInvocation, argv, check_provider_mode, config_provider_mode, exit_code, outcome
+from mara.invocation import (
+    REVIEW_ARTIFACTS,
+    InvocationError,
+    ReviewInvocation,
+    argv,
+    check_paths,
+    check_provider_mode,
+    config_provider_mode,
+    exit_code,
+    outcome,
+)
 from tests import cli_output
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +48,28 @@ def test_any_other_provider_mode_is_refused_on_provider(kinds, provider_mode, me
     with pytest.raises(InvocationError) as e:
         check_provider_mode(kinds, provider_mode)
     assert (e.value.kind, e.value.param, str(e.value)) == ("provider_mismatch", "--provider", message)
+
+
+@pytest.mark.parametrize(("kinds", "provider_mode"), [({"mock", "bedrock"}, "mixed"), ({"mock"}, "mixed"), ({"bedrock"}, "foo"), ({"mock"}, "")])
+def test_a_provider_mode_other_than_live_or_mock_is_refused_whatever_the_models(kinds, provider_mode):
+    # only Pipeline.run can be given one (the command line's enum and the workbench's Literal refuse it first); a mixed
+    # config run as "mixed" would send source to its live models with no secret preflight, which runs for "live" only
+    with pytest.raises(InvocationError) as e:
+        check_provider_mode(kinds, provider_mode)
+    assert (e.value.kind, e.value.param, str(e.value)) == (
+        "provider_mismatch", "--provider", f"--provider {provider_mode!r}: a review's provider mode is live or mock")
+
+
+@pytest.mark.parametrize(("provider_mode", "name"), [("mock", "mara.mock.yaml"), ("live", "mara.yaml")])
+def test_without_a_config_the_paths_are_checked_with_the_workspaces_default_for_the_provider_mode(tmp_path, provider_mode, name):
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / name).write_text("models: []\n", encoding="utf-8")
+    target = tmp_path / "target"
+    target.mkdir()
+    assert check_paths(target, None, tmp_path / "out", {}, provider_mode=provider_mode, root=tmp_path) == tmp_path / "config" / name
+    given = tmp_path / "given.yaml"
+    given.write_text("models: []\n", encoding="utf-8")
+    assert check_paths(target, given, tmp_path / "out", {}, provider_mode=provider_mode, root=tmp_path) == given
 
 
 @pytest.mark.parametrize(("psirt_failed", "gate_enforced", "code"), [(False, False, 0), (False, True, 2), (True, False, 3), (True, True, 3)])

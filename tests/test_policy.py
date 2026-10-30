@@ -396,6 +396,9 @@ def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkey
     # a result from the first, untagged AAT (fixed 0.5 baseline, rejections never examined) is no evidence
     bad(lambda ev: ev["aat"].pop("method"), "uses method None")
     bad(lambda ev: ev["aat"].pop("rejection"), "did not pass")
+    # evidence of the wrong shape is a failed policy, never an exception pydantic would not turn into a refusal
+    bad(lambda ev: ev.update(aat=["passed"]), "uses method None")
+    bad(lambda ev: ev["aat"].update(rejection="passed"), "did not pass")
     bad(lambda ev: ev.update(mode="mock"), "not live")
     bad(lambda ev: ev.update(date=(dt.date.today() - dt.timedelta(days=91)).isoformat()), "rerun the calibration")
     bad(lambda ev: ev.update(date=(dt.date.today() + dt.timedelta(days=1)).isoformat()), "in the future")

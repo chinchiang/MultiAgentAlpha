@@ -49,8 +49,12 @@ def config_provider_mode(kinds: Iterable[str]) -> Literal["mock", "live", "mixed
 
 
 def check_provider_mode(kinds: Iterable[str], provider_mode: str) -> None:
-    """Nothing when the provider kinds classify as `provider_mode`; InvocationError provider_mismatch on --provider
-    otherwise."""
+    """Nothing when `provider_mode` is live or mock and the provider kinds classify as it; InvocationError
+    provider_mismatch on --provider otherwise."""
+    if provider_mode not in tuple(ProviderMode):
+        # only Pipeline.run can be given one: "mixed" would otherwise pass for a mixed config
+        raise InvocationError(f"--provider {provider_mode!r}: a review's provider mode is live or mock",
+                              param="--provider", kind="provider_mismatch")
     kinds = set(kinds)
     if config_provider_mode(kinds) != provider_mode:
         needs = "needs only mock models" if provider_mode == "mock" else "needs no mock model"
@@ -64,12 +68,13 @@ def default_config(provider_mode: str, root: Path) -> Path:
     return root / "config" / ("mara.mock.yaml" if provider_mode == "mock" else "mara.yaml")
 
 
-def check_paths(target: Path, config: Path, out: Path, inputs: dict[str, Path]) -> None:
-    """Nothing when the config file, the output directory and `inputs` (each path by its option) lie outside `target`
-    and the config file exists; reads no config. InvocationError inside_target on TARGET, else config_not_found on
-    --config."""
+def check_paths(target: Path, config: Path | None, out: Path, inputs: dict[str, Path], *, provider_mode: str, root: Path) -> Path:
+    """The config file, `config` or else the workspace `root`'s default for `provider_mode`, when it, the output
+    directory and `inputs` (each path by its option) lie outside `target` and it exists; reads no config.
+    InvocationError inside_target on TARGET, else config_not_found on --config."""
     from .workspace import WorkspaceInsideTarget, check_outside
 
+    config = config if config is not None else default_config(provider_mode, root)
     try:
         check_outside(target, {f"the config file {config}": config, f"the output directory {out}": out,
                                **{f"{flag} {p}": p for flag, p in inputs.items()}})
@@ -78,6 +83,7 @@ def check_paths(target: Path, config: Path, out: Path, inputs: dict[str, Path]) 
     if not config.is_file():
         raise InvocationError(f"config file not found: {config} (run from the MARA workspace, set MARA_HOME or pass --config)",
                               param="--config", kind="config_not_found")
+    return config
 
 
 def load(config: Path, provider_mode: str) -> MaraConfig:

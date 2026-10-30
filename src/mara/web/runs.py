@@ -5,11 +5,11 @@ A launch is checked first for what only the workbench asks (a target directory, 
 inputs inside the workspace, a git ref for `--base`), then with the command line's own checks (GLOSSARY.md: Review
 invocation): `invocation.check_paths` (the config, output and evidence paths outside the target) and `invocation.load`
 (the config loaded under policies P1-P8, the provider mode matching its models). A browser is told why a launch is
-refused instead of seeing a failed run, and the subprocess repeats every check anyway. `run.json` is the record of a
-run: the request as given, the argv, the roles and models of the config at launch (the config file may change later,
-and the report keeps only the provider manifest), status and exit code. The exit code alone is ambiguous (2 is a usage
-error and an enforced gate alike), so a run counts as finished only when its progress record says the reports were
-written.
+refused instead of seeing a failed run, and the subprocess runs the command line's checks again. `run.json` is the
+record of a run: the request as given, the argv, the roles and models of the config at launch (the config file may
+change later, and the report keeps only the provider manifest), status and exit code. The exit code alone is ambiguous
+(2 is a usage error and an enforced gate alike), so a run counts as finished only when its progress record says the
+reports were written.
 
 The config is one `configs` allows, the configs the page lists (`configs.allowed`); `resolve_config` and
 `resolve_path` turn a request's value into it, and a check_config job resolves its config with them too.
@@ -132,7 +132,7 @@ class RunRegistry:
         if base and (base.startswith("-") or not BASE_REF_RE.match(base)):
             raise LaunchError("bad_base_ref", f"{base!r}: not a git ref")
         try:
-            check_paths(target, cfg_path, self.runs_dir, dirs)
+            check_paths(target, cfg_path, self.runs_dir, dirs, provider_mode=req.provider, root=self.workspace)
             cfg = load(cfg_path, req.provider)
         except InvocationError as e:  # the command line would refuse the same launch, on e.param
             message = {"provider_mismatch": f"{cfg_path.name}: {e}", "config_invalid": str(e)[:800]}.get(e.kind, str(e))
