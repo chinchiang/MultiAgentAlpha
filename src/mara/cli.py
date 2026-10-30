@@ -13,7 +13,7 @@ from rich.table import Table
 from typer.core import TyperGroup
 
 from .config import MaraConfig
-from .invocation import InvocationError, ProviderMode, check_paths, exit_code, load
+from .invocation import EXIT_GATE, EXIT_PSIRT, InvocationError, ProviderMode, ReviewInvocation, check_paths, exit_code, load
 from .pipeline import Pipeline
 from .progress import Progress
 from .report.markdown_out import enforcement_wording, write_markdown
@@ -73,18 +73,18 @@ def review(
     # directory) like every other trust anchor: with MARA_HOME set and the job running inside the target,
     # a relative default would let the reviewed repository supply the config (models, endpoints, gate).
     out = out if out is not None else resolve("out")
+    inv = ReviewInvocation(target=target, config=config, provider=provider, out=out, sarif_dir=sarif_dir, mock_fixtures=mock_fixtures,
+                           fail_on_gate=fail_on_gate, notify_psirt=notify_psirt, psirt_event=psirt_event, psirt_resend=psirt_resend,
+                           base=base, calibration_sample=calibration_sample, progress_file=progress_file)
     with _usage_errors():
         # before the config is even read; the pipeline repeats the workspace, tool and trivy checks
         # pre-recorded SARIF is tool evidence, mock fixtures are the models' answers and a PSIRT event
         # starts legal clocks: from inside the target, the reviewed repository would supply its own verdict
         # the progress file is an output: inside the target it would be bundled into the next review
-        inputs = {"--sarif-dir": sarif_dir, "--mock-fixtures": mock_fixtures, "--psirt-event": psirt_event, "--progress-file": progress_file}
-        cfg_path = check_paths(target, config, out, {flag: p for flag, p in inputs.items() if p is not None},
-                               provider_mode=provider, root=root())
+        cfg_path = check_paths(inv, root())
     progress = Progress(progress_file)  # a no-op without --progress-file
     try:
-        report, cfg, psirt_failed = _review(target, cfg_path, provider, out, sarif_dir, mock_fixtures, fail_on_gate, notify_psirt,
-                                            psirt_event, psirt_resend, base, calibration_sample, progress)
+        report, cfg, psirt_failed = _review(inv, cfg_path, progress)
     except BaseException as e:
         # the reports were not all written: the workbench must not read a usage error's exit 2 as a blocked gate
         progress.finish(ok=False, error=type(e).__name__)
@@ -95,10 +95,8 @@ def review(
     # G-10: whether a blocked gate is enforced (the blocking phase, or --fail-on-gate) was decided by mara.review_status
     # and recorded in report.json; the gate's message says which, and the exit code the command ends with
     code = exit_code(psirt_failed, bool(report.gate_enforced))
-    if psirt_failed:
-        why = ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else "")
-    else:
-        why = "" if report.gate_enforced else ", G-10"
+    why = {EXIT_PSIRT: ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else ""),
+           EXIT_GATE: ""}.get(code, ", G-10")
     if not report.gate_passed:
         console.print(f"rollout phase [bold]{cfg.rollout.phase}[/bold]: the gate blocked: "
                       f"{enforcement_wording(bool(report.gate_enforced))} (exit {code}{why})")
@@ -108,15 +106,15 @@ def review(
         raise typer.Exit(code=code)
 
 
-def _review(target: Path, cfg_path: Path, provider: ProviderMode, out: Path, sarif_dir: Path | None, mock_fixtures: Path | None,
-            fail_on_gate: bool, notify_psirt: bool, psirt_event: Path | None, psirt_resend: bool, base: str | None,
-            calibration_sample: bool, progress: Progress) -> tuple[ReviewReport, MaraConfig, bool]:
-    """Load the config, run the review and write every report; returns (report, config, PSIRT send failed)."""
+def _review(inv: ReviewInvocation, cfg_path: Path, progress: Progress) -> tuple[ReviewReport, MaraConfig, bool]:
+    """Load the config file `cfg_path`, run the review `inv` and write every report; returns (report, config, PSIRT send
+    failed)."""
     from .workspace import WorkspaceInsideTarget, resolve
 
+    target, out, psirt_event, base = inv.target, inv.out, inv.psirt_event, inv.base
     with _usage_errors():
-        cfg = load(cfg_path, provider)
-    pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out, progress=progress)
+        cfg = load(cfg_path, inv.provider)
+    pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress)
     event = None
     if psirt_event:
         # read before the review, and handed to it: the notifications are built once, and the report's psirt holds these
@@ -125,13 +123,13 @@ def _review(target: Path, cfg_path: Path, provider: ProviderMode, out: Path, sar
         except (OSError, ValueError) as e:
             raise typer.BadParameter(f"{psirt_event}: not a readable JSON event ({type(e).__name__})", param_hint="--psirt-event") from e
     try:
-        report = pipe.run(target, sarif_dir=sarif_dir, provider_mode=provider, base_ref=base, calibration_sample=calibration_sample,
-                          psirt_event=event, fail_on_gate=fail_on_gate)
+        report = pipe.run(target, sarif_dir=inv.sarif_dir, provider_mode=inv.provider, base_ref=base,
+                          calibration_sample=inv.calibration_sample, psirt_event=event, fail_on_gate=inv.fail_on_gate)
     except WorkspaceInsideTarget as e:
         raise typer.BadParameter(str(e), param_hint="TARGET") from e
     except ValueError as e:
         # a broken base ref or an ineligible calibration target is a usage error, not an empty review
-        if base is not None or calibration_sample:
+        if base is not None or inv.calibration_sample:
             raise typer.BadParameter(str(e), param_hint="--base" if base is not None else "--calibration-sample") from e
         raise
     out.mkdir(parents=True, exist_ok=True)
@@ -148,8 +146,8 @@ def _review(target: Path, cfg_path: Path, provider: ProviderMode, out: Path, sar
         from .report.psirt_out import send_psirt, write_psirt
 
         write_psirt(report.psirt, out / "psirt-notifications.json")
-        if notify_psirt and report.psirt:
-            for s in send_psirt(report.psirt, cfg, ledger_path=resolve(cfg.psirt.ledger_file), resend=psirt_resend):
+        if inv.notify_psirt and report.psirt:
+            for s in send_psirt(report.psirt, cfg, ledger_path=resolve(cfg.psirt.ledger_file), resend=inv.psirt_resend):
                 if s.get("skipped"):
                     console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: skipped, {s['reason']} (ledger {cfg.psirt.ledger_file})")
                 else:

@@ -1,6 +1,7 @@
 """The review invocation (GLOSSARY.md: Review invocation, Provider mode) through `mara.invocation`'s public functions:
 a config's models classify as mock, live or mixed, and a review runs only in the provider mode its models have."""
 
+import dataclasses
 import re
 import shutil
 from pathlib import Path
@@ -17,12 +18,12 @@ from mara.invocation import (
     FinishedReview,
     InvocationError,
     ReviewInvocation,
-    argv,
     check_paths,
     check_provider_mode,
     config_provider_mode,
     exit_code,
     outcome,
+    review_args,
 )
 from tests import cli_output
 
@@ -67,10 +68,11 @@ def test_without_a_config_the_paths_are_checked_with_the_workspaces_default_for_
     (tmp_path / "config" / name).write_text("models: []\n", encoding="utf-8")
     target = tmp_path / "target"
     target.mkdir()
-    assert check_paths(target, None, tmp_path / "out", {}, provider_mode=provider_mode, root=tmp_path) == tmp_path / "config" / name
+    inv = ReviewInvocation(target=target, config=None, provider=provider_mode, out=tmp_path / "out")
+    assert check_paths(inv, tmp_path) == tmp_path / "config" / name
     given = tmp_path / "given.yaml"
     given.write_text("models: []\n", encoding="utf-8")
-    assert check_paths(target, given, tmp_path / "out", {}, provider_mode=provider_mode, root=tmp_path) == given
+    assert check_paths(dataclasses.replace(inv, config=given), tmp_path) == given
 
 
 @pytest.mark.parametrize(("psirt_failed", "gate_enforced", "code"), [(False, False, 0), (False, True, 2), (True, False, 3), (True, True, 3)])
@@ -90,9 +92,9 @@ def test_a_finished_review_reads_back_as_whether_its_gate_was_enforced_and_its_p
 
 
 def parsed(inv: ReviewInvocation) -> dict:
-    """The parameters the real `mara review` command reads from `argv(inv)`, as it parses them (strings, before Typer
-    converts them)."""
-    args = argv(inv)
+    """The parameters the real `mara review` command reads from `review_args(inv)`, as it parses them (strings, before
+    Typer converts them)."""
+    args = review_args(inv)
     assert args[0] == "review"
     command = get_command(app).commands["review"]
     return command.make_context("review", args[1:]).params
@@ -112,9 +114,9 @@ def test_the_argv_of_an_invocation_with_every_option_is_read_back_by_mara_review
 
 
 def test_the_argv_of_an_invocation_with_no_option_set_is_read_back_with_every_default():
-    inv = ReviewInvocation(target=Path("/w/target"), config=Path("/w/config/mara.yaml"), provider="live", out=Path("/w/out"))
+    inv = ReviewInvocation(target=Path("/w/target"), config=None, provider="live", out=Path("/w/out"))
     assert parsed(inv) == {
-        "target": "/w/target", "config": "/w/config/mara.yaml", "provider": "live", "out": "/w/out", "sarif_dir": None,
+        "target": "/w/target", "config": None, "provider": "live", "out": "/w/out", "sarif_dir": None,
         "mock_fixtures": None, "fail_on_gate": False, "notify_psirt": False, "psirt_event": None, "psirt_resend": False,
         "base": None, "calibration_sample": False, "progress_file": None,
     }

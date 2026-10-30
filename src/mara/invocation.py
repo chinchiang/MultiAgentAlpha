@@ -68,17 +68,16 @@ def default_config(provider_mode: ProviderMode, root: Path) -> Path:
     return root / "config" / ("mara.mock.yaml" if provider_mode == "mock" else "mara.yaml")
 
 
-def check_paths(target: Path, config: Path | None, out: Path, inputs: dict[str, Path], *, provider_mode: ProviderMode,
-                root: Path) -> Path:
-    """The config file, `config` or else the workspace `root`'s default for `provider_mode`, when it, the output
-    directory and `inputs` (each path by its option) lie outside `target` and it exists; reads no config.
+def check_paths(inv: ReviewInvocation, root: Path) -> Path:
+    """The config file of `inv`, its config or else the workspace `root`'s default for its provider mode, when it, the
+    output directory and the path options that are set lie outside the target and it exists; reads no config.
     InvocationError inside_target on TARGET, else config_not_found on --config."""
     from .workspace import WorkspaceInsideTarget, check_outside
 
-    config = config if config is not None else default_config(provider_mode, root)
+    config = inv.config if inv.config is not None else default_config(inv.provider, root)
     try:
-        check_outside(target, {f"the config file {config}": config, f"the output directory {out}": out,
-                               **{f"{flag} {p}": p for flag, p in inputs.items()}})
+        check_outside(inv.target, {f"the config file {config}": config, f"the output directory {inv.out}": inv.out,
+                                   **{f"{flag} {p}": p for flag, p in path_options(inv).items()}})
     except WorkspaceInsideTarget as e:
         raise InvocationError(str(e), param="TARGET", kind="inside_target") from e
     if not config.is_file():
@@ -131,10 +130,11 @@ def outcome(code: int, report: dict[str, Any]) -> FinishedReview:
 
 @dataclass(frozen=True)
 class ReviewInvocation:
-    """One call of `mara review`: a field per option, named as the command names its parameters."""
+    """One call of `mara review`: a field per option, named as the command names its parameters, the option's flag
+    being the name with dashes (`option`); no config is the provider mode's default (check_paths)."""
 
     target: Path
-    config: Path
+    config: Path | None
     provider: ProviderMode
     out: Path
     sarif_dir: Path | None = None
@@ -148,14 +148,30 @@ class ReviewInvocation:
     progress_file: Path | None = None
 
 
-def argv(inv: ReviewInvocation) -> list[str]:
+# the options naming a file or directory other than the config and the output directory: evidence inputs, which the
+# reviewed repository must not supply, and the progress file, an output that would be bundled into the next review
+PATH_OPTIONS = ("sarif_dir", "mock_fixtures", "psirt_event", "progress_file")
+
+
+def option(field: str) -> str:
+    """The flag of ReviewInvocation's `field`: "sarif_dir" is --sarif-dir."""
+    return "--" + field.replace("_", "-")
+
+
+def path_options(inv: ReviewInvocation) -> dict[str, Path]:
+    """The path options of `inv` that are set, each by its flag, in PATH_OPTIONS' order."""
+    paths = {option(f): getattr(inv, f) for f in PATH_OPTIONS}
+    return {flag: p for flag, p in paths.items() if p is not None}
+
+
+def review_args(inv: ReviewInvocation) -> list[str]:
     """`mara review`'s arguments for `inv`, from "review" on: every option that is set, and none that is not."""
-    args = ["review", str(inv.target), "--provider", inv.provider, "--config", str(inv.config), "--out", str(inv.out)]
-    paths = (("--sarif-dir", inv.sarif_dir), ("--mock-fixtures", inv.mock_fixtures), ("--psirt-event", inv.psirt_event),
-             ("--progress-file", inv.progress_file))
-    for flag, p in paths:
-        if p is not None:
-            args += [flag, str(p)]
+    args = ["review", str(inv.target), "--provider", inv.provider]
+    if inv.config is not None:
+        args += ["--config", str(inv.config)]
+    args += ["--out", str(inv.out)]
+    for flag, p in path_options(inv).items():
+        args += [flag, str(p)]
     if inv.base is not None:
         args.append(f"--base={inv.base}")  # one argument: the ref can never be read as an option
     flags = (("--fail-on-gate", inv.fail_on_gate), ("--notify-psirt", inv.notify_psirt), ("--psirt-resend", inv.psirt_resend),
