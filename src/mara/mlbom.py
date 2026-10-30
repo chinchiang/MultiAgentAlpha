@@ -389,21 +389,28 @@ def build_bom(entries: list[ModelEntry], *, allow_pending: bool = False, timesta
 
 def load_bom(path: Path | str) -> dict:
     d = json.loads(Path(path).read_text(encoding="utf-8"))
-    if d.get("bomFormat") != "CycloneDX":
+    if not isinstance(d, dict) or d.get("bomFormat") != "CycloneDX":
         raise ValueError(f"{path}: not a CycloneDX BOM")
     return d
 
 
+def _objects(value: object) -> list[dict]:
+    """The objects of a JSON list; none when `value` is not a list. A BOM of another shape lists nothing, rather than
+    raising an exception pydantic would not turn into a refusal of the config (policy P7)."""
+    return [x for x in value if isinstance(x, dict)] if isinstance(value, list) else []
+
+
 def props(component: dict) -> dict[str, str]:
-    return {p["name"][len(PROP):]: str(p.get("value", "")) for p in component.get("properties", []) if str(p.get("name", "")).startswith(PROP)}
+    return {str(p["name"])[len(PROP):]: str(p.get("value", "")) for p in _objects(component.get("properties"))
+            if str(p.get("name", "")).startswith(PROP)}
 
 
 def ml_components(bom: dict) -> dict[str, dict]:
     """model_id -> machine-learning-model component (keyed by the mara:model-id property, else the name)."""
     out = {}
-    for c in bom.get("components", []):
+    for c in _objects(bom.get("components")):
         if c.get("type") == "machine-learning-model":
-            out[props(c).get("model-id") or c.get("name", "")] = c
+            out[props(c).get("model-id") or str(c.get("name", ""))] = c
     return out
 
 
@@ -413,16 +420,16 @@ def component_problems(c: dict) -> list[str]:
     problems = []
     if pr.get("status") == STATUS_PENDING:
         problems.append("status pending (weights not yet hashed)")
-    hashes = [h for h in c.get("hashes", []) if h.get("alg") == "SHA-256" and SHA256_RE.match(str(h.get("content", "")))]
+    hashes = [h for h in _objects(c.get("hashes")) if h.get("alg") == "SHA-256" and SHA256_RE.match(str(h.get("content", "")))]
     if not hashes:
         problems.append("no SHA-256 hash")
-    files = [x for x in c.get("components", []) if x.get("type") == "file"]
+    files = [x for x in _objects(c.get("components")) if x.get("type") == "file"]
     if hashes and not files:
         problems.append("no per-file hashes")
     for f in files:
-        if Path(f.get("name", "")).suffix.lower() in PICKLE_SUFFIXES:
+        if Path(str(f.get("name", ""))).suffix.lower() in PICKLE_SUFFIXES:
             problems.append(f"pickle-based file listed: {f.get('name')}")
-        if not any(SHA256_RE.match(str(h.get("content", ""))) for h in f.get("hashes", []) if h.get("alg") == "SHA-256"):
+        if not any(SHA256_RE.match(str(h.get("content", ""))) for h in _objects(f.get("hashes")) if h.get("alg") == "SHA-256"):
             problems.append(f"file without SHA-256: {f.get('name')}")
     if files and not any(str(f.get("name", "")).lower().endswith(WEIGHT_SUFFIX) for f in files):
         problems.append("no safetensors file among the hashed files")
@@ -430,7 +437,7 @@ def component_problems(c: dict) -> list[str]:
         problems.append(f"format {pr.get('format')!r} is not safetensors")
     if not c.get("licenses"):
         problems.append("no licence")
-    if not any(r.get("type") == "distribution" and r.get("url") for r in c.get("externalReferences", [])):
+    if not any(r.get("type") == "distribution" and r.get("url") for r in _objects(c.get("externalReferences"))):
         problems.append("no distribution source (externalReferences type distribution)")
     if pr.get("signature", "none") == "none":
         problems.append("no signature method (cosign-keyless or ngc)")
@@ -603,7 +610,7 @@ def status_for_config(cfg: MaraConfig, root: Path | str | None = None) -> dict[s
             out[m.name] = ModelStatus(m.name, m.model, STATUS_ABSENT, (f"no machine-learning-model component with mara:model-id {m.model!r}",))
             continue
         pr = component_problems(c)
-        digest = next((h["content"] for h in c.get("hashes", []) if h.get("alg") == "SHA-256"), "")
+        digest = next((str(h.get("content", "")) for h in _objects(c.get("hashes")) if h.get("alg") == "SHA-256"), "")
         status = STATUS_COMPLETE if not pr else (STATUS_PENDING if props(c).get("status") == STATUS_PENDING else STATUS_INCOMPLETE)
         out[m.name] = ModelStatus(m.name, m.model, status, tuple(pr), str(c.get("name", "")), str(c.get("version", "")), digest)
     return out

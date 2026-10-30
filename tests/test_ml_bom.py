@@ -226,6 +226,30 @@ def test_policy_p7_three_states(tmp_path):
     assert load_config(ROOT / "config" / "examples" / "ml-bom-required.yaml").ml_bom.required
 
 
+_COMPONENT = {"type": "machine-learning-model", "name": "example/model-7b"}
+
+
+@pytest.mark.parametrize(("bom", "why"), [
+    ([], "missing or unreadable"),
+    ({"bomFormat": "CycloneDX", "components": 3}, "no machine-learning-model component"),
+    ({"bomFormat": "CycloneDX", "components": ["x"]}, "no machine-learning-model component"),
+    ({"bomFormat": "CycloneDX", "components": [{**_COMPONENT, "name": ["example/model-7b"]}]}, "no machine-learning-model component"),
+    ({"bomFormat": "CycloneDX", "components": [{**_COMPONENT, "properties": ["mara:model-id"]}]}, "no SHA-256 hash"),
+    ({"bomFormat": "CycloneDX", "components": [{**_COMPONENT, "hashes": [{"alg": "SHA-256"}]}]}, "no SHA-256 hash"),
+    ({"bomFormat": "CycloneDX", "components": [{**_COMPONENT, "hashes": "SHA-256", "components": [3], "externalReferences": {}}]},
+     "no SHA-256 hash"),
+], ids=["a list", "components not a list", "a component not an object", "a name not a string", "a property not an object",
+        "a SHA-256 hash without content", "lists not lists"])
+def test_policy_p7_reads_a_bom_of_the_wrong_shape_as_listing_nothing(tmp_path, bom, why):
+    # an exception other than ValueError would go through pydantic unwrapped, and out of invocation.load as a crash
+    path = tmp_path / "bom.cdx.json"
+    path.write_text(json.dumps(bom), encoding="utf-8")
+    r = p7_ml_bom(_cfg_with(tmp_path, path, "example/model-7b", required=False))
+    assert r.passed and "not required" in r.reason and "0/1" in r.reason
+    with pytest.raises(ValueError, match=f"P7 ml-bom: .*{why}"):
+        _cfg_with(tmp_path, path, "example/model-7b", required=True)
+
+
 def test_repository_bom_is_pending_but_valid_and_governance_g7_says_why(tmp_path):
     import governance_check as gc
 

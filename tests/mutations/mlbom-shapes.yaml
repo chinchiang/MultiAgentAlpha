@@ -1,0 +1,26 @@
+focused: [tests/test_ml_bom.py]
+mutations:
+  - name: a BOM that is not an object read as one
+    file: src/mara/mlbom.py
+    old: '    if not isinstance(d, dict) or d.get("bomFormat") != "CycloneDX":'
+    new: '    if d.get("bomFormat") != "CycloneDX":'
+  - name: the elements of a list kept whatever their shape
+    file: src/mara/mlbom.py
+    old: '    return [x for x in value if isinstance(x, dict)] if isinstance(value, list) else []'
+    new: '    return value if isinstance(value, list) else []'
+  - name: a value that is not a list iterated as one
+    file: src/mara/mlbom.py
+    old: '    return [x for x in value if isinstance(x, dict)] if isinstance(value, list) else []'
+    new: '    return [x for x in value if isinstance(x, dict)]'
+  - name: properties read without their shape checked
+    file: src/mara/mlbom.py
+    old: 'for p in _objects(component.get("properties"))'
+    new: 'for p in component.get("properties", [])'
+  - name: a component's name used as a key whatever its type
+    file: src/mara/mlbom.py
+    old: '            out[props(c).get("model-id") or str(c.get("name", ""))] = c'
+    new: '            out[props(c).get("model-id") or c.get("name", "")] = c'
+  - name: the digest read from a SHA-256 hash that may have no content
+    file: src/mara/mlbom.py
+    old: '        digest = next((str(h.get("content", "")) for h in _objects(c.get("hashes")) if h.get("alg") == "SHA-256"), "")'
+    new: '        digest = next((h["content"] for h in _objects(c.get("hashes")) if h.get("alg") == "SHA-256"), "")'
