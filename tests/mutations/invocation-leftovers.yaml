@@ -9,12 +9,12 @@ mutations:
     new: '    if False:'
   - name: check_paths takes the live default whatever the provider mode
     file: src/mara/invocation.py
-    old: '    config = config if config is not None else default_config(provider_mode, root)'
-    new: '    config = config if config is not None else default_config("live", root)'
+    old: '    config = inv.config if inv.config is not None else default_config(inv.provider, root)'
+    new: '    config = inv.config if inv.config is not None else default_config("live", root)'
   - name: check_paths takes the default even when a config is given
     file: src/mara/invocation.py
-    old: '    config = config if config is not None else default_config(provider_mode, root)'
-    new: '    config = default_config(provider_mode, root)'
+    old: '    config = inv.config if inv.config is not None else default_config(inv.provider, root)'
+    new: '    config = default_config(inv.provider, root)'
   - name: P8 reads an aat of any shape
     file: src/mara/policy.py
     old: '    aat = aat if isinstance(aat, dict) else {}  # evidence of another shape records no passing test'

@@ -17,16 +17,16 @@ mutations:
     new: '    check_provider_mode((m.provider for m in cfg.models), provider_mode) if provider_mode != "live" else None'
   - name: the live check without its hint
     file: src/mara/cli.py
-    old: "    with _usage_errors():\n        cfg = load(cfg_path, provider)\n"
-    new: "    try:\n        cfg = load(cfg_path, provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=None if provider == \"live\" else e.param) from e\n"
+    old: "    with _usage_errors():\n        cfg = load(cfg_path, inv.provider)\n"
+    new: "    try:\n        cfg = load(cfg_path, inv.provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=None if inv.provider == \"live\" else e.param) from e\n"
   - name: the mock check removed
     file: src/mara/invocation.py
     old: '    check_provider_mode((m.provider for m in cfg.models), provider_mode)'
     new: '    check_provider_mode((m.provider for m in cfg.models), provider_mode) if provider_mode != "mock" else None'
   - name: the mock check without its hint
     file: src/mara/cli.py
-    old: "    with _usage_errors():\n        cfg = load(cfg_path, provider)\n"
-    new: "    try:\n        cfg = load(cfg_path, provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=None if provider == \"mock\" else e.param) from e\n"
+    old: "    with _usage_errors():\n        cfg = load(cfg_path, inv.provider)\n"
+    new: "    try:\n        cfg = load(cfg_path, inv.provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=None if inv.provider == \"mock\" else e.param) from e\n"
   - name: the live check refuses only an all-mock config
     file: src/mara/invocation.py
     old: '    check_provider_mode((m.provider for m in cfg.models), provider_mode)'

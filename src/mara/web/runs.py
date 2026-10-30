@@ -42,11 +42,12 @@ from ..invocation import (
     InvocationError,
     ProviderMode,
     ReviewInvocation,
-    argv,
     check_paths,
     default_config,
     load,
+    option,
     outcome,
+    review_args,
 )
 from ..schemas import ReviewReport
 from . import admission, configs, procs, views
@@ -131,20 +132,23 @@ class RunRegistry:
         provider = ProviderMode(req.provider)
         cfg_path = resolve_config(self.workspace, req.config, provider)
         dirs: dict[str, Path] = {}
-        inputs = (("--sarif-dir", req.sarif_dir, "sarif_dir_not_dir"), ("--mock-fixtures", req.mock_fixtures, "mock_fixtures_not_dir"))
-        for flag, value, code in inputs:
-            if value:
+        for field, code in (("sarif_dir", "sarif_dir_not_dir"), ("mock_fixtures", "mock_fixtures_not_dir")):  # evidence inputs
+            if value := getattr(req, field):
                 p = resolve_path(self.workspace, value)
                 if not p.is_dir():
                     raise LaunchError(code, f"{p}: not a directory")
                 if not self._inside_workspace(p):
-                    raise LaunchError("path_outside_workspace", f"{flag} {p}: evidence inputs must lie inside the workspace {self.workspace}")
-                dirs[flag] = p
+                    raise LaunchError("path_outside_workspace",
+                                      f"{option(field)} {p}: evidence inputs must lie inside the workspace {self.workspace}")
+                dirs[field] = p
         base = req.base.strip()
         if base and (base.startswith("-") or not BASE_REF_RE.match(base)):
             raise LaunchError("bad_base_ref", f"{base!r}: not a git ref")
+        inv = ReviewInvocation(target=target, config=cfg_path, provider=provider, out=self.runs_dir, sarif_dir=dirs.get("sarif_dir"),
+                               mock_fixtures=dirs.get("mock_fixtures"), fail_on_gate=req.fail_on_gate, base=base or None,
+                               calibration_sample=req.calibration_sample)
         try:
-            check_paths(target, cfg_path, self.runs_dir, dirs, provider_mode=provider, root=self.workspace)
+            check_paths(inv, self.workspace)
             cfg = load(cfg_path, provider)
         except InvocationError as e:  # the command line would refuse the same launch, on e.param
             message = {"provider_mismatch": f"{cfg_path.name}: {e}", "config_invalid": str(e)[:800]}.get(e.kind, str(e))
@@ -164,9 +168,6 @@ class RunRegistry:
             "gate": {"min_dimension_score": cfg.gate.min_dimension_score, "block_on_tiers": list(cfg.gate.block_on_tiers),
                      "block_on_severity": list(cfg.gate.block_on_severity), "accept_threshold": cfg.gate.accept_threshold},
         }
-        inv = ReviewInvocation(target=target, config=cfg_path, provider=provider, out=self.runs_dir,
-                               sarif_dir=dirs.get("--sarif-dir"), mock_fixtures=dirs.get("--mock-fixtures"),
-                               fail_on_gate=req.fail_on_gate, base=base or None, calibration_sample=req.calibration_sample)
         return inv, fields
 
     # ------------------------------------------------------------------ lifecycle
@@ -184,13 +185,13 @@ class RunRegistry:
             run_dir = self.runs_dir / run_id
             run_dir.mkdir(parents=True)
             inv = dataclasses.replace(inv, out=run_dir, progress_file=run_dir / "progress.json")
-            args = [sys.executable, "-m", "mara.cli", *argv(inv)]
+            argv = [sys.executable, "-m", "mara.cli", *review_args(inv)]
             manifest: dict[str, Any] = {
                 "id": run_id,
                 "title": clean_title(req.title) or Path(fields["target"]).name,
                 **fields,
                 "request": req.model_dump(),
-                "argv": args,
+                "argv": argv,
                 "status": "running",
                 "started_at": procs.now(),
                 "finished_at": None,
@@ -201,7 +202,7 @@ class RunRegistry:
             }
             procs.write_json(run_dir / "run.json", manifest)
             try:
-                pid = self.children.start(run_id, args, cwd=self.workspace, log_path=run_dir / "run.log",
+                pid = self.children.start(run_id, argv, cwd=self.workspace, log_path=run_dir / "run.log",
                                           env=procs.child_env(self.workspace), tag="run")
             except OSError as e:
                 manifest.update(status="failed", finished_at=procs.now(), error=type(e).__name__)

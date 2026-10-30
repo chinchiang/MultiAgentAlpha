@@ -1,0 +1,30 @@
+focused: [tests/test_invocation.py, tests/test_progress.py, tests/test_psirt.py, tests/test_misc_leftovers.py, tests/test_core_review_fixes_8_13.py]
+mutations:
+  - name: the progress file no longer a path option
+    file: src/mara/invocation.py
+    old: 'PATH_OPTIONS = ("sarif_dir", "mock_fixtures", "psirt_event", "progress_file")'
+    new: 'PATH_OPTIONS = ("sarif_dir", "mock_fixtures", "psirt_event")'
+  - name: a field's flag keeps its underscores
+    file: src/mara/invocation.py
+    old: '    return "--" + field.replace("_", "-")'
+    new: '    return "--" + field'
+  - name: check_paths skips the path options
+    file: src/mara/invocation.py
+    old: '                                   **{f"{flag} {p}": p for flag, p in path_options(inv).items()}})'
+    new: '                                   })'
+  - name: review_args gives --config without a config
+    file: src/mara/invocation.py
+    old: "    if inv.config is not None:\n        args += [\"--config\", str(inv.config)]\n"
+    new: "    args += [\"--config\", str(inv.config)]\n"
+  - name: an enforced gate's exit named G-10
+    file: src/mara/cli.py
+    old: '           EXIT_GATE: ""}.get(code, ", G-10")'
+    new: '           EXIT_GATE: ", G-10"}.get(code, ", G-10")'
+  - name: an unenforced gate's exit without G-10
+    file: src/mara/cli.py
+    old: '           EXIT_GATE: ""}.get(code, ", G-10")'
+    new: '           EXIT_GATE: ""}.get(code, "")'
+  - name: the PSIRT failure not said to outrank the gate
+    file: src/mara/cli.py
+    old: '    why = {EXIT_PSIRT: ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else ""),'
+    new: '    why = {EXIT_PSIRT: ": the PSIRT hand-off failed",'
