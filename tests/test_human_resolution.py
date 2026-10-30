@@ -31,7 +31,7 @@ def home(tmp_path, monkeypatch):
 def review(home, name="out", cfg=None):
     cfg = cfg or load_config(ROOT / "config" / "mara.mock.yaml")
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=home / name)
-    return pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    return pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
 
 
 def decide(home, item, decision, *, by="alice", issue=1):

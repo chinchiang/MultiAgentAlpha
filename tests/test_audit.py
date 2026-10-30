@@ -125,7 +125,7 @@ def test_a_ballot_provider_failure_is_counted_as_an_error_and_blocks(tmp_path, r
     pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path / "out")
     pipe.providers = {n: _FailRole(p, role, exc) for n, p in pipe.providers.items()}
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     audit = report.bias_audit
     assert audit[f"{role}_errors"] > 0 and audit[f"{role}_invalid_items"] == 0 and audit.get(f"{role}_retries", 0) == 0
     assert f"{role}_errors" in report.incomplete_reasons and not report.gate_passed

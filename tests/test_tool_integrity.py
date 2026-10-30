@@ -144,7 +144,7 @@ def test_cosign_verifies_the_signature_and_a_failure_blocks_the_review(tmp_path,
 
     monkeypatch.setattr(mlbom, "verify_signature", lambda cfg: (False, "cosign verify-blob exit 1"))
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     assert "ml_bom_signature_unverified" in report.incomplete_reasons
     assert report.ml_bom_signature.startswith("failed:") and "ml_bom_signature" not in report.bias_audit
 

@@ -257,7 +257,7 @@ def test_pipeline_records_ml_bom_status_in_the_report(tmp_path):
     cfg = load_config(ROOT / "config" / "mara.mock.yaml")
     assert mlbom.status_for_config(cfg) == {}  # mock providers are not self-hosted weights
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     assert report.ml_bom == {} and "## Model provenance" in render_markdown(report)
     live = load_config(ROOT / "config" / "mara.yaml")
     st = mlbom.status_for_config(live, ROOT)
@@ -271,7 +271,7 @@ def test_pipeline_logs_ml_bom_status_when_self_hosted_models_are_configured(tmp_
     cfg = load_config(ROOT / "config" / "mara.mock.yaml")
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)
     pipe.ml_bom_status = mlbom.status_for_config(load_config(ROOT / "config" / "mara.yaml"), ROOT)
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     assert set(report.ml_bom) == {"glm-reviewer"}
     assert any(line.startswith("L0: ML-BOM: ") and "pending" in line for line in pipe.log)
 

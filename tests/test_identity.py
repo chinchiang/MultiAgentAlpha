@@ -60,7 +60,7 @@ def mock_report(tmp_path_factory):
 
     pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path_factory.mktemp("out"))
-    return pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    return pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
 
 
 def test_an_alert_keeps_its_fingerprint_when_an_earlier_twin_changes_state(mock_report):

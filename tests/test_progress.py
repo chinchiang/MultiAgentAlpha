@@ -90,7 +90,7 @@ def test_the_mock_pipeline_reports_all_nine_stages_in_order(root, tmp_path):
     path = tmp_path / "progress.json"
     cfg = load_config(root / "config" / "mara.mock.yaml")
     pipe = Pipeline(cfg, mock_fixtures=str(root / "fixtures" / "mock-responses"), out_dir=tmp_path / "out", progress=prog.Progress(path))
-    pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", mode="mock")
+    pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     d = prog.read(path)
     assert d["status"] == "running", "the pipeline leaves finishing to whoever writes the reports"
     assert [s["status"] for s in d["stages"]] == ["done"] * len(prog.STAGES)

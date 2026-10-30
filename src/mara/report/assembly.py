@@ -32,9 +32,9 @@ class ReportMetadata:
     model_eval: dict[str, ModelEvalStatus]
 
 
-def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *, cfg: MaraConfig, target: Path, mode: str,
+def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *, cfg: MaraConfig, target: Path, provider_mode: str,
              generated_at: str, provider_manifest: list[dict], bias_audit: dict, psirt_event: dict | None) -> ReviewReport:
-    """The report of the review of `target` in provider `mode`, generated at `generated_at`: its findings, ballots, jury
+    """The report of the review of `target` in provider mode `provider_mode`, generated at `generated_at`: its findings, ballots, jury
     scoring and dimension scores as `stages` gives them, its status and gate as `assessment` decided them, `metadata`,
     the providers as `provider_manifest` lists them and the `bias_audit` snapshot, with the human queue and the PSIRT
     payloads (under `psirt_event`, when given) built from it."""
@@ -42,7 +42,7 @@ def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *
     report = ReviewReport(
         target=str(target),
         generated_at=generated_at,
-        provider_mode=mode,
+        provider_mode=provider_mode,
         families_used=sorted({m.family.value for m in cfg.models}),
         findings=reviewed.findings,
         skeptic=list(ballots.skeptic.values()),

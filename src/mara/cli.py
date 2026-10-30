@@ -118,7 +118,7 @@ def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: P
         except (OSError, ValueError) as e:
             raise typer.BadParameter(f"{psirt_event}: not a readable JSON event ({type(e).__name__})", param_hint="--psirt-event") from e
     try:
-        report = pipe.run(target, sarif_dir=sarif_dir, mode=provider, base_ref=base, calibration_sample=calibration_sample,
+        report = pipe.run(target, sarif_dir=sarif_dir, provider_mode=provider, base_ref=base, calibration_sample=calibration_sample,
                           psirt_event=event, fail_on_gate=fail_on_gate)
     except WorkspaceInsideTarget as e:
         raise typer.BadParameter(str(e), param_hint="TARGET") from e

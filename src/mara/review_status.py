@@ -42,7 +42,7 @@ class SecretPreflight:
     unexplained: tuple[ToolResult, ...] = ()  # every other secret found
 
 
-def secret_preflight(mode: str, secret_runs: list[ToolRun], answer_key: list[dict] | None) -> SecretPreflight:
+def secret_preflight(provider_mode: str, secret_runs: list[ToolRun], answer_key: list[dict] | None) -> SecretPreflight:
     """Live source egress is blocked before any provider sees data when the trusted local secret scan (gitleaks) is
     missing, did not run, or found a secret. Calibration only (`answer_key`, mara.pipeline.calibration_answer_key): a
     seeded secret the sample's answer key declares at the same file and line is expected and does not block; anything
@@ -50,7 +50,7 @@ def secret_preflight(mode: str, secret_runs: list[ToolRun], answer_key: list[dic
     found = [res for run in secret_runs for res in run.results]
     exempted = tuple(res for res in found if answer_key is not None and _declared_secret(res, answer_key))
     unexplained = tuple(res for res in found if res not in exempted)
-    blocked = mode == "live" and (not secret_runs or any(not r.ran for r in secret_runs) or bool(unexplained))
+    blocked = provider_mode == "live" and (not secret_runs or any(not r.ran for r in secret_runs) or bool(unexplained))
     return SecretPreflight(blocked=blocked, exempted=exempted, unexplained=unexplained)
 
 

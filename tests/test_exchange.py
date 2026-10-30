@@ -83,7 +83,7 @@ def _run(tmp_path, role, raw):
     pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path / "out")
     pipe.providers = {n: _BallotReply(p, role, raw) for n, p in pipe.providers.items()}
-    return pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    return pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
 
 
 @pytest.mark.parametrize("role", ["skeptic", "redteam", "judge"])

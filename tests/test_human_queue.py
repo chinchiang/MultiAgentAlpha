@@ -104,7 +104,7 @@ def test_pipeline_reads_backlog_and_records_tightening(cfg, tmp_path, monkeypatc
     (tmp_path / "calib" / "decisions").mkdir(parents=True)
     (tmp_path / "calib" / "decisions" / "backlog.json").write_text(json.dumps({"open": 99}))
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
-    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", mode="mock")
+    report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     t = report.human_queue_tightening
     assert t is not None and t.tightened and t.backlog == 99 and t.alpha_threshold > cfg.gate.human_threshold_alpha
     assert f"Queue tightening: tightened (backlog 99, agreement threshold {t.alpha_threshold})" in render_markdown(report)
