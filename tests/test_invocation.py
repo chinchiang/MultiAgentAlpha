@@ -14,6 +14,7 @@ from mara import progress
 from mara.cli import app
 from mara.invocation import (
     REVIEW_ARTIFACTS,
+    FinishedReview,
     InvocationError,
     ReviewInvocation,
     argv,
@@ -85,7 +86,7 @@ def test_the_exit_code_is_3_for_a_failed_psirt_hand_off_which_outranks_an_enforc
 ])
 def test_a_finished_review_reads_back_as_whether_its_gate_was_enforced_and_its_psirt_hand_off_failed(code, report, gate_enforced,
                                                                                                     psirt_failed):
-    assert outcome(code, report) == (gate_enforced, psirt_failed)
+    assert outcome(code, report) == FinishedReview(gate_enforced=gate_enforced, psirt_failed=psirt_failed)
 
 
 def parsed(inv: ReviewInvocation) -> dict:

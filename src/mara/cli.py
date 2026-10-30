@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
@@ -34,6 +36,15 @@ def main(ctx: typer.Context) -> None:
             serve_cmd.invoke(sub)
 
 
+@contextmanager
+def _usage_errors() -> Iterator[None]:
+    """A review invocation's usage error (mara.invocation) as click's, on the option it names."""
+    try:
+        yield
+    except InvocationError as e:
+        raise typer.BadParameter(str(e), param_hint=e.param) from e
+
+
 @app.command()
 def review(
     target: Path = typer.Argument(..., help="Repository or directory to review"),
@@ -62,19 +73,17 @@ def review(
     # directory) like every other trust anchor: with MARA_HOME set and the job running inside the target,
     # a relative default would let the reviewed repository supply the config (models, endpoints, gate).
     out = out if out is not None else resolve("out")
-    try:
+    with _usage_errors():
         # before the config is even read; the pipeline repeats the workspace, tool and trivy checks
         # pre-recorded SARIF is tool evidence, mock fixtures are the models' answers and a PSIRT event
         # starts legal clocks: from inside the target, the reviewed repository would supply its own verdict
         # the progress file is an output: inside the target it would be bundled into the next review
         inputs = {"--sarif-dir": sarif_dir, "--mock-fixtures": mock_fixtures, "--psirt-event": psirt_event, "--progress-file": progress_file}
         cfg_path = check_paths(target, config, out, {flag: p for flag, p in inputs.items() if p is not None},
-                               provider_mode=provider.value, root=root())
-    except InvocationError as e:
-        raise typer.BadParameter(str(e), param_hint=e.param) from e
+                               provider_mode=provider, root=root())
     progress = Progress(progress_file)  # a no-op without --progress-file
     try:
-        report, cfg, psirt_failed = _review(target, cfg_path, provider.value, out, sarif_dir, mock_fixtures, fail_on_gate, notify_psirt,
+        report, cfg, psirt_failed = _review(target, cfg_path, provider, out, sarif_dir, mock_fixtures, fail_on_gate, notify_psirt,
                                             psirt_event, psirt_resend, base, calibration_sample, progress)
     except BaseException as e:
         # the reports were not all written: the workbench must not read a usage error's exit 2 as a blocked gate
@@ -99,16 +108,14 @@ def review(
         raise typer.Exit(code=code)
 
 
-def _review(target: Path, cfg_path: Path, provider: str, out: Path, sarif_dir: Path | None, mock_fixtures: Path | None,
+def _review(target: Path, cfg_path: Path, provider: ProviderMode, out: Path, sarif_dir: Path | None, mock_fixtures: Path | None,
             fail_on_gate: bool, notify_psirt: bool, psirt_event: Path | None, psirt_resend: bool, base: str | None,
             calibration_sample: bool, progress: Progress) -> tuple[ReviewReport, MaraConfig, bool]:
     """Load the config, run the review and write every report; returns (report, config, PSIRT send failed)."""
     from .workspace import WorkspaceInsideTarget, resolve
 
-    try:
+    with _usage_errors():
         cfg = load(cfg_path, provider)
-    except InvocationError as e:
-        raise typer.BadParameter(str(e), param_hint=e.param) from e
     pipe = Pipeline(cfg, mock_fixtures=str(mock_fixtures) if mock_fixtures else None, out_dir=out, progress=progress)
     event = None
     if psirt_event:

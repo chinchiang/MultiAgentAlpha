@@ -36,7 +36,18 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import progress as progress_mod
-from ..invocation import REVIEW_ARTIFACTS, InvocationError, ReviewInvocation, argv, check_paths, default_config, load, outcome
+from ..invocation import (
+    REVIEW_ARTIFACTS,
+    FinishedReview,
+    InvocationError,
+    ProviderMode,
+    ReviewInvocation,
+    argv,
+    check_paths,
+    default_config,
+    load,
+    outcome,
+)
 from ..schemas import ReviewReport
 from . import admission, configs, procs, views
 
@@ -85,7 +96,7 @@ def resolve_path(workspace: Path, value: str) -> Path:
         raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path ({type(e).__name__})") from e
 
 
-def resolve_config(workspace: Path, value: str, provider: str) -> Path:
+def resolve_config(workspace: Path, value: str, provider: ProviderMode) -> Path:
     """The config file `value` names, or the provider's default when it is empty, if `configs.allowed()` accepts it;
     LaunchError config_not_found otherwise (bad_path, from resolve_path)."""
     if value:
@@ -117,7 +128,8 @@ class RunRegistry:
         target = resolve_path(self.workspace, req.target)
         if not target.is_dir():
             raise LaunchError("target_not_dir", f"{target}: not a directory")
-        cfg_path = resolve_config(self.workspace, req.config, req.provider)
+        provider = ProviderMode(req.provider)
+        cfg_path = resolve_config(self.workspace, req.config, provider)
         dirs: dict[str, Path] = {}
         inputs = (("--sarif-dir", req.sarif_dir, "sarif_dir_not_dir"), ("--mock-fixtures", req.mock_fixtures, "mock_fixtures_not_dir"))
         for flag, value, code in inputs:
@@ -132,8 +144,8 @@ class RunRegistry:
         if base and (base.startswith("-") or not BASE_REF_RE.match(base)):
             raise LaunchError("bad_base_ref", f"{base!r}: not a git ref")
         try:
-            check_paths(target, cfg_path, self.runs_dir, dirs, provider_mode=req.provider, root=self.workspace)
-            cfg = load(cfg_path, req.provider)
+            check_paths(target, cfg_path, self.runs_dir, dirs, provider_mode=provider, root=self.workspace)
+            cfg = load(cfg_path, provider)
         except InvocationError as e:  # the command line would refuse the same launch, on e.param
             message = {"provider_mismatch": f"{cfg_path.name}: {e}", "config_invalid": str(e)[:800]}.get(e.kind, str(e))
             raise LaunchError(e.kind, message) from e
@@ -152,7 +164,7 @@ class RunRegistry:
             "gate": {"min_dimension_score": cfg.gate.min_dimension_score, "block_on_tiers": list(cfg.gate.block_on_tiers),
                      "block_on_severity": list(cfg.gate.block_on_severity), "accept_threshold": cfg.gate.accept_threshold},
         }
-        inv = ReviewInvocation(target=target, config=cfg_path, provider=req.provider, out=self.runs_dir,
+        inv = ReviewInvocation(target=target, config=cfg_path, provider=provider, out=self.runs_dir,
                                sarif_dir=dirs.get("--sarif-dir"), mock_fixtures=dirs.get("--mock-fixtures"),
                                fail_on_gate=req.fail_on_gate, base=base or None, calibration_sample=req.calibration_sample)
         return inv, fields
@@ -207,8 +219,8 @@ class RunRegistry:
         status = "cancelled" if stopped else "finished" if finished else "failed"
         if not finished:
             progress_mod.close_abandoned(run_dir / "progress.json", "cancelled" if status == "cancelled" else f"exit {code}")
-        gate_enforced, psirt_failed = outcome(code, procs.read_json(run_dir / "report.json") or {}) if finished else (False, False)
-        manifest.update(status=status, exit_code=code, finished_at=procs.now(), gate_enforced=gate_enforced, psirt_failed=psirt_failed)
+        end = outcome(code, procs.read_json(run_dir / "report.json") or {}) if finished else FinishedReview(False, False)
+        manifest.update(status=status, exit_code=code, finished_at=procs.now(), gate_enforced=end.gate_enforced, psirt_failed=end.psirt_failed)
         procs.write_json(run_dir / "run.json", manifest)
 
     def cancel(self, run_id: str) -> dict[str, Any]:

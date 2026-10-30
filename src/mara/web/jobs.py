@@ -21,6 +21,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..invocation import ProviderMode
 from . import admission, procs
 from .runs import LaunchError, resolve_config
 
@@ -68,7 +69,7 @@ class JobRegistry:
             return [sys.executable, str(self.workspace / SCRIPTS["install_tools"]), *(["--only", *req.only] if req.only else [])]
         if req.kind in ("trivy_db_download", "trivy_db_status"):
             return [sys.executable, str(self.workspace / SCRIPTS[req.kind]), "download" if req.kind == "trivy_db_download" else "status"]
-        cfg = resolve_config(self.workspace, req.config, "live")
+        cfg = resolve_config(self.workspace, req.config, ProviderMode.live)
         return [sys.executable, "-m", "mara.cli", "check-config", str(cfg)]
 
     def create(self, req: JobRequest) -> dict[str, Any]:
