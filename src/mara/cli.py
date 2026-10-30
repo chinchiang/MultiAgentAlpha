@@ -11,7 +11,7 @@ from rich.table import Table
 from typer.core import TyperGroup
 
 from .config import MaraConfig
-from .invocation import InvocationError, ProviderMode, check_paths, default_config, exit_code, load
+from .invocation import InvocationError, ProviderMode, check_paths, exit_code, load
 from .pipeline import Pipeline
 from .progress import Progress
 from .report.markdown_out import enforcement_wording, write_markdown
@@ -61,7 +61,6 @@ def review(
     # The defaults are MARA's own files, so they resolve against the workspace (MARA_HOME, else the working
     # directory) like every other trust anchor: with MARA_HOME set and the job running inside the target,
     # a relative default would let the reviewed repository supply the config (models, endpoints, gate).
-    cfg_path = config if config is not None else default_config(provider.value, root())
     out = out if out is not None else resolve("out")
     try:
         # before the config is even read; the pipeline repeats the workspace, tool and trivy checks
@@ -69,7 +68,8 @@ def review(
         # starts legal clocks: from inside the target, the reviewed repository would supply its own verdict
         # the progress file is an output: inside the target it would be bundled into the next review
         inputs = {"--sarif-dir": sarif_dir, "--mock-fixtures": mock_fixtures, "--psirt-event": psirt_event, "--progress-file": progress_file}
-        check_paths(target, cfg_path, out, {flag: p for flag, p in inputs.items() if p is not None})
+        cfg_path = check_paths(target, config, out, {flag: p for flag, p in inputs.items() if p is not None},
+                               provider_mode=provider.value, root=root())
     except InvocationError as e:
         raise typer.BadParameter(str(e), param_hint=e.param) from e
     progress = Progress(progress_file)  # a no-op without --progress-file

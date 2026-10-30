@@ -1,0 +1,25 @@
+focused: [tests/test_invocation.py, tests/test_policy.py]
+# the refusal of a provider mode outside live and mock is mutated in check_provider_mode itself, unlike the mode checks
+# of tests/mutations/invocation.yaml: the command line and the workbench never pass such a value, and with the refusal
+# gone the live and mock checks still stand, so no mutant here lets a review run in another provider mode than asked
+mutations:
+  - name: a provider mode outside live and mock accepted
+    file: src/mara/invocation.py
+    old: '    if provider_mode not in tuple(ProviderMode):'
+    new: '    if False:'
+  - name: check_paths takes the live default whatever the provider mode
+    file: src/mara/invocation.py
+    old: '    config = config if config is not None else default_config(provider_mode, root)'
+    new: '    config = config if config is not None else default_config("live", root)'
+  - name: check_paths takes the default even when a config is given
+    file: src/mara/invocation.py
+    old: '    config = config if config is not None else default_config(provider_mode, root)'
+    new: '    config = default_config(provider_mode, root)'
+  - name: P8 reads an aat of any shape
+    file: src/mara/policy.py
+    old: '    aat = aat if isinstance(aat, dict) else {}  # evidence of another shape records no passing test'
+    new: '    aat = aat or {}'
+  - name: P8 reads a rejection of any shape
+    file: src/mara/policy.py
+    old: 'not (isinstance(rejection, dict) and rejection.get("passed"))'
+    new: 'not (rejection or {}).get("passed")'
