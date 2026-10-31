@@ -314,6 +314,8 @@ class MaraConfig(BaseModel):
         return self
 
 
-def load_config(path: str | Path) -> MaraConfig:
+def load_config(path: str | Path, *, enforce_policies: bool = True) -> MaraConfig:
+    """The config at `path`, validated and with its defaults. A file violating a policy is refused unless
+    `enforce_policies` is false, for a caller that reports the policies itself (scripts/governance_check.py)."""
     with open(path, encoding="utf-8") as fh:
-        return MaraConfig.model_validate(yaml.safe_load(fh))
+        return MaraConfig.model_validate(yaml.safe_load(fh), context=None if enforce_policies else {"skip_policies": True})
