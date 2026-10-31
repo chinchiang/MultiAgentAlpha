@@ -42,6 +42,7 @@ from mara.decisions import Decision  # noqa: E402
 from mara.decisions import read as read_decision  # noqa: E402
 from mara.human_queue import queue_key  # noqa: E402
 from mara.report.escaping import code, literal  # noqa: E402
+from mara.reviewed_content import ReviewedContent  # noqa: E402
 from mara.training import is_trained, load_register  # noqa: E402
 from mara.workspace import resolve  # noqa: E402
 
@@ -193,8 +194,7 @@ def create_tickets(queue_path: Path, repo: str, label: str, dry_run: bool, decis
 def valid_identity(item: dict) -> bool:
     if not all(item.get(k) for k in ("target_id", "revision", "context_hash", "file", "line", "cwe")):
         return False
-    return item.get("key") == queue_key(item["file"], int(item["line"]), item["cwe"], target_id=item["target_id"],
-                                       revision=item["revision"], context_hash=item["context_hash"])
+    return item.get("key") == queue_key(item["file"], int(item["line"]), item["cwe"], ReviewedContent.of_record(item))
 
 
 def decision_event(repo: str, number: int, label: str) -> dict | None:

@@ -216,7 +216,7 @@ def _variants(report, cfg) -> list[_Variant]:
     positive on every third finding and a true positive on the next (a ruling binds to content, whatever the jury
     concluded). Each gets its blocking reasons from assess and the human queue built for it. The report's other
     fields (review status, incomplete reasons, gate, dimensions, overall score) stay those of the seeded review, and the
-    queue keys are built without the review identity: both writers copy those as they stand, so the comparison does
+    queue keys are built without the reviewed content: both writers copy those as they stand, so the comparison does
     not depend on them."""
     from collections import defaultdict
 

@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, get_args
 
 from .decisions import TrainingRequirement, select
 from .decisions import load as load_decisions
+from .reviewed_content import ReviewedContent
 from .schemas import ConsensusResult, JuryOutcomeValue
 
 JURY_OUTCOMES = get_args(JuryOutcomeValue)  # accepted, rejected, dropped, needs_human
@@ -376,7 +377,7 @@ def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None 
         usable: dict[str, str] = {}
         seen: set[str] = set()
         for r in reports:
-            sel = select(loaded.decisions, r, training or TrainingRequirement())
+            sel = select(loaded.decisions, ReviewedContent.of_report(r), training or TrainingRequirement())
             usable.update((d.key, d.decision) for d in sel.usable)
             for d, why in sel.excluded:
                 if why != "unbound":

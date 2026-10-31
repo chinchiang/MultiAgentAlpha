@@ -56,8 +56,8 @@ def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *
         tool_health=[{"tool": t.tool, "ran": t.ran, "note": t.note} for t in tools.runs],
         provider_manifest=provider_manifest,
         config_hash=hashlib.sha256(cfg.model_dump_json().encode()).hexdigest(),
-        target_id=stages.target_id,
-        revision=ctx.revision,
+        target_id=stages.content.target_id,
+        revision=stages.content.revision,
         votes=ballots.votes,
         consensus=stages.scoring.rows,
         dimensions=stages.dimensions,
@@ -75,8 +75,7 @@ def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *
     )
     # G-11: the human queue as an object with full context; decisions come back through calib/decisions
     report.human_queue = build_queue(reviewed.findings, {c.finding_id: c for c in stages.scoring.rows}, ballots.skeptic,
-                                     ballots.redteam, ballots.votes, cfg, target_id=stages.target_id, revision=ctx.revision,
-                                     context_hash=ctx.content_hash)
+                                     ballots.redteam, ballots.votes, cfg, content=stages.content)
     # G-12: accepted tier-A Critical findings on a shipped product start the CRA Article 14 clock
     report.psirt = build_notifications(report, cfg, event=psirt_event)
     return report

@@ -9,6 +9,7 @@ import pytest
 
 from mara.config import load_config
 from mara.pipeline import Pipeline
+from mara.reviewed_content import ReviewedContent
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTER = ("curriculum_version: '2026-09'\nvalidity_days: 365\npass_mark: 0.8\nrecords:\n"
@@ -67,7 +68,7 @@ def decide_finding(home, report, finding_id, decision, *, by="alice", issue=1):
     f = next(x for x in report.findings if x.id == finding_id)
     p = f.provenance[0]
     ctx = report.coverage["content_hash"]
-    key = queue_key(p.file, p.line, f.cwe, target_id=report.target_id, revision=report.revision, context_hash=ctx)
+    key = queue_key(p.file, p.line, f.cwe, ReviewedContent(report.target_id, report.revision, ctx))
     item = type("Item", (), {"key": key, "target_id": report.target_id, "revision": report.revision, "context_hash": ctx,
                              "file": p.file, "line": p.line, "cwe": f.cwe, "finding_id": finding_id})
     decide(home, item, decision, by=by, issue=issue)
@@ -154,7 +155,7 @@ def test_calibration_still_counts_a_jury_drop_that_a_human_confirmed_as_a_miss()
     from mara.human_queue import queue_key
     from mara.schemas import ConsensusResult, EvidenceTier
 
-    key = queue_key("app.py", 10, "CWE-79", target_id="t", revision="r", context_hash="c")
+    key = queue_key("app.py", 10, "CWE-79", ReviewedContent("t", "r", "c"))
     jury_drop = ConsensusResult(finding_id="F-1", weighted_score=0.2, votes_tp=0, votes_fp=4, votes_human=0, families_agreeing=[],
                                 tool_corroborated=False, skeptic_refuted=False, position_consistent=True, tier=EvidenceTier.C,
                                 cvss4_score=7.0, cvss4_severity="High", ssvc_decision="Track", accepted=False,

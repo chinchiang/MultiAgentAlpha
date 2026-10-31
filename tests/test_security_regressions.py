@@ -20,6 +20,7 @@ from mara.pipeline import Pipeline
 from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 from mara.report.markdown_out import render_markdown
 from mara.report.psirt_out import legal_deadlines
+from mara.reviewed_content import ReviewedContent
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
 from mara.tools.runner import ToolRun, run_all
 from mara.tools.sarif import ToolResult
@@ -722,7 +723,7 @@ def test_provider_errors_block_the_gate_and_are_not_counted_as_refusals(tmp_path
 
 
 def test_queue_identity_separates_targets_and_revisions():
-    keys = {queue_key("app.py", 1, "CWE-89", target_id=t, revision=r, context_hash="ctx")
+    keys = {queue_key("app.py", 1, "CWE-89", ReviewedContent(t, r, "ctx"))
             for t in ("repo-a", "repo-b") for r in ("rev1", "rev2")}
     assert len(keys) == 4
 
@@ -921,12 +922,13 @@ def test_cross_target_and_legacy_decisions_never_apply():
     from mara.decisions import Decision, TrainingRequirement, select
 
     assert isinstance(Decision.parse(decision), str), "a record without a key is not a decision"
-    decision.update(key=queue_key("app.py", 1, "CWE-89", target_id="target-a", revision="rev", context_hash="ctx"),
+    decision.update(key=queue_key("app.py", 1, "CWE-89", ReviewedContent("target-a", "rev", "ctx")),
                     decided_by="alice", decided_at="2026-10-01T08:00:00Z")
     parsed = Decision.parse(decision)
     anyone = TrainingRequirement(required=False)
-    assert select([parsed], report, anyone).usable == [] and select([parsed], {"target": "/a/s9"}, anyone).usable == []
-    assert calibrate.apply_decisions(select([parsed], report, anyone).usable, []) == ([], 0)
+    bound, legacy = ReviewedContent.of_report(report), ReviewedContent.of_report({"target": "/a/s9"})
+    assert select([parsed], bound, anyone).usable == [] and select([parsed], legacy, anyone).usable == []
+    assert calibrate.apply_decisions(select([parsed], bound, anyone).usable, []) == ([], 0)
 
 
 def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():

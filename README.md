@@ -803,13 +803,13 @@ one that was not withdrawn as not planned, or a recorded decision is never filed
 turns closed tickets labelled `decision:true-positive` / `decision:false-positive` into
 `calib/decisions/<key>.json` (several closed tickets for one key: a trained adjudicator's decision when they
 agree, none and a failed sync when they disagree), which `scripts/calibrate.py` uses as labels. A review
-of the same content (same target, revision and context) reads the usable decisions back: each one settles
-its finding - a **human-resolved finding** - and the human ruling outranks the jury in both directions (a true
-positive is accepted and meets the gate's blocking rules with its tier unchanged, a false positive is not
-accepted and is emitted to code scanning dismissed with the ruling as justification). Such findings leave the
-queue and no longer make the review incomplete; the jury outcome stays in `accepted` / `needs_human` for
-calibration, and tool results are untouched (`docs/adr/0003-human-resolution.md`). A decision that is not
-usable settles nothing; the finding stays queued with `decision_not_usable:<reason>`. When
+of the same **reviewed content** (the same target, revision and content bundle) reads the usable decisions
+back: each one settles its finding - a **human-resolved finding** - and the human ruling outranks the jury in
+both directions (a true positive is accepted and meets the gate's blocking rules with its tier unchanged, a
+false positive is not accepted and is emitted to code scanning dismissed with the ruling as justification).
+Such findings leave the queue and no longer make the review incomplete; the jury outcome stays in `accepted` /
+`needs_human` for calibration, and tool results are untouched (`docs/adr/0003-human-resolution.md`). A
+decision that is not usable settles nothing; the finding stays queued with `decision_not_usable:<reason>`. When
 `calib/decisions/backlog.json` shows more open tickets than `human_queue.backlog_limit`, the pipeline
 raises the alpha threshold and — with `human_queue.tighten_exclude_tier_c`, the default — stops queuing
 tier C at `human_queue.queue_tier_c_min_severity`. Nobody then looks at those findings, so one the jury

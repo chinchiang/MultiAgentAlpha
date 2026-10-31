@@ -18,6 +18,7 @@ from mara.human_queue import build_queue, queue_key, tightening  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
 from mara.report.human_queue_out import render_human_queue  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
+from mara.reviewed_content import ReviewedContent  # noqa: E402
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, ReviewReport, SkepticVerdict  # noqa: E402
 from mara.scoring.outcome import OutcomePolicy  # noqa: E402
 from tests import scored_rows  # noqa: E402
@@ -263,7 +264,7 @@ def test_tickets_are_created_once_and_decisions_come_back(tmp_path, monkeypatch)
          "judge_votes": [{"family": "anthropic", "pass": "forward", "verdict": "true_positive", "severity_band": "Medium", "reason": "y", "self_family": False}]}]}
     for it in queue["items"]:
         it.update(target_id="target-x", revision="revision-x", context_hash="context-x")
-        it["key"] = queue_key(it["file"], it["line"], it["cwe"], target_id="target-x", revision="revision-x", context_hash="context-x")
+        it["key"] = queue_key(it["file"], it["line"], it["cwe"], ReviewedContent("target-x", "revision-x", "context-x"))
     state["open"][0]["body"] = hq.ticket_body(queue["items"][0], "/t/x")
     state["closed"][0]["body"] = hq.ticket_body({**queue["items"][1], "finding_id": "F-0002"}, "/t/x")
     state["events"]["8"][1].update(id=100, created_at="2026-09-12T08:00:00Z")
@@ -309,7 +310,7 @@ def _queue_item(n: int) -> dict:
             "weighted_score": 0.6, "krippendorff_alpha": 0.5, "votes_tp": 1, "votes_fp": 0, "votes_human": 0, "finder_families": ["anthropic"],
             "reachability": "reachable", "reachability_argument": "r", "exploit_sketch": "e", "skeptic": None, "redteam": None, "judge_votes": [],
             "target_id": "target-x", "revision": "revision-x", "context_hash": "context-x"}
-    item["key"] = queue_key("app.py", n, "CWE-89", target_id="target-x", revision="revision-x", context_hash="context-x")
+    item["key"] = queue_key("app.py", n, "CWE-89", ReviewedContent("target-x", "revision-x", "context-x"))
     return item
 
 
@@ -487,14 +488,14 @@ def test_calibration_uses_true_positive_decisions_as_labels(tmp_path):
     for d in decisions:
         d.update(target_id="other" if d["issue"] == 5 else "target-s9", revision="rev", context_hash="ctx", decision_event_id=d["issue"],
                  decided_at="2026-10-01T08:00:00Z")
-        d["key"] = queue_key(d["file"], d["line"], d["cwe"], target_id=d["target_id"], revision="rev", context_hash="ctx")
+        d["key"] = queue_key(d["file"], d["line"], d["cwe"], ReviewedContent(d["target_id"], "rev", "ctx"))
     parsed = [Decision.parse(d) for d in decisions]
     alice = Record("alice", "adjudicator", "2026-09", dt.date(2026, 9, 1), dt.date(2027, 9, 1), None, "quiz", "quiz")
-    sel = select(parsed, report, TrainingRequirement(required=True, register=Register("2026-09", 365, 0.8, [alice])))
+    sel = select(parsed, ReviewedContent.of_report(report), TrainingRequirement(required=True, register=Register("2026-09", 365, 0.8, [alice])))
     labels, applied = calibrate.apply_decisions(sel.usable, [])
     assert applied == 2 and len(labels) == 1 and labels[0]["source"] == "human_decision" and labels[0]["cwe"] == "CWE-79"
     assert [(d.issue, why) for d, why in sel.excluded] == [(5, "unbound"), (6, "untrained")]  # G-13: mallory's decision not applied
-    labels, applied = calibrate.apply_decisions(select(parsed, report, TrainingRequirement(required=False)).usable, [])
+    labels, applied = calibrate.apply_decisions(select(parsed, ReviewedContent.of_report(report), TrainingRequirement(required=False)).usable, [])
     assert applied == 3 and len(labels) == 2
     d = tmp_path / "decisions"
     d.mkdir()

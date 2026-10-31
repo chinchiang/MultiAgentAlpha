@@ -12,6 +12,7 @@ from mara.context.repo_map import RepoContext
 from mara.pipeline import ReviewerFindings, Stages
 from mara.report.assembly import ReportMetadata, assemble
 from mara.review_status import GatePolicy, SecretPreflight, assess
+from mara.reviewed_content import ReviewedContent
 from mara.schemas import MlBomEntry, ModelEvalStatus, ModelFamily, QueueTightening, RedTeamNote, SkepticVerdict
 from mara.scoring.dimension_score import score_dimension
 from mara.tools.evidence import ToolEvidence
@@ -48,7 +49,8 @@ def _stages(tmp_path: Path, base_ref: str | None = None) -> Stages:
     dims = [score_dimension("vulnerabilities", findings, {c.finding_id: c for c in scoring.rows}, True)]
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h", revision="r1")
     return Stages(ctx=ctx, tools=tools, egress=SecretPreflight(blocked=False), context_view=None, reviewed=ReviewerFindings(raw_count=3, findings=findings, finders=finders),
-                  ballots=ballots, scoring=scoring, dimensions=dims, target_id="t" * 64, base_ref=base_ref)
+                  ballots=ballots, scoring=scoring, dimensions=dims, content=ReviewedContent("t" * 64, "r1", "h"),
+                  base_ref=base_ref)
 
 
 def _assembled(tmp_path: Path, *, base_ref: str | None = None, psirt_event: dict | None = None):
