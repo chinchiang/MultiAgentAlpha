@@ -24,3 +24,6 @@ filelock>=4.2.1  # GHSA-567q-5qvw-pf92 / CVE-2026-112907, GHSA-9vhv-jxww-xfm5 / 
 langgraph>=1.2.14  # GHSA-3fx2-cqw9-xr3c / CVE-2026-118667 (unencoded identifiers in the SDK's v3 streaming redirect
 #   authenticated GET requests), fixed in 1.2.14
 langgraph-sdk>=0.4.6  # the same advisory, fixed in 0.4.6
+pyasn1>=0.6.5  # GHSA-fm9c-5rcf-2q5p / CVE-2026-119194, GHSA-9m75-vc3g-4x39 / CVE-2026-119195,
+#   GHSA-2qm8-x737-gmw5 / CVE-2026-119196, GHSA-mm57-4v3p-rchx / CVE-2026-119197 (quadratic-time decoding of
+#   crafted BER/CER/DER input), fixed in 0.6.5

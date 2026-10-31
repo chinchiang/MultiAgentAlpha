@@ -4,7 +4,7 @@
 # Install: python3 -m pip install --require-hashes --no-build-isolation -r <this file>
 # Preinstall the hash-pinned tools/build-requirements.txt closure before resolving or installing sdists.
 # Source distributions (no wheel published; built at install time, see scripts/relock_requirements.py): ecoji==0.1.1, langdetect==1.0.9
-# Hand-applied, the eleven exceptions to the rule above (a full relock could not run: the CUDA wheels download at ~50 KB/s from
+# Hand-applied, the twelve exceptions to the rule above (a full relock could not run: the CUDA wheels download at ~50 KB/s from
 # the authoring host; the .in file's floors keep them, and the next relock drops these notes). Each takes the index's SHA-256
 # of the cp311-cp311-manylinux2014_x86_64 wheel unless another wheel is named, verified by pip --require-hashes for CPython
 # 3.11 / manylinux x86_64:
@@ -44,6 +44,10 @@
 #   requirements are the old ones' but langgraph's langgraph-sdk>=0.4.6, which 0.4.6 meets. Outside extras the closure
 #   does not install, langgraph's one dependent, langchain 1.4.1 (langgraph<1.3.0,>=1.2.11), accepts 1.2.14, and
 #   langgraph-sdk's one dependent is langgraph itself.
+# - 2026-10-31: pyasn1 0.6.4 -> 0.6.5 (GHSA-fm9c-5rcf-2q5p / CVE-2026-119194, GHSA-9m75-vc3g-4x39 / CVE-2026-119195,
+#   GHSA-2qm8-x737-gmw5 / CVE-2026-119196, GHSA-mm57-4v3p-rchx / CVE-2026-119197), the SHA-256 of its one wheel,
+#   pyasn1-0.6.5-py3-none-any.whl; its requirements are 0.6.4's, and pyasn1-modules 0.4.2 (pyasn1<0.7.0,>=0.6.1), its one
+#   dependent outside extras the closure does not install, accepts it.
 accelerate==1.15.0 \
     --hash=sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec
 aiohappyeyeballs==2.7.1 \
@@ -310,8 +314,8 @@ py-markdown-table==1.3.0 \
     --hash=sha256:b8740b57e466f343dbb1e9c7ca4e2d1b4281d96fb922bf1ed60b6c496c8725c4
 pyarrow==25.0.1 \
     --hash=sha256:25f8720bf6387d5dc2ebd2622112de630760419e4b66134405dd24110d15f37e
-pyasn1==0.6.4 \
-    --hash=sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b
+pyasn1==0.6.5 \
+    --hash=sha256:4017b0fce125096b8573b39c989fdb1a4b19cf761e683398184550fea0e66587
 pyasn1_modules==0.4.2 \
     --hash=sha256:29253a9207ce32b64c3ac6600edc75368f98473906e8fd1043bd6b5b1de2c14a
 pycparser==3.0 \
