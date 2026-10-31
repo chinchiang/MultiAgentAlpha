@@ -1,0 +1,38 @@
+focused: [tests/test_reply_shapes.py]
+mutations:
+  - name: the skeptic's schema admits a longer reason than its raw model
+    file: src/mara/agents/skeptic.py
+    old: '                       "reason": {"type": "string", "maxLength": 600},'
+    new: '                       "reason": {"type": "string", "maxLength": 601},'
+  - name: the judge's raw model allows a severity band its schema does not
+    file: src/mara/agents/judge.py
+    old: '    severity_band: Literal["None", "Low", "Medium", "High", "Critical"]'
+    new: '    severity_band: Literal["None", "Info", "Low", "Medium", "High", "Critical"]'
+  - name: the red team's schema no longer requires the preconditions its raw model does
+    file: src/mara/agents/redteam.py
+    old: '                "required": ["finding_id", "exploitable", "preconditions"],'
+    new: '                "required": ["finding_id", "exploitable"],'
+  - name: the judge's raw model parses a field its schema does not ask for
+    file: src/mara/agents/judge.py
+    old: "    reason: str = Field(max_length=400)\n\n\ndef run_judge("
+    new: "    reason: str = Field(max_length=400)\n    confidence: float = 0.5\n\n\ndef run_judge("
+  - name: the judge's schema admits items with fields of their own
+    file: src/mara/agents/judge.py
+    old: '        "type": "object", "additionalProperties": False, "required": ["finding_id", "verdict", "severity_band", "reason"],'
+    new: '        "type": "object", "required": ["finding_id", "verdict", "severity_band", "reason"],'
+  - name: the skeptic's domain model keeps a longer reason than a reply may give
+    file: src/mara/schemas.py
+    old: '    reason: str = Field(max_length=600)'
+    new: '    reason: str = Field(max_length=700)'
+  - name: the red team's domain model drops an exploitable value a reply may give
+    file: src/mara/schemas.py
+    old: '    exploitable: Literal["yes", "conditional", "no", "unknown"]'
+    new: '    exploitable: Literal["yes", "conditional", "no"]'
+  - name: the judge's domain model lets the reason default though a reply requires it
+    file: src/mara/schemas.py
+    old: '    reason: str = Field(max_length=400)'
+    new: '    reason: str = Field(default="", max_length=400)'
+  - name: the skeptic's domain model requires sanitizer_or_control, so an older report no longer loads
+    file: src/mara/schemas.py
+    old: '    sanitizer_or_control: str = Field(default="", max_length=300)'
+    new: '    sanitizer_or_control: str = Field(max_length=300)'
