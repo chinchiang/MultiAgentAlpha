@@ -103,15 +103,18 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
   are replaced by functions that record which step ran, then call the real ones, so a test reads the order `close()`
   takes them in. `test_web_server.py::test_closing_a_server_stops_serving_then_its_children_then_closes_its_socket`.
 - `admission.refusal(kind, running)`: pure, called directly with a kind and a set of kinds. Also patched as an attribute
-  of `mara.web.admission`, which both registries call through the module under `held()`.
-  `test_web_admission.py`,
-  `test_web_server.py::test_a_review_and_a_job_replacing_the_tools_launched_at_once_one_is_refused`.
+  of `mara.web.admission`, which `Children.launch` calls through the module under `held()`, for a run and a job
+  alike. `test_web_admission.py`,
+  `test_web_server.py::test_a_review_and_a_job_replacing_the_tools_launched_at_once_one_is_refused`,
+  `test_web_procs.py::test_a_launch_admission_refuses_is_refused_as_busy_and_writes_nothing`.
 - `Children.running`: replaced on a registry's own instance (its `children` attribute) by a function that first lets
-  the exit be recorded, then asks; `get()` calls it with the id alone, under `Children.held`.
+  the exit be recorded, then asks; `Children.read`, which each registry's `get()` calls, asks it with the id alone,
+  under `Children.held`.
   `test_web_server.py::test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code`,
   `test_web_server.py::test_a_job_whose_exit_is_recorded_while_it_is_read_is_never_read_as_interrupted`.
-- `procs.read_json`, `procs.write_json`: patched as attributes of `mara.web.procs`, which the registries call through
-  the module (`get()` reads a run's or a job's record with the first, `create()` writes a run's pid with the second).
+- `procs.read_json`, `procs.write_json`: patched as attributes of `mara.web.procs`, which `Children.read` and
+  `Children.launch` call by their module names (`read` reads a run's or a job's record with the first, `launch` writes
+  its record and then its pid with the second).
   The two tests above, and `test_web_server.py::test_a_run_whose_child_exits_at_once_keeps_the_exit_code_its_waiter_recorded`.
 - `mara.web.server.serve`: patched as an attribute of its module; `cli.serve` imports it when it runs, so a test that
   patches it before invoking `mara` or `mara serve` reaches it, and no server listens. `cli.serve` calls it with keyword

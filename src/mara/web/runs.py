@@ -50,22 +50,13 @@ from ..invocation import (
     review_args,
 )
 from ..schemas import ReviewReport
-from . import admission, configs, procs, views
+from . import configs, procs, views
+from .admission import LaunchError
 
 ARTIFACTS = (*REVIEW_ARTIFACTS, "run.log")
 IMPORTED_ID = "workspace-out"  # a review written by `mara review` into <workspace>/out, shown read-only
 BASE_REF_RE = re.compile(r"^[A-Za-z0-9._/@^~{}-]{1,200}$")
 STATUSES = ("running", "finished", "failed", "cancelled", "interrupted")
-
-
-class LaunchError(ValueError):
-    """A request the workbench refuses; `code` is what the page translates, `message` the detail."""
-
-    def __init__(self, code: str, message: str = "", status: int = 400) -> None:
-        super().__init__(message or code)
-        self.code = code
-        self.message = message
-        self.status = status
 
 
 class LaunchRequest(BaseModel):
@@ -176,17 +167,11 @@ class RunRegistry:
 
     def create(self, req: LaunchRequest) -> dict[str, Any]:
         inv, fields = self.prepare(req)
-        with self.children.held():  # the lock of every registry's children: the check and the start are one step
-            if self.children.table.closed:  # the server exit took the children: before anything is written
-                raise LaunchError("stopping", "the server is stopping: no review or job is started", status=503)
-            if refused := admission.refusal("run", self.children.table.running_tags()):
-                raise LaunchError("busy", refused, status=409)
-            run_id = procs.new_id()
-            run_dir = self.runs_dir / run_id
-            run_dir.mkdir(parents=True)
-            inv = dataclasses.replace(inv, out=run_dir, progress_file=run_dir / "progress.json")
-            argv = [sys.executable, "-m", "mara.cli", *review_args(inv)]
-            manifest: dict[str, Any] = {
+
+        def record(run_id: str, run_dir: Path) -> tuple[list[str], dict[str, Any]]:
+            run_inv = dataclasses.replace(inv, out=run_dir, progress_file=run_dir / "progress.json")
+            argv = [sys.executable, "-m", "mara.cli", *review_args(run_inv)]
+            return argv, {
                 "id": run_id,
                 "title": clean_title(req.title) or Path(fields["target"]).name,
                 **fields,
@@ -200,16 +185,9 @@ class RunRegistry:
                 "gate_enforced": False,
                 "psirt_failed": False,
             }
-            procs.write_json(run_dir / "run.json", manifest)
-            try:
-                pid = self.children.start(run_id, argv, cwd=self.workspace, log_path=run_dir / "run.log",
-                                          env=procs.child_env(self.workspace), tag="run")
-            except OSError as e:
-                manifest.update(status="failed", finished_at=procs.now(), error=type(e).__name__)
-                procs.write_json(run_dir / "run.json", manifest)
-                raise LaunchError("spawn_failed", str(e), status=500) from e
-            manifest["pid"] = pid
-            procs.write_json(run_dir / "run.json", manifest)
+
+        run_id, manifest = self.children.launch("run", self.runs_dir, record="run.json", log="run.log", cwd=self.workspace,
+                                                env=procs.child_env(self.workspace), prepare=record)
         return self.get(run_id) or manifest
 
     def _record_exit(self, run_id: str, code: int, stopped: bool) -> None:
@@ -283,9 +261,11 @@ class RunRegistry:
         return report
 
     def get(self, run_id: str) -> dict[str, Any] | None:
-        with self.children.held():  # a run's exit is recorded under this lock: read run.json and whether it runs in one step
-            manifest = self._manifest(run_id)
-            owned = self.children.running(run_id)
+        d = self.run_dir(run_id)
+        if run_id == IMPORTED_ID or d is None:
+            manifest, owned = self._manifest(run_id), False
+        else:  # run.json and whether the run is running, read in one step under the lock its exit is recorded under
+            manifest, owned = self.children.read(run_id, d / "run.json")
         if manifest is None:
             return None
         prog = self.progress(run_id)

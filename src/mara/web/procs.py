@@ -1,5 +1,7 @@
 """Child processes and small files of the workbench (GLOSSARY.md: workbench, run; docs/adr/0006-local-web-workbench.md):
-one way to start, stop and read a run or an environment job.
+one way to start, stop and read a run or an environment job, and to launch one with its record (Children.launch): the
+closed table and the admission checked, the child's directory and record written, the child started and its pid recorded,
+in one step under the table's lock.
 
 Every child is an argv list started without a shell, from the MARA workspace, with MARA_HOME pointing at it and
 the `mara` package the server itself runs on first on PYTHONPATH, so the child runs the `mara` the server was started
@@ -8,7 +10,7 @@ Output goes to a log file, never through a pipe the server would have to drain.
 
 Not pure: it starts and stops children and waits for them on threads of its own, copies the server's environment into
 theirs, reads the clock (ids, timestamps and the deadlines of a stop) and a random source (ids and temporary file
-names), and reads and writes the files it is given.
+names), creates a launched child's directory, and reads and writes the files it is given.
 """
 
 from __future__ import annotations
@@ -27,6 +29,9 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
+
+from . import admission
+from .admission import LaunchError
 
 ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 STOP_GRACE_SECONDS = 10.0
@@ -255,6 +260,42 @@ class Children:
 
     def running(self, child_id: str) -> bool:
         return self.table.running(self.name, child_id)
+
+    def launch(self, tag: str, parent: Path, *, record: str, log: str, cwd: Path, env: dict[str, str],
+               prepare: Callable[[str, Path], tuple[list[str], dict[str, Any]]]) -> tuple[str, dict[str, Any]]:
+        """Launch a child tagged `tag` and write its record, in one step under the table's lock, so the check and the
+        start see the same children running. Refused, before anything is written, with LaunchError stopping (503) once
+        the table is closed, or busy (409) when admission refuses `tag` beside the tags running. Otherwise a new id and
+        its directory below `parent`; `prepare(id, directory)` gives the argv and the record, which is written to
+        `record` in the directory before the child starts, its output going to `log` there. A start that fails with an
+        OSError leaves the record failed, with finished_at and error (the exception's type), and is refused with
+        spawn_failed (500); a started child's pid is added to the record. Returns the id and the record as written."""
+        with self.held():
+            if self.table.closed:  # the server exit took the children: before anything is written
+                raise LaunchError("stopping", "the server is stopping: no review or job is started", status=503)
+            if refused := admission.refusal(tag, self.table.running_tags()):
+                raise LaunchError("busy", refused, status=409)
+            child_id = new_id()
+            d = parent / child_id
+            d.mkdir(parents=True)
+            argv, rec = prepare(child_id, d)
+            write_json(d / record, rec)
+            try:
+                pid = self.start(child_id, argv, cwd=cwd, log_path=d / log, env=env, tag=tag)
+            except OSError as e:
+                rec.update(status="failed", finished_at=now(), error=type(e).__name__)
+                write_json(d / record, rec)
+                raise LaunchError("spawn_failed", str(e), status=500) from e
+            rec["pid"] = pid
+            write_json(d / record, rec)  # under the lock the exit is recorded under: never over the exit
+        return child_id, rec
+
+    def read(self, child_id: str, path: Path) -> tuple[dict[str, Any] | None, bool]:
+        """The record at `path` (None when it is missing or unreadable) and whether the child `child_id` is running,
+        read in one step under the table's lock, the one its exit is recorded under: a record without its exit code
+        is read only beside a child still running, unless its waiter stopped without recording the exit."""
+        with self.held():
+            return read_json(path), self.running(child_id)
 
     def stop(self, child_id: str) -> Literal["stopped", "exited", "unknown"]:
         """ChildTable.stop()."""

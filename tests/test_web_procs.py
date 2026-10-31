@@ -318,3 +318,94 @@ def test_a_table_tells_the_tags_of_every_child_running_and_each_registry_sees_on
         for child in made:
             child.released.set()
     assert _until(lambda: not table.running_tags(), 30)
+
+
+# ------------------------------------------------------------------ launch: a child and its record in one step
+
+def _launching(records, start=None):
+    return procs.Children("test", lambda child_id, code, stopped: records.append((child_id, code, stopped)),
+                          start=start or (lambda argv, **kw: procs.spawn(argv, **kw)))
+
+
+def _prepare(seen):
+    """A prepare callback recording each (id, directory) it is given, the record naming its id."""
+    def prepare(child_id, d):
+        seen.append((child_id, d))
+        return [sys.executable, "-c", "pass"], {"id": child_id, "status": "running", "exit_code": None}
+    return prepare
+
+
+def _launch(children, tmp_path, seen, tag="run"):
+    return children.launch(tag, tmp_path / "children", record="child.json", log="child.log", cwd=tmp_path,
+                           env=dict(os.environ), prepare=_prepare(seen))
+
+
+def test_a_launch_once_the_table_is_closed_is_refused_as_stopping_and_writes_nothing(tmp_path):
+    from mara.web.admission import LaunchError
+
+    children, seen = _launching([]), []
+    children.table.shutdown()
+    with pytest.raises(LaunchError) as refused:
+        _launch(children, tmp_path, seen)
+    assert (refused.value.code, refused.value.status) == ("stopping", 503)
+    assert seen == [] and not (tmp_path / "children").exists()
+
+
+def test_a_launch_admission_refuses_is_refused_as_busy_and_writes_nothing(tmp_path, monkeypatch):
+    from mara.web import admission
+
+    asked = []
+    monkeypatch.setattr(admission, "refusal", lambda kind, running: asked.append(kind) or f"{kind} waits")
+    children, seen = _launching([]), []
+    with pytest.raises(admission.LaunchError) as refused:
+        _launch(children, tmp_path, seen, tag="install_tools")
+    assert (refused.value.code, refused.value.status, refused.value.message) == ("busy", 409, "install_tools waits")
+    assert asked == ["install_tools"] and seen == [] and not (tmp_path / "children").exists()
+
+
+def test_a_launch_whose_child_cannot_start_leaves_its_record_failed_and_is_refused_as_spawn_failed(tmp_path):
+    from mara.web.admission import LaunchError
+
+    def unstartable(argv, **kw):
+        raise FileNotFoundError("no such interpreter")
+
+    children, seen = _launching([], start=unstartable), []
+    with pytest.raises(LaunchError) as refused:
+        _launch(children, tmp_path, seen)
+    assert (refused.value.code, refused.value.status) == ("spawn_failed", 500)
+    ((child_id, d),) = seen
+    record = procs.read_json(d / "child.json")
+    assert record["id"] == child_id and record["status"] == "failed" and record["error"] == "FileNotFoundError"
+    assert record["finished_at"] and record["exit_code"] is None
+    assert not children.running(child_id)
+
+
+def test_a_launch_starts_the_child_prepare_gives_and_records_its_pid(tmp_path):
+    records, seen, started = [], [], []
+
+    def start(argv, **kw):
+        started.append((argv, kw["log_path"], kw["cwd"]))
+        return procs.spawn(argv, **kw)
+
+    children = _launching(records, start=start)
+    child_id, record = _launch(children, tmp_path, seen)
+    ((seen_id, d),) = seen
+    assert seen_id == child_id and d == tmp_path / "children" / child_id and procs.ID_RE.match(child_id)
+    assert started == [([sys.executable, "-c", "pass"], d / "child.log", tmp_path)]
+    assert isinstance(record["pid"], int) and record["pid"] > 0
+    assert procs.read_json(d / "child.json")["pid"] == record["pid"]
+    assert _until(lambda: records == [(child_id, 0, False)], 30)
+
+
+def test_a_launch_writes_the_record_before_it_starts_the_child(tmp_path):
+    """A server stopped between the start and the pid still leaves a record, which the next server reads as interrupted;
+    without one, the child's directory would be no run or job at all (RunRegistry.run_dir needs run.json)."""
+    on_disk = []
+
+    def start(argv, **kw):
+        on_disk.append(procs.read_json(kw["log_path"].with_name("child.json")))
+        return procs.spawn(argv, **kw)
+
+    children, seen = _launching([], start=start), []
+    child_id, _ = _launch(children, tmp_path, seen)
+    assert on_disk == [{"id": child_id, "status": "running", "exit_code": None}]

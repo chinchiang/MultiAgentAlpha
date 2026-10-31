@@ -1,34 +1,32 @@
-focused: [tests/test_web_server.py]
+focused:
+- tests/test_web_server.py
+- tests/test_web_procs.py
 mutations:
-  - name: job.json read outside the lock
-    file: src/mara/web/jobs.py
-    old: "        with self.children.held():  # a job's exit is recorded under this lock: read job.json and whether it runs in one step\n            job = procs.read_json(d / \"job.json\")\n"
-    new: "        job = procs.read_json(d / \"job.json\")\n        with self.children.held():\n"
-  - name: whether the job runs asked outside the lock
-    file: src/mara/web/jobs.py
-    old: "            job = procs.read_json(d / \"job.json\")\n            owned = self.children.running(job_id)\n        if job is None:"
-    new: "            job = procs.read_json(d / \"job.json\")\n        owned = self.children.running(job_id)\n        if job is None:"
-  - name: the job's kind not given as its tag
-    file: src/mara/web/jobs.py
-    old: "                                    tag=req.kind)\n"
-    new: "                                    tag=None)\n"
-  - name: a job exiting 0 recorded failed
-    file: src/mara/web/jobs.py
-    old: "        job.update(status=\"finished\" if code == 0 else \"failed\", exit_code=code, finished_at=procs.now())\n"
-    new: "        job.update(status=\"failed\", exit_code=code, finished_at=procs.now())\n"
-  - name: a job admitted outside the lock it starts under
-    file: src/mara/web/jobs.py
-    old: "        with self.children.held():  # the lock of every registry's children: the check and the start are one step\n            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n            if refused := admission.refusal(req.kind, self.children.table.running_tags()):\n                raise LaunchError(\"busy\", refused, status=409)\n"
-    new: "        if refused := admission.refusal(req.kind, self.children.table.running_tags()):\n            raise LaunchError(\"busy\", refused, status=409)\n        with self.children.held():  # the lock of every registry's children: the check and the start are one step\n            if self.children.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"
-  - name: a job launched without asking for admission
-    file: src/mara/web/jobs.py
-    old: "            if refused := admission.refusal(req.kind, self.children.table.running_tags()):\n"
-    new: "            if refused := None:\n"
-  - name: a job registry with a table of its own, not the server's
-    file: src/mara/web/server.py
-    old: "        self.jobs = JobRegistry(self.workspace, self.out_dir, table=self.table)\n"
-    new: "        self.jobs = JobRegistry(self.workspace, self.out_dir)\n"
-  - name: a run registry with a table of its own, not the server's
-    file: src/mara/web/server.py
-    old: "        self.runs = RunRegistry(self.workspace, self.out_dir, table=self.table)\n"
-    new: "        self.runs = RunRegistry(self.workspace, self.out_dir)\n"
+- name: the job's kind not given as its tag
+  file: src/mara/web/jobs.py
+  old: '        job_id, job = self.children.launch(req.kind, self.jobs_dir,'
+  new: '        job_id, job = self.children.launch("job", self.jobs_dir,'
+- name: a job exiting 0 recorded failed
+  file: src/mara/web/jobs.py
+  old: '        job.update(status="finished" if code == 0 else "failed", exit_code=code, finished_at=procs.now())
+
+    '
+  new: '        job.update(status="failed", exit_code=code, finished_at=procs.now())
+
+    '
+- name: a job registry with a table of its own, not the server's
+  file: src/mara/web/server.py
+  old: '        self.jobs = JobRegistry(self.workspace, self.out_dir, table=self.table)
+
+    '
+  new: '        self.jobs = JobRegistry(self.workspace, self.out_dir)
+
+    '
+- name: a run registry with a table of its own, not the server's
+  file: src/mara/web/server.py
+  old: '        self.runs = RunRegistry(self.workspace, self.out_dir, table=self.table)
+
+    '
+  new: '        self.runs = RunRegistry(self.workspace, self.out_dir)
+
+    '

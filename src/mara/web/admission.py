@@ -1,6 +1,6 @@
 """Which launch the workbench admits (GLOSSARY.md: workbench, run; docs/adr/0006-local-web-workbench.md): one review runs
 at a time, and never while an environment job replaces the tools or the trivy database it uses, nor such a job while a
-review runs; one environment job runs at a time.
+review runs; one environment job runs at a time. LaunchError is how the workbench refuses a request, this one or any other.
 
 Pure: `refusal()` reads only the kind launched and the kinds running it is given.
 """
@@ -8,6 +8,17 @@ Pure: `refusal()` reads only the kind launched and the kinds running it is given
 from __future__ import annotations
 
 from collections.abc import Collection
+
+
+class LaunchError(ValueError):
+    """A request the workbench refuses; `code` is what the page translates, `message` the detail."""
+
+    def __init__(self, code: str, message: str = "", status: int = 400) -> None:
+        super().__init__(message or code)
+        self.code = code
+        self.message = message
+        self.status = status
+
 
 CHANGES_TOOLS = frozenset({"install_tools", "trivy_db_download"})  # never while a review executes the tools or reads the database
 

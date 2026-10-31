@@ -1,14 +1,20 @@
-focused: [tests/test_web_server.py]
+focused:
+- tests/test_web_server.py
+- tests/test_web_procs.py
 mutations:
-  - name: a run's refusal reaches the 409 without its message
-    file: src/mara/web/runs.py
-    old: "                raise LaunchError(\"busy\", refused, status=409)\n"
-    new: "                raise LaunchError(\"busy\", status=409)\n"
-  - name: a job's refusal reaches the 409 without its message
-    file: src/mara/web/jobs.py
-    old: "                raise LaunchError(\"busy\", refused, status=409)\n"
-    new: "                raise LaunchError(\"busy\", status=409)\n"
-  - name: a refused launch's message is not sent
-    file: src/mara/web/server.py
-    old: "            self._error(e.status, e.code, e.message)\n"
-    new: "            self._error(e.status, e.code)\n"
+- name: a run's refusal reaches the 409 without its message
+  file: src/mara/web/procs.py
+  old: '                raise LaunchError("busy", refused, status=409)
+
+    '
+  new: '                raise LaunchError("busy", status=409)
+
+    '
+- name: a refused launch's message is not sent
+  file: src/mara/web/server.py
+  old: '            self._error(e.status, e.code, e.message)
+
+    '
+  new: '            self._error(e.status, e.code)
+
+    '

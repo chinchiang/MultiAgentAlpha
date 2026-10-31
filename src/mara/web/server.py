@@ -48,8 +48,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .. import __version__
 from . import env, procs, views
+from .admission import LaunchError
 from .jobs import JobRegistry, JobRequest
-from .runs import LaunchError, LaunchRequest, RunRegistry
+from .runs import LaunchRequest, RunRegistry
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 MAX_BODY = 64 * 1024
