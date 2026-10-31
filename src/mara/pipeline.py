@@ -17,7 +17,7 @@ from .agents.context_agent import ContextView
 from .audit import Audit, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
-from .identity import NEAR_LINES, norm_path
+from .identity import norm_path, same_place
 from .invocation import ProviderMode, check_provider_mode
 from .progress import Progress
 from .providers import make_provider
@@ -163,7 +163,9 @@ class Pipeline:
 
     @staticmethod
     def dedupe(findings: list[Finding]) -> tuple[list[Finding], dict[str, set[ModelFamily]]]:
-        """Merge findings from different families that point at the same file/line(+-3)/CWE."""
+        """Merge findings of one dimension at one place (mara.identity.same_place: one file, one CWE, lines at most
+        NEAR_LINES apart), the first one kept and the families that found it collected; an unverified finding is never
+        merged into a verified one, nor a verified one into an unverified one."""
         kept: list[Finding] = []
         finders: dict[str, set[ModelFamily]] = {}
         for f in findings:
@@ -175,8 +177,7 @@ class Pipeline:
                 k_ok = all(x.verified for x in k.provenance)
                 # never merge an unverified (possibly fabricated) finding into a verified one:
                 # it would inherit the verified finding's acceptance and hide the fabrication
-                same_file = norm_path(q.file) == norm_path(p.file)  # ./app.py and app.py are one file
-                if k.dimension == f.dimension and k.cwe == f.cwe and same_file and abs(q.line - p.line) <= NEAR_LINES and k_ok == f_ok:
+                if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):
                     match = k
                     break
             if match is None:
