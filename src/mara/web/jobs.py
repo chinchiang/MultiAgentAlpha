@@ -18,10 +18,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..invocation import ProviderMode
+from ..tools import pins
 from . import admission, procs
 from .runs import LaunchError, resolve_config
 
@@ -38,12 +38,8 @@ class JobRequest(BaseModel):
 
 
 def locked_tools(workspace: Path) -> list[str]:
-    try:
-        lock = yaml.safe_load((workspace / "tools" / "versions.lock").read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        return []
-    tools = lock.get("tools") if isinstance(lock, dict) else None
-    return sorted(tools) if isinstance(tools, dict) else []
+    """The tools the workspace's lock names (mara.tools.pins), sorted; none when it cannot be read."""
+    return sorted(pins.locked_tools(pins.read_lock(workspace / pins.LOCK)))
 
 
 def available(workspace: Path) -> dict[str, bool]:

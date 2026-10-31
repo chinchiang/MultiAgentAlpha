@@ -524,8 +524,10 @@ asset, checks the SHA-256 (never skippable), runs the publisher-side check — c
 SLSA provenance, GitHub attestation, publisher checksum file, the npm registry's `dist.integrity` for
 csp-evaluator, or `pip --require-hashes` for semgrep —
 and installs into `.mara-tools/bin`, writing `.mara-tools/manifest.json`. Any mismatch aborts.
-`mara/tools/runner.py` executes tools only from that directory and reports "not installed" otherwise;
-PATH is never consulted. `docs/tools-provenance.md` records source, licence, what each verification
+`mara/tools/runner.py` executes tools only from that directory, and only at the version the workspace's
+`tools/versions.lock` pins, as `manifest.json` records the install (`mara/tools/pins.py`, the rule the CI scripts
+apply too). A tool missing, or installed at another version, is recorded as not run with the reason, which keeps the
+review incomplete; re-run `scripts/install_tools.py` after a relock. PATH is never consulted. `docs/tools-provenance.md` records source, licence, what each verification
 proves and the remaining gaps (gitleaks, semgrep and csp-evaluator publish no signature). CI installs and verifies
 the whole set on every run. The lock also has a `git` kind: `semgrep-rules` is a checkout of
 `semgrep/semgrep-rules` at a pinned commit, verified by commit id, by a SHA-256 digest over every

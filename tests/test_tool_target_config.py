@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from mara.tools import runner
+from tests import tool_installs
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / ".mara-tools"
@@ -36,7 +37,8 @@ def test_every_tool_is_handed_neutral_config_instead_of_the_targets(tmp_path, mo
 
     monkeypatch.setenv("MARA_SEMGREP_CONFIG", str(tmp_path / "rules.yml"))
     monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
-    monkeypatch.setattr(runner, "installed_version", lambda tool: "pinned")
+    tool_installs.manifest(tmp_path / "tools", *runner.TOOL_DIMENSIONS)  # each at its locked version
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     monkeypatch.setattr(runner, "_run", fake_run)
     fake_db = tmp_path / "trivy.db"
     fake_db.write_bytes(b"")
@@ -67,7 +69,8 @@ def test_semgrep_without_pinned_rules_does_not_fall_back_to_the_registry(tmp_pat
     the run as the pinned one; now semgrep is not run, which keeps the review incomplete."""
     monkeypatch.delenv("MARA_SEMGREP_CONFIG", raising=False)
     monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
-    monkeypatch.setattr(runner, "installed_version", lambda tool: "pinned")
+    tool_installs.manifest(tmp_path / "tools", *runner.TOOL_DIMENSIONS)  # each at its locked version
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     monkeypatch.setattr(runner, "_run", lambda *a, **k: pytest.fail("semgrep must not be invoked without its pinned rules"))
     (tmp_path / "target").mkdir()
     [run] = runner.run_all(tmp_path / "target", tmp_path / "out", enabled=["semgrep"])
@@ -97,7 +100,8 @@ def _zizmor_with(monkeypatch, tmp_path, returncode, stderr):
         return subprocess.CompletedProcess(cmd, returncode, stdout="", stderr=stderr)
 
     monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
-    monkeypatch.setattr(runner, "installed_version", lambda tool: "1.30.1")
+    tool_installs.manifest(tmp_path / "tools", "zizmor")  # at its locked version
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     monkeypatch.setattr(runner, "_run", fake_run)
 
 

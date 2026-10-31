@@ -16,6 +16,7 @@ from mara import mlbom
 from mara.context.repo_map import git_changed_files
 from mara.tools import runner
 from mara.tools import trivy_db as tdb
+from tests import tool_installs
 
 ROOT = Path(__file__).resolve().parents[1]
 EMPTY_SARIF = json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Trivy"}}, "results": []}]})
@@ -106,10 +107,11 @@ def trivy_env(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setenv("MARA_HOME", str(tmp_path / "ws"))
-    (tmp_path / "ws" / "tools").mkdir(parents=True)
+    tool_installs.lock_into(tmp_path / "ws")
+    tool_installs.manifest(tmp_path / "tools", "trivy")
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
-    monkeypatch.setattr(runner, "installed_version", lambda tool: "0.74.0")
     monkeypatch.setattr(runner, "_run", fake_run)
     target = tmp_path / "target"
     target.mkdir()
