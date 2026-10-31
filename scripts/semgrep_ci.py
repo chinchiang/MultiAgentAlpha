@@ -30,17 +30,16 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_manifest_entry, installed_version, tool_path, tools_dir  # noqa: E402
 from mara.tools.sarif import scan_complete  # noqa: E402
 from mara.tools.semgrep_rules import RULES_DIR_NAME, normalize_sarif, result_keys, rules_dir, scan_args, scan_env  # noqa: E402
 
 
-def locked(lock: Path = ROOT / "tools" / "versions.lock") -> tuple[str, str, list[str]]:
+def locked(lock: Path = ROOT / pins.LOCK) -> tuple[str, str, list[str]]:
     """(semgrep version, rules commit, rule paths) from the lock."""
-    d = yaml.safe_load(lock.read_text(encoding="utf-8")) or {}
-    tools = d.get("tools", d)
-    rules = tools.get(RULES_DIR_NAME, {})
-    return str(tools.get("semgrep", {}).get("version", "")), str(rules.get("commit", "")), [str(p) for p in rules.get("paths", [])]
+    rules = pins.locked_tools(pins.read_lock(lock)).get(RULES_DIR_NAME, {})
+    return pins.locked_version("semgrep", lock), str(rules.get("commit", "")), [str(p) for p in rules.get("paths", [])]
 
 
 def check_pins() -> tuple[Path, list[str]] | str:
@@ -50,8 +49,9 @@ def check_pins() -> tuple[Path, list[str]] | str:
     if exe is None:
         return f"semgrep is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)"
     have = installed_version("semgrep")
-    if not want_ver or have != want_ver:
-        return f"installed semgrep {have!r} does not match tools/versions.lock {want_ver!r}; re-run scripts/install_tools.py"
+    not_pinned = pins.mismatch("semgrep", want_ver, have)
+    if not_pinned:
+        return not_pinned
     rdir = rules_dir()
     entry = installed_manifest_entry(RULES_DIR_NAME) or {}
     if not rdir.is_dir() or not entry:

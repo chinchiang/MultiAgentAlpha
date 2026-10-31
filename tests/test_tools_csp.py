@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara.tools import csp_eval, runner  # noqa: E402
 from mara.tools.sarif import scan_complete  # noqa: E402
+from tests import tool_installs  # noqa: E402
 
 DRIVER_SRC = ROOT / "src" / "mara" / "tools" / "csp_driver.js"
 
@@ -69,7 +70,7 @@ def csp_install(tmp_path, monkeypatch):
     shim.write_text("#!/bin/sh\nexec node \"$0/../csp-evaluator/mara_driver.js\"\n", encoding="utf-8")
     shim.chmod(shim.stat().st_mode | stat.S_IXUSR)
     (mt / "bin" / "csp-evaluator.cmd").write_text("@echo off\nnode \"%~dp0..\\csp-evaluator\\mara_driver.js\"\n", encoding="ascii")
-    (mt / "manifest.json").write_text(json.dumps({"tools": {"csp-evaluator": {"version": "9.9.9"}}}), encoding="utf-8")
+    tool_installs.manifest(mt, "csp-evaluator")  # at its locked version
     monkeypatch.setenv("MARA_TOOLS_DIR", str(mt))
     return mt
 
@@ -170,7 +171,7 @@ def test_runner_branch_runs_and_reports_the_tool(tmp_path, csp_install):
     _write(tmp_path, "index.html", '<meta http-equiv="Content-Security-Policy" content="default-src \'self\'">')
     runs = {r.tool: r for r in runner.run_all(tmp_path, tmp_path / "out", enabled=["csp-evaluator"])}
     r = runs["csp-evaluator"]
-    assert r.ran and "9.9.9" in r.note
+    assert r.ran and r.note == f"pinned {tool_installs.locked('csp-evaluator')}"
     assert [x.rule_id for x in r.results] == ["SCRIPT_UNSAFE_INLINE", "FAKE_INFO"]
 
 

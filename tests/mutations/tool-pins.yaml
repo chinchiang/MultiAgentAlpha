@@ -1,0 +1,50 @@
+focused: [tests/test_tool_pins.py, tests/test_tool_env.py, tests/test_tool_target_config.py, tests/test_base_ref_trivy_hf_token.py, tests/test_tools_csp.py, tests/test_install_tools.py, tests/test_gitleaks_ci.py]
+mutations:
+  - name: the review runs a tool installed at another version
+    file: src/mara/tools/runner.py
+    old: "        if not_pinned:\n            runs.append(ToolRun(tool=tool, ran=False, note=not_pinned))\n            continue\n"
+    new: ""
+  - name: the review reads no lock and pins nothing
+    file: src/mara/tools/runner.py
+    old: '        not_pinned = pins.mismatch(tool, locked.get(tool, ""), version)'
+    new: '        not_pinned = pins.mismatch(tool, version or "", version)'
+  - name: a tool the lock does not pin is the pinned one
+    file: src/mara/tools/pins.py
+    old: '    if locked and installed == locked:'
+    new: '    if installed == locked or not locked:'
+  - name: a lock that is not a mapping is read as one
+    file: src/mara/tools/pins.py
+    old: '    return doc if isinstance(doc, dict) else {}'
+    new: '    return doc or {}'
+  - name: a tool's entry that is not a mapping is kept
+    file: src/mara/tools/pins.py
+    old: '    return {name: spec for name, spec in tools.items() if isinstance(spec, dict)} if isinstance(tools, dict) else {}'
+    new: '    return dict(tools) if isinstance(tools, dict) else {}'
+  - name: the workbench shows an unverified install as ok
+    file: src/mara/tools/pins.py
+    old: '    return "ok" if entry.get("signature_verified") else "unverified"'
+    new: '    return "ok"'
+  - name: the workbench shows another version as the pinned one
+    file: src/mara/tools/pins.py
+    old: "    if mismatch(\"\", locked, None if have is None else str(have)) is not None:\n        return \"version_mismatch\"\n"
+    new: ""
+  - name: a relative tool directory ignores the workspace asked for
+    file: src/mara/tools/runner.py
+    old: '    return (workspace / d if workspace is not None and not d.is_absolute() else resolve(d)).resolve()'
+    new: '    return resolve(d).resolve()'
+  - name: G-5 reads the manifest from the default tool directory
+    file: scripts/governance_check.py
+    old: '    manifest = tools_dir(root) / "manifest.json"  # MARA_TOOLS_DIR moves it, as it moves the runner''s tools'
+    new: '    manifest = root / ".mara-tools" / "manifest.json"'
+  - name: G-5 passes a lock it cannot read
+    file: scripts/governance_check.py
+    old: "    if not isinstance(lock.get(\"tools\"), dict) or not lock[\"tools\"]:\n"
+    new: "    if False:\n"
+  - name: gitleaks_ci runs an off-lock gitleaks
+    file: scripts/gitleaks_ci.py
+    old: "    not_pinned = pins.mismatch(\"gitleaks\", want, have)\n"
+    new: "    not_pinned = None\n"
+  - name: osv_ci reads another tool's version
+    file: scripts/osv_ci.py
+    old: '    return pins.locked_version("osv-scanner", lock)'
+    new: '    return pins.locked_version("trivy", lock)'

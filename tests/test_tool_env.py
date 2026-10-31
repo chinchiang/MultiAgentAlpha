@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from mara.tools import csp_eval, runner, semgrep_rules
+from tests import tool_installs
 
 EMPTY_SARIF = json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "x"}}, "results": []}]})
 SECRETS = {
@@ -65,7 +66,8 @@ def every_tool(tmp_path, monkeypatch, parent_env):
 
     monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
     monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
-    monkeypatch.setattr(runner, "installed_version", lambda tool: "1.0")
+    tool_installs.manifest(tmp_path / "tools", *runner.TOOL_DIMENSIONS)  # each at its locked version
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     rules = tmp_path / "rules"
     rules.mkdir()
     monkeypatch.setattr(semgrep_rules, "installed_rule_paths", lambda: [rules])
@@ -114,7 +116,7 @@ def test_csp_evaluator_driver_runs_with_the_allowlist(parent_env, tmp_path, monk
 def test_pinned_rules_are_labelled_pinned(every_tool):
     target, out, _ = every_tool
     [run] = runner.run_all(target, out, enabled=["semgrep"])
-    assert run.ran and run.note == "pinned 1.0" and "UNPINNED" not in run.note
+    assert run.ran and run.note == f"pinned {tool_installs.locked('semgrep')}" and "UNPINNED" not in run.note
 
 
 @pytest.mark.parametrize("config, registry", [("/opt/rules/custom.yml", False), ("p/default", True), ("auto", True),
@@ -136,4 +138,4 @@ def test_blank_override_falls_back_to_the_pinned_rules(every_tool, monkeypatch):
     monkeypatch.setenv("MARA_SEMGREP_CONFIG", " , ")
     assert semgrep_rules.override_configs() == []
     [run] = runner.run_all(target, out, enabled=["semgrep"])
-    assert run.note == "pinned 1.0"
+    assert run.note == f"pinned {tool_installs.locked('semgrep')}"

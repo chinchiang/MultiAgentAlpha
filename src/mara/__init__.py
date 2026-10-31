@@ -6,4 +6,4 @@ deterministic tools. See docs/ for the research report this prototype accompanie
 
 # The one version string: pyproject.toml reads it (dynamic version), the SARIF driver and the ML-BOM
 # carry it, and tests/test_version.py keeps it equal to the newest row of docs/CHANGELOG.md.
-__version__ = "0.13.46"
+__version__ = "0.13.47"

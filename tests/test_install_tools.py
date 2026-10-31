@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from install_tools import InstallError, git_paths_digest, install, load_lock, python_for_pip  # noqa: E402
 
 from mara.tools import runner  # noqa: E402
+from tests import tool_installs  # noqa: E402
 
 
 def _sha(b: bytes) -> str:
@@ -285,12 +286,13 @@ def test_runner_only_executes_pinned_tools(tmp_path, monkeypatch):
     fake = mt / "bin" / "zizmor"
     fake.write_text("#!/bin/sh\ncat <<'EOF'\n" + sarif + "\nEOF\n")
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
-    (mt / "manifest.json").write_text(json.dumps({"tools": {"zizmor": {"version": "9.9.9"}}}))
+    tool_installs.manifest(mt, "zizmor")  # at its locked version
     monkeypatch.setenv("MARA_TOOLS_DIR", str(mt))
     target = tmp_path / "target"
     target.mkdir()
     runs = {r.tool: r for r in runner.run_all(target, tmp_path / "out", enabled=["zizmor", "gitleaks"])}
-    assert runs["zizmor"].ran and runs["zizmor"].results[0].rule_id == "zizmor/dangerous-triggers" and "9.9.9" in runs["zizmor"].note
+    assert runs["zizmor"].ran and runs["zizmor"].results[0].rule_id == "zizmor/dangerous-triggers"
+    assert runs["zizmor"].note == f"pinned {tool_installs.locked('zizmor')}"
     assert not runs["gitleaks"].ran and "install_tools.py" in runs["gitleaks"].note
     # PATH is never consulted
     monkeypatch.setenv("PATH", str(mt / "bin") + os.pathsep + os.environ["PATH"])

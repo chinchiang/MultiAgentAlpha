@@ -29,15 +29,15 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from mara.tools import pins  # noqa: E402
 from mara.tools.csp_eval import node_exe, run_csp_eval  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
 from mara.tools.sarif import scan_complete  # noqa: E402
 from mara.tools.semgrep_rules import result_keys  # noqa: E402
 
 
-def locked_version(lock: Path = ROOT / "tools" / "versions.lock") -> str:
-    d = yaml.safe_load(lock.read_text(encoding="utf-8")) or {}
-    return str(d.get("tools", d).get("csp-evaluator", {}).get("version", ""))
+def locked_version(lock: Path = ROOT / pins.LOCK) -> str:
+    return pins.locked_version("csp-evaluator", lock)
 
 
 def check_pins() -> str | tuple[str, str]:
@@ -45,8 +45,9 @@ def check_pins() -> str | tuple[str, str]:
     want, have = locked_version(), installed_version("csp-evaluator")
     if tool_path("csp-evaluator") is None:
         return f"csp-evaluator is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)"
-    if not want or have != want:
-        return f"installed csp-evaluator {have!r} does not match tools/versions.lock {want!r}; re-run scripts/install_tools.py"
+    not_pinned = pins.mismatch("csp-evaluator", want, have)
+    if not_pinned:
+        return not_pinned
     node = node_exe()
     if not node:
         return "node interpreter not found on PATH (node >= 18 required to drive the pinned csp-evaluator)"

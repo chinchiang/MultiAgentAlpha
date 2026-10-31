@@ -33,7 +33,7 @@ from .. import __version__
 from ..config import MaraConfig, ModelSpec
 from ..invocation import config_provider_mode
 from ..policy import evaluate_policies
-from ..tools import trivy_db
+from ..tools import pins, trivy_db
 from ..tools.csp_eval import node_exe
 from ..tools.runner import TOOL_DIMENSIONS, installed_manifest_entry, tool_path, tools_dir
 from . import jobs
@@ -57,31 +57,17 @@ def _sha256(path: Path) -> str | None:
 
 
 def tools(workspace: Path) -> dict[str, Any]:
-    lock_path = workspace / "tools" / "versions.lock"
-    try:
-        lock = yaml.safe_load(lock_path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        lock = {}
-    specs: dict[str, Any] = {}
-    if isinstance(lock, dict) and isinstance(lock.get("tools"), dict):
-        specs = lock["tools"]
+    lock_path = workspace / pins.LOCK
+    lock = pins.read_lock(lock_path)
     tdir = tools_dir()
     rows = []
-    for name, spec in specs.items():
-        spec = spec if isinstance(spec, dict) else {}
+    for name, spec in pins.locked_tools(lock).items():
         entry = installed_manifest_entry(name)
         kind = str(spec.get("kind", ""))
         installed = (tdir / name).is_dir() if kind == "git" else tool_path(name) is not None
         locked = str(spec.get("version", ""))
         have = str(entry.get("version")) if entry and entry.get("version") is not None else None
-        if not installed or entry is None:
-            status = "missing"
-        elif have != locked:
-            status = "version_mismatch"
-        elif not entry.get("signature_verified"):
-            status = "unverified"
-        else:
-            status = "ok"
+        status = pins.install_status(locked, entry, installed=installed)
         rows.append({
             "name": name,
             "role": str(spec.get("role", "scanner")),
@@ -104,7 +90,7 @@ def tools(workspace: Path) -> dict[str, Any]:
         except (OSError, ValueError, AttributeError):
             manifest_lock = None
     lock_sha = _sha256(lock_path)
-    platform_lock = lock.get("platform") if isinstance(lock, dict) and isinstance(lock.get("platform"), dict) else {}
+    platform_lock = lock.get("platform") if isinstance(lock.get("platform"), dict) else {}
     return {
         "lock_present": lock_path.is_file(),
         "lock_sha256": lock_sha,
