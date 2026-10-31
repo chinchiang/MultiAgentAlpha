@@ -1,0 +1,14 @@
+focused: [tests/test_jury_quorum.py]
+mutations:
+  - name: the quorum counts the config's judge seats, not the valid votes
+    file: src/mara/scoring/jury.py
+    old: '        independent = valid_families - finders[f.id]'
+    new: '        independent = set(jury.weights) - finders[f.id]'
+  - name: the plan falls back to the finder's family even with enough independent seats
+    file: src/mara/ballot_round.py
+    old: '                elif independent(f) < min_ind:'
+    new: '                elif independent(f) <= min_ind:'
+  - name: the plan counts the finder's own family as independent of it
+    file: src/mara/ballot_round.py
+    old: '            return sum(1 for fam in judge_fams if fam not in finders[f.id])'
+    new: '            return sum(1 for fam in judge_fams)'
