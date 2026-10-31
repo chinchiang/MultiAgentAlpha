@@ -9,10 +9,11 @@ import pytest
 
 from mara.ballot_round import Ballots
 from mara.context.repo_map import RepoContext
-from mara.pipeline import ReviewerFindings, Stages
+from mara.pipeline import Stages
 from mara.report.assembly import ReportMetadata, assemble
 from mara.review_status import GatePolicy, SecretPreflight, assess
 from mara.reviewed_content import ReviewedContent
+from mara.reviewer_round import ReviewerFindings
 from mara.schemas import MlBomEntry, ModelEvalStatus, ModelFamily, QueueTightening, RedTeamNote, SkepticVerdict
 from mara.scoring.dimension_score import score_dimension
 from mara.tools.evidence import ToolEvidence

@@ -55,6 +55,10 @@ A role that produces new items from repository data (reviewer, context); an empt
 A role that rules on given findings one by one (skeptic, red team, judge); an empty reply from it is invalid output, since a ballot cannot abstain.
 _Avoid_: verdict role
 
+**Reviewer round**:
+The part of a review in which every reviewer reports findings on each batch of the bundle for each dimension, one exchange each, unless the secret preflight blocked source egress. The findings are numbered in the order of their place, never the order the reviewers answered, so consecutive ids do not show which findings one exchange returned; then the findings of one dimension at the same place, equally verified, are merged into one, kept with every family that found it. Its result is what the ballot round rules on.
+_Avoid_: L2 (a layer number, not a concept), review (the review is every stage, the tools and the reports included)
+
 **Ballot round**:
 The part of a review in which every ballot role rules on the deduplicated findings: the skeptic, then the red team on the findings the skeptic did not refute, then each judge in a forward and a mirrored reverse pass. A voided reply worth it is asked once more. Its result, the ballots (the skeptic's verdicts, the red team's notes and the judges' votes), is what the jury outcome is scored from.
 _Avoid_: L3/L4 (layer numbers, not a concept), jury round (the jury is the judges alone)

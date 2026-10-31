@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 from typer.testing import CliRunner
 
-from mara import exchange
+from mara import exchange, reviewer_round
 from mara.agents import base
 from mara.cli import app
 from mara.config import load_config
@@ -140,9 +140,9 @@ def _f(fid: str, file: str, fam: ModelFamily, verified: bool) -> Finding:
 
 
 def test_dedupe_treats_dot_slash_and_bare_paths_as_one_file():
-    kept, finders = Pipeline.dedupe([_f("F-1", "app.py", ModelFamily.ANTHROPIC, False),
+    kept, finders = reviewer_round.dedupe([_f("F-1", "app.py", ModelFamily.ANTHROPIC, False),
                                      _f("F-2", "./app.py", ModelFamily.DEEPSEEK, False),
                                      _f("F-3", "other.py", ModelFamily.NEMOTRON, False)])
     assert [k.id for k in kept] == ["F-1", "F-3"] and finders["F-1"] == {ModelFamily.ANTHROPIC, ModelFamily.DEEPSEEK}
-    kept, _ = Pipeline.dedupe([_f("F-1", "app.py", ModelFamily.ANTHROPIC, True), _f("F-2", "./app.py", ModelFamily.DEEPSEEK, False)])
+    kept, _ = reviewer_round.dedupe([_f("F-1", "app.py", ModelFamily.ANTHROPIC, True), _f("F-2", "./app.py", ModelFamily.DEEPSEEK, False)])
     assert len(kept) == 2, "an unverified finding is still never merged into a verified one"

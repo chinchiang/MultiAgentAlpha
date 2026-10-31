@@ -1,26 +1,30 @@
 focused: [tests/test_reviewer_round.py, tests/test_core_review_fixes_8_13.py, tests/test_identity.py]
 mutations:
   - name: ids given in the order the reviewers answered
-    file: src/mara/pipeline.py
-    old: "        raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))\n"
+    file: src/mara/reviewer_round.py
+    old: "    raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))\n"
     new: ""
   - name: ids given in reverse content order
-    file: src/mara/pipeline.py
-    old: '        raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))'
-    new: '        raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title), reverse=True)'
+    file: src/mara/reviewer_round.py
+    old: '    raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))'
+    new: '    raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title), reverse=True)'
   - name: dedupe compares the weakness as spelled, a rule of its own
-    file: src/mara/pipeline.py
-    old: '                if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
-    new: '                if k.dimension == f.dimension and k_ok == f_ok and k.cwe == f.cwe and same_place(q.file, q.line, k.cwe, p.file, p.line, k.cwe):'
+    file: src/mara/reviewer_round.py
+    old: '            if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
+    new: '            if k.dimension == f.dimension and k_ok == f_ok and k.cwe == f.cwe and same_place(q.file, q.line, k.cwe, p.file, p.line, k.cwe):'
   - name: dedupe merges across dimensions
-    file: src/mara/pipeline.py
-    old: '                if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
-    new: '                if k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
+    file: src/mara/reviewer_round.py
+    old: '            if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
+    new: '            if k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
   - name: dedupe merges an unverified finding into a verified one
-    file: src/mara/pipeline.py
-    old: '                if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
-    new: '                if k.dimension == f.dimension and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
+    file: src/mara/reviewer_round.py
+    old: '            if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
+    new: '            if k.dimension == f.dimension and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
   - name: one place is closer than NEAR_LINES
     file: src/mara/identity.py
     old: '            and abs(int(line_a) - int(line_b)) <= NEAR_LINES)'
     new: '            and abs(int(line_a) - int(line_b)) < NEAR_LINES)'
+  - name: the reviewers are asked although source egress was blocked
+    file: src/mara/reviewer_round.py
+    old: "    if egress_blocked:\n        progress.skip("
+    new: "    if False:\n        progress.skip("

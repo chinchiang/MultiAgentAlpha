@@ -11,13 +11,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import ballot_round, exchange
-from .agents import context_agent, reviewer
+from . import ballot_round, exchange, reviewer_round
+from .agents import context_agent
 from .agents.context_agent import ContextView
 from .audit import Audit, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
-from .identity import norm_path, same_place
 from .invocation import ProviderMode, check_provider_mode
 from .progress import Progress
 from .providers import make_provider
@@ -25,32 +24,21 @@ from .providers.base import Provider
 from .report.assembly import ReportMetadata, assemble
 from .review_status import Assessment, GatePolicy, ReviewFacts, SecretPreflight, assess, secret_preflight
 from .reviewed_content import ReviewedContent
+from .reviewer_round import ReviewerFindings
 from .schemas import (
     ConsensusResult,
     DimensionScore,
     Finding,
     MlBomEntry,
     ModelEvalStatus,
-    ModelFamily,
     ReviewReport,
 )
 from .scoring import jury
 from .scoring.dimension_score import score_dimension
-from .scoring.idcheck import check_finding_refs
 from .scoring.outcome import OutcomePolicy
 from .tools.evidence import ToolEvidence
 from .tools.runner import ToolRun, load_prerecorded, run_all
 from .workspace import check_outside, resolve
-
-
-@dataclass(frozen=True)
-class ReviewerFindings:
-    """What the reviewers stage hands in: how many findings the reviewers reported, and the deduplicated findings with
-    the families that found each."""
-
-    raw_count: int
-    findings: list[Finding]
-    finders: dict[str, set[ModelFamily]]
 
 
 @dataclass(frozen=True)
@@ -135,58 +123,6 @@ class Pipeline:
         self._say(f"L1: context {fam}: {len(view.items) if view else 0} fact(s)" + log_tags(*records))
         return view
 
-    # ------------------------------------------------------------------ L2
-    def run_reviewers(self, ctx: RepoContext, context_view: ContextView | None = None) -> list[Finding]:
-        raw: list[Finding] = []
-        for batch in ctx.batches():
-            for dim in self.cfg.dimensions:
-                for name in self.cfg.roles.reviewers:
-                    prov = self._p(name)
-                    # every exchange plants a canary of its own (agents.base.extraction_exchange)
-                    findings, rec = reviewer.review_dimension(prov, batch, dim, context_view=context_view)
-                    self.audit.record(rec)
-                    raw.extend(findings)
-                    self._say(f"L2: {dim} × {prov.family.value}: {len(findings)} finding(s)" + log_tags(rec))
-        # assign ids and strip unknown standard references. Ids are content-ordered (file, line,
-        # cwe, dimension, title) rather than call-ordered: consecutive ids no longer reveal which
-        # findings shared a reviewer call, so the blinded view leaks no grouping (judge.md promises
-        # no source identity; id clusters are a subtle channel back to it).
-        raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))
-        out: list[Finding] = []
-        for i, f in enumerate(raw, 1):
-            f = f.model_copy(update={"id": f"F-{i:04d}"})
-            ref = check_finding_refs(f)
-            self.audit["standard_refs_stripped"] += len(ref.stripped)
-            self.audit["unknown_cwe"] += int(ref.unknown_cwe)
-            out.append(ref.finding)
-        return out
-
-    @staticmethod
-    def dedupe(findings: list[Finding]) -> tuple[list[Finding], dict[str, set[ModelFamily]]]:
-        """Merge findings of one dimension at one place (mara.identity.same_place: one file, one CWE, lines at most
-        NEAR_LINES apart), the first one kept and the families that found it collected; an unverified finding is never
-        merged into a verified one, nor a verified one into an unverified one."""
-        kept: list[Finding] = []
-        finders: dict[str, set[ModelFamily]] = {}
-        for f in findings:
-            p = f.provenance[0]
-            match = None
-            f_ok = all(x.verified for x in f.provenance)
-            for k in kept:
-                q = k.provenance[0]
-                k_ok = all(x.verified for x in k.provenance)
-                # never merge an unverified (possibly fabricated) finding into a verified one:
-                # it would inherit the verified finding's acceptance and hide the fabrication
-                if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):
-                    match = k
-                    break
-            if match is None:
-                kept.append(f)
-                finders[f.id] = {f.source_family}
-            else:
-                finders[match.id].add(f.source_family)
-        return kept, finders
-
     def apply_decisions(self, findings: list[Finding], consensus: list[ConsensusResult], content: ReviewedContent) -> None:
         """The decision files, selected against `content`, the reviewed content of this review, settle the findings their usable decisions bind to
         (mara.human_queue.settle); the audit counts the rows settled and, by why, the decisions not usable on this content
@@ -218,7 +154,8 @@ class Pipeline:
         ctx = self._bundle(target, base_ref)
         tools, egress = self._tools(target, sarif_dir, provider_mode, answer_key)
         context_view = self._context(ctx, egress)
-        reviewed = self._reviewers(ctx, context_view, egress)
+        reviewed = reviewer_round.run(ctx, context_view, cfg=self.cfg, providers=self.providers, audit=self.audit, say=self._say,
+                                      progress=self.progress, egress_blocked=egress.blocked)
         ballots = ballot_round.run(ctx, reviewed.findings, reviewed.finders, cfg=self.cfg, providers=self.providers, audit=self.audit,
                                    say=self._say, progress=self.progress)
         stages = self._score(ctx, tools, egress, context_view, reviewed, ballots, base_ref)
@@ -303,22 +240,6 @@ class Pipeline:
             (self.out_dir / "context.json").write_text(context_view.model_dump_json(indent=2), encoding="utf-8")
             self.audit["context_view_items"] = len(context_view.items)
         return context_view
-
-    def _reviewers(self, ctx: RepoContext, context_view: ContextView | None, egress: SecretPreflight) -> ReviewerFindings:
-        prog = self.progress
-        if egress.blocked:
-            prog.skip("reviewers", "source egress blocked by the secret preflight")
-            raw = []
-        else:
-            prog.begin("reviewers")
-            raw = self.run_reviewers(ctx, context_view)
-        findings, finders = self.dedupe(raw)
-        if not egress.blocked:
-            prog.done("reviewers", f"{len(raw)} raw finding(s), {len(findings)} after deduplication")
-        findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
-        self.audit["findings_raw"] = len(raw)
-        self.audit["findings_deduped"] = len(findings)
-        return ReviewerFindings(raw_count=len(raw), findings=findings, finders=finders)
 
     def _score(self, ctx: RepoContext, tools: ToolEvidence, egress: SecretPreflight, context_view: ContextView | None,
                reviewed: ReviewerFindings, ballots: ballot_round.Ballots, base_ref: str | None) -> Stages:
