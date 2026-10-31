@@ -142,9 +142,16 @@ def test_cosign_verifies_the_signature_and_a_failure_blocks_the_review(tmp_path,
     # the pipeline: an unverified signature makes the review incomplete
     from mara.pipeline import Pipeline
 
-    monkeypatch.setattr(mlbom, "verify_signature", lambda cfg: (False, "cosign verify-blob exit 1"))
+    asked_in = []  # the workspace the pipeline asks cosign to verify in: its own (Pipeline.workspace)
+
+    def unverified(cfg, root=None, runner=None):  # verify_signature's parameters
+        asked_in.append(root)
+        return False, "cosign verify-blob exit 1"
+
+    monkeypatch.setattr(mlbom, "verify_signature", unverified)
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
+    assert asked_in == [pipe.workspace]
     assert "ml_bom_signature_unverified" in report.incomplete_reasons
     assert report.ml_bom_signature.startswith("failed:") and "ml_bom_signature" not in report.bias_audit
 

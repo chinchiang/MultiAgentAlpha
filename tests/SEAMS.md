@@ -33,6 +33,12 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   with `enabled=["gitleaks"]`. `test_security_regressions.py`, `test_redteam_strip.py`, `test_tool_evidence.py`; the
   two calls: `test_tool_evidence.py::test_a_review_takes_its_tool_runs_from_the_runner_it_is_given`,
   `test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress`.
+- `Pipeline(cfg, ..., workspace=...)`: tests pass a directory of their own as the MARA workspace. The pipeline fixes
+  it when it is built (`Pipeline.workspace`; MARA_HOME, else the working directory, when none is given) and reads
+  the ticket backlog, the ML-BOM, the decision files and training register, the signature bundle, the model
+  evaluations and the calibration samples there, so a test setting MARA_HOME before `Pipeline(cfg)` still reaches
+  them and one setting it after does not. The tool runner keeps its own (`run_tools=`, MARA_TOOLS_DIR).
+  `test_pipeline_workspace.py`.
 - `Pipeline.providers`: the dict, or its items, replaced after `Pipeline(cfg)` and before `run()`. `Pipeline.run`
   reads them when it runs (the provider mode check, binding the target, the reviewer round, the ballot round, the provider
   manifest); nothing built in `Pipeline.__init__` holds them. `fake_panel.py`, `test_exchange.py`, `test_audit.py`,

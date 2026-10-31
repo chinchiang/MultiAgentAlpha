@@ -1,0 +1,42 @@
+focused: [tests/test_pipeline_workspace.py, tests/test_workspace_anchors.py, tests/test_human_resolution.py, tests/test_security_regressions.py]
+mutations:
+  - name: the workspace given is ignored
+    file: src/mara/pipeline.py
+    old: '        self.workspace = (Path(workspace) if workspace is not None else workspace_root()).resolve()'
+    new: '        self.workspace = workspace_root().resolve()'
+  - name: the ticket backlog read from MARA_HOME
+    file: src/mara/pipeline.py
+    old: '        self.tightening = tightening(cfg, read_backlog(cfg, self.workspace))'
+    new: '        self.tightening = tightening(cfg, read_backlog(cfg))'
+  - name: the ML-BOM read from MARA_HOME
+    file: src/mara/pipeline.py
+    old: '        self.ml_bom_status = status_for_config(cfg, self.workspace)'
+    new: '        self.ml_bom_status = status_for_config(cfg)'
+  - name: the decision files read from MARA_HOME when the review scores
+    file: src/mara/pipeline.py
+    old: '        loaded = load_decisions(self.workspace / "calib" / "decisions")'
+    new: '        loaded = load_decisions(workspace_root() / "calib" / "decisions")'
+  - name: the training register read from MARA_HOME
+    file: src/mara/pipeline.py
+    old: '        sel = select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, self.workspace))'
+    new: '        sel = select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training))'
+  - name: the workspace checked against the target is MARA_HOME's
+    file: src/mara/pipeline.py
+    old: '        check_outside(target, workspace=self.workspace)'
+    new: '        check_outside(target)'
+  - name: the calibration samples looked up in MARA_HOME
+    file: src/mara/pipeline.py
+    old: '        answer_key = calibration_answer_key(target, self.workspace) if calibration_sample else None'
+    new: '        answer_key = calibration_answer_key(target) if calibration_sample else None'
+  - name: the ML-BOM signature bundle looked up in MARA_HOME
+    file: src/mara/pipeline.py
+    old: '            signed, why = verify_signature(self.cfg, self.workspace)'
+    new: '            signed, why = verify_signature(self.cfg)'
+  - name: the model evaluations read from MARA_HOME
+    file: src/mara/pipeline.py
+    old: 'family_eval_status(self.workspace, evaluated).items()}'
+    new: 'family_eval_status(workspace_root(), evaluated).items()}'
+  - name: check_outside ignores the workspace it is given
+    file: src/mara/workspace.py
+    old: '    anchors = {"the MARA workspace (MARA_HOME or the working directory)": workspace if workspace is not None else root(),'
+    new: '    anchors = {"the MARA workspace (MARA_HOME or the working directory)": root(),'

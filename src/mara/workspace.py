@@ -23,25 +23,26 @@ def root() -> Path:
     return Path(os.environ.get("MARA_HOME") or ".").resolve()
 
 
-def resolve(path: str | Path) -> Path:
-    """An absolute path as given; a relative one below the workspace root."""
+def resolve(path: str | Path, base: Path | None = None) -> Path:
+    """An absolute path as given; a relative one below `base`, the workspace root by default."""
     p = Path(path)
-    return p if p.is_absolute() else root() / p
+    return p if p.is_absolute() else (base if base is not None else root()) / p
 
 
 def _inside(anchor: Path, target: Path) -> bool:
     return anchor == target or target in anchor.parents
 
 
-def check_outside(target: Path, extra: dict[str, Path] | None = None) -> None:
-    """Raise WorkspaceInsideTarget when the workspace root, the tool directory or the trivy cache
-    lies inside `target` (or is it). `extra` names further anchors to check (the CLI's config file
-    and output directory)."""
+def check_outside(target: Path, extra: dict[str, Path] | None = None, *, workspace: Path | None = None) -> None:
+    """Raise WorkspaceInsideTarget when the workspace root (`workspace`, MARA_HOME or the working directory by default),
+    the tool directory or the trivy cache lies inside `target` (or is it). The tool directory and the trivy cache are the
+    ones the tool runner uses, from the environment. `extra` names further anchors to check (the CLI's config file and
+    output directory)."""
     from .tools.runner import tools_dir
     from .tools.trivy_db import cache_dir
 
     target = Path(target).resolve()
-    anchors = {"the MARA workspace (MARA_HOME or the working directory)": root(),
+    anchors = {"the MARA workspace (MARA_HOME or the working directory)": workspace if workspace is not None else root(),
                "the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": tools_dir(),
                "the trivy database (MARA_TRIVY_CACHE_DIR)": cache_dir(), **(extra or {})}
     inside = [f"{name} {path}" for name, path in anchors.items() if _inside(path.resolve(), target)]

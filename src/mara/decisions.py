@@ -189,15 +189,16 @@ class TrainingRequirement:
             return cls(required=True, problem=f"{why}; " * bool(why) + f"training register {cfg.register_file} unavailable ({e})")
 
     @classmethod
-    def from_config(cls, cfg: TrainingConfig) -> TrainingRequirement:
-        """From an already loaded `training` block; the register resolves against the workspace."""
+    def from_config(cls, cfg: TrainingConfig, workspace: Path | None = None) -> TrainingRequirement:
+        """From an already loaded `training` block; the register resolves against `workspace`, the MARA workspace by
+        default."""
         from .training import load_register
         from .workspace import resolve
 
         if not cfg.require_trained_adjudicator:
             return cls(required=False)
         try:
-            return cls(required=True, register=load_register(resolve(cfg.register_file)))
+            return cls(required=True, register=load_register(resolve(cfg.register_file, workspace)))
         except (OSError, ValueError, KeyError, TypeError) as e:
             return cls(required=True, problem=f"training register {cfg.register_file} unavailable ({e})")
 
