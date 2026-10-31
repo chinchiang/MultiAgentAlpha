@@ -108,6 +108,14 @@ def _raw_config(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
+def _block(config_path: Path, key: str, model):
+    """The config's `key` block validated by `model` (a block of mara.config), with the defaults the review has; a block
+    the file lacks is all defaults. Only that block need be valid, as G-11, G-12 and G-13 read nothing else."""
+    raw = _raw_config(config_path)
+    block = raw.get(key) if isinstance(raw, dict) else None
+    return model.model_validate(block if isinstance(block, dict) else {})
+
+
 # ----------------------------------------------------------------------------- checks
 
 
@@ -385,26 +393,27 @@ def check_g6(root: Path, workflows_dir: Path | None = None) -> CheckResult:
 
 
 def check_g7(root: Path, config_path: Path) -> CheckResult:
-    from mara.mlbom import component_problems, load_bom, ml_components, props
+    """The ML-BOM the config names (ml_bom.path, below `root` when relative), the one a review reads: every self-hosted
+    model (mara.mlbom.self_hosted_models) listed in it with a complete component."""
+    from mara.config import load_config
+    from mara.mlbom import component_problems, load_bom, ml_components, props, self_hosted_models
 
-    raw = _raw_config(config_path)
-    self_hosted = [(m.get("name", "?"), m.get("model", "?")) for m in raw.get("models", []) if m.get("provider") == "openai_compatible"]
-    cands = sorted((root / "sbom").glob("*.cdx.json")) + ([root / "bom.json"] if (root / "bom.json").exists() else [])
-    comps: dict[str, dict] = {}
-    boms = []
-    for p in cands:
-        try:
-            comps.update(ml_components(load_bom(p)))
-            boms.append(p)
-        except (OSError, ValueError):
-            continue
+    cfg = load_config(config_path, enforce_policies=False)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it
+    ml = cfg.ml_bom
+    self_hosted = [(m.name, m.model) for m in self_hosted_models(cfg)]
+    bom = Path(ml.path) if Path(ml.path).is_absolute() else root / ml.path
+    try:
+        comps, boms = ml_components(load_bom(bom)), [bom]
+    except (OSError, ValueError):
+        comps, boms = {}, []
     if not self_hosted:
         return CheckResult("G-7", PASS, "設定中沒有自架模型，ML-BOM 無需列出權重")
     need = ("需要：平台團隊只從官方來源下載權重，在能連 huggingface.co 的主機執行 `scripts/ml_bom.py registry-hashes --model-id … --write-manifest sbom/models.yaml`（LFS object id 即 SHA-256，不必下載權重；或在下載主機執行 `hash-dir`），"
             "`ml_bom.py build` 產生 BOM，以 `cosign sign-blob --bundle` 簽章後提交，並把 `ml_bom.required` 設為 true 讓政策 P7 強制")
     if not boms:
-        return CheckResult("G-7", FAIL, f"找不到 CycloneDX ML-BOM（`sbom/*.cdx.json`、`bom.json`）。自架模型 {[m for _, m in self_hosted]} 的權重未列冊。{need}")
-    ev = [f"`{p.relative_to(root).as_posix()}`" for p in boms]
+        return CheckResult("G-7", FAIL, f"找不到設定指定的 CycloneDX ML-BOM `{_shown(bom, root)}`（`ml_bom.path`），或無法讀取。"
+                           f"自架模型 {[m for _, m in self_hosted]} 的權重未列冊。{need}")
+    ev = [f"`{_shown(p, root)}`" for p in boms]
     if (root / "sbom" / "models.yaml").exists():
         ev.append("manifest `sbom/models.yaml`")
     problems = []
@@ -419,11 +428,11 @@ def check_g7(root: Path, config_path: Path) -> CheckResult:
         else:
             digest = next((h["content"] for h in c.get("hashes", []) if h.get("alg") == "SHA-256"), "")
             ev.append(f"`{model_id}` {c.get('name')}@{c.get('version')} SHA-256 {digest[:12]}… {props(c).get('file-count', '?')} 檔，簽章 {props(c).get('signature')}")
-    ml = raw.get("ml_bom") or {}
-    if ml.get("required"):
+    if ml.required:
         ev.append("`ml_bom.required: true`（政策 P7 強制）")
-        if ml.get("require_signature") and not (root / str(ml.get("bundle", ""))).exists():
-            problems.append(f"`ml_bom.require_signature` 已開但簽章 bundle `{ml.get('bundle')}` 不存在")
+        bundle = Path(ml.bundle) if Path(ml.bundle).is_absolute() else root / ml.bundle
+        if ml.require_signature and not (ml.bundle.strip() and bundle.exists()):
+            problems.append(f"`ml_bom.require_signature` 已開但簽章 bundle `{ml.bundle}` 不存在")
     else:
         ev.append("`ml_bom.required: false`（P7 尚未強制）")
     if problems:
@@ -559,10 +568,11 @@ def check_g11(root: Path, config_path: Path) -> CheckResult:
     """Tickets and decisions, as evidence rather than words: the config files GitHub issues, a workflow step runs the
     ticket sync, and that sync has run for real - a backlog it wrote or a decision it recorded in calib/decisions/.
     A workflow merely naming the human queue, the job staying in dry-run, used to pass."""
-    raw = _raw_config(config_path)
-    hq = raw.get("human_queue") if isinstance(raw.get("human_queue"), dict) else {}
+    from mara.config import HumanQueueConfig
+
+    hq = _block(config_path, "human_queue", HumanQueueConfig)
     have, missing = [], []
-    if raw.get("human_queue") is not None and hq.get("enabled", True) and hq.get("ticketing", "github_issues") == "github_issues":
+    if hq.enabled and hq.ticketing == "github_issues":
         have.append("設定以 GitHub issue 開單（`human_queue.ticketing: github_issues`）")
     else:
         missing.append("設定的 `human_queue` 要啟用並以 `ticketing: github_issues` 開單")
@@ -572,7 +582,7 @@ def check_g11(root: Path, config_path: Path) -> CheckResult:
     else:
         missing.append("workflow 要有執行 `scripts/human_queue_issues.py --sync-decisions` 的步驟")
     decisions_dir = root / "calib" / "decisions"
-    backlog = root / str(hq.get("backlog_file", "calib/decisions/backlog.json"))
+    backlog = root / hq.backlog_file
     decisions = [p for p in decisions_dir.glob("*.json") if p.resolve() != backlog.resolve()] if decisions_dir.is_dir() else []
     if backlog.is_file() or decisions:
         have.append(f"同步確實執行過：{'backlog 已寫入' if backlog.is_file() else ''}{'、' if backlog.is_file() and decisions else ''}"
@@ -586,38 +596,40 @@ def check_g11(root: Path, config_path: Path) -> CheckResult:
 
 
 def check_g12(root: Path, config_path: Path) -> CheckResult:
-    raw = _raw_config(config_path)
-    ps = raw.get("psirt")
-    if not isinstance(ps, dict):
-        return CheckResult("G-12", FAIL, "設定無 `psirt:` 區塊。需要：PSIRT 接入端點（https）、產品識別、只對 A 級 Critical 觸發的規則（政策 P6），對應 CRA 第 14 條 24 小時預警（2026-09-11 起適用）；見 `docs/psirt-integration.md`")
-    if not ps.get("enabled"):
-        return CheckResult("G-12", FAIL, "`psirt:` 區塊存在但 `enabled: false`。需要：填入 https 的 `webhook_url`、`product`，把 `enabled` 與 `shipped` 設為 true，token 放在 `token_env` 指定的環境變數，"
-                           "再以 `scripts/psirt_ops.py handshake` 對真實端點完成握手；範例 `config/examples/psirt-enabled.yaml`")
+    from mara.config import PsirtConfig
+    from mara.policy import PSIRT_ALLOWED_SEVERITIES, PSIRT_ALLOWED_TIERS
+
+    ps = _block(config_path, "psirt", PsirtConfig)
+    if not ps.enabled:
+        return CheckResult("G-12", FAIL, "`psirt` 未啟用（設定沒有 `psirt:` 區塊，或 `enabled: false`）。需要：PSIRT 接入端點（https）、產品識別、"
+                           "只對 A 級 Critical 觸發的規則（政策 P6），對應 CRA 第 14 條 24 小時預警（2026-09-11 起適用）："
+                           "填入 https 的 `webhook_url`、`product`，把 `enabled` 與 `shipped` 設為 true，token 放在 `token_env` 指定的環境變數，"
+                           "再以 `scripts/psirt_ops.py handshake` 對真實端點完成握手；範例 `config/examples/psirt-enabled.yaml`，見 `docs/psirt-integration.md`")
     problems = []
-    if not str(ps.get("webhook_url", "")).lower().startswith("https://"):
+    if not ps.webhook_url.lower().startswith("https://"):
         problems.append("webhook_url 非 https")
-    if not str(ps.get("product", "")).strip():
+    if not ps.product.strip():
         problems.append("product 為空")
-    tiers, sevs = ps.get("trigger_tiers", ["A"]), ps.get("trigger_severities", ["Critical"])
-    if not set(tiers) <= {"A", "B"} or not set(sevs) <= {"Critical", "High"}:
+    tiers, sevs = ps.trigger_tiers, ps.trigger_severities
+    if not set(tiers) <= set(PSIRT_ALLOWED_TIERS) or not set(sevs) <= set(PSIRT_ALLOWED_SEVERITIES):
         problems.append(f"觸發範圍過寬：tiers={tiers} severities={sevs}（G-12 只限 A 級 Critical，P6 允許到 B/High）")
     if problems:
         return CheckResult("G-12", FAIL, "；".join(problems))
     from mara import psirt_ledger as pl
 
-    hs_path = Path(str(ps.get("handshake_file", "ops/psirt/handshake.json")))
-    hs_ok, hs_msg = pl.handshake_status(hs_path if hs_path.is_absolute() else root / hs_path, int(ps.get("handshake_max_age_days", 90)))
+    hs_path = Path(ps.handshake_file)
+    hs_ok, hs_msg = pl.handshake_status(hs_path if hs_path.is_absolute() else root / hs_path, ps.handshake_max_age_days)
     if not hs_ok:
         return CheckResult("G-12", FAIL, f"設定完整但端點未證實可用：{hs_msg}。`enabled: true` 不證明 PSIRT 收得到；需要對真實端點的成功握手紀錄（`scripts/psirt_ops.py handshake`）")
-    led_path = Path(str(ps.get("ledger_file", "ops/psirt/ledger.json")))
+    led_path = Path(ps.ledger_file)
     ledger = pl.load_ledger(led_path if led_path.is_absolute() else root / led_path)
     late = pl.overdue(ledger)
     if late:
         return CheckResult("G-12", FAIL, "送出紀錄中有逾期的第 14 條階段：" + "；".join(f"{k[:8]}… {s} 期限 {d}" for k, s, d in late)
                            + "。需要：在 PSIRT 完成該階段後以 `scripts/psirt_ops.py record` 記下參考編號，或以 `close` 結案並寫明理由")
     open_items = [i for i in ledger["items"].values() if not i.get("closed")]
-    return CheckResult("G-12", PASS, f"`psirt.enabled: true`，產品 {ps.get('product')!r}，webhook {ps.get('webhook_url')}，觸發 tiers={tiers} severities={sevs}，"
-                       f"{ps.get('early_warning_hours', 24)} h 預警；{hs_msg}；送出紀錄 {len(ledger['items'])} 筆（{len(open_items)} 筆進行中，無逾期）；"
+    return CheckResult("G-12", PASS, f"`psirt.enabled: true`，產品 {ps.product!r}，webhook {ps.webhook_url}，觸發 tiers={tiers} severities={sevs}，"
+                       f"{ps.early_warning_hours} h 預警；{hs_msg}；送出紀錄 {len(ledger['items'])} 筆（{len(open_items)} 筆進行中，無逾期）；"
                        f"`src/mara/report/psirt_out.py` 在每次 review 產出 `out/psirt-notifications.json`")
 
 
@@ -628,8 +640,10 @@ def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> Ch
             "`scripts/training_register.py assess`／`add` 寫入 `training/records.yaml`；人工裁決者必須有有效的 adjudicator 紀錄，否則其裁決不進校準")
     curriculum = root / "training" / "curriculum.md"
     register_path = root / "training" / "records.yaml"
-    raw = _raw_config(config_path) if config_path else {}
-    roles = tuple((raw.get("training") or {}).get("required_roles") or ROLES)
+    from mara.config import TrainingConfig
+
+    tr = _block(config_path, "training", TrainingConfig) if config_path else TrainingConfig()
+    roles = tuple(tr.required_roles or ROLES)
     if not curriculum.exists():
         return CheckResult("G-13", FAIL, f"沒有課程 `training/curriculum.md`（證據層級、偏誤稽核、「通過不等於安全」、人工裁決）。{need}")
     if not register_path.exists():
@@ -649,7 +663,7 @@ def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> Ch
     expiring = reg.expiring(today)
     if expiring:
         ev.append("30 天內到期：" + ", ".join(f"{r.person}/{r.role} {r.expires}" for r in expiring))
-    if (raw.get("training") or {}).get("require_trained_adjudicator", True):
+    if tr.require_trained_adjudicator:
         ev.append("`training.require_trained_adjudicator: true`（未受訓者的裁決不進校準）")
     # well-formed decisions whose adjudicator held no valid record on the decision day: they answer their
     # ticket but are not ground truth until a trained adjudicator rules again (docs/adr/0002-usable-decisions.md)

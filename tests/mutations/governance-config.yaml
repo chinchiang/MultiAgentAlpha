@@ -1,0 +1,42 @@
+focused: [tests/test_governance_config.py, tests/test_governance_check.py, tests/test_ml_bom.py, tests/test_psirt.py]
+mutations:
+  - name: G-7 reads the repository's default BOM, not the one the config names
+    file: scripts/governance_check.py
+    old: '    bom = Path(ml.path) if Path(ml.path).is_absolute() else root / ml.path'
+    new: '    bom = root / "sbom" / "ml-bom.cdx.json"'
+  - name: G-7 counts every model not mocked as self-hosted
+    file: scripts/governance_check.py
+    old: '    self_hosted = [(m.name, m.model) for m in self_hosted_models(cfg)]'
+    new: '    self_hosted = [(m.name, m.model) for m in cfg.models if m.provider != "mock"]'
+  - name: G-7 refuses a config that violates P7 instead of reporting it
+    file: scripts/governance_check.py
+    old: '    cfg = load_config(config_path, enforce_policies=False)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it'
+    new: '    cfg = load_config(config_path)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it'
+  - name: G-7 does not look for the signature bundle
+    file: scripts/governance_check.py
+    old: '        if ml.require_signature and not (ml.bundle.strip() and bundle.exists()):'
+    new: '        if False:'
+  - name: load_config enforces the policies whatever it is asked
+    file: src/mara/config.py
+    old: 'context=None if enforce_policies else {"skip_policies": True})'
+    new: 'context=None)'
+  - name: G-11 needs a human_queue block the review does not
+    file: scripts/governance_check.py
+    old: '    if hq.enabled and hq.ticketing == "github_issues":'
+    new: '    if hq.enabled and hq.ticketing == "github_issues" and "human_queue" in _raw_config(config_path):'
+  - name: G-12 admits tier C
+    file: scripts/governance_check.py
+    old: '    if not set(tiers) <= set(PSIRT_ALLOWED_TIERS) or not set(sevs) <= set(PSIRT_ALLOWED_SEVERITIES):'
+    new: '    if not set(tiers) <= set(PSIRT_ALLOWED_TIERS) | {"C"} or not set(sevs) <= set(PSIRT_ALLOWED_SEVERITIES):'
+  - name: G-12 refuses High, which P6 allows
+    file: scripts/governance_check.py
+    old: '    if not set(tiers) <= set(PSIRT_ALLOWED_TIERS) or not set(sevs) <= set(PSIRT_ALLOWED_SEVERITIES):'
+    new: '    if not set(tiers) <= set(PSIRT_ALLOWED_TIERS) or not set(sevs) <= {"Critical"}:'
+  - name: G-13 asks for every role whatever the config requires
+    file: scripts/governance_check.py
+    old: '    roles = tuple(tr.required_roles or ROLES)'
+    new: '    roles = ROLES'
+  - name: G-13 ignores the config's training block
+    file: scripts/governance_check.py
+    old: '    tr = _block(config_path, "training", TrainingConfig) if config_path else TrainingConfig()'
+    new: '    tr = TrainingConfig()'
