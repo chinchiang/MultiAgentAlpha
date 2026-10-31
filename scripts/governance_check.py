@@ -28,6 +28,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from actions_inventory import inventory_workflow  # noqa: E402
 
+from mara.tools import pins  # noqa: E402
+from mara.tools.runner import tools_dir  # noqa: E402
+
 PASS, FAIL, MANUAL = "PASS", "FAIL", "MANUAL"
 STATUS_ZH = {PASS: "通過", FAIL: "失敗", MANUAL: "需人工"}
 FRESH_DAYS = 90
@@ -308,7 +311,9 @@ def check_g5(root: Path) -> CheckResult:
     lock_path = root / "tools" / "versions.lock"
     if not lock_path.is_file():
         return CheckResult("G-5", FAIL, "`tools/versions.lock` 不存在。需要：每個 L0 工具的版本、URL、SHA-256 與簽章驗證方式（見 prompt 7）")
-    lock = yaml.safe_load(lock_path.read_text(encoding="utf-8")) or {}
+    lock = pins.read_lock(lock_path)
+    if not isinstance(lock.get("tools"), dict) or not lock["tools"]:
+        return CheckResult("G-5", FAIL, "`tools/versions.lock` 無法讀取，或沒有列出任何工具的 `tools` 區塊")
     problems, ev = [], []
     for name, t in (lock.get("tools") or {}).items():
         if t.get("kind") == "pip":
@@ -324,7 +329,7 @@ def check_g5(root: Path) -> CheckResult:
             problems.append(f"{name} 無 verify.method")
         else:
             ev.append(f"{name} {t.get('version')} sha256 {sha[:12]}… {method}")
-    manifest = root / ".mara-tools" / "manifest.json"
+    manifest = tools_dir(root) / "manifest.json"  # MARA_TOOLS_DIR moves it, as it moves the runner's tools
     if manifest.is_file():
         m = json.loads(manifest.read_text(encoding="utf-8")).get("tools", {})
         ev.append("manifest：" + ", ".join(f"{k}={'signed' if v.get('signature_verified') else 'hash-only'}" for k, v in m.items()))

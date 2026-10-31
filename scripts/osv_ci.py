@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import ignore_expiry  # noqa: E402
 
+from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
 from mara.tools.sarif import scan_complete  # noqa: E402
 
@@ -42,11 +43,8 @@ MSG_RE = re.compile(r"Package '(?P<name>[^'@]+)@(?P<version>[^']*)' is vulnerabl
 ROW_RE = re.compile(r"^\|\s*(?P<source>[^|]+?)\s*\|\s*(?P<name>[^|]+?)\s*\|\s*(?P<version>[^|]+?)\s*\|?\s*$", re.M)
 
 
-def locked_version(lock: Path = ROOT / "tools" / "versions.lock") -> str:
-    import yaml
-
-    d = yaml.safe_load(lock.read_text(encoding="utf-8")) or {}
-    return str(d.get("tools", d).get("osv-scanner", {}).get("version", ""))
+def locked_version(lock: Path = ROOT / pins.LOCK) -> str:
+    return pins.locked_version("osv-scanner", lock)
 
 
 def packages_in(result: dict, rule: dict | None = None) -> list[tuple[str, str]]:
@@ -106,8 +104,9 @@ def main() -> int:
         print(f"ERROR: osv-scanner is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)", file=sys.stderr)
         return 2
     want, have = locked_version(), installed_version("osv-scanner")
-    if not want or have != want:
-        print(f"ERROR: installed osv-scanner {have!r} does not match tools/versions.lock {want!r}; re-run scripts/install_tools.py", file=sys.stderr)
+    not_pinned = pins.mismatch("osv-scanner", want, have)
+    if not_pinned:
+        print(f"ERROR: {not_pinned}", file=sys.stderr)
         return 2
     ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True)
     print(f"osv-scanner {(ver.stdout or ver.stderr).strip().splitlines()[0]} from {exe} (lock {want})")

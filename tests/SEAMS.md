@@ -129,3 +129,8 @@ code that writes it, so it changes with that code:
 - `tests/review_facts.py`: review facts, policies and consensus rows for `mara.review_status` and what reads its
   results.
 - `tests/fake_panel.py`: the ballot round's fake panel, above.
+- `tests/tool_installs.py`: what `scripts/install_tools.py` leaves for `runner.run_all`, the workspace's lock and a
+  tool directory's manifest recording each tool at its locked version. A test faking a tool's binary gives the runner
+  these instead of patching `runner.installed_version`, so the pin check (`mara.tools.pins`) runs as in a review.
+  `test_tool_env.py`, `test_tool_target_config.py`, `test_base_ref_trivy_hf_token.py`, `test_tools_csp.py`,
+  `test_install_tools.py`.
