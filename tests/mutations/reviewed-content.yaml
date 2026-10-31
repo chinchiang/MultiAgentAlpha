@@ -1,0 +1,38 @@
+focused: [tests/test_reviewed_content.py, tests/test_decisions.py, tests/test_queue_key.py, tests/test_human_resolution.py, tests/test_human_queue.py, tests/test_human_queue_rules.py, tests/test_report_assembly.py]
+mutations:
+  - name: a report without its content hash still has a reviewed content
+    file: src/mara/reviewed_content.py
+    old: '        if not all(isinstance(x, str) and x for x in parts):'
+    new: '        if not all(isinstance(x, str) and x for x in parts[:2]):'
+  - name: the bundle's target named by its identity unhashed
+    file: src/mara/reviewed_content.py
+    old: '        return cls(hashlib.sha256(ctx.identity.encode()).hexdigest(), ctx.revision, ctx.content_hash)'
+    new: '        return cls(ctx.identity, ctx.revision, ctx.content_hash)'
+  - name: a record's content hash read under the report's name
+    file: src/mara/reviewed_content.py
+    old: 'record.get("context_hash") or "")'
+    new: 'record.get("content_hash") or "")'
+  - name: a reviewed content known without its content hash
+    file: src/mara/reviewed_content.py
+    old: '        return bool(self.target_id and self.revision and self.content_hash)'
+    new: '        return bool(self.target_id and self.revision)'
+  - name: a decision on other reviewed content is bound
+    file: src/mara/decisions.py
+    old: '        if content is None or d.content != content:'
+    new: '        if content is None:'
+  - name: the v2 queue key without the revision
+    file: src/mara/human_queue.py
+    old: '    identity = json.dumps([content.target_id, content.revision, content.content_hash, norm, line, norm_cwe(cwe)],'
+    new: '    identity = json.dumps([content.target_id, content.content_hash, norm, line, norm_cwe(cwe)],'
+  - name: a queue item without its content hash
+    file: src/mara/human_queue.py
+    old: '                context_hash=content.content_hash,'
+    new: '                context_hash="",'
+  - name: the pipeline settles against no reviewed content
+    file: src/mara/pipeline.py
+    old: '        self.audit["human_decisions_applied"] = settle(findings, consensus, sel, content)'
+    new: '        self.audit["human_decisions_applied"] = settle(findings, consensus, sel, ReviewedContent("", "", ""))'
+  - name: the report's human queue built without the reviewed content
+    file: src/mara/report/assembly.py
+    old: '                                     ballots.redteam, ballots.votes, cfg, content=stages.content)'
+    new: '                                     ballots.redteam, ballots.votes, cfg)'

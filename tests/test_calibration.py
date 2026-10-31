@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara.config import load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
+from mara.reviewed_content import ReviewedContent  # noqa: E402
 from tests import scored_rows  # noqa: E402
 
 
@@ -217,7 +218,7 @@ def _dec(file, line, cwe, decision, trained=True):
     from mara.decisions import Decision
     from mara.human_queue import queue_key
 
-    return Decision.parse({"key": queue_key(file, line, cwe, target_id="target-s9", revision="rev", context_hash="ctx"),
+    return Decision.parse({"key": queue_key(file, line, cwe, ReviewedContent("target-s9", "rev", "ctx")),
                            "decision": decision, "file": file, "line": line, "cwe": cwe, "issue": line,
                            "decided_by": "alice" if trained else "mallory", "decided_at": "2026-10-01T08:00:00Z",
                            "target_id": "target-s9", "revision": "rev", "context_hash": "ctx", "decision_event_id": line})

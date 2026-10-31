@@ -32,9 +32,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mara.audit import by_family  # noqa: E402
-from mara.decisions import Decision, TrainingRequirement, binding, select  # noqa: E402
+from mara.decisions import Decision, TrainingRequirement, select  # noqa: E402
 from mara.decisions import load as load_decision_dir  # noqa: E402
 from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
+from mara.reviewed_content import ReviewedContent  # noqa: E402
 from mara.schemas import ConsensusResult  # noqa: E402
 from mara.workspace import resolve  # noqa: E402
 
@@ -98,7 +99,7 @@ def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = Non
             continue
         labels = json.loads(labels_path.read_text(encoding="utf-8"))["labels"]
         report = json.loads(rep.read_text(encoding="utf-8"))
-        sel = select(decisions, report, training)
+        sel = select(decisions, ReviewedContent.of_report(report), training)
         labels, applied = apply_decisions(sel.usable, labels)
         if applied:
             print(f"{sample}: {applied} human decision(s) applied")
@@ -329,7 +330,7 @@ def alternative_annotator_test(runs, decisions: list[Decision], post, training: 
 
     A single-adjudicator variant: each finding carries one human decision, so the published
     leave-one-annotator-out procedure (several annotators per item) does not apply. Decisions bind
-    to findings by their v2 queue key (primary location, CWE, target, revision, context hash), one
+    to findings by their v2 queue key (primary location, CWE and the reviewed content), one
     decision per finding, never by line proximity; only usable decisions count (mara.decisions:
     contradicted keys and, under G-13, untrained adjudicators are excluded, with the reason in
     `excluded_by_reason`). Every live result goes to calib/latest.json; policy P8
@@ -341,11 +342,10 @@ def alternative_annotator_test(runs, decisions: list[Decision], post, training: 
     rejected = misses = 0
     left_out: Counter[str] = Counter()
     for sample, rep, _labels in runs:
-        ident = binding(rep)
-        if ident is None:
+        content = ReviewedContent.of_report(rep)
+        if content is None:
             continue
-        target_id, revision, ctx = ident
-        sel = select(decisions, rep, training)
+        sel = select(decisions, content, training)
         left_out.update({why: n for why, n in sel.by_reason().items() if why != "unbound"})
         verdict_by_key = {d.key: d.decision for d in sel.usable}
         # every row is validated before anything is counted (docs/adr/0005-jury-outcome.md): a row that does not
@@ -353,8 +353,7 @@ def alternative_annotator_test(runs, decisions: list[Decision], post, training: 
         consensus = {c.finding_id: c for c in map(ConsensusResult.model_validate, rep.get("consensus", []))}
         for f in rep.get("findings", []):
             p = f["provenance"][0]
-            verdict = verdict_by_key.get(queue_key(p["file"], int(p["line"]), f["cwe"], target_id=target_id,
-                                                   revision=revision, context_hash=ctx))
+            verdict = verdict_by_key.get(queue_key(p["file"], int(p["line"]), f["cwe"], content))
             if verdict is None:
                 continue
             human_tp = verdict == "true_positive"

@@ -9,10 +9,12 @@ import pytest
 
 from mara import decisions as dec
 from mara.human_queue import queue_key
+from mara.reviewed_content import ReviewedContent
 from mara.training import load_register
 
 TARGET, REVISION, CONTEXT = "target-s9", "rev", "ctx"
 REPORT = {"target_id": TARGET, "revision": REVISION, "coverage": {"content_hash": CONTEXT}}
+CONTENT = ReviewedContent(TARGET, REVISION, CONTEXT)
 
 
 def record(line=10, decision="true_positive", by="alice", at="2026-10-01T08:00:00Z", **over):
@@ -20,8 +22,7 @@ def record(line=10, decision="true_positive", by="alice", at="2026-10-01T08:00:0
          "decision": decision, "decision_event_id": 100 + line, "decided_by": by, "decided_at": at, "issue": line,
          "url": f"https://example/{line}", "adjudicator_trained": True}
     r.update(over)
-    r.setdefault("key", queue_key(r["file"], int(r["line"]), r["cwe"], target_id=r["target_id"], revision=r["revision"],
-                                  context_hash=r["context_hash"]))
+    r.setdefault("key", queue_key(r["file"], int(r["line"]), r["cwe"], ReviewedContent.of_record(r)))
     return r
 
 
@@ -88,14 +89,15 @@ def test_only_decisions_bound_to_the_report_are_usable(register):
     ours = record()
     other = record(line=20, target_id="target-other")
     stale = record(line=30, revision="older")
-    sel = dec.select(parsed(ours, other, stale), REPORT, trained(register))
+    sel = dec.select(parsed(ours, other, stale), CONTENT, trained(register))
     assert [d.key for d in sel.usable] == [ours["key"]]
     assert sel.by_reason() == {"unbound": 2}
 
 
-@pytest.mark.parametrize("report", [{}, {"target_id": TARGET, "revision": REVISION}, {**REPORT, "coverage": {"content_hash": ""}}])
+@pytest.mark.parametrize("report", [{}, {"target_id": TARGET, "revision": REVISION}, {**REPORT, "coverage": {"content_hash": ""}},
+                                    {**REPORT, "coverage": None}, {**REPORT, "revision": 7}])
 def test_a_report_without_its_full_identity_binds_nothing(register, report):
-    sel = dec.select(parsed(record()), report, trained(register))
+    sel = dec.select(parsed(record()), ReviewedContent.of_report(report), trained(register))
     assert sel.usable == [] and sel.by_reason() == {"unbound": 1}
 
 
@@ -105,29 +107,29 @@ def test_training_is_judged_from_the_register_on_the_decision_day_not_from_the_r
     forged = record(line=20, by="mallory", adjudicator_trained=True)
     honest_but_stale_flag = record(line=30, by="alice", adjudicator_trained=False)
     before_training = record(line=40, by="alice", at="2026-09-01T08:00:00Z")  # alice trained on 2026-09-20
-    sel = dec.select(parsed(forged, honest_but_stale_flag, before_training), REPORT, trained(register))
+    sel = dec.select(parsed(forged, honest_but_stale_flag, before_training), CONTENT, trained(register))
     assert [d.key for d in sel.usable] == [honest_but_stale_flag["key"]]
     assert sel.by_reason() == {"untrained": 2}
-    anyone = dec.select(parsed(forged, honest_but_stale_flag, before_training), REPORT, dec.TrainingRequirement(required=False))
+    anyone = dec.select(parsed(forged, honest_but_stale_flag, before_training), CONTENT, dec.TrainingRequirement(required=False))
     assert len(anyone.usable) == 3 and anyone.excluded == []
 
 
 def test_without_a_readable_register_no_decision_is_trained():
-    sel = dec.select(parsed(record()), REPORT, dec.TrainingRequirement(required=True, register=None, problem="no training/records.yaml"))
+    sel = dec.select(parsed(record()), CONTENT, dec.TrainingRequirement(required=True, register=None, problem="no training/records.yaml"))
     assert sel.usable == [] and sel.by_reason() == {"untrained": 1}
 
 
 def test_contradicting_decisions_on_one_key_are_all_excluded(register):
     tp, fp = record(), record(decision="false_positive", decision_event_id=999)
     agreeing = [record(line=20), record(line=20, decision_event_id=998)]
-    sel = dec.select(parsed(tp, fp, *agreeing), REPORT, trained(register))
+    sel = dec.select(parsed(tp, fp, *agreeing), CONTENT, trained(register))
     assert [d.key for d in sel.usable] == [agreeing[0]["key"]], "agreeing records of one key count once"
     assert sel.by_reason() == {"contradictory": 1}, "one contradicted key, however many records"
 
 
 def test_an_untrained_ruling_does_not_contradict_a_trained_one(register):
     trained_tp, untrained_fp = record(), record(decision="false_positive", by="mallory", decision_event_id=999)
-    sel = dec.select(parsed(trained_tp, untrained_fp), REPORT, trained(register))
+    sel = dec.select(parsed(trained_tp, untrained_fp), CONTENT, trained(register))
     assert [d.decision for d in sel.usable] == ["true_positive"] and sel.by_reason() == {"untrained": 1}
 
 
@@ -195,7 +197,7 @@ def test_two_well_formed_contradicting_decisions_give_no_label(tmp_path, registe
     tp = record()
     fp = record(decision="false_positive", decision_event_id=999)
     decisions = [dec.Decision.parse(tp), dec.Decision.parse(fp)]
-    sel = dec.select(decisions, REPORT, trained(register))
+    sel = dec.select(decisions, CONTENT, trained(register))
     labels, applied = calibrate.apply_decisions(sel.usable, [])
     assert labels == [] and applied == 0
 

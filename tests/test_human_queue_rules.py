@@ -5,6 +5,7 @@ import itertools
 
 from mara.decisions import Decision, Selection
 from mara.human_queue import DECISION_NOT_USABLE, HUMAN_REASONS, UNSUPERVISED_REJECT_UNVERIFIED, queue_key, settle, tightening
+from mara.reviewed_content import ReviewedContent
 from mara.schemas import EvidenceTier, QueueTightening
 from mara.scoring.outcome import JURY_HUMAN_REASONS, OutcomeSignals, decide
 from tests.scored_rows import MOCK, finding, policy, row
@@ -52,13 +53,13 @@ def test_the_tightening_is_one_value_and_the_report_records_it():
 
 def _decision(f, verdict="false_positive", *, by="alice", target_id=TARGET):
     p = f.provenance[0]
-    return Decision(key=queue_key(p.file, p.line, f.cwe, target_id=target_id, revision=REVISION, context_hash=CONTEXT),
+    return Decision(key=queue_key(p.file, p.line, f.cwe, ReviewedContent(target_id, REVISION, CONTEXT)),
                     target_id=target_id, revision=REVISION, context_hash=CONTEXT, file=p.file, line=p.line, cwe=f.cwe,
                     decision=verdict, decision_event_id=1, decided_by=by, decided_at="2026-10-01T08:00:00Z", issue=7)
 
 
 def _settle(rows, findings, selection):
-    return settle(findings, rows, selection, target_id=TARGET, revision=REVISION, context_hash=CONTEXT)
+    return settle(findings, rows, selection, ReviewedContent(TARGET, REVISION, CONTEXT))
 
 
 def test_a_usable_decision_settles_its_finding_and_the_jury_outcome_stays():

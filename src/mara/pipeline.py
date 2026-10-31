@@ -6,7 +6,6 @@ schemas; reviewers never see each other's output; judges never see model identit
 from __future__ import annotations
 
 import datetime as dt
-import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,6 +24,7 @@ from .providers import make_provider
 from .providers.base import Provider
 from .report.assembly import ReportMetadata, assemble
 from .review_status import Assessment, GatePolicy, ReviewFacts, SecretPreflight, assess, secret_preflight
+from .reviewed_content import ReviewedContent
 from .schemas import (
     ConsensusResult,
     DimensionScore,
@@ -57,7 +57,7 @@ class ReviewerFindings:
 class Stages:
     """What a review's stages handed in, up to its jury scoring and dimension scores: the bundle, the tool evidence, the
     secret preflight's decision on source egress, the context view, the reviewers' findings, the ballots, the jury
-    scoring (its rows carry the human decisions applied), the dimension scores, the target's id and the base of an
+    scoring (its rows carry the human decisions applied), the dimension scores, the reviewed content and the base of an
     incremental review."""
 
     ctx: RepoContext
@@ -68,7 +68,7 @@ class Stages:
     ballots: ballot_round.Ballots
     scoring: jury.JuryScoring
     dimensions: list[DimensionScore]
-    target_id: str
+    content: ReviewedContent
     base_ref: str | None
 
 
@@ -186,9 +186,8 @@ class Pipeline:
                 finders[match.id].add(f.source_family)
         return kept, finders
 
-    def apply_decisions(self, findings: list[Finding], consensus: list[ConsensusResult], *, target_id: str, revision: str,
-                        context_hash: str) -> None:
-        """The decision files, selected against this review, settle the findings their usable decisions bind to
+    def apply_decisions(self, findings: list[Finding], consensus: list[ConsensusResult], content: ReviewedContent) -> None:
+        """The decision files, selected against `content`, the reviewed content of this review, settle the findings their usable decisions bind to
         (mara.human_queue.settle); the audit counts the rows settled and, by why, the decisions not usable on this content
         (a decision on other content is not counted)."""
         from .decisions import TrainingRequirement, select
@@ -197,10 +196,8 @@ class Pipeline:
         from .workspace import resolve
 
         loaded = load_decisions(resolve("calib/decisions"))
-        report = {"target_id": target_id, "revision": revision, "coverage": {"content_hash": context_hash}}
-        sel = select(loaded.decisions, report, TrainingRequirement.from_config(self.cfg.training))
-        self.audit["human_decisions_applied"] = settle(findings, consensus, sel, target_id=target_id, revision=revision,
-                                                       context_hash=context_hash)
+        sel = select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training))
+        self.audit["human_decisions_applied"] = settle(findings, consensus, sel, content)
         for why, n in sel.by_reason().items():
             if why != "unbound":
                 self.audit[f"human_decisions_not_usable[{why}]"] = n
@@ -331,16 +328,14 @@ class Pipeline:
         scoring = jury.score(findings, reviewed.finders, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
                              tool_path_prefix=ctx.repo_prefix)
         self.audit["position_flips"] = scoring.position_flips
-        # repository + path below its top level for a committed git target (repo_map.target_identity),
-        # so CI, every clone and every calibration run name the same target the same way
-        target_id = hashlib.sha256(ctx.identity.encode()).hexdigest()
-        self.apply_decisions(findings, scoring.rows, target_id=target_id, revision=ctx.revision, context_hash=ctx.content_hash)
+        content = ReviewedContent.of_bundle(ctx)
+        self.apply_decisions(findings, scoring.rows, content)
         cons_by_id = {c.finding_id: c for c in scoring.rows}
         dims = []
         for d in self.cfg.dimensions:
             dims.append(score_dimension(d, findings, cons_by_id, tools.ran_for(d)))
         return Stages(ctx=ctx, tools=tools, egress=egress, context_view=context_view, reviewed=reviewed, ballots=ballots, scoring=scoring,
-                      dimensions=dims, target_id=target_id, base_ref=base_ref)
+                      dimensions=dims, content=content, base_ref=base_ref)
 
     def _assess(self, stages: Stages, fail_on_gate: bool) -> tuple[Assessment, str | None]:
         """The review facts the stages handed in, the ML-BOM signature check among them, and the review status and gate

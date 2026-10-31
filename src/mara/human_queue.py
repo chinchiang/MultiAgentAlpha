@@ -1,14 +1,14 @@
-"""The human queue (GLOSSARY.md: human queue, queue key, human reason, queue tightening, usable decision): which
-findings a human must look at and under which key, the reasons they need one, the tightening while the ticket backlog
-is over its limit, and how usable decisions settle the findings they bind to (docs/adr/0002-usable-decisions.md,
-docs/adr/0003-human-resolution.md, docs/adr/0005-jury-outcome.md). Pure, except that settle() records decisions on
-the consensus rows it is given: the pipeline reads the backlog and the decision files (mara.decisions) and writes the
-audit; mara.report.human_queue_out writes the queue.
+"""The human queue (GLOSSARY.md: human queue, queue key, reviewed content, human reason, queue tightening, usable
+decision): which findings a human must look at and under which key, the reasons they need one, the tightening while the
+ticket backlog is over its limit, and how usable decisions settle the findings they bind to
+(docs/adr/0002-usable-decisions.md, docs/adr/0003-human-resolution.md, docs/adr/0005-jury-outcome.md). Pure, except
+that settle() records decisions on the consensus rows it is given: the pipeline reads the backlog and the decision files
+(mara.decisions) and writes the audit; mara.report.human_queue_out writes the queue.
 
 The queue takes the human reasons the jury outcome recorded on each consensus row (quorum,
 disagreement, unverified provenance, tier C at the severity floor) and the rejected findings under
 rejection review (policy P8). Queue tightening never drops a finding that still needs a human.
-Each item carries un-blinded context and its exact review identity.
+Each item carries un-blinded context and the reviewed content it binds to (mara.reviewed_content).
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .identity import norm_cwe, norm_path
+from .reviewed_content import ReviewedContent
 from .schemas import ConsensusResult, Finding, HumanQueueItem, JudgeVote, QueueTightening, RedTeamNote, SkepticVerdict
 from .scoring.outcome import JURY_HUMAN_REASONS
 
@@ -33,11 +34,14 @@ DECISION_NOT_USABLE = "decision_not_usable"
 HUMAN_REASONS = frozenset(JURY_HUMAN_REASONS) | {UNSUPERVISED_REJECT_UNVERIFIED, DECISION_NOT_USABLE}
 
 
-def queue_key(file: str, line: int, cwe: str, *, target_id: str = "", revision: str = "", context_hash: str = "") -> str:
+def queue_key(file: str, line: int, cwe: str, content: ReviewedContent | None = None) -> str:
+    """The queue key of the place `file`:`line` and weakness `cwe` in `content`: the v2 key when every part of the
+    reviewed content is known, the legacy key otherwise (no content, or a part of it unknown)."""
     norm = norm_path(file)
-    if not (target_id and revision and context_hash):
+    if content is None or not content.known:
         return hashlib.sha256(f"{norm}:{line}:{norm_cwe(cwe)}".encode()).hexdigest()[:12]  # legacy: never auto-synced
-    identity = json.dumps([target_id, revision, context_hash, norm, line, norm_cwe(cwe)], separators=(",", ":"))
+    identity = json.dumps([content.target_id, content.revision, content.content_hash, norm, line, norm_cwe(cwe)],
+                          separators=(",", ":"))
     return "v2-" + hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
@@ -74,13 +78,12 @@ def build_queue(
     votes: list[JudgeVote],
     cfg: MaraConfig,
     *,
-    target_id: str = "",
-    revision: str = "",
-    context_hash: str = "",
+    content: ReviewedContent | None = None,
 ) -> list[HumanQueueItem]:
     hq = cfg.human_queue
     if not hq.enabled:
         return []
+    content = content or ReviewedContent("", "", "")
     by_finding: dict[str, list[JudgeVote]] = {}
     for v in votes:
         by_finding.setdefault(v.finding_id, []).append(v)
@@ -112,10 +115,10 @@ def build_queue(
         items.append(
             HumanQueueItem(
                 finding_id=f.id,
-                key=queue_key(p.file, p.line, f.cwe, target_id=target_id, revision=revision, context_hash=context_hash),
-                target_id=target_id,
-                revision=revision,
-                context_hash=context_hash,
+                key=queue_key(p.file, p.line, f.cwe, content),
+                target_id=content.target_id,
+                revision=content.revision,
+                context_hash=content.content_hash,
                 reasons=reasons,
                 title=f.title,
                 dimension=f.dimension,
@@ -146,20 +149,19 @@ def build_queue(
     return items
 
 
-def settle(findings: list[Finding], consensus: list[ConsensusResult], selection: Selection, *, target_id: str, revision: str,
-           context_hash: str) -> int:
-    """Usable decisions on this very content settle their findings (docs/adr/0003-human-resolution.md): each one is
-    recorded on its consensus row, whose jury outcome stays as it is. A well-formed decision that is not usable
-    settles nothing, and a finding that still needs a human says why. Returns how many consensus rows a decision was
-    recorded on (two findings at one place count twice)."""
+def settle(findings: list[Finding], consensus: list[ConsensusResult], selection: Selection,
+           content: ReviewedContent) -> int:
+    """Usable decisions on `content`, the reviewed content of the findings, settle the findings they bind to
+    (docs/adr/0003-human-resolution.md): each one is recorded on its consensus row, whose jury outcome stays as it is.
+    A well-formed decision that is not usable settles nothing, and a finding that still needs a human says why. Returns
+    how many consensus rows a decision was recorded on (two findings at one place count twice)."""
     usable = {d.key: d for d in selection.usable}
     not_usable = {d.key: why for d, why in selection.excluded if why != "unbound"}
     by_id = {f.id: f for f in findings}
     applied = 0
     for c in consensus:
         f = by_id[c.finding_id]
-        key = queue_key(f.provenance[0].file, f.provenance[0].line, f.cwe, target_id=target_id, revision=revision,
-                        context_hash=context_hash)
+        key = queue_key(f.provenance[0].file, f.provenance[0].line, f.cwe, content)
         d = usable.get(key)
         if d is not None:
             c.human_decision = {"decision": d.decision, "key": d.key, "issue": d.issue, "decided_by": d.decided_by,

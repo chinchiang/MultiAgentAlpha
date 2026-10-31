@@ -113,8 +113,9 @@ def test_gitleaks_reads_a_human_queue_key_as_no_credential():
     import tomllib
 
     from mara.human_queue import queue_key
+    from mara.reviewed_content import ReviewedContent
 
     allow = tomllib.loads((ROOT / ".gitleaks.toml").read_text(encoding="utf-8"))["allowlist"]["regexes"]
-    key = queue_key("app.py", 3, "CWE-79", target_id="t", revision="r", context_hash="c")
+    key = queue_key("app.py", 3, "CWE-79", ReviewedContent("t", "r", "c"))
     assert any(re.fullmatch(r, key) for r in allow if "v2-" in r)
     assert not any(re.fullmatch(r, "v2-" + "0" * 23) or re.fullmatch(r, "ghp_" + "0" * 36) for r in allow if "v2-" in r)

@@ -7,8 +7,8 @@ This module defines that record and the two levels of trust in it (docs/adr/0002
 - well-formed: the record is consistent with itself (a ruling, a decision event, and a key that is
   both its file name and the v2 queue key of its own fields). A well-formed decision answers its
   ticket: the key is not queued again.
-- usable: well-formed, bound to the report it is compared with (same target, revision and
-  context), not contradicted on its key, and - whenever training is required - made by an
+- usable: well-formed, bound to the review it is compared with (the same reviewed content,
+  mara.reviewed_content), not contradicted on its key, and - whenever training is required - made by an
   adjudicator holding a valid training record on the decision day. Only a usable decision is
   ground truth: calibration labels, the Alternative Annotator Test, false-positive rates.
 
@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .human_queue import queue_key
+from .reviewed_content import ReviewedContent
 from .training import Register, is_trained
 
 if TYPE_CHECKING:
@@ -75,8 +76,7 @@ class Decision:
             return "line or decided_at is unreadable"
         if line < 1:
             return "line is not a positive number"
-        if r["key"] != queue_key(r["file"], line, r["cwe"], target_id=r["target_id"], revision=r["revision"],
-                                 context_hash=r["context_hash"]):
+        if r["key"] != queue_key(r["file"], line, r["cwe"], ReviewedContent.of_record(r)):
             return "key is not the v2 queue key of the record's own fields"
         issue = r.get("issue")
         return cls(key=r["key"], target_id=r["target_id"], revision=r["revision"], context_hash=r["context_hash"],
@@ -91,6 +91,11 @@ class Decision:
         if self.issue is not None:
             core["issue"] = self.issue
         return {**self.extra, **core}
+
+    @property
+    def content(self) -> ReviewedContent:
+        """The reviewed content the decision binds to."""
+        return ReviewedContent(self.target_id, self.revision, self.context_hash)
 
     @property
     def day(self) -> dt.date:
@@ -213,22 +218,15 @@ class Selection:
         return {why: len(k) for why, k in sorted(keys.items())}
 
 
-def binding(report: dict) -> tuple[str, str, str] | None:
-    """(target id, revision, context hash) of a review report, or None when any is missing: such a
-    report binds no decision."""
-    ident = (report.get("target_id"), report.get("revision"), (report.get("coverage") or {}).get("content_hash"))
-    return ident if all(isinstance(x, str) and x for x in ident) else None  # type: ignore[return-value]
-
-
-def select(decisions: list[Decision], report: dict, training: TrainingRequirement) -> Selection:
-    """The usable decisions for `report`, and every other decision with why it is not usable: 'unbound'
-    (another target, revision or context), then 'untrained', then 'contradictory' (the remaining
-    decisions on a key disagree; all of them are excluded). Agreeing records of one key count once."""
-    ident = binding(report)
+def select(decisions: list[Decision], content: ReviewedContent | None, training: TrainingRequirement) -> Selection:
+    """The usable decisions for a review of `content`, and every other decision with why it is not usable: 'unbound'
+    (another reviewed content, or none: a report whose reviewed content is not known binds no decision,
+    ReviewedContent.of_report), then 'untrained', then 'contradictory' (the remaining decisions on a key disagree; all of
+    them are excluded). Agreeing records of one key count once."""
     sel = Selection([], [])
     candidates: dict[str, list[Decision]] = {}
     for d in decisions:
-        if ident is None or (d.target_id, d.revision, d.context_hash) != ident:
+        if content is None or d.content != content:
             sel.excluded.append((d, "unbound"))
         elif not training.satisfied_by(d):
             sel.excluded.append((d, "untrained"))

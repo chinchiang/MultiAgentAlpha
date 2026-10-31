@@ -76,8 +76,12 @@ _Avoid_: block, rejection
 
 ## Human decisions
 
+**Reviewed content**:
+The exact target, revision and content bundle a review examined (受審內容). Decisions and human queue items bind to reviewed content so a ruling on one revision or bundle never settles a finding on another.
+_Avoid_: review identity, context identity, report identity
+
 **Queue key**:
-The identity of one place in one reviewed content that a decision binds to: the target, revision and content reviewed, and the file, line and weakness of the finding. A decision under one queue key never settles a finding under another.
+The identity of one place in one reviewed content that a decision binds to: the reviewed content, and the file, line and weakness of the finding. A decision under one queue key never settles a finding under another.
 _Avoid_: finding id (a finding's id is only unique within one review), fingerprint
 
 **Decision**:
@@ -89,7 +93,7 @@ The person who made a decision, named by the decision event on the ticket.
 _Avoid_: reviewer (a model role), annotator
 
 **Bound decision**:
-A decision on the same target, revision and context as a given review report, so it speaks about exactly the finding that report holds.
+A decision on the same reviewed content as a given review, so it speaks about exactly the finding that review holds.
 _Avoid_: matching decision, applied decision
 
 **Usable decision**:
