@@ -1,0 +1,35 @@
+focused:
+- tests/test_web_procs.py
+- tests/test_web_server.py
+- tests/test_web_admission.py
+mutations:
+- name: admission asked about another kind than the one launched
+  file: src/mara/web/procs.py
+  old: '            if refused := admission.refusal(tag, self.table.running_tags()):'
+  new: '            if refused := admission.refusal("run", self.table.running_tags()):'
+- name: the record not written before the child starts
+  file: src/mara/web/procs.py
+  old: "            argv, rec = prepare(child_id, d)\n            write_json(d / record, rec)\n"
+  new: '            argv, rec = prepare(child_id, d)
+
+    '
+- name: a failed start's record without the error
+  file: src/mara/web/procs.py
+  old: '                rec.update(status="failed", finished_at=now(), error=type(e).__name__)'
+  new: '                rec.update(status="failed", finished_at=now())'
+- name: a failed start's record left running
+  file: src/mara/web/procs.py
+  old: '                rec.update(status="failed", finished_at=now(), error=type(e).__name__)'
+  new: '                rec.update(finished_at=now(), error=type(e).__name__)'
+- name: a started child's pid not recorded
+  file: src/mara/web/procs.py
+  old: '            rec["pid"] = pid
+
+    '
+  new: ''
+- name: a record and running() read outside the lock
+  file: src/mara/web/procs.py
+  old: "        with self.held():\n            return read_json(path), self.running(child_id)\n"
+  new: '        return read_json(path), self.running(child_id)
+
+    '

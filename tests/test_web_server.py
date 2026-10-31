@@ -650,6 +650,16 @@ def _exited_job(tmp_path, monkeypatch, child_type, kind="trivy_db_download"):
     return reg, job_reg, job_id, children
 
 
+def test_a_job_records_the_pid_of_its_child_as_a_run_does(tmp_path, monkeypatch):
+    """One launch for runs and jobs (procs.Children.launch): job.json gains the pid run.json has always had."""
+    _, job_reg, job_id, (child,) = _exited_job(tmp_path, monkeypatch, UnrecordedExit)
+    try:
+        assert procs.read_json(job_reg.jobs_dir / job_id / "job.json")["pid"] == child.pid
+    finally:
+        child.released.set()
+    _until_not_running(job_reg, job_id, 30)
+
+
 def test_no_second_job_starts_while_the_exit_of_the_first_is_not_recorded_yet(tmp_path, monkeypatch):
     """The first job still reads as running, so another job is refused."""
     from mara.web import jobs as jobs_mod

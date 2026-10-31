@@ -22,8 +22,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..invocation import ProviderMode
 from ..tools import pins
-from . import admission, procs
-from .runs import LaunchError, resolve_config
+from . import procs
+from .admission import LaunchError
+from .runs import resolve_config
 
 JobKind = Literal["install_tools", "trivy_db_download", "trivy_db_status", "check_config"]
 SCRIPTS = {"install_tools": "scripts/install_tools.py", "trivy_db_download": "scripts/trivy_db.py", "trivy_db_status": "scripts/trivy_db.py"}
@@ -70,24 +71,13 @@ class JobRegistry:
 
     def create(self, req: JobRequest) -> dict[str, Any]:
         argv = self.argv(req)
-        with self.children.held():  # the lock of every registry's children: the check and the start are one step
-            if self.children.table.closed:  # the server exit took the children: before anything is written
-                raise LaunchError("stopping", "the server is stopping: no review or job is started", status=503)
-            if refused := admission.refusal(req.kind, self.children.table.running_tags()):
-                raise LaunchError("busy", refused, status=409)
-            job_id = procs.new_id()
-            d = self.jobs_dir / job_id
-            d.mkdir(parents=True)
-            job: dict[str, Any] = {"id": job_id, "kind": req.kind, "request": req.model_dump(), "argv": argv, "status": "running",
-                                   "started_at": procs.now(), "finished_at": None, "exit_code": None}
-            procs.write_json(d / "job.json", job)
-            try:
-                self.children.start(job_id, argv, cwd=self.workspace, log_path=d / "job.log", env=procs.child_env(self.workspace),
-                                    tag=req.kind)
-            except OSError as e:
-                job.update(status="failed", finished_at=procs.now())
-                procs.write_json(d / "job.json", job)
-                raise LaunchError("spawn_failed", str(e), status=500) from e
+
+        def record(job_id: str, _: Path) -> tuple[list[str], dict[str, Any]]:
+            return argv, {"id": job_id, "kind": req.kind, "request": req.model_dump(), "argv": argv, "status": "running",
+                          "started_at": procs.now(), "finished_at": None, "exit_code": None}
+
+        job_id, job = self.children.launch(req.kind, self.jobs_dir, record="job.json", log="job.log", cwd=self.workspace,
+                                           env=procs.child_env(self.workspace), prepare=record)
         return self.get(job_id) or job
 
     def _record_exit(self, job_id: str, code: int, stopped: bool) -> None:
@@ -100,9 +90,7 @@ class JobRegistry:
         if not procs.ID_RE.match(job_id):
             return None
         d = self.jobs_dir / job_id
-        with self.children.held():  # a job's exit is recorded under this lock: read job.json and whether it runs in one step
-            job = procs.read_json(d / "job.json")
-            owned = self.children.running(job_id)
+        job, owned = self.children.read(job_id, d / "job.json")  # in one step under the lock its exit is recorded under
         if job is None:
             return None
         if job.get("status") == "running" and not owned:  # a job of an earlier server, or one whose waiter stopped
