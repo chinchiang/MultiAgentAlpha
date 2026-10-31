@@ -1,5 +1,6 @@
 """L0 deterministic tools. Each wrapper runs the pinned binary from .mara-tools/bin and emits SARIF.
-A tool that is not installed, writes no SARIF, exits with an unexpected code or reports an incomplete
+A tool that is not installed, is installed at another version than tools/versions.lock pins
+(mara.tools.pins), writes no SARIF, exits with an unexpected code or reports an incomplete
 scan is recorded as ran=False; the pipeline then marks the review incomplete
 (required_tool_incomplete) and the gate fails closed. Tool output is ground truth: a model
 finding that coincides with a tool result is corroborated (tier A); a tool result no
@@ -23,6 +24,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import pins
 from .sarif import ToolResult, read_sarif, scan_complete
 
 _log = logging.getLogger("mara.tools")
@@ -53,10 +55,12 @@ def tool_env(*extra: str, **set_vars: str) -> dict[str, str]:
     return env
 
 
-def tools_dir() -> Path:
+def tools_dir(workspace: Path | None = None) -> Path:
+    """MARA_TOOLS_DIR, or .mara-tools; a relative one below `workspace`, the MARA workspace by default."""
     from ..workspace import resolve
 
-    return resolve(os.environ.get("MARA_TOOLS_DIR") or ".mara-tools").resolve()
+    d = Path(os.environ.get("MARA_TOOLS_DIR") or ".mara-tools")
+    return (workspace / d if workspace is not None and not d.is_absolute() else resolve(d)).resolve()
 
 
 def tool_path(tool: str) -> Path | None:
@@ -170,6 +174,10 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
     target = target.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     neutral = neutral_configs(out_dir)
+    from ..workspace import resolve
+
+    # the workspace's lock, read once: a tool runs only at the version it pins, as the CI scripts require
+    locked = pins.locked_versions(resolve(pins.LOCK))
     runs: list[ToolRun] = []
     wanted = enabled or list(TOOL_DIMENSIONS)
     for tool in wanted:
@@ -179,6 +187,10 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
             continue
         exe = str(exe_path)
         version = installed_version(tool)
+        not_pinned = pins.mismatch(tool, locked.get(tool, ""), version)
+        if not_pinned:
+            runs.append(ToolRun(tool=tool, ran=False, note=not_pinned))
+            continue
         sarif = out_dir / f"{tool}.sarif"
         sarif.unlink(missing_ok=True)
         try:

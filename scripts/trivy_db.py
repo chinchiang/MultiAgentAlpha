@@ -41,6 +41,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from mara.tools import pins  # noqa: E402
 from mara.tools import trivy_db as tdb  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
 
@@ -57,9 +58,8 @@ def load_config(path: Path = CONFIG) -> dict:
     return {"repositories": repos, "max_age_hours": float(d.get("max_age_hours", 48))}
 
 
-def locked_version(lock: Path = ROOT / "tools" / "versions.lock") -> str:
-    d = yaml.safe_load(lock.read_text(encoding="utf-8")) or {}
-    return str(d.get("tools", d).get("trivy", {}).get("version", ""))
+def locked_version(lock: Path = ROOT / pins.LOCK) -> str:
+    return pins.locked_version("trivy", lock)
 
 
 class PinError(RuntimeError):
@@ -71,8 +71,9 @@ def pinned_trivy() -> Path:
     if exe is None:
         raise PinError(f"trivy is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)")
     want, have = locked_version(), installed_version("trivy")
-    if not want or have != want:
-        raise PinError(f"installed trivy {have!r} does not match tools/versions.lock {want!r}; re-run scripts/install_tools.py")
+    not_pinned = pins.mismatch("trivy", want, have)
+    if not_pinned:
+        raise PinError(not_pinned)
     return exe
 
 

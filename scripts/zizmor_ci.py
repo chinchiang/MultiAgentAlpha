@@ -22,16 +22,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
 
 PERSONAS = ("regular", "auditor", "pedantic")
 
 
-def locked_version(lock: Path = ROOT / "tools" / "versions.lock") -> str:
-    import yaml
-
-    d = yaml.safe_load(lock.read_text(encoding="utf-8")) or {}
-    return str(d.get("tools", d).get("zizmor", {}).get("version", ""))
+def locked_version(lock: Path = ROOT / pins.LOCK) -> str:
+    return pins.locked_version("zizmor", lock)
 
 
 def summarize(doc: dict) -> list[dict]:
@@ -59,8 +57,9 @@ def main() -> int:
         print(f"ERROR: zizmor is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)", file=sys.stderr)
         return 2
     want, have = locked_version(), installed_version("zizmor")
-    if not want or have != want:
-        print(f"ERROR: installed zizmor {have!r} does not match tools/versions.lock {want!r}; re-run scripts/install_tools.py", file=sys.stderr)
+    not_pinned = pins.mismatch("zizmor", want, have)
+    if not_pinned:
+        print(f"ERROR: {not_pinned}", file=sys.stderr)
         return 2
     if not a.target.exists():
         print(f"ERROR: target {a.target} does not exist", file=sys.stderr)
