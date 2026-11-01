@@ -11,7 +11,8 @@ line's checks again. `run.json` is the
 record of a run: the request as given, the argv, the roles and models of the config at launch (the config file may
 change later, and the report keeps only the provider manifest), status and exit code. The exit code alone is ambiguous
 (2 is a usage error and an enforced gate alike), so a run counts as finished only when its progress record says the
-reports were written.
+reports were written. Whether the gate was enforced and whether the PSIRT hand-off failed are not in it: `get` derives them
+at each read from the report's own `gate_enforced` and the exit code (`invocation.outcome`), `None` where neither says.
 
 The config is one `configs` allows, the configs the page lists (`configs.allowed`); `resolve_config` and
 `resolve_path` turn a request's value into it, and a check_config job resolves its config with them too.
@@ -26,6 +27,7 @@ reads the config and the workspace, and reads and writes the files under `<out>/
 from __future__ import annotations
 
 import dataclasses
+import json
 import sys
 import threading
 import unicodedata
@@ -58,7 +60,6 @@ from .admission import LaunchError
 
 ARTIFACTS = (*REVIEW_ARTIFACTS, "run.log")
 IMPORTED_ID = "workspace-out"  # a review written by `mara review` into <workspace>/out, shown read-only
-STATUSES = ("running", "finished", "failed", "cancelled", "interrupted")
 
 
 class LaunchRequest(BaseModel):
@@ -111,6 +112,7 @@ class RunRegistry:
         self.children = procs.Children("run", self._record_exit, start=start, table=table)
         self._reports_lock = threading.Lock()
         self._reports: dict[str, tuple[int, int, ReviewReport]] = {}
+        self._recorded_gates: dict[str, tuple[int, int, bool | None]] = {}
 
     # ------------------------------------------------------------------ validation
     def _inside_workspace(self, p: Path) -> bool:
@@ -186,8 +188,6 @@ class RunRegistry:
                 "finished_at": None,
                 "exit_code": None,
                 "pid": None,
-                "gate_enforced": False,
-                "psirt_failed": False,
             }
 
         run_id, manifest = self.children.launch("run", self.runs_dir, record="run.json", log="run.log", cwd=self.workspace,
@@ -202,8 +202,7 @@ class RunRegistry:
         status = "cancelled" if stopped else "finished" if finished else "failed"
         if not finished:
             progress_mod.close_abandoned(run_dir / "progress.json", "cancelled" if status == "cancelled" else f"exit {code}")
-        end = outcome(code, procs.read_json(run_dir / "report.json") or {}) if finished else FinishedReview(False, False)
-        manifest.update(status=status, exit_code=code, finished_at=procs.now(), gate_enforced=end.gate_enforced, psirt_failed=end.psirt_failed)
+        manifest.update(status=status, exit_code=code, finished_at=procs.now())
         procs.write_json(run_dir / "run.json", manifest)
 
     def cancel(self, run_id: str) -> dict[str, Any]:
@@ -264,6 +263,32 @@ class RunRegistry:
             self._reports[run_id] = (st.st_mtime_ns, st.st_size, report)
         return report
 
+    def _gate_enforced(self, run_id: str) -> bool | None:
+        """The gate_enforced the run's report.json records, read from the file as it is, so a report the model of
+        mara.schemas does not validate still tells; None when the file is absent, unreadable, or records none (a report
+        written before the field). Cached until the file changes."""
+        d = self.run_dir(run_id)
+        if d is None:
+            return None
+        path = d / "report.json"
+        try:
+            st = path.stat()
+        except OSError:
+            return None
+        with self._reports_lock:
+            cached = self._recorded_gates.get(run_id)
+            if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+                return cached[2]
+        try:
+            doc = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            return None
+        recorded = doc.get("gate_enforced") if isinstance(doc, dict) else None
+        value = recorded if isinstance(recorded, bool) else None
+        with self._reports_lock:
+            self._recorded_gates[run_id] = (st.st_mtime_ns, st.st_size, value)
+        return value
+
     def get(self, run_id: str) -> dict[str, Any] | None:
         d = self.run_dir(run_id)
         if run_id == IMPORTED_ID or d is None:
@@ -277,6 +302,10 @@ class RunRegistry:
             # a run of an earlier server, or one whose waiter stopped without recording its exit: the progress record decides
             st = (prog or {}).get("status")
             manifest["status"] = "finished" if st == "finished" else "failed" if st == "failed" else "interrupted"
+        # read now, never stored: a finished run's gate and PSIRT hand-off, from its report and its exit code when it has one
+        finished = manifest.get("status") == "finished"
+        end = outcome(manifest.get("exit_code"), self._gate_enforced(run_id)) if finished else FinishedReview(False, False)
+        manifest["gate_enforced"], manifest["psirt_failed"] = end
         manifest["current_stage"] = (prog or {}).get("current")
         manifest["stages_done"] = sum(1 for s in (prog or {}).get("stages", []) if s.get("status") in ("done", "skipped"))
         report = self.report(run_id)
