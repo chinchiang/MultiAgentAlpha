@@ -15,7 +15,9 @@ server takes from socketserver, is defined nowhere in it: write it bare, not aft
 that calls it: `invocation.load_config`. A patch of `mara.config.load_config` leaves the invocation's own reference in
 place, so the test reads the real config: it fails for another reason, or passes without testing what it names. When a
 module changes between importing a name (`from .config import load_config`) and calling it through its module
-(`config.load_config(...)`), the patches of that name move with it. A patch of a class attribute (`cli.Pipeline.run`)
+(`config.load_config(...)`), the patches of that name move with it. `mara.policy` imports it by name too
+(`check_config_file` calls it), so a test that makes the check meet an exception that is not about the file patches
+`policy.load_config` (`test_policy.py`). A patch of a class attribute (`cli.Pipeline.run`)
 changes the class itself, the same object wherever it is imported.
 
 A review's tool runner is given, not patched: a test passes it to `Pipeline(cfg, ..., run_tools=...)` (below).

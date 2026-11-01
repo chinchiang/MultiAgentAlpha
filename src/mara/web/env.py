@@ -5,8 +5,9 @@ Tools: every entry of `tools/versions.lock` against what `scripts/install_tools.
 directory's manifest (installed version, signature verification) and whether the runner would find it
 (`runner.tool_path`, never PATH). The trivy database: `trivy_db.check`, the same freshness and integrity rule a
 review applies (cached while the database file is unchanged, since the check hashes it). Configs: every file
-under `config/` and `config/examples/`, validated as `mara check-config` validates it, with the eight policy
-results. Credentials are reported by environment variable name and presence only, never by value.
+under `config/` and `config/examples/`, checked by `policy.check_config_file`, the check `mara check-config` renders
+too: whether its structure is valid and, when it is, the eight policy results. Credentials are reported by environment
+variable name and presence only, never by value.
 
 Not pure: it reads the workspace, the tool directory, the trivy database, the environment and the clock (the trivy
 database's age), runs `node --version`, and keeps the trivy check and the node version in caches of the module's own.
@@ -27,12 +28,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import yaml
-
 from .. import __version__
-from ..config import MaraConfig, ModelSpec
+from ..config import ModelSpec
 from ..invocation import config_provider_mode
-from ..policy import evaluate_policies
+from ..policy import check_config_file
 from ..tools import pins, trivy_db
 from ..tools.csp_eval import node_exe
 from ..tools.runner import TOOL_DIMENSIONS, installed_manifest_entry, tool_path, tools_dir
@@ -163,21 +162,17 @@ def configs(workspace: Path) -> list[dict[str, Any]]:
     out = []
     for path in config_files(workspace):
         rel = path.relative_to(workspace).as_posix()
-        entry: dict[str, Any] = {"path": rel, "name": path.stem, "structure_ok": False, "loadable": False, "error": "", "provider_mode": None,
+        check = check_config_file(path)  # the check `mara check-config` renders too
+        entry: dict[str, Any] = {"path": rel, "name": path.stem, "structure_ok": check.structure_ok, "loadable": check.passed,
+                                 "error": " ".join(check.error.split())[:600], "provider_mode": None,
                                  "models": [], "roles": {}, "policies": [], "dimensions": [], "rollout_phase": None}
-        try:
-            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            cfg = MaraConfig.model_validate(raw, context={"skip_policies": True})
-        except Exception as e:  # what `mara check-config` reports as an invalid structure
-            entry["error"] = " ".join(str(e).split())[:600]
+        cfg = check.config
+        if cfg is None:
             out.append(entry)
             continue
-        results = evaluate_policies(cfg)
         entry.update(
-            structure_ok=True,
-            loadable=all(r.passed for r in results),
             provider_mode=config_provider_mode(m.provider for m in cfg.models),
-            policies=[{"id": r.id, "name": r.name, "passed": r.passed, "reason": r.reason} for r in results],
+            policies=[{"id": r.id, "name": r.name, "passed": r.passed, "reason": r.reason} for r in check.policies],
             roles={"context": cfg.roles.context, "reviewers": list(cfg.roles.reviewers), "skeptic": cfg.roles.skeptic,
                    "redteam": cfg.roles.redteam, "judges": list(cfg.roles.judges)},
             dimensions=list(cfg.dimensions),

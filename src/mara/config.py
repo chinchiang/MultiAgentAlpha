@@ -314,8 +314,15 @@ class MaraConfig(BaseModel):
         return self
 
 
+# What makes a config file unusable: it cannot be read, is not YAML, or fails validation (pydantic's ValidationError
+# and a UnicodeDecodeError are ValueErrors). Any other exception is a bug, not a property of the file.
+INVALID_FILE_ERRORS = (OSError, ValueError, yaml.YAMLError)
+
+
 def load_config(path: str | Path, *, enforce_policies: bool = True) -> MaraConfig:
     """The config at `path`, validated and with its defaults. A file violating a policy is refused unless
-    `enforce_policies` is false, for a caller that reports the policies itself (scripts/governance_check.py)."""
+    `enforce_policies` is false, for a caller that reports the policies itself (policy.check_config_file,
+    scripts/governance_check.py). An empty file is a config with no keys and is refused for the fields it lacks. What
+    can be wrong with the file is INVALID_FILE_ERRORS; any other exception is a bug."""
     with open(path, encoding="utf-8") as fh:
-        return MaraConfig.model_validate(yaml.safe_load(fh), context=None if enforce_policies else {"skip_policies": True})
+        return MaraConfig.model_validate(yaml.safe_load(fh) or {}, context=None if enforce_policies else {"skip_policies": True})

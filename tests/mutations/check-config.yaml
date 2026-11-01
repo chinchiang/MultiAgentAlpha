@@ -1,10 +1,38 @@
-focused: [tests/test_policy.py]
+focused: [tests/test_policy.py, tests/test_web_server.py]
 mutations:
-  - name: check-config reads the YAML outside the structural check
+  - name: a YAML syntax error is not an invalid file
+    file: src/mara/config.py
+    old: 'INVALID_FILE_ERRORS = (OSError, ValueError, yaml.YAMLError)'
+    new: 'INVALID_FILE_ERRORS = (OSError, ValueError)'
+  - name: a path that cannot be read is not an invalid file
+    file: src/mara/config.py
+    old: 'INVALID_FILE_ERRORS = (OSError, ValueError, yaml.YAMLError)'
+    new: 'INVALID_FILE_ERRORS = (ValueError, yaml.YAMLError)'
+  - name: an empty file is not a config with no keys
+    file: src/mara/config.py
+    old: 'MaraConfig.model_validate(yaml.safe_load(fh) or {}, context='
+    new: 'MaraConfig.model_validate(yaml.safe_load(fh), context='
+  - name: an exception that is not about the file is reported as an invalid file
+    file: src/mara/policy.py
+    old: '    except INVALID_FILE_ERRORS as e:'
+    new: '    except Exception as e:'
+  - name: a config passes the check whatever its policies say
+    file: src/mara/policy.py
+    old: '        return self.config is not None and all(r.passed for r in self.policies)'
+    new: '        return self.config is not None'
+  - name: the command line prints a structure error without escaping it
     file: src/mara/cli.py
-    old: "    try:\n        raw = yaml.safe_load(config.read_text(encoding=\"utf-8\")) or {}\n        cfg = MaraConfig"
-    new: "    raw = yaml.safe_load(config.read_text(encoding=\"utf-8\")) or {}\n    try:\n        cfg = MaraConfig"
-  - name: check-config reports only validation errors as an invalid structure
-    file: src/mara/cli.py
-    old: '    except Exception as e:  # structural error: nothing to evaluate'
-    new: '    except ValueError as e:  # structural error: nothing to evaluate'
+    old: '{escape(check.error)}'
+    new: '{check.error}'
+  - name: the page lists a long structure error whole
+    file: src/mara/web/env.py
+    old: '" ".join(check.error.split())[:600]'
+    new: '" ".join(check.error.split())'
+  - name: the page keeps the line breaks of a structure error
+    file: src/mara/web/env.py
+    old: '" ".join(check.error.split())[:600]'
+    new: 'check.error[:600]'
+  - name: the page calls a config loadable when only its structure is valid
+    file: src/mara/web/env.py
+    old: '"loadable": check.passed'
+    new: '"loadable": check.structure_ok'

@@ -4,14 +4,20 @@
 import datetime as dt
 import json
 import re
+from pathlib import Path
 
 import pytest
 import yaml
 from typer.testing import CliRunner
 
+from mara import policy
 from mara.cli import app
 from mara.config import MaraConfig, load_config
 from mara.policy import evaluate_policies
+from tests import cli_output
+
+ROOT = Path(__file__).resolve().parents[1]
+CONFIGS = sorted([*(ROOT / "config").glob("*.yaml"), *(ROOT / "config" / "examples").glob("*.yaml")])
 
 
 def _base(**over):
@@ -416,3 +422,82 @@ def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkey
     ev["date"] = (dt.date.today() - dt.timedelta(days=90)).isoformat()
     (calib / "latest.json").write_text(json.dumps(ev), encoding="utf-8")
     assert _p8(_allow()).passed  # exactly 90 days is still within the window
+
+
+# ---------------------------------------------------------------- one check of a config file
+
+
+@pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.relative_to(ROOT).as_posix())
+def test_a_config_file_passes_the_check_exactly_when_load_config_accepts_it(path):
+    try:
+        load_config(path)
+        accepted = True
+    except ValueError:
+        accepted = False
+    assert policy.check_config_file(path).passed is accepted
+
+
+def test_a_config_that_violates_policies_has_a_valid_structure_and_says_which_policies_fail():
+    check = policy.check_config_file(ROOT / "config" / "examples" / "violating.yaml")
+    assert check.structure_ok and check.config is not None and check.error == "" and not check.passed
+    assert len(check.policies) == 8 and {r.id for r in check.policies if not r.passed} >= {"P1", "P2", "P3"}
+
+
+def test_a_structure_error_is_kept_whole_and_there_is_nothing_to_evaluate(tmp_path):
+    raw = _base()
+    raw["models"].append(dict(raw["models"][0]))
+    path = tmp_path / "dup.yaml"
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    check = policy.check_config_file(path)
+    assert not check.structure_ok and not check.passed and check.config is None and check.policies == ()
+    assert "model names must be unique" in check.error and "[type=value_error" in check.error
+
+
+def test_a_yaml_syntax_error_names_the_file(tmp_path):
+    path = tmp_path / "broken.yaml"
+    path.write_text("models: [\n  - name: x\n", encoding="utf-8")
+    check = policy.check_config_file(path)
+    assert not check.structure_ok and "broken.yaml" in check.error
+
+
+def test_an_empty_file_names_the_fields_it_lacks(tmp_path):
+    path = tmp_path / "empty.yaml"
+    path.write_text("", encoding="utf-8")
+    check = policy.check_config_file(path)
+    assert not check.structure_ok and "models" in check.error and "Field required" in check.error
+
+
+def test_load_config_names_the_fields_an_empty_file_lacks(tmp_path):
+    path = tmp_path / "empty.yaml"
+    path.write_text("", encoding="utf-8")
+    with pytest.raises(ValueError, match="models"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("name", ["missing.yaml", "a-directory"])
+def test_a_path_that_cannot_be_read_is_an_invalid_file_not_an_exception(tmp_path, name):
+    (tmp_path / "a-directory").mkdir()
+    check = policy.check_config_file(tmp_path / name)
+    assert not check.structure_ok and check.error
+
+
+def test_an_exception_that_is_not_about_the_file_is_not_reported_as_one(tmp_path, monkeypatch):
+    """A bug while validating is a bug, not an invalid structure."""
+    def boom(*args, **kwargs):
+        raise RuntimeError("a bug")
+
+    monkeypatch.setattr(policy, "load_config", boom)
+    with pytest.raises(RuntimeError, match="a bug"):
+        policy.check_config_file(tmp_path / "any.yaml")
+
+
+def test_check_config_prints_a_structure_error_whole(tmp_path):
+    """The message holds square brackets (pydantic's `[type=value_error, ...]`), which the console must not read as markup.
+    Whether it does depends on the file's keys: the mock config's make it eat the bracket."""
+    raw = yaml.safe_load((ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8"))
+    raw["models"].append(dict(raw["models"][0]))
+    path = tmp_path / "dup.yaml"
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    res = CliRunner().invoke(app, ["check-config", str(path)])
+    assert res.exit_code == 1 and "invalid config structure" in cli_output.plain(res.output)
+    assert "[type=value_error" in cli_output.plain(res.output), res.output

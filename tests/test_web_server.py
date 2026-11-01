@@ -843,6 +843,24 @@ def test_the_page_lists_exactly_the_configs_a_launch_accepts(tmp_path):
     assert listed == by_review == by_job == {"config/plain.yaml", "config/short.yml"}
 
 
+def test_the_page_lists_a_config_whose_structure_is_invalid_as_one_short_line_and_nothing_else(tmp_path):
+    """The page reads `structure_ok` and `loadable`, and lists the other fields empty."""
+    import yaml
+
+    from mara.web import env
+
+    raw = yaml.safe_load((ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8"))
+    raw.update({f"unknown_key_{i}": 1 for i in range(30)})  # thirty validation errors: far more than 600 characters
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "broken.yaml").write_text(yaml.safe_dump(raw), encoding="utf-8")
+    (entry,) = env.configs(tmp_path)
+    assert entry["path"] == "config/broken.yaml" and entry["name"] == "broken"
+    assert entry["structure_ok"] is False and entry["loadable"] is False and entry["provider_mode"] is None
+    assert entry["policies"] == [] and entry["models"] == [] and entry["roles"] == {} and entry["dimensions"] == []
+    assert entry["rollout_phase"] is None
+    assert "\n" not in entry["error"] and 0 < len(entry["error"]) <= 600
+
+
 def test_a_check_config_job_runs_the_command_line(server):
     c = Client(server)
     res, data, _ = c.request("POST", "/api/jobs", body={"kind": "check_config", "config": "config/mara.mock.yaml"})
