@@ -45,7 +45,7 @@ class SecretPreflight:
 
 def secret_preflight(provider_mode: ProviderMode, secret_runs: list[ToolRun], answer_key: list[dict] | None) -> SecretPreflight:
     """Live source egress is blocked before any provider sees data when the trusted local secret scan (gitleaks) is
-    missing, did not run, or found a secret. Calibration only (`answer_key`, mara.pipeline.calibration_answer_key): a
+    missing, did not run, or found a secret. Calibration only (`answer_key`, mara.invocation.calibration_answer_key): a
     seeded secret the sample's answer key declares at the same file and line is expected and does not block; anything
     else the scan finds still does."""
     found = [res for run in secret_runs for res in run.results]

@@ -182,6 +182,7 @@
  "env.ws.version": "MARA 版本",
  "env.ws.workspace": "工作區（MARA_HOME）",
  "error.bad_base_ref": "增量基準不是有效的 git ref。",
+ "error.bad_calibration_sample": "校準樣本必須是 calib/samples/ 底下、附有答案檔的標註樣本。",
  "error.bad_host": "Host 標頭不是本機位址。",
  "error.bad_json": "請求不是有效的 JSON 物件。",
  "error.bad_path": "路徑無法使用（例如含有 NUL 字元）。",

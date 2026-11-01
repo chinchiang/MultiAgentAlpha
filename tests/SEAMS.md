@@ -52,8 +52,11 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
 ## The CLI's pipeline (`src/mara/cli.py`)
 
 - `cli.Pipeline.run`: replaced by `run(self, target, **kw)`, which records `kw` and stops. `cli._review` calls it as
-  `run(target, sarif_dir=..., provider_mode=..., ...)`, the target positional and every option a keyword.
-  `test_governance_leftovers.py`, `test_security_regressions.py`.
+  `run(target, sarif_dir=..., provider_mode=..., ...)`, the target positional and every option a keyword. `review`
+  checks the target's options before `Pipeline.run` (`invocation.check_calibration_sample`, `check_base`), so patching
+  `run` does not skip them: a test that gives `--base` gives a git repository for a target, one with a merge base for
+  that ref, and `--calibration-sample` a target below the workspace's `calib/samples/`.
+  `test_governance_leftovers.py`, `test_security_regressions.py`, `test_invocation_checks.py`.
 - `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]`. `cli._review` builds
   `Pipeline(cfg, out_dir=..., ...)`, the config positional and the rest keywords. `test_security_regressions.py`.
 - `invocation.load_config`: patched as a module name. `cli._review` calls `load(...)`, which `cli` imports by name from

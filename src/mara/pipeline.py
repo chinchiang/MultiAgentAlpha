@@ -6,7 +6,6 @@ schemas; reviewers never see each other's output; judges never see model identit
 from __future__ import annotations
 
 import datetime as dt
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,7 +17,7 @@ from .audit import Audit, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
 from .decisions import Selection
-from .invocation import ProviderMode, check_provider_mode
+from .invocation import ProviderMode, calibration_answer_key, check_base, check_provider_mode
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
@@ -148,6 +147,8 @@ class Pipeline:
         # workspace; none of it may be supplied by the repository under review
         check_outside(target, workspace=self.workspace)
         answer_key = calibration_answer_key(target, self.workspace) if calibration_sample else None
+        if base_ref:  # an empty one is no base; a refused one leaves no output directory behind
+            check_base(target, base_ref)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = self._bundle(target, base_ref)
         tools, egress = self._tools(target, sarif_dir, provider_mode, answer_key)
@@ -311,24 +312,3 @@ class Pipeline:
         """Every provider and the models it served in this review (for the report's provider manifest)."""
         return [{"name": n, "type": p.spec.provider, "family": p.family.value, "model": p.model,
                  "served_models": sorted(getattr(p, "served_models", ()))} for n, p in self.providers.items()]
-
-
-
-def calibration_answer_key(target: Path, workspace: Path | None = None) -> list[dict]:
-    """The seeded-secret labels (CWE-798) of a calibration sample, for the secret-preflight exemption.
-
-    Only an operator flag (`mara review --calibration-sample`) asks for it, and only a directory below
-    the MARA workspace's calib/samples/ with a MARA answer key qualifies: a reviewed repository cannot
-    exempt its own secrets by shipping a labels.json, since its location is the operator's choice and
-    the exemption is off for every ordinary review. The workspace is `workspace`, the MARA workspace by default."""
-    from .context.repo_map import is_calibration_answer_key
-
-    samples = ((workspace if workspace is not None else workspace_root()) / "calib" / "samples").resolve()
-    target = Path(target).resolve()
-    if samples not in target.parents:
-        raise ValueError(f"--calibration-sample needs a target below {samples}, got {target}")
-    path = target / "labels.json"
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    if not is_calibration_answer_key("labels.json", text):
-        raise ValueError(f"--calibration-sample: {path} is not a calibration answer key")
-    return [lab for lab in json.loads(text)["labels"] if str(lab.get("cwe", "")).upper() == "CWE-798"]
