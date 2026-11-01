@@ -40,3 +40,23 @@ mutations:
     file: scripts/governance_check.py
     old: '    tr = _block(config_path, "training", TrainingConfig) if config_path else TrainingConfig()'
     new: '    tr = TrainingConfig()'
+  - name: G-8 and G-9 read the families from the raw YAML again
+    file: scripts/governance_check.py
+    old: '    return sorted(production_families(load_config(config_path, enforce_policies=False)))'
+    new: '    return sorted({m.get("family", "?") for m in _raw_config(config_path).get("models", []) if m.get("provider") != "mock"})'
+  - name: G-8 and G-9 refuse a config that violates a policy instead of reporting the reports
+    file: scripts/governance_check.py
+    old: '    return sorted(production_families(load_config(config_path, enforce_policies=False)))'
+    new: '    return sorted(production_families(load_config(config_path)))'
+  - name: the production families count the mock models
+    file: src/mara/govdocs.py
+    old: '        if m.provider != "mock" and f not in fams:'
+    new: '        if f not in fams:'
+  - name: G-8 asks the reports to cover no family
+    file: scripts/governance_check.py
+    old: "    families = _production_families(config_path) if config_path else []\n    ev_g, pr_g"
+    new: "    families = []\n    ev_g, pr_g"
+  - name: G-9 asks the calibration report to cover no family
+    file: scripts/governance_check.py
+    old: "    families = _production_families(config_path) if config_path else []\n    files = _dated_files"
+    new: "    families = []\n    files = _dated_files"
