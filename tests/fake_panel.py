@@ -139,6 +139,6 @@ class Panel:
     def asked(self, role: Role, family: ModelFamily | None = None) -> list[Exchange]:
         return [ex for ex in self.exchanges if ex.role == role and family in (None, ex.family)]
 
-    def run(self, ctx: RepoContext, findings: list[Finding], finders: dict[str, set[ModelFamily]]) -> Ballots:
-        return ballot_round.run(ctx, findings, finders, cfg=self.cfg, providers=self.providers, audit=self.audit,
+    def run(self, ctx: RepoContext, findings: list[Finding]) -> Ballots:
+        return ballot_round.run(ctx, findings, cfg=self.cfg, providers=self.providers, audit=self.audit,
                                 say=self.log.append, progress=Progress())

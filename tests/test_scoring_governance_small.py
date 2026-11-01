@@ -64,7 +64,7 @@ def test_a_judge_votes_with_its_own_weight_not_a_same_family_reviewers():
     votes = [_vote(ModelFamily.ANTHROPIC, p, "true_positive") for p in ("forward", "reverse")] + \
             [_vote(ModelFamily.DEEPSEEK, p, "false_positive") for p in ("forward", "reverse")] + \
             [_vote(ModelFamily.NEMOTRON, p, "true_positive") for p in ("forward", "reverse")]
-    (c,) = scored_rows.score([_finding()], {"F-1": {ModelFamily.NEMOTRON}}, votes, cfg=cfg).rows
+    (c,) = scored_rows.score(scored_rows.found_by([_finding()], ModelFamily.NEMOTRON), votes, cfg=cfg).rows
     flagged = [v.model_copy(update={"self_family": v.judge_family == ModelFamily.NEMOTRON}) for v in votes]
     expected = weighted_consensus(flagged, {ModelFamily.ANTHROPIC: 2.0, ModelFamily.DEEPSEEK: 1.0, ModelFamily.NEMOTRON: 1.0},
                                   cfg.gate.self_judge_discount)[0]

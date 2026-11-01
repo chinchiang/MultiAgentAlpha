@@ -139,14 +139,17 @@ def check_g1(root: Path, today: dt.date | None = None) -> CheckResult:
 REVERSE_FLAG_RE = re.compile(r"skip_reverse|reverse_pass|single_pass|disable_reverse")
 
 
-def _g2_findings() -> list:
-    """Two findings no judge family found: G-2 blinds the first and runs the judges' passes over both."""
+def _g2_findings(cfg) -> list:
+    """Two findings no judge family of `cfg` found, found by the first model family (not mock, not tool) none of its
+    judges has: G-2 blinds the first and runs the judges' passes over both."""
     from mara.schemas import Finding, ModelFamily, Provenance
 
+    judges = {cfg.model_by_name(n).family for n in cfg.roles.judges}
+    finder = next(f for f in ModelFamily if f not in judges and f not in (ModelFamily.MOCK, ModelFamily.TOOL))
     return [Finding(id=f"F-000{i}", dimension="xss", title=f"t{i}", cwe="CWE-79", provenance=[Provenance(file="a.py", line=i, quote="abc")],
                     reachability_argument="r", exploit_sketch="e",
                     cvss4_vector="CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N", model_confidence=0.9,
-                    source_family=ModelFamily("anthropic"), source_model="m") for i in (1, 2)]
+                    source_family=finder, source_model="m", finder_families=[finder]) for i in (1, 2)]
 
 
 def _jury_votes(cfg, findings: list) -> list:
@@ -166,9 +169,8 @@ def _jury_votes(cfg, findings: list) -> list:
         providers = {m.name: MockProvider(m) for m in cfg.models}
         for prov in providers.values():
             prov.bind_target(target)
-        return ballot_round.run(RepoContext(root=Path(target), content={"a.py": "abc\nabc\n"}, content_hash="g2"), findings,
-                                {f.id: set() for f in findings}, cfg=cfg, providers=providers, audit=Audit(),
-                                say=lambda _: None, progress=Progress()).votes
+        return ballot_round.run(RepoContext(root=Path(target), content={"a.py": "abc\nabc\n"}, content_hash="g2"), findings, cfg=cfg,
+                                providers=providers, audit=Audit(), say=lambda _: None, progress=Progress()).votes
 
 
 def _unmirrored(families: set[str], findings: list, votes: list) -> list[str]:
@@ -231,7 +233,7 @@ def check_g2(root: Path, config_path: Path) -> CheckResult:
         problems.append(f"judge 家族數 {len(jud)} < 3")
     # the ballot round itself, run over this config's panel: every judge family rules on every finding once in a forward
     # pass and once in a reverse pass that presents the findings in mirrored order
-    findings = _g2_findings()
+    findings = _g2_findings(cfg)
     unmirrored = _unmirrored(jud, findings, _jury_votes(cfg, findings))
     if unmirrored:
         problems.append(f"judge 家族 {unmirrored} 沒有對每個 finding 各投恰好一張 forward 與一張順序鏡像的 reverse 票")

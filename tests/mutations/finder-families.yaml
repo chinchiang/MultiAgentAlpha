@@ -1,0 +1,23 @@
+focused: [tests/test_finder_families.py, tests/test_jury_quorum.py, tests/test_reviewer_round.py, tests/test_core_review_fixes_8_13.py,
+          tests/test_governance_templates.py, tests/test_scoring_governance_small.py, tests/test_governance_check.py]
+mutations:
+  - name: the ballot round judges a finding without finders as found by no family
+    file: src/mara/ballot_round.py
+    old: "    finders = finders_of(findings)\n    rounds"
+    new: "    finders = {f.id: set(f.finder_families) for f in findings}\n    rounds"
+  - name: the jury scores a finding without finders as found by no family
+    file: src/mara/scoring/jury.py
+    old: "    finders = finders_of(findings)\n    by_finding"
+    new: "    finders = {f.id: set(f.finder_families) for f in findings}\n    by_finding"
+  - name: the finders are read from the source family, not the finder families
+    file: src/mara/bias/diversity.py
+    old: '    return {f.id: set(f.finder_families) for f in findings}'
+    new: '    return {f.id: {f.source_family} for f in findings}'
+  - name: deduplication keeps only the first finder of merged findings
+    file: src/mara/reviewer_round.py
+    old: '            finders[match.id].add(f.source_family)'
+    new: '            pass'
+  - name: G-2's findings are found by one of the judge families
+    file: scripts/governance_check.py
+    old: '    finder = next(f for f in ModelFamily if f not in judges and f not in (ModelFamily.MOCK, ModelFamily.TOOL))'
+    new: '    finder = sorted(judges, key=lambda x: x.value)[0]'

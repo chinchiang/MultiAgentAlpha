@@ -149,7 +149,7 @@ def _under(cfg, backlog):
 
 
 def _scored(cfg, policy, f):
-    (c,) = scored_rows.score([f], {f.id: {ModelFamily.ANTHROPIC}}, _votes(f.id), cfg=cfg, outcome_policy=policy).rows
+    (c,) = scored_rows.score(scored_rows.found_by([f], ModelFamily.ANTHROPIC), _votes(f.id), cfg=cfg, outcome_policy=policy).rows
     return c
 
 

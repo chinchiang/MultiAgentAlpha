@@ -244,7 +244,7 @@ def _variants(report, cfg) -> list[_Variant]:
         for k in range(len(_PATTERNS)):
             patterns = {f.id: _PATTERNS[(i + k) % len(_PATTERNS)] for i, f in enumerate(report.findings)}
             votes = [v for f in report.findings for v in _recast(by_finding[f.id], patterns[f.id])]
-            consensus = score(report.findings, finders, votes, cfg=panel, outcome_policy=outcome_policy, skeptic=skeptic,
+            consensus = score(report.findings, votes, cfg=panel, outcome_policy=outcome_policy, skeptic=skeptic,
                               redteam=redteam, tool_results=tools, tool_path_prefix=prefix).rows
             if k % 2:
                 for i, c in enumerate(consensus):

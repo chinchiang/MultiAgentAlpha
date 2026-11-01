@@ -22,6 +22,7 @@ from mara.context.repo_map import RepoContext
 from mara.schemas import Finding, ModelFamily, Provenance
 from mara.tools import runner
 from tests.fake_panel import REFUSAL, TRUNCATION, Panel, items
+from tests.scored_rows import found_by
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -53,8 +54,7 @@ def test_no_finding_is_left_alone_in_a_judge_chunk(tmp_path):
     """26 findings used to give chunks of 25 and 1: the last one's reverse pass was its forward pass."""
     findings = [_finding(i) for i in range(1, 27)]
     panel = Panel().always("judge", REFUSAL)
-    panel.run(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings,
-              {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+    panel.run(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), found_by(findings, ModelFamily.ANTHROPIC))
     assert panel.asked("judge") and {len(ex.finding_ids) for ex in panel.asked("judge")} == {13}
 
 
@@ -67,8 +67,7 @@ def test_the_judge_log_line_names_each_tag_of_its_two_passes_once(tmp_path):
 
     def judge_lines():
         panel.log.clear()
-        panel.run(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), findings,
-                  {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+        panel.run(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h"), found_by(findings, ModelFamily.ANTHROPIC))
         return [line for line in panel.log if line.startswith("L4: judge ")]
 
     lines = judge_lines()
@@ -104,7 +103,7 @@ def test_l3_canary_reports_reach_the_bias_audit(tmp_path):
 
     panel = (Panel().always("skeptic", reporting("reason", verdict="stands", sanitizer_or_control=""))
              .always("redteam", reporting("preconditions", exploitable="unknown")))
-    ballots = panel.run(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}), [f], {f.id: {ModelFamily.ANTHROPIC}})
+    ballots = panel.run(RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}), found_by([f], ModelFamily.ANTHROPIC))
     assert f.id in ballots.skeptic and f.id in ballots.redteam
     assert panel.audit["skeptic_canary_reports"] == 1 and panel.audit["skeptic_canary_reports[nemotron]"] == 1
     assert panel.audit["redteam_canary_reports"] == 1 and panel.audit["redteam_canary_reports[deepseek]"] == 1

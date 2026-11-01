@@ -80,14 +80,14 @@ def policy(cfg: MaraConfig = MOCK, *, exclude_tier_c: bool = False) -> OutcomePo
     return OutcomePolicy.from_config(cfg, alpha_threshold=cfg.gate.human_threshold_alpha, exclude_tier_c=exclude_tier_c)
 
 
-def score(findings: list[Finding], finders: dict[str, set[ModelFamily]], votes: list[JudgeVote], *, cfg: MaraConfig = MOCK,
+def score(findings: list[Finding], votes: list[JudgeVote], *, cfg: MaraConfig = MOCK,
           outcome_policy: OutcomePolicy | None = None, skeptic: dict[str, SkepticVerdict] | None = None,
           redteam: dict[str, RedTeamNote] | None = None, tool_results: list[ToolResult] | None = None,
           tool_path_prefix: str = "") -> jury.JuryScoring:
     """Jury scoring of `findings` on `votes` (and the skeptic's verdicts, the red team's notes and tool results, when
     given) by `cfg`'s jury, under `outcome_policy` (the one `cfg` gives untightened by default)."""
     ballots = Ballots(skeptic=skeptic or {}, unchallenged=frozenset(), redteam=redteam or {}, votes=votes)
-    return jury.score(findings, finders, ballots, tool_results or [], jury=jury.Jury.from_config(cfg),
+    return jury.score(findings, ballots, tool_results or [], jury=jury.Jury.from_config(cfg),
                       policy=outcome_policy or policy(cfg), tool_path_prefix=tool_path_prefix)
 
 
@@ -96,6 +96,11 @@ def finding(fid: str = "F-1", *, severity: str = "High", reachability: str = "re
                    provenance=[Provenance(file="app.py", line=1, quote="unsafe()", verified=verified)], reachability=reachability,
                    reachability_argument="r", exploit_sketch="e", cvss4_vector=VECTORS[severity], model_confidence=0.9,
                    source_family=FINDER, source_model="m", finder_families=[FINDER])
+
+
+def found_by(findings: list[Finding], *families: ModelFamily) -> list[Finding]:
+    """`findings`, each found by `families` (its finder_families, as the reviewer round fills them)."""
+    return [f.model_copy(update={"finder_families": sorted(families, key=lambda x: x.value)}) for f in findings]
 
 
 def votes(fid: str, verdicts: dict[ModelFamily, str]) -> list[JudgeVote]:
@@ -111,12 +116,12 @@ def row(state: str, fid: str = "F-1", *, outcome_policy: OutcomePolicy | None = 
     skeptic = {fid: SkepticVerdict(finding_id=fid, verdict="refuted", reason="r", sanitizer_or_control="", source_family=ModelFamily.NEMOTRON,
                                    source_model="m")} if s.refuted else None
     tools = [ToolResult("semgrep", "sql", "error", "SQL injection", "app.py", 1, "CWE-89")] if s.tool else None
-    (r,) = score([finding(fid, severity=severity, reachability=s.reachability, verified=s.verified)], {fid: {FINDER}}, votes(fid, s.verdicts),
+    (r,) = score([finding(fid, severity=severity, reachability=s.reachability, verified=s.verified)], votes(fid, s.verdicts),
                  cfg=FOUR_JUDGE_PANEL if s.four_judge_panel else MOCK, outcome_policy=outcome_policy, skeptic=skeptic, tool_results=tools).rows
     return r
 
 
 def tool_corroborated(f: Finding, tool_results: list[ToolResult], tool_path_prefix: str = "") -> bool:
     """Whether jury scoring counts `tool_results` as corroborating `f`, unvoted, on the mock panel."""
-    (r,) = score([f], {f.id: {f.source_family}}, [], tool_results=tool_results, tool_path_prefix=tool_path_prefix).rows
+    (r,) = score([f], [], tool_results=tool_results, tool_path_prefix=tool_path_prefix).rows
     return r.tool_corroborated
