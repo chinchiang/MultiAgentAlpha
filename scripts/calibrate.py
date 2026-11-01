@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from mara.audit import by_family  # noqa: E402
+from mara.audit import ROLES, Count, alpha, by_family, by_pair  # noqa: E402
 from mara.decisions import Decision, TrainingRequirement, select  # noqa: E402
 from mara.decisions import load as load_decision_dir  # noqa: E402
 from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
@@ -184,25 +184,29 @@ def audit_rates(runs, families):
                 agg[fam][key] += v
     rows = {}
     for fam in families:
-        calls = agg[fam]["reviewer_calls"] or 1
+        reviewer = ROLES["reviewer"]  # the counters' names are the audit's (mara.audit.ROLES), never typed here
+        assert reviewer.canary is not None
+        calls = agg[fam][reviewer.calls] or 1
         r = {
-            "calls": agg[fam]["reviewer_calls"],
-            "refusal_rate": agg[fam]["reviewer_refusals"] / calls,
-            "error_rate": agg[fam]["reviewer_errors"] / calls,  # provider failures, kept out of the refusal rate
-            "canary_rate": agg[fam]["canary_echoes"] / calls,
-            "unverified_quotes": agg[fam]["findings_with_unverified_quotes"],
-            "invalid": agg[fam]["invalid_findings_dropped"],
-            "invalid_rate": agg[fam]["invalid_findings_dropped"] / calls,
+            "calls": agg[fam][reviewer.calls],
+            "refusal_rate": agg[fam][reviewer.refusals] / calls,
+            "error_rate": agg[fam][reviewer.errors] / calls,  # provider failures, kept out of the refusal rate
+            "canary_rate": agg[fam][reviewer.canary.echoes] / calls,
+            "unverified_quotes": agg[fam][reviewer.local["unverified_quotes"][0]],
+            "invalid": agg[fam][reviewer.invalid],
+            "invalid_rate": agg[fam][reviewer.invalid] / calls,
         }
         # L3/L4 roles run per finding, not per call; report each role's refusals and invalid
         # output per family (assessment #30/#38) instead of hiding them in pipeline totals
         for role in ("skeptic", "redteam", "judge"):
-            role_calls = agg[fam][f"{role}_calls"] or 1
-            r[f"{role}_calls"] = agg[fam][f"{role}_calls"]
-            r[f"{role}_refusal_rate"] = agg[fam][f"{role}_refusals"] / role_calls
-            r[f"{role}_invalid_rate"] = agg[fam][f"{role}_invalid_items"] / role_calls
-        r["skeptic_refuted"] = agg[fam]["skeptic_refuted"]
-        r["skeptic_unverified_controls"] = agg[fam]["skeptic_unverified_controls"]
+            counters = ROLES[role]
+            role_calls = agg[fam][counters.calls] or 1
+            r[f"{role}_calls"] = agg[fam][counters.calls]
+            r[f"{role}_refusal_rate"] = agg[fam][counters.refusals] / role_calls
+            r[f"{role}_invalid_rate"] = agg[fam][counters.invalid] / role_calls
+        skeptic = ROLES["skeptic"]
+        r["skeptic_refuted"] = agg[fam][skeptic.local["refuted"][0]]
+        r["skeptic_unverified_controls"] = agg[fam][skeptic.local["unverified_controls"][0]]
         rows[fam] = r
     return rows
 
@@ -226,11 +230,10 @@ def judge_agreement(runs):
     pair = defaultdict(list)
     alphas = []
     for _, rep, _ in runs:
-        for k, v in rep["bias_audit"].items():
-            if k.startswith("judge_agreement["):
-                pair[k[len("judge_agreement["):-1]].append(v)
-        a = rep["bias_audit"].get("global_krippendorff_alpha")
-        if isinstance(a, (int, float)):
+        for k, v in by_pair(rep["bias_audit"], Count.JUDGE_AGREEMENT).items():
+            pair[k].append(v)
+        a = alpha(rep["bias_audit"])
+        if a is not None:
             alphas.append(a)
     return {k: sum(v) / len(v) for k, v in pair.items()}, (sum(alphas) / len(alphas) if alphas else None)
 

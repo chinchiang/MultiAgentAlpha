@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, get_args
 
+from .audit import Count, read
 from .decisions import TrainingRequirement, select
 from .decisions import load as load_decisions
 from .reviewed_content import ReviewedContent
@@ -366,8 +367,8 @@ def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None 
         queued += len(r.get("human_queue", []))
         blocked += int(not r.get("gate_passed", False))  # a report that does not say counts as blocked (fail closed)
         audit = r.get("bias_audit", {})
-        tokens_in += int(audit.get("input_tokens", 0) or 0)
-        tokens_out += int(audit.get("output_tokens", 0) or 0)
+        tokens_in += int(read(audit, Count.INPUT_TOKENS))
+        tokens_out += int(read(audit, Count.OUTPUT_TOKENS))
     decisions = {"true_positive": 0, "false_positive": 0}
     excluded: dict[str, set[str]] = {}
     if decisions_dir:

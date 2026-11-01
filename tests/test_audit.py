@@ -165,8 +165,7 @@ def test_the_per_family_counters_are_read_back_from_their_names():
     a.add("judge_refusals", "gemini")
     a.record(extraction("context", "gemini", canary_echoes=1))
     a["judge_agreement[glm~gemini]"] = 0.5  # a pair of families, not one
-    a["rollout_phase"] = "shadow"
-    fams = by_family(dict(a))
+    fams = by_family({**a, "rollout_phase": "shadow"})  # an old report held a label here: no number, no counter
     assert set(fams) == {"glm", "gemini"}
     assert fams["glm"] == {"judge_refusals": 2}
     assert fams["gemini"]["judge_refusals"] == 1 and fams["gemini"]["context_canary_echoes"] == 1

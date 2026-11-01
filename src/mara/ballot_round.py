@@ -13,7 +13,7 @@ from functools import partial
 from typing import TypeVar
 
 from .agents import judge, redteam, skeptic
-from .audit import Audit, ReplyRecord, log_tags, worth_retrying
+from .audit import Audit, Count, ReplyRecord, log_tags, worth_retrying
 from .bias.blinding import blinded_batches
 from .bias.diversity import finders_of, pick_independent
 from .config import MaraConfig
@@ -143,7 +143,7 @@ class _Round:
             # the skeptic must not share a family with ANY finder of this finding
             spec, independent = pick_independent(self.cfg, self.cfg.roles.skeptic, finders[f.id])
             if not independent:
-                self.audit["skeptic_same_family"] += 1
+                self.audit.count(Count.SKEPTIC_SAME_FAMILY)
                 self.say(f"L3: no skeptic outside the finder families of {f.id}; {spec.family.value} reviews it")
             groups[spec.name].append(f)
         verdicts: list[SkepticVerdict] = []
@@ -172,7 +172,7 @@ class _Round:
         for f in findings:
             spec, independent = pick_independent(self.cfg, self.cfg.roles.redteam, finders[f.id])
             if not independent:
-                self.audit["redteam_same_family"] += 1
+                self.audit.count(Count.REDTEAM_SAME_FAMILY)
                 self.say(f"L3: no red team outside the finder families of {f.id}; {spec.family.value} reviews it")
             groups[spec.name].append(f)
         notes: list[RedTeamNote] = []
@@ -210,8 +210,8 @@ class _Round:
                     eligible.append(f)
                     self_ids.add(f.id)
                 else:
-                    self.audit["self_preference_exclusions"] += 1
-            self.audit["self_family_fallback_votes"] += len(self_ids)
+                    self.audit.count(Count.SELF_PREFERENCE_EXCLUSIONS)
+            self.audit.count(Count.SELF_FAMILY_FALLBACK_VOTES, len(self_ids))
             if not eligible:
                 continue
             # one seeded order over all eligible findings, cut into bounded chunks; each chunk's reverse

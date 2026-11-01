@@ -48,6 +48,9 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
 - `reviewer_round.run(ctx, context_view, *, cfg, providers, audit, say, progress, egress_blocked)`: called directly with a
   dict of providers of the test's own, which it reads by the config's reviewer names, so a test needs no `Pipeline`;
   `reviewer_round.dedupe(findings)`: pure, called directly. `test_reviewer_round.py`, `test_core_review_fixes_8_13.py`.
+  The `audit` they take is an `Audit`, which refuses a name `mara.audit` does not hold (`mara.audit.COUNTER_NAMES`): a test that
+  needs another key in the bias audit adds it to the names, or builds the report's dict beside the audit (`{**audit,
+  "key": value}`). `test_audit.py`, `test_audit_names.py`.
 - `Pipeline.backlog`, `Pipeline.queue_tightened`, `Pipeline.outcome_policy`: read after `Pipeline(cfg)`, so set
   when the pipeline is built, before `run()`. `test_workspace_anchors.py`, `test_review_status.py`.
 

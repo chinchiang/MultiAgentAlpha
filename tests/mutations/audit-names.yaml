@@ -1,0 +1,64 @@
+focused: [tests/test_audit_names.py, tests/test_audit.py, tests/test_calibration.py]
+# the audit holds every name a report's bias_audit carries, each in one shape, and refuses the others
+# (docs/adr/0008-reply-accounting.md); each mutation puts back one thing that rule rules out.
+# A bare `old` is a whole line of src/mara/audit.py, its indentation included.
+# An Audit has no check of its own on a read: a key not there is stored with its default (0) through __setitem__, which
+# refuses a name not held, so no mutation removes "the read check" (the first draft of this list had one: it survived,
+# as an equivalent mutant, and the override it mutated was removed). The case [read] of the refusal test holds the rule.
+mutations:
+  - name: a name the audit does not hold reads 0
+    file: src/mara/audit.py
+    old: '    v = bias_audit.get(_held(name), 0)'
+    new: '    v = bias_audit.get(name, 0)'
+  - name: a name the audit does not hold is written
+    file: src/mara/audit.py
+    old: '        super().__setitem__(_held(key), value)'
+    new: '        super().__setitem__(key, value)'
+  - name: a value that is no number is read as it is
+    file: src/mara/audit.py
+    old: '    return v if _number(v) else 0'
+    new: '    return v'
+  - name: a reason is read as a family again
+    file: src/mara/audit.py
+    old: '                and name not in REASON_COUNTS and name not in PAIR_COUNTS):'
+    new: '                and name not in PAIR_COUNTS):'
+  - name: by_reason keeps the whole key
+    file: src/mara/audit.py
+    old: '    return _bracketed(bias_audit, _shaped(name, REASON_COUNTS, "a count by reason"))'
+    new: '    return {k: v for k, v in bias_audit.items() if k.startswith(f"{name}[")}'
+  - name: a pair is cut one character short
+    file: src/mara/audit.py
+    old: '    return {k[len(name) + 1:-1]: v for k, v in bias_audit.items() if k.startswith(f"{name}[") and k.endswith("]") and _number(v)}'
+    new: '    return {k[len(name) + 1:-2]: v for k, v in bias_audit.items() if k.startswith(f"{name}[") and k.endswith("]") and _number(v)}'
+  - name: a pair keeps the opening bracket
+    file: src/mara/audit.py
+    old: '    return {k[len(name) + 1:-1]: v for k, v in bias_audit.items() if k.startswith(f"{name}[") and k.endswith("]") and _number(v)}'
+    new: '    return {k[len(name):-1]: v for k, v in bias_audit.items() if k.startswith(f"{name}[") and k.endswith("]") and _number(v)}'
+  - name: an alpha of n/a is read as 0.0
+    file: src/mara/audit.py
+    old: '    return float(v) if _number(v) else None'
+    new: '    return float(v) if _number(v) else 0.0'
+  - name: a bool is a number
+    file: src/mara/audit.py
+    old: '    return isinstance(v, int | float) and not isinstance(v, bool)'
+    new: '    return isinstance(v, int | float)'
+  - name: a missing alpha is written as 0.0
+    file: src/mara/audit.py
+    old: '        self[Count.GLOBAL_KRIPPENDORFF_ALPHA] = "n/a" if alpha is None else alpha'
+    new: '        self[Count.GLOBAL_KRIPPENDORFF_ALPHA] = 0.0 if alpha is None else alpha'
+  - name: a name is written in any shape
+    file: src/mara/audit.py
+    old: '    if name not in shapes:'
+    new: '    if False:'
+  - name: an enum member is renamed
+    file: src/mara/audit.py
+    old: '    POSITION_FLIPS = "position_flips"'
+    new: '    POSITION_FLIPS = "position_flip"'
+  - name: two enum members share a name
+    file: src/mara/audit.py
+    old: '    UNKNOWN_CWE = "unknown_cwe"'
+    new: '    UNKNOWN_CWE = "findings_raw"'
+  - name: a role's retry counter is left out of its names
+    file: src/mara/audit.py
+    old: '        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid, self.retries)'
+    new: '        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid)'
