@@ -22,8 +22,8 @@ mutations:
     new: '    if c.jury_outcome != "accepted":'
   - name: the pipeline settles with no usable decision
     file: src/mara/pipeline.py
-    old: '        self.audit["human_decisions_applied"] = settlement.finish(findings, scoring.rows, selection, content,'
-    new: '        self.audit["human_decisions_applied"] = settlement.finish(findings, scoring.rows, Selection(usable=[], excluded=[]), content,'
+    old: '        self.audit.set(Count.HUMAN_DECISIONS_APPLIED, settlement.finish(findings, scoring.rows, selection, content,'
+    new: '        self.audit.set(Count.HUMAN_DECISIONS_APPLIED, settlement.finish(findings, scoring.rows, Selection(usable=[], excluded=[]), content,'
   - name: the pipeline records the blocking reasons under a gate that blocks nothing
     file: src/mara/pipeline.py
     old: '                                                                  outcome_policy=self.outcome_policy, gate_policy=self.gate_policy)'

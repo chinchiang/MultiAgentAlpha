@@ -205,8 +205,12 @@ A finding whose final outcome is accepted and whose evidence tier and severity m
 _Avoid_: blocker, critical finding (severity alone does not block)
 
 **Bias audit**:
-The report's counts and statistics of how the review went: every exchange's reply outcomes and canary echoes by role and family, what the pipeline dropped, merged or excluded on the way, the jury's agreement and position flips, and the exchange version the counts follow. It holds no report metadata: the rollout phase, the human queue's tightening and the ML-BOM and model-evaluation status are fields of the report of their own.
+The report's counts and statistics of how the review went: every exchange's reply outcomes and canary echoes by role and family, what the pipeline dropped, merged or excluded on the way, the jury's agreement and position flips, and the exchange version the counts follow. It holds no report metadata: the rollout phase, the human queue's tightening and the ML-BOM and model-evaluation status are fields of the report of their own. Each of its entries is an audit counter.
 _Avoid_: audit alone (the Alternative Annotator Test and the governance checks are audits too), report metadata (the rest of the report)
+
+**Audit counter**:
+One entry of the bias audit, under a persisted name that `mara.audit` holds (`COUNTER_NAMES`) and in one shape: a plain number, a number per model family (`name[family]`), per pair of families (`name[a~b]`) or per reason (`name[why]`). The audit writes a counter through the entry of its shape and refuses a name it does not hold, on a write and on a read; a report written before the counter existed reads 0 for it. Persisted names are never renamed.
+_Avoid_: metric, statistic (a counter counts; the jury's agreement and alpha are the bias audit's statistics), key (the report's JSON key is how a counter is persisted)
 
 **Report metadata**:
 What a report records about the circumstances of its review rather than about how the review went: the rollout phase, the human queue's tightening, the ML-BOM status and signature, and the model families' red-team evaluations. Each is a field of the report of its own, none is in the bias audit, and a report written before a value was recorded reads it as not recorded.

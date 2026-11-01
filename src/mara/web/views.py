@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any
 
-from ..audit import INCOMPLETE_COUNTERS, ROLES, Role, by_family
+from ..audit import INCOMPLETE_COUNTERS, ROLES, Count, Role, by_family, read
 from ..schemas import DIMENSION_LABELS, SEVERITY_ORDER, ConsensusResult, ReviewReport
 from ..tools.evidence import is_alert
 
@@ -32,8 +32,7 @@ _FAILURES = {role: (ROLES[r].refusals, ROLES[r].truncations, ROLES[r].errors, RO
 
 
 def _num(audit: dict[str, Any], key: str) -> int:
-    v = audit.get(key, 0)
-    return int(v) if isinstance(v, int | float) and not isinstance(v, bool) else 0
+    return int(read(audit, key))
 
 
 def outcome_counts(report: ReviewReport) -> dict[str, int]:
@@ -137,18 +136,18 @@ def budget(manifest: dict[str, Any], report: ReviewReport | None, progress: dict
         "finished_at": finished,
         "calls": calls,
         "calls_total": sum(calls.values()),
-        "input_tokens": _num(audit, "input_tokens"),
-        "output_tokens": _num(audit, "output_tokens"),
+        "input_tokens": _num(audit, Count.INPUT_TOKENS),
+        "output_tokens": _num(audit, Count.OUTPUT_TOKENS),
         "tokens_partial": True,
-        "findings_raw": _num(audit, "findings_raw"),
-        "findings_deduped": _num(audit, "findings_deduped"),
+        "findings_raw": _num(audit, Count.FINDINGS_RAW),
+        "findings_deduped": _num(audit, Count.FINDINGS_DEDUPED),
         "tool_results_ingested": len(report.tool_results) if report else 0,
         "human_queue_size": len(report.human_queue) if report else 0,
         # the page reads a backlog nobody knew as "unknown", and one with no report as missing
         "human_queue_backlog": None if tightening is None else ("unknown" if tightening.backlog is None else tightening.backlog),
         "human_queue_tightened": bool(tightening and tightening.tightened),
-        "global_krippendorff_alpha": audit.get("global_krippendorff_alpha"),
-        "position_flips": _num(audit, "position_flips"),
+        "global_krippendorff_alpha": audit.get(Count.GLOBAL_KRIPPENDORFF_ALPHA),
+        "position_flips": _num(audit, Count.POSITION_FLIPS),
     }
 
 
@@ -191,7 +190,7 @@ def report_view(manifest: dict[str, Any], report: ReviewReport, progress: dict[s
             "overall_score": report.overall_score,
             "content_hash": coverage.get("content_hash", ""),
             "commit": coverage.get("commit", ""),
-            "exchange_version": audit.get("exchange_version"),
+            "exchange_version": audit.get(Count.EXCHANGE_VERSION),
             "rollout_phase": report.rollout_phase,
             "ml_bom": {n: b.model_dump() for n, b in report.ml_bom.items()},
             "model_eval": {fam: e.model_dump() for fam, e in report.model_eval.items()},

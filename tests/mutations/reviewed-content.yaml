@@ -30,8 +30,8 @@ mutations:
     new: '                context_hash="",'
   - name: the pipeline settles against no reviewed content
     file: src/mara/pipeline.py
-    old: '        self.audit["human_decisions_applied"] = settlement.finish(findings, scoring.rows, selection, content,'
-    new: '        self.audit["human_decisions_applied"] = settlement.finish(findings, scoring.rows, selection, ReviewedContent("", "", ""),'
+    old: '        self.audit.set(Count.HUMAN_DECISIONS_APPLIED, settlement.finish(findings, scoring.rows, selection, content,'
+    new: '        self.audit.set(Count.HUMAN_DECISIONS_APPLIED, settlement.finish(findings, scoring.rows, selection, ReviewedContent("", "", ""),'
   - name: the report's human queue built without the reviewed content
     file: src/mara/report/assembly.py
     old: '                                     ballots.redteam, ballots.votes, cfg, content=stages.content)'

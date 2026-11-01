@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from .agents import reviewer
 from .agents.context_agent import ContextView
-from .audit import Audit, log_tags
+from .audit import Audit, Count, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext
 from .identity import norm_path, same_place
@@ -48,8 +48,8 @@ def run(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConfig, 
     findings = dedupe(raw)
     if not egress_blocked:
         progress.done("reviewers", f"{len(raw)} raw finding(s), {len(findings)} after deduplication")
-    audit["findings_raw"] = len(raw)
-    audit["findings_deduped"] = len(findings)
+    audit.set(Count.FINDINGS_RAW, len(raw))
+    audit.set(Count.FINDINGS_DEDUPED, len(findings))
     return ReviewerFindings(raw_count=len(raw), findings=findings)
 
 
@@ -76,8 +76,8 @@ def _review(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConf
     for i, f in enumerate(raw, 1):
         f = f.model_copy(update={"id": f"F-{i:04d}"})
         ref = check_finding_refs(f)
-        audit["standard_refs_stripped"] += len(ref.stripped)
-        audit["unknown_cwe"] += int(ref.unknown_cwe)
+        audit.count(Count.STANDARD_REFS_STRIPPED, len(ref.stripped))
+        audit.count(Count.UNKNOWN_CWE, int(ref.unknown_cwe))
         out.append(ref.finding)
     return out
 

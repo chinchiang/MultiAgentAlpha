@@ -13,7 +13,7 @@ from pathlib import Path
 from . import ballot_round, exchange, reviewer_round, settlement
 from .agents import context_agent
 from .agents.context_agent import ContextView
-from .audit import Audit, log_tags
+from .audit import Audit, Count, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
 from .decisions import Selection
@@ -163,7 +163,7 @@ class Pipeline:
         report = assemble(stages, assessment, self._metadata(signature), cfg=self.cfg, target=target, provider_mode=provider_mode,
                           generated_at=dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
                           provider_manifest=self._provider_manifest(),
-                          bias_audit={**self.audit, "exchange_version": exchange.EXCHANGE_VERSION}, psirt_event=psirt_event)
+                          bias_audit={**self.audit, Count.EXCHANGE_VERSION.value: exchange.EXCHANGE_VERSION}, psirt_event=psirt_event)
         self._say(
             f"L5: human queue: {len(report.human_queue)} item(s)"
             + (
@@ -189,8 +189,8 @@ class Pipeline:
             # incremental review (assessment #14): keep the changed files, their import
             # neighbours and the manifests/workflows; everything else is excluded, not silently kept
             changed, related = restrict_to_increment(ctx, base_ref)
-            self.audit["bundle_files_changed"] = len(changed)
-            self.audit["bundle_files_related"] = len(related)
+            self.audit.set(Count.BUNDLE_FILES_CHANGED, len(changed))
+            self.audit.set(Count.BUNDLE_FILES_RELATED, len(related))
             self._say(f"L1: incremental review vs {base_ref}: {len(changed)} changed, {len(related)} related file(s) in bundle")
         for prov in self.providers.values():
             prov.bind_target(ctx.root)
@@ -218,7 +218,7 @@ class Pipeline:
         # secret scan is unavailable or reports secrets (mara.review_status). The masked manifest remains reviewable.
         egress = secret_preflight(provider_mode, tools.runs_of("gitleaks"), answer_key)
         if answer_key is not None and (egress.exempted or egress.unexplained):
-            self.audit["secret_preflight_calibration_exempted"] = len(egress.exempted)
+            self.audit.set(Count.SECRET_PREFLIGHT_CALIBRATION_EXEMPTED, len(egress.exempted))
             self._say(f"L0: secret preflight: {len(egress.exempted)} seeded secret(s) declared by the calibration answer key, "
                       f"{len(egress.unexplained)} other finding(s)")
         prog.done("tools", f"{len(tools.ran)} of {len(tool_runs)} tool(s) ran, {len(tools.results)} result(s)"
@@ -237,7 +237,7 @@ class Pipeline:
             prog.done("context", f"{len(context_view.items) if context_view else 0} verified fact(s)")
         if context_view is not None:
             (self.out_dir / "context.json").write_text(context_view.model_dump_json(indent=2), encoding="utf-8")
-            self.audit["context_view_items"] = len(context_view.items)
+            self.audit.set(Count.CONTEXT_VIEW_ITEMS, len(context_view.items))
         return context_view
 
     def _score(self, ctx: RepoContext, tools: ToolEvidence, egress: SecretPreflight, context_view: ContextView | None,
@@ -249,14 +249,14 @@ class Pipeline:
         findings = reviewed.findings
         scoring = jury.score(findings, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
                              tool_path_prefix=ctx.repo_prefix)
-        self.audit["position_flips"] = scoring.position_flips
+        self.audit.set(Count.POSITION_FLIPS, scoring.position_flips)
         content = ReviewedContent.of_bundle(ctx)
         selection = self.select_decisions(content)
-        self.audit["human_decisions_applied"] = settlement.finish(findings, scoring.rows, selection, content,
-                                                                  outcome_policy=self.outcome_policy, gate_policy=self.gate_policy)
+        self.audit.set(Count.HUMAN_DECISIONS_APPLIED, settlement.finish(findings, scoring.rows, selection, content,
+                                                                        outcome_policy=self.outcome_policy, gate_policy=self.gate_policy))
         for why, n in selection.by_reason().items():
             if why != "unbound":
-                self.audit[f"human_decisions_not_usable[{why}]"] = n
+                self.audit.set_reason(Count.HUMAN_DECISIONS_NOT_USABLE, why, n)
         cons_by_id = {c.finding_id: c for c in scoring.rows}
         dims = []
         for d in self.cfg.dimensions:
@@ -284,10 +284,10 @@ class Pipeline:
         consensus = stages.scoring.rows
         assessment = assess(facts, consensus, tools.results, stages.dimensions, self.outcome_policy, self.gate_policy)
         if assessment.tier_c_blocked_while_tightened:
-            self.audit["tier_c_blocked_while_tightened"] = assessment.tier_c_blocked_while_tightened
-        self.audit["global_krippendorff_alpha"] = stages.scoring.global_alpha if stages.scoring.global_alpha is not None else "n/a"
+            self.audit.set(Count.TIER_C_BLOCKED_WHILE_TIGHTENED, assessment.tier_c_blocked_while_tightened)
+        self.audit.set_alpha(stages.scoring.global_alpha)
         for k, v in stages.scoring.family_agreement.items():
-            self.audit[f"judge_agreement[{k}]"] = v
+            self.audit.set_pair(Count.JUDGE_AGREEMENT, k, v)
         self.progress.done("scoring", f"review {assessment.review_status}, gate {'passed' if assessment.gate_passed else 'blocked'}")
         return assessment, signature
 
