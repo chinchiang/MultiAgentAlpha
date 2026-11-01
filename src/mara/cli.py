@@ -227,11 +227,12 @@ def check_config(
     if not config.is_file():
         raise typer.BadParameter(f"config file not found: {config} (run from the MARA workspace, set MARA_HOME or pass the path)",
                                  param_hint="CONFIG")
-    raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
     # Full structural validation (fields, cross-field checks, unknown keys) so check-config can
     # never report "policies pass" for a file load_config would refuse; policies are rendered
-    # separately afterwards instead of failing the whole validation.
+    # separately afterwards instead of failing the whole validation. A file that is not YAML is
+    # an invalid structure too, as the workbench's environment page lists it (mara.web.env.configs).
     try:
+        raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
         cfg = MaraConfig.model_validate(raw, context={"skip_policies": True})
     except Exception as e:  # structural error: nothing to evaluate
         console.print(f"[red]invalid config structure:[/red] {e}")

@@ -1,0 +1,10 @@
+focused: [tests/test_policy.py]
+mutations:
+  - name: check-config reads the YAML outside the structural check
+    file: src/mara/cli.py
+    old: "    try:\n        raw = yaml.safe_load(config.read_text(encoding=\"utf-8\")) or {}\n        cfg = MaraConfig"
+    new: "    raw = yaml.safe_load(config.read_text(encoding=\"utf-8\")) or {}\n    try:\n        cfg = MaraConfig"
+  - name: check-config reports only validation errors as an invalid structure
+    file: src/mara/cli.py
+    old: '    except Exception as e:  # structural error: nothing to evaluate'
+    new: '    except ValueError as e:  # structural error: nothing to evaluate'
