@@ -80,15 +80,19 @@ def test_the_exit_code_is_3_for_a_failed_psirt_hand_off_which_outranks_an_enforc
     assert exit_code(psirt_failed, gate_enforced) == code
 
 
-@pytest.mark.parametrize(("code", "report", "gate_enforced", "psirt_failed"), [
-    (3, {"gate_enforced": True}, True, True),
-    (2, {"gate_enforced": False}, False, False),
-    (2, {}, True, False),  # a report written before the field: the exit code is all there is to go by
-    (0, {}, False, False),
+@pytest.mark.parametrize(("code", "recorded", "gate_enforced", "psirt_failed"), [
+    (3, True, True, True),
+    (2, False, False, False),
+    (2, None, True, False),  # a report written before the field: the exit code is all there is to go by
+    (0, None, False, False),
+    (None, True, True, None),  # the exit was never recorded: the report still says, and a PSIRT hand-off is not known
+    (None, False, False, None),
+    (None, None, None, None),  # neither the report nor an exit code: unknown, not "not enforced"
 ])
-def test_a_finished_review_reads_back_as_whether_its_gate_was_enforced_and_its_psirt_hand_off_failed(code, report, gate_enforced,
+def test_a_finished_review_reads_back_as_whether_its_gate_was_enforced_and_its_psirt_hand_off_failed(code, recorded, gate_enforced,
                                                                                                     psirt_failed):
-    assert outcome(code, report) == FinishedReview(gate_enforced=gate_enforced, psirt_failed=psirt_failed)
+    """`recorded` is the report's gate_enforced, `code` the exit code of the review when it is known."""
+    assert outcome(code, recorded) == FinishedReview(gate_enforced=gate_enforced, psirt_failed=psirt_failed)
 
 
 def parsed(inv: ReviewInvocation) -> dict:

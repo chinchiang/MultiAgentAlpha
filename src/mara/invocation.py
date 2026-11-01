@@ -19,7 +19,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from .config import INVALID_FILE_ERRORS, load_config
 
@@ -155,18 +155,24 @@ def exit_code(psirt_failed: bool, gate_enforced: bool) -> int:
 
 
 class FinishedReview(NamedTuple):
-    """What a finished review's exit code and report.json say about it beside its reports."""
+    """What a finished review's exit code and report.json say about it beside its reports: whether its gate was
+    enforced and whether its PSIRT hand-off failed, each None where nothing says."""
 
-    gate_enforced: bool
-    psirt_failed: bool
+    gate_enforced: bool | None
+    psirt_failed: bool | None
 
 
-def outcome(code: int, report: dict[str, Any]) -> FinishedReview:
-    """Whether a finished review's gate was enforced and its PSIRT hand-off failed, from its exit code and its
-    report.json: the report's gate_enforced when it records one (the exit code cannot say, since EXIT_PSIRT outranks
-    EXIT_GATE), else code == EXIT_GATE."""
-    recorded = report.get("gate_enforced")
-    return FinishedReview(gate_enforced=recorded if isinstance(recorded, bool) else code == EXIT_GATE, psirt_failed=code == EXIT_PSIRT)
+def outcome(code: int | None, gate_enforced: bool | None) -> FinishedReview:
+    """What a finished review's report and exit code say. `gate_enforced` is the report's (None: a report written before
+    the field, or none that records it) and `code` the review's exit code (None: it was not recorded, as when the server
+    stopped before the review's exit). The gate: the report's when it records one (the exit code cannot say, since
+    EXIT_PSIRT outranks EXIT_GATE), else code == EXIT_GATE, else unknown. The PSIRT hand-off failed only when the exit
+    code is EXIT_PSIRT, and is unknown without one."""
+    if isinstance(gate_enforced, bool):
+        enforced: bool | None = gate_enforced
+    else:
+        enforced = None if code is None else code == EXIT_GATE
+    return FinishedReview(gate_enforced=enforced, psirt_failed=None if code is None else code == EXIT_PSIRT)
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,40 @@
+focused: [tests/test_run_outcome.py, tests/test_invocation.py]
+# the gate and the PSIRT hand-off of a run the workbench lists are derived at each read (RunRegistry.get), never stored;
+# each mutation puts back one thing the derivation rules out
+mutations:
+  - name: get does not look at the exit code
+    file: src/mara/web/runs.py
+    old: '        end = outcome(manifest.get("exit_code"), self._gate_enforced(run_id)) if finished else FinishedReview(False, False)'
+    new: '        end = outcome(None, self._gate_enforced(run_id)) if finished else FinishedReview(False, False)'
+  - name: get reads the validated report, not the raw one
+    file: src/mara/web/runs.py
+    old: '        end = outcome(manifest.get("exit_code"), self._gate_enforced(run_id)) if finished else FinishedReview(False, False)'
+    new: '        end = outcome(manifest.get("exit_code"), getattr(self.report(run_id), "gate_enforced", None)) if finished else FinishedReview(False, False)'
+  - name: get derives for a run that has not finished
+    file: src/mara/web/runs.py
+    old: '        end = outcome(manifest.get("exit_code"), self._gate_enforced(run_id)) if finished else FinishedReview(False, False)'
+    new: '        end = outcome(manifest.get("exit_code"), self._gate_enforced(run_id))'
+  - name: get keeps the values an older run.json stored
+    file: src/mara/web/runs.py
+    old: '        manifest["gate_enforced"], manifest["psirt_failed"] = end'
+    new: '        manifest["gate_enforced"], manifest["psirt_failed"] = manifest.get("gate_enforced", end[0]), manifest.get("psirt_failed", end[1])'
+  - name: the cached gate ignores the file size
+    file: src/mara/web/runs.py
+    old: |-
+      cached = self._recorded_gates.get(run_id)
+                  if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
+    new: |-
+      cached = self._recorded_gates.get(run_id)
+                  if cached and cached[0] == st.st_mtime_ns:
+  - name: an unknown gate read as not enforced
+    file: src/mara/invocation.py
+    old: '        enforced = None if code is None else code == EXIT_GATE'
+    new: '        enforced = code == EXIT_GATE'
+  - name: an unknown PSIRT hand-off read as not failed
+    file: src/mara/invocation.py
+    old: '    return FinishedReview(gate_enforced=enforced, psirt_failed=None if code is None else code == EXIT_PSIRT)'
+    new: '    return FinishedReview(gate_enforced=enforced, psirt_failed=code == EXIT_PSIRT)'
+  - name: the exit code outranks the report on the gate
+    file: src/mara/invocation.py
+    old: '    if isinstance(gate_enforced, bool):'
+    new: '    if isinstance(gate_enforced, bool) and code is None:'

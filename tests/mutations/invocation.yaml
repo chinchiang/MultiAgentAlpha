@@ -19,8 +19,8 @@ mutations:
     new: '    return EXIT_GATE if gate_enforced else EXIT_PSIRT if psirt_failed else 0'
   - name: the old-report fallback removed
     file: src/mara/invocation.py
-    old: '    return FinishedReview(gate_enforced=recorded if isinstance(recorded, bool) else code == EXIT_GATE, psirt_failed=code == EXIT_PSIRT)'
-    new: '    return FinishedReview(gate_enforced=recorded is True, psirt_failed=code == EXIT_PSIRT)'
+    old: '        enforced = None if code is None else code == EXIT_GATE'
+    new: '        enforced = False'
   - name: the default-config fallback restored
     file: src/mara/invocation.py
     old: '    return root / "config" / ("mara.mock.yaml" if provider_mode == "mock" else "mara.yaml")'
