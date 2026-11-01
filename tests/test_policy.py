@@ -310,6 +310,16 @@ def test_check_config_refuses_structurally_invalid_configs(tmp_path):
     assert res.exit_code == 1 and "block_on_tiers" in res.output
 
 
+def test_check_config_reports_a_yaml_syntax_error_as_an_invalid_structure(tmp_path):
+    """A file that is not YAML is an invalid structure, as the workbench's environment page lists it
+    (mara.web.env.configs): reported, exit 1, not a traceback."""
+    p = tmp_path / "broken.yaml"
+    p.write_text("models: [\n  - name: x\n", encoding="utf-8")
+    res = CliRunner().invoke(app, ["check-config", str(p)])
+    assert isinstance(res.exception, SystemExit), res.exception
+    assert res.exit_code == 1 and "invalid config structure" in res.output and "line 2" in res.output
+
+
 def test_p5_data_residency():
     bad = _base()
     bad["models"][0]["data_residency"] = "vendor_api_30d"
