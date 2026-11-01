@@ -809,6 +809,25 @@ def test_the_environment_lists_every_locked_tool_and_never_a_credential_value(se
     assert SENTINEL.encode() not in body and SENTINEL.encode() not in body2
 
 
+def test_a_bug_of_the_validator_is_an_internal_error_of_the_whole_configs_page_not_a_row(server, monkeypatch):
+    """A config file that cannot be used is one row (`loadable` false, its error); an exception that is not about a
+    file is a bug (policy.check_config_file lets it through), so /api/configs answers with an internal error as a whole,
+    naming the exception's type and nothing of its text, and the server keeps serving."""
+    from mara import policy
+
+    def broken(path, **kwargs):
+        raise RuntimeError(f"validator bug {SENTINEL}")
+
+    monkeypatch.setattr(policy, "load_config", broken)
+    c = Client(server)
+    res, doc, body = c.request("GET", "/api/configs")
+    assert res.status == 500 and doc == {"error": {"code": "internal_error", "message": "RuntimeError"}}
+    assert b"validator bug" not in body and SENTINEL.encode() not in body
+    assert c.request("GET", "/api/env")[0].status == 200, "the server keeps serving the other pages"
+    monkeypatch.undo()
+    assert c.request("GET", "/api/configs")[0].status == 200, "and the configs page once the bug is gone"
+
+
 def test_the_page_lists_exactly_the_configs_a_launch_accepts(tmp_path):
     """A config the page offers is one a review and a check_config job accept, and the other way round: a .yml config,
     a symlink in config/ to a file outside the workspace, a file that is not YAML."""
