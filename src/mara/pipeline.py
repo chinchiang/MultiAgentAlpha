@@ -11,12 +11,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import ballot_round, exchange, reviewer_round
+from . import ballot_round, exchange, reviewer_round, settlement
 from .agents import context_agent
 from .agents.context_agent import ContextView
 from .audit import Audit, log_tags
 from .config import MaraConfig
 from .context.repo_map import RepoContext, build_context, restrict_to_increment
+from .decisions import Selection
 from .invocation import ProviderMode, check_provider_mode
 from .progress import Progress
 from .providers import make_provider
@@ -26,9 +27,7 @@ from .review_status import Assessment, GatePolicy, ReviewFacts, SecretPreflight,
 from .reviewed_content import ReviewedContent
 from .reviewer_round import ReviewerFindings
 from .schemas import (
-    ConsensusResult,
     DimensionScore,
-    Finding,
     MlBomEntry,
     ModelEvalStatus,
     ReviewReport,
@@ -129,20 +128,14 @@ class Pipeline:
         self._say(f"L1: context {fam}: {len(view.items) if view else 0} fact(s)" + log_tags(*records))
         return view
 
-    def apply_decisions(self, findings: list[Finding], consensus: list[ConsensusResult], content: ReviewedContent) -> None:
-        """The decision files, selected against `content`, the reviewed content of this review, settle the findings their usable decisions bind to
-        (mara.human_queue.settle); the audit counts the rows settled and, by why, the decisions not usable on this content
-        (a decision on other content is not counted)."""
+    def select_decisions(self, content: ReviewedContent) -> Selection:
+        """The decision files of the workspace, selected against `content`, the reviewed content of this review: the
+        decisions usable on it, and why each of the others is not (mara.decisions)."""
         from .decisions import TrainingRequirement, select
         from .decisions import load as load_decisions
-        from .human_queue import settle
 
         loaded = load_decisions(self.workspace / "calib" / "decisions")
-        sel = select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, self.workspace))
-        self.audit["human_decisions_applied"] = settle(findings, consensus, sel, content)
-        for why, n in sel.by_reason().items():
-            if why != "unbound":
-                self.audit[f"human_decisions_not_usable[{why}]"] = n
+        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, self.workspace))
 
     # ------------------------------------------------------------------ run
     def run(self, target: str | Path, *, sarif_dir: Path | None = None, provider_mode: ProviderMode = ProviderMode.live,
@@ -248,15 +241,21 @@ class Pipeline:
 
     def _score(self, ctx: RepoContext, tools: ToolEvidence, egress: SecretPreflight, context_view: ContextView | None,
                reviewed: ReviewerFindings, ballots: ballot_round.Ballots, base_ref: str | None) -> Stages:
-        """The jury scoring, the human decisions on it and the dimension scores, with everything the stages before
-        handed in."""
+        """The jury scoring with its rows finished (mara.settlement) by the usable decisions on the reviewed content, and
+        the dimension scores, with everything the stages before handed in. The audit counts the rows a decision settled
+        and, by why, the decisions not usable on this content (a decision on other content is not counted)."""
         self.progress.begin("scoring")
         findings = reviewed.findings
         scoring = jury.score(findings, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
                              tool_path_prefix=ctx.repo_prefix)
         self.audit["position_flips"] = scoring.position_flips
         content = ReviewedContent.of_bundle(ctx)
-        self.apply_decisions(findings, scoring.rows, content)
+        selection = self.select_decisions(content)
+        self.audit["human_decisions_applied"] = settlement.finish(findings, scoring.rows, selection, content,
+                                                                  outcome_policy=self.outcome_policy, gate_policy=self.gate_policy)
+        for why, n in selection.by_reason().items():
+            if why != "unbound":
+                self.audit[f"human_decisions_not_usable[{why}]"] = n
         cons_by_id = {c.finding_id: c for c in scoring.rows}
         dims = []
         for d in self.cfg.dimensions:
@@ -283,8 +282,6 @@ class Pipeline:
                             rollout_phase=self.cfg.rollout.phase, fail_on_gate=fail_on_gate)
         consensus = stages.scoring.rows
         assessment = assess(facts, consensus, tools.results, stages.dimensions, self.outcome_policy, self.gate_policy)
-        for c in consensus:
-            c.blocking_reason = assessment.blocking_reasons.get(c.finding_id)
         if assessment.tier_c_blocked_while_tightened:
             self.audit["tier_c_blocked_while_tightened"] = assessment.tier_c_blocked_while_tightened
         self.audit["global_krippendorff_alpha"] = stages.scoring.global_alpha if stages.scoring.global_alpha is not None else "n/a"

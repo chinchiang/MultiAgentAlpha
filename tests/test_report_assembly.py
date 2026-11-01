@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from mara import settlement
 from mara.ballot_round import Ballots
 from mara.context.repo_map import RepoContext
 from mara.pipeline import Stages
@@ -21,6 +22,7 @@ from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
 from tests import scored_rows
 from tests.review_facts import FACTS
+from tests.usable_decisions import usable
 
 METADATA = ReportMetadata(
     rollout_phase="shadow",
@@ -29,6 +31,8 @@ METADATA = ReportMetadata(
     ml_bom_signature="verified",
     model_eval={"glm": ModelEvalStatus(date="2026-10-01", mode="live", status="pass")},
 )
+CONTENT = ReviewedContent("t" * 64, "r1", "h")
+GATE = GatePolicy.from_config(scored_rows.MOCK)
 MANIFEST = [{"name": "mock-a", "type": "mock", "family": "anthropic", "model": "mock-anthropic", "served_models": []}]
 
 
@@ -46,17 +50,17 @@ def _stages(tmp_path: Path, base_ref: str | None = None) -> Stages:
     result = ToolResult("semgrep", "sql", "warning", "SQL injection", "other.py", 9, "CWE-89")
     tools = ToolEvidence(runs=[ToolRun("semgrep", True, [result], "pinned 1.0"), ToolRun("gitleaks", False, [], "missing")])
     scoring = scored_rows.score(findings, votes, skeptic=skeptic, redteam=redteam, tool_results=tools.results)
+    settlement.finish(findings, scoring.rows, usable(), CONTENT, outcome_policy=scored_rows.policy(), gate_policy=GATE)  # as Pipeline._score
     dims = [score_dimension("vulnerabilities", findings, {c.finding_id: c for c in scoring.rows}, True)]
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h", revision="r1")
     return Stages(ctx=ctx, tools=tools, egress=SecretPreflight(blocked=False), context_view=None,
                   reviewed=ReviewerFindings(raw_count=3, findings=findings), ballots=ballots, scoring=scoring, dimensions=dims,
-                  content=ReviewedContent("t" * 64, "r1", "h"), base_ref=base_ref)
+                  content=CONTENT, base_ref=base_ref)
 
 
 def _assembled(tmp_path: Path, *, base_ref: str | None = None, psirt_event: dict | None = None):
     stages = _stages(tmp_path, base_ref)
-    assessment = assess(FACTS, stages.scoring.rows, stages.tools.results, stages.dimensions, scored_rows.policy(),
-                        GatePolicy.from_config(scored_rows.MOCK))
+    assessment = assess(FACTS, stages.scoring.rows, stages.tools.results, stages.dimensions, scored_rows.policy(), GATE)
     return assemble(stages, assessment, METADATA, cfg=scored_rows.MOCK, target=tmp_path, provider_mode="mock",
                     generated_at="2026-10-17T00:00:00+00:00", provider_manifest=MANIFEST, bias_audit={"skeptic_calls": 1},
                     psirt_event=psirt_event)

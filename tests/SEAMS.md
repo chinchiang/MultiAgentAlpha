@@ -134,6 +134,11 @@ code that writes it, so it changes with that code:
 
 - `tests/scored_rows.py`: consensus rows as jury scoring writes them (`mara.scoring.jury.score`), one per named
   state. A row written by hand can hold a state scoring never produces, and `decide()` does not check.
+- `tests/usable_decisions.py`: usable decisions as `mara.decisions` holds them once selected against a reviewed content,
+  `decision(f, verdict, content=...)` bound to a finding's place under the queue key `mara.human_queue` gives it and
+  `usable(*decisions)` the selection that `human_queue.settle` and `settlement.finish` take. A decision written by hand
+  can hold a key no review writes. `test_settlement.py`, `test_human_queue_rules.py`, `test_sarif_final_outcome.py`,
+  `test_report_assembly.py`.
 - `tests/reply_records.py`: reply records as the agents write them (`mara.audit.ReplyRecord`).
 - `tests/review_facts.py`: review facts, policies and consensus rows for `mara.review_status` and what reads its
   results.
