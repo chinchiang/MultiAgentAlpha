@@ -229,28 +229,26 @@ def check_config(
     config: Path | None = typer.Argument(None, show_default=False, help="default: <workspace>/config/mara.yaml"),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
 ):
-    """Evaluate every configuration policy (P1-P8) and exit non-zero if any fails."""
-    import yaml
+    """Check a config file: its structure, then every configuration policy (P1-P8); exit non-zero when the structure is
+    invalid or any policy fails."""
+    from rich.markup import escape
 
-    from .config import MaraConfig
-    from .policy import evaluate_policies
+    from .policy import check_config_file
     from .workspace import resolve
 
     config = config if config is not None else resolve("config/mara.yaml")
     if not config.is_file():
         raise typer.BadParameter(f"config file not found: {config} (run from the MARA workspace, set MARA_HOME or pass the path)",
                                  param_hint="CONFIG")
-    # Full structural validation (fields, cross-field checks, unknown keys) so check-config can
-    # never report "policies pass" for a file load_config would refuse; policies are rendered
-    # separately afterwards instead of failing the whole validation. A file that is not YAML is
-    # an invalid structure too, as the workbench's environment page lists it (mara.web.env.configs).
-    try:
-        raw = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
-        cfg = MaraConfig.model_validate(raw, context={"skip_policies": True})
-    except Exception as e:  # structural error: nothing to evaluate
-        console.print(f"[red]invalid config structure:[/red] {e}")
-        raise typer.Exit(code=1) from e
-    results = evaluate_policies(cfg)
+    # The one check of a config file (policy.check_config_file), the one the workbench's environment page lists too: its
+    # structure in full (fields, cross-field checks, unknown keys; a file that is not YAML is an invalid structure) so
+    # check-config can never report "policies pass" for a file load_config would refuse, and the policies separately
+    # instead of failing the whole validation. The error holds square brackets, which the console must not read as markup.
+    check = check_config_file(config)
+    cfg, results = check.config, check.policies
+    if cfg is None:
+        console.print(f"[red]invalid config structure:[/red] {escape(check.error)}")
+        raise typer.Exit(code=1)
     if as_json:
         typer.echo(json.dumps([r.__dict__ for r in results], ensure_ascii=False, indent=1))
     else:

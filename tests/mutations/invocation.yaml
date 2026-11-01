@@ -27,5 +27,5 @@ mutations:
     new: '    return root / "config" / ("mara.mock.yaml" if provider_mode == "mock" and (root / "config" / "mara.mock.yaml").exists() else "mara.yaml")'
   - name: an invalid config back to exit 1
     file: src/mara/invocation.py
-    old: '    except (OSError, ValueError, yaml.YAMLError) as e:'
-    new: '    except OSError as e:'
+    old: '    except INVALID_FILE_ERRORS as e:  # unreadable, not YAML, or refused'
+    new: '    except OSError as e:  # unreadable, not YAML, or refused'

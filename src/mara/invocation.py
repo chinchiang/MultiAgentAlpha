@@ -21,9 +21,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
-import yaml
-
-from .config import load_config
+from .config import INVALID_FILE_ERRORS, load_config
 
 if TYPE_CHECKING:
     from .config import MaraConfig
@@ -135,7 +133,7 @@ def load(config: Path, provider_mode: ProviderMode) -> MaraConfig:
     check_provider_mode's provider_mismatch."""
     try:
         cfg = load_config(config)
-    except (OSError, ValueError, yaml.YAMLError) as e:  # unreadable, or refused: pydantic's ValidationError is a ValueError
+    except INVALID_FILE_ERRORS as e:  # unreadable, not YAML, or refused
         raise InvocationError(" ".join(str(e).split()), param="--config", kind="config_invalid") from e
     check_provider_mode((m.provider for m in cfg.models), provider_mode)
     return cfg

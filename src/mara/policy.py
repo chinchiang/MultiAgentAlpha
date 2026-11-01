@@ -1,8 +1,10 @@
 """Policy-as-code for the MARA configuration (Appendix E, prompt 6; governance G-2, G-3, G-7, G-12).
 
-Every policy is evaluated independently so `mara check-config` can list all violations at
-once; `MaraConfig` then refuses to load when any policy fails. Policies are pure functions of
-the parsed configuration and never consult the network.
+Every policy is evaluated on its own, so `mara check-config` and the workbench's environment page can list all
+violations at once (evaluate_policies, or check_config_file for a config file); `MaraConfig` then refuses to load when
+any policy fails. A policy is a function of the parsed configuration and never reaches the network. Pure, except that
+P7 reads the workspace's ML-BOM and its signature bundle, P8 the workspace's calib/latest.json, and check_config_file
+the config file it is given.
 """
 
 from __future__ import annotations
@@ -12,14 +14,11 @@ import ipaddress
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+from .config import INVALID_FILE_ERRORS, MaraConfig, load_config
 from .schemas import ModelFamily
 from .workspace import resolve
-
-if TYPE_CHECKING:
-    from .config import MaraConfig
 
 COVERED_MODEL_MARKERS = ("fable", "mythos")
 PRIVATE_SUFFIXES = (".internal", ".local", ".lan")
@@ -361,3 +360,33 @@ POLICIES = (
 
 def evaluate_policies(cfg: MaraConfig) -> list[PolicyResult]:
     return [p(cfg) for p in POLICIES]
+
+
+@dataclass(frozen=True)
+class ConfigCheck:
+    """A config file as `mara check-config` and the workbench's environment page read it: the config, or why its
+    structure is invalid (`error`, the exception's text as it is), and the eight policy results when it is not.
+    `passed` holds exactly when `load_config` accepts the file."""
+
+    config: MaraConfig | None
+    error: str
+    policies: tuple[PolicyResult, ...]
+
+    @property
+    def structure_ok(self) -> bool:
+        return self.config is not None
+
+    @property
+    def passed(self) -> bool:
+        return self.config is not None and all(r.passed for r in self.policies)
+
+
+def check_config_file(path: str | Path) -> ConfigCheck:
+    """The structure of the config file `path` and every policy result, whether or not a policy fails. A file that
+    cannot be read, is not YAML or fails validation (config.INVALID_FILE_ERRORS) is an invalid structure with nothing to
+    evaluate; any other exception is a bug and propagates."""
+    try:
+        cfg = load_config(path, enforce_policies=False)
+    except INVALID_FILE_ERRORS as e:
+        return ConfigCheck(None, str(e), ())
+    return ConfigCheck(cfg, "", tuple(evaluate_policies(cfg)))
