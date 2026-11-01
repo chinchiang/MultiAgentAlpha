@@ -34,3 +34,22 @@ The persisted shape stays `ConsensusResult` in `report.json`, so retained report
   - add a fourth judge family, or a judge that is not a reviewer;
   - change how agreement is read with two judges;
   - accept that unsupervised rejection stays off for this panel.
+- Amended 2026-11-01: who may judge and the quorum count differently, and deliberately (the owner's call). Nothing in
+  the code changed; this records how the two counts relate.
+  - **Who may judge** (`mara.ballot_round`) is planned before any reply, from the config's judge seats that are
+    independent of a finding's finders.
+  - **The quorum** (`mara.scoring.jury.score`) counts only the judge families that voted validly in both passes.
+  - So when an independent judge's reply is voided, the plan still counted it and starts no fallback to the finder's
+    own family. The quorum then falls short and a human decides
+    (`tests/test_jury_quorum.py::test_a_voided_independent_judge_starts_no_fallback_so_the_quorum_fails_and_a_human_decides`).
+    A plan cannot know which replies will be voided, and a finding short of valid independent votes going to a human
+    is the safe outcome. Asking the finder's family afterwards would let a finding stand on its own finder's discounted
+    vote.
+  - The plan counts judge seats where the quorum counts families. The two agree because policy P3 refuses a config
+    with two judges of one family (`mara.policy`, "each judge must come from a different model family"). The plan
+    relies on P3 for that, and no config that loads can make them differ.
+  - The "Who judges" rule of the open question above still stands: in a fallback, the finder's family votes at a
+    discount and the quorum fails. Its "fewer than `gate.min_independent_judges` (2) families remain independent" is
+    to be read as judge seats, one per family by P3. No test pinned that rule until now:
+    `tests/test_jury_quorum.py::test_with_too_few_independent_seats_the_finders_families_judge_at_a_discount_and_the_quorum_still_fails`.
+    No sentence of the decision is stale.
