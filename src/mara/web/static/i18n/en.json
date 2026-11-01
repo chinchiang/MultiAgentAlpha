@@ -182,6 +182,7 @@
  "env.ws.version": "MARA version",
  "env.ws.workspace": "Workspace (MARA_HOME)",
  "error.bad_base_ref": "The incremental base is not a valid git ref.",
+ "error.bad_calibration_sample": "The calibration sample must be a labelled sample below calib/samples/ with an answer key.",
  "error.bad_host": "The Host header does not name this loopback server.",
  "error.bad_json": "The request is not a valid JSON object.",
  "error.bad_path": "Not a usable path (a NUL character, for example).",

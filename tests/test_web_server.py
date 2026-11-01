@@ -179,6 +179,10 @@ def test_settings_round_trip_even_when_saved_at_once(server):
     ({"target": "fixtures/vuln-sample", "provider": "live", "config": "config/examples/violating.yaml"}, "config_invalid"),
     ({"target": "fixtures/vuln-sample", "provider": "mock", "base": "--output=/tmp/pwned"}, "bad_base_ref"),
     ({"target": "fixtures/vuln-sample", "provider": "mock", "base": "main; rm -rf /"}, "bad_base_ref"),
+    ({"target": "fixtures/vuln-sample", "provider": "mock", "base": "no-such-ref"}, "bad_base_ref"),
+    ({"target": "fixtures/vuln-sample", "provider": "mock", "calibration_sample": True}, "bad_calibration_sample"),
+    # in the command line's order: the config is checked before the base, so a bad config is named first
+    ({"target": "fixtures/vuln-sample", "provider": "mock", "config": "config/mara.yaml", "base": "-x"}, "provider_mismatch"),
     ({"target": "fixtures/vuln-sample", "provider": "mock", "sarif_dir": "fixtures/nothing-here"}, "sarif_dir_not_dir"),
     ({"target": "fixtures/vuln-sample", "provider": "mock", "argv": ["--notify-psirt"]}, "bad_request"),
     ({"target": "fixtures/vuln-sample", "provider": "local"}, "bad_request"),

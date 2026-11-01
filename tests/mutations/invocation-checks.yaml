@@ -1,0 +1,34 @@
+focused: [tests/test_invocation_checks.py, tests/test_web_server.py]
+mutations:
+  - name: a base git cannot find a merge base for is accepted
+    file: src/mara/context/repo_map.py
+    old: '    if merge_base is None or merge_base.returncode != 0:'
+    new: '    if merge_base is None:'
+  - name: the syntax rule is not applied before git is asked
+    file: src/mara/context/repo_map.py
+    old: "    if problem := base_ref_syntax_error(base):\n        raise ValueError(problem)\n    merge_base = _run_git("
+    new: "    merge_base = _run_git("
+  - name: a target that is not a calibration sample is a usage error on --base
+    file: src/mara/invocation.py
+    old: '        raise InvocationError(f"needs a target below {samples}, got {target}", param="--calibration-sample", kind="bad_calibration_sample")'
+    new: '        raise InvocationError(f"needs a target below {samples}, got {target}", param="--base", kind="bad_calibration_sample")'
+  - name: the pipeline does not check the base itself
+    file: src/mara/pipeline.py
+    old: "        if base_ref:  # an empty one is no base; a refused one leaves no output directory behind\n            check_base(target, base_ref)\n"
+    new: ""
+  - name: the pipeline checks an empty base
+    file: src/mara/pipeline.py
+    old: '        if base_ref:  # an empty one is no base; a refused one leaves no output directory behind'
+    new: '        if base_ref is not None:  # an empty one is no base; a refused one leaves no output directory behind'
+  - name: the command line checks an empty base
+    file: src/mara/cli.py
+    old: '        if base:  # an empty --base is no base'
+    new: '        if base is not None:  # an empty --base is no base'
+  - name: the workbench does not check the base
+    file: src/mara/web/runs.py
+    old: "            if inv.base:\n                check_base(target, inv.base)\n"
+    new: ""
+  - name: the workbench does not check the calibration sample
+    file: src/mara/web/runs.py
+    old: "            if inv.calibration_sample:\n                check_calibration_sample(target, self.workspace)\n"
+    new: ""

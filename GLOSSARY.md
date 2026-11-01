@@ -173,7 +173,7 @@ One call of `mara review`: the target, the config, the provider mode, the output
 _Avoid_: launch (the workbench's request that becomes one), arguments, command line (the invocation is the same from the workbench)
 
 **Usage error**:
-A review invocation whose options cannot make a review, named with the option at fault: a config or output path inside the target, a config not found or that fails to load, a provider mode its models do not have, or another option's value the review cannot use (an unreadable PSIRT event, a base that is not a git ref). The command line exits 2 on it, which a blocked gate also does; the workbench names the ones it can check before it starts a run.
+A review invocation whose options cannot make a review, named with the option at fault: a config or output path inside the target, a config not found or that fails to load, a provider mode its models do not have, or another option's value the review cannot use (an unreadable PSIRT event, a base that git cannot diff against HEAD, a calibration sample that is not a labelled sample of the workspace). The command line exits 2 on it, which a blocked gate also does; the workbench names the ones it can check before it starts a run.
 _Avoid_: refusal (a model's declined reply), rejection (a jury outcome), launch error
 
 **Review scope**:

@@ -2,10 +2,12 @@
 `mara review` subprocess per run, one directory per run under `<out>/runs/<run-id>/`.
 
 A launch is checked first for what only the workbench asks (a target directory, a config `configs` allows, evidence
-inputs inside the workspace, a git ref for `--base`), then with the command line's own checks (GLOSSARY.md: Review
-invocation): `invocation.check_paths` (the config, output and evidence paths outside the target) and `invocation.load`
-(the config loaded under policies P1-P8, the provider mode matching its models). A browser is told why a launch is
-refused instead of seeing a failed run, and the subprocess runs the command line's checks again. `run.json` is the
+inputs inside the workspace), then with the command line's own checks (GLOSSARY.md: Review invocation), in its order:
+`invocation.check_paths` (the config, output and evidence paths outside the target), `invocation.load` (the config
+loaded under policies P1-P8, the provider mode matching its models), `invocation.check_calibration_sample` (the target
+a labelled sample of the workspace) and `invocation.check_base` (the base a git revision that has a merge base with
+HEAD). A browser is told why a launch is refused instead of seeing a failed run, and the subprocess runs the command
+line's checks again. `run.json` is the
 record of a run: the request as given, the argv, the roles and models of the config at launch (the config file may
 change later, and the report keeps only the provider manifest), status and exit code. The exit code alone is ambiguous
 (2 is a usage error and an enforced gate alike), so a run counts as finished only when its progress record says the
@@ -24,7 +26,6 @@ reads the config and the workspace, and reads and writes the files under `<out>/
 from __future__ import annotations
 
 import dataclasses
-import re
 import sys
 import threading
 import unicodedata
@@ -42,6 +43,8 @@ from ..invocation import (
     InvocationError,
     ProviderMode,
     ReviewInvocation,
+    check_base,
+    check_calibration_sample,
     check_paths,
     default_config,
     load,
@@ -55,7 +58,6 @@ from .admission import LaunchError
 
 ARTIFACTS = (*REVIEW_ARTIFACTS, "run.log")
 IMPORTED_ID = "workspace-out"  # a review written by `mara review` into <workspace>/out, shown read-only
-BASE_REF_RE = re.compile(r"^[A-Za-z0-9._/@^~{}-]{1,200}$")
 STATUSES = ("running", "finished", "failed", "cancelled", "interrupted")
 
 
@@ -133,14 +135,16 @@ class RunRegistry:
                                       f"{option(field)} {p}: evidence inputs must lie inside the workspace {self.workspace}")
                 dirs[field] = p
         base = req.base.strip()
-        if base and (base.startswith("-") or not BASE_REF_RE.match(base)):
-            raise LaunchError("bad_base_ref", f"{base!r}: not a git ref")
         inv = ReviewInvocation(target=target, config=cfg_path, provider=provider, out=self.runs_dir, sarif_dir=dirs.get("sarif_dir"),
                                mock_fixtures=dirs.get("mock_fixtures"), fail_on_gate=req.fail_on_gate, base=base or None,
                                calibration_sample=req.calibration_sample)
         try:
             check_paths(inv, self.workspace)
             cfg = load(cfg_path, provider)
+            if inv.calibration_sample:
+                check_calibration_sample(target, self.workspace)
+            if inv.base:
+                check_base(target, inv.base)
         except InvocationError as e:  # the command line would refuse the same launch, on e.param
             message = {"provider_mismatch": f"{cfg_path.name}: {e}", "config_invalid": str(e)[:800]}.get(e.kind, str(e))
             raise LaunchError(e.kind, message) from e

@@ -6,11 +6,15 @@ A config's models classify as mock, live or mixed by their providers, and a revi
 models have: a mixed config runs in neither. Once its reports are written, a review exits EXIT_PSIRT when an internal
 PSIRT hand-off failed, which outranks EXIT_GATE for an enforced blocked gate, and 0 otherwise; EXIT_GATE is also a
 usage error's code, so whether a review finished is its progress record's to say (GLOSSARY.md: Progress record).
-check_paths reads the file system and load reads the config file; the rest is pure.
+A review is refused in one order, by the command line and the workbench alike: check_paths, load, then the target's
+own options, check_calibration_sample and check_base; the pipeline repeats those two, and the provider mode, before it
+starts. check_paths reads the file system, load reads the config file, check_base runs git and calibration_answer_key
+reads the answer key of a calibration sample; the rest is pure.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -84,6 +88,45 @@ def check_paths(inv: ReviewInvocation, root: Path) -> Path:
         raise InvocationError(f"config file not found: {config} (run from the MARA workspace, set MARA_HOME or pass --config)",
                               param="--config", kind="config_not_found")
     return config
+
+
+def check_base(target: Path, base: str) -> None:
+    """Nothing when `base` is a git revision of `target`'s repository that has a merge base with HEAD, the range
+    `<base>...HEAD` that an incremental review diffs; InvocationError bad_base_ref on --base otherwise. Runs git."""
+    from .context.repo_map import check_base_ref
+
+    try:
+        check_base_ref(target, base)
+    except ValueError as e:
+        raise InvocationError(str(e), param="--base", kind="bad_base_ref") from e
+
+
+def calibration_answer_key(target: Path, workspace: Path | None = None) -> list[dict]:
+    """The seeded-secret labels (CWE-798) of a calibration sample, for the secret-preflight exemption.
+
+    Only an operator flag (`mara review --calibration-sample`) asks for it, and only a directory below
+    the MARA workspace's calib/samples/ with a MARA answer key qualifies: a reviewed repository cannot
+    exempt its own secrets by shipping a labels.json, since its location is the operator's choice and
+    the exemption is off for every ordinary review. The workspace is `workspace`, the MARA workspace by default.
+    InvocationError bad_calibration_sample on --calibration-sample for any other target."""
+    from .context.repo_map import is_calibration_answer_key
+    from .workspace import root as workspace_root
+
+    samples = ((workspace if workspace is not None else workspace_root()) / "calib" / "samples").resolve()
+    target = Path(target).resolve()
+    if samples not in target.parents:
+        raise InvocationError(f"needs a target below {samples}, got {target}", param="--calibration-sample", kind="bad_calibration_sample")
+    path = target / "labels.json"
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if not is_calibration_answer_key("labels.json", text):
+        raise InvocationError(f"{path} is not a calibration answer key", param="--calibration-sample", kind="bad_calibration_sample")
+    return [lab for lab in json.loads(text)["labels"] if str(lab.get("cwe", "")).upper() == "CWE-798"]
+
+
+def check_calibration_sample(target: Path, workspace: Path | None = None) -> None:
+    """Nothing when `target` is a calibration sample of the workspace (calibration_answer_key); InvocationError
+    bad_calibration_sample on --calibration-sample otherwise."""
+    calibration_answer_key(target, workspace)
 
 
 def load(config: Path, provider_mode: ProviderMode) -> MaraConfig:

@@ -350,6 +350,26 @@ def target_identity(root: Path) -> str:
     return json.dumps(["git", normalise_remote(remote), prefix])
 
 
+def base_ref_syntax_error(base: str) -> str | None:
+    """Why `base` cannot be handed to git as a revision, or None. `base` reaches git as an argument (from --base, which
+    a CI job may fill from event data): a value such as `--output=/path` would be read as an option - git diff writes
+    the diff to that file - so a ref that is empty, starts with '-' or holds whitespace or control characters is
+    refused; `--end-of-options` keeps git from parsing the range as an option in any case. Pure."""
+    if not base or base.startswith("-") or any(ch.isspace() or ord(ch) < 32 for ch in base):
+        return f"cannot resolve base ref {base!r} for incremental review: not a git revision"
+    return None
+
+
+def check_base_ref(root: str | Path, base: str) -> None:
+    """ValueError unless `base` is a revision of the repository of `root` that has a merge base with HEAD: the range
+    `<base>...HEAD` that an incremental review diffs. Runs git."""
+    if problem := base_ref_syntax_error(base):
+        raise ValueError(problem)
+    merge_base = _run_git(Path(root).resolve(), "merge-base", "--end-of-options", base, "HEAD")
+    if merge_base is None or merge_base.returncode != 0:
+        raise ValueError(f"cannot resolve base ref {base!r} for incremental review")
+
+
 def git_changed_files(root: str | Path, base: str, diff_filter: str = "d") -> list[str]:
     """Files changed between `base` and HEAD (three-dot: since the merge base), relative
     to the review target directory (assessment #14). `diff_filter` is git's --diff-filter:
@@ -361,12 +381,8 @@ def git_changed_files(root: str | Path, base: str, diff_filter: str = "d") -> li
     'nothing changed'.
     """
     root = Path(root).resolve()
-    # `base` reaches git as an argument (from --base, which a CI job may fill from event data): a value
-    # such as `--output=/path` would be read as an option - git diff writes the diff to that file - so a
-    # ref that starts with '-' or holds control characters is refused, and `--end-of-options` keeps git
-    # from parsing the range as an option in any case
-    if not base or base.startswith("-") or any(ch.isspace() or ord(ch) < 32 for ch in base):
-        raise ValueError(f"cannot resolve base ref {base!r} for incremental review: not a git revision")
+    if problem := base_ref_syntax_error(base):
+        raise ValueError(problem)
     top = _git(root, "rev-parse", "--show-toplevel")
     prefix = _git(root, "rev-parse", "--show-prefix")
     diff = _run_git(Path(top) if top is not None else root, "diff", "--name-only", "-z",

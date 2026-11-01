@@ -13,7 +13,18 @@ from rich.table import Table
 from typer.core import TyperGroup
 
 from .config import MaraConfig
-from .invocation import EXIT_GATE, EXIT_PSIRT, InvocationError, ProviderMode, ReviewInvocation, check_paths, exit_code, load
+from .invocation import (
+    EXIT_GATE,
+    EXIT_PSIRT,
+    InvocationError,
+    ProviderMode,
+    ReviewInvocation,
+    check_base,
+    check_calibration_sample,
+    check_paths,
+    exit_code,
+    load,
+)
 from .pipeline import Pipeline
 from .progress import Progress
 from .report.markdown_out import enforcement_wording, write_markdown
@@ -107,13 +118,19 @@ def review(
 
 
 def _review(inv: ReviewInvocation, cfg_path: Path, progress: Progress) -> tuple[ReviewReport, MaraConfig, bool]:
-    """Load the config file `cfg_path`, run the review `inv` and write every report; returns (report, config, PSIRT send
-    failed)."""
+    """Load the config file `cfg_path`, check the target's own options against it (a calibration sample, then a base;
+    mara.invocation), run the review `inv` and write every report; returns (report, config, PSIRT send failed). A usage
+    error, from these checks or from the pipeline's own, is click's on the option it names; any other exception is not."""
     from .workspace import WorkspaceInsideTarget, resolve
 
     target, out, psirt_event, base = inv.target, inv.out, inv.psirt_event, inv.base
     with _usage_errors():
         cfg = load(cfg_path, inv.provider)
+        # the target's own options, after the config as the workbench checks them; the pipeline repeats both
+        if inv.calibration_sample:
+            check_calibration_sample(target)
+        if base:  # an empty --base is no base
+            check_base(target, base)
     pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress)
     event = None
     if psirt_event:
@@ -123,15 +140,11 @@ def _review(inv: ReviewInvocation, cfg_path: Path, progress: Progress) -> tuple[
         except (OSError, ValueError) as e:
             raise typer.BadParameter(f"{psirt_event}: not a readable JSON event ({type(e).__name__})", param_hint="--psirt-event") from e
     try:
-        report = pipe.run(target, sarif_dir=inv.sarif_dir, provider_mode=inv.provider, base_ref=base,
-                          calibration_sample=inv.calibration_sample, psirt_event=event, fail_on_gate=inv.fail_on_gate)
+        with _usage_errors():
+            report = pipe.run(target, sarif_dir=inv.sarif_dir, provider_mode=inv.provider, base_ref=base,
+                              calibration_sample=inv.calibration_sample, psirt_event=event, fail_on_gate=inv.fail_on_gate)
     except WorkspaceInsideTarget as e:
         raise typer.BadParameter(str(e), param_hint="TARGET") from e
-    except ValueError as e:
-        # a broken base ref or an ineligible calibration target is a usage error, not an empty review
-        if base is not None or inv.calibration_sample:
-            raise typer.BadParameter(str(e), param_hint="--base" if base is not None else "--calibration-sample") from e
-        raise
     out.mkdir(parents=True, exist_ok=True)
     write_sarif(report, out / "report.sarif")
     write_markdown(report, out / "report.md")

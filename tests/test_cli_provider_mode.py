@@ -35,7 +35,8 @@ def test_provider_live_with_mock_models_is_a_usage_error_on_provider(tmp_path):
 
 
 def test_provider_mismatch_is_not_reported_as_a_broken_base(tmp_path):
-    """`--base` turns the review's own ValueErrors into usage errors on `--base`; a provider mismatch is not one of them."""
+    """The config is loaded, and its providers checked, before the base is: a provider mismatch is a usage error on
+    `--provider` even when a valid `--base` is given."""
     res = review(tmp_path, "--provider", "live", "--config", str(MOCK_CONFIG), "--base", "HEAD")
     assert res.exit_code == 2, res.output
     assert isinstance(res.exception, SystemExit), res.exception
