@@ -3,14 +3,16 @@ one vocabulary, the tightening as one value, and how usable decisions settle the
 
 import itertools
 
-from mara.decisions import Decision, Selection
-from mara.human_queue import DECISION_NOT_USABLE, HUMAN_REASONS, UNSUPERVISED_REJECT_UNVERIFIED, queue_key, settle, tightening
+from mara.decisions import Selection
+from mara.human_queue import DECISION_NOT_USABLE, HUMAN_REASONS, UNSUPERVISED_REJECT_UNVERIFIED, settle, tightening
 from mara.reviewed_content import ReviewedContent
 from mara.schemas import EvidenceTier, QueueTightening
 from mara.scoring.outcome import JURY_HUMAN_REASONS, OutcomeSignals, decide
 from tests.scored_rows import MOCK, finding, policy, row
+from tests.usable_decisions import decision
 
 TARGET, REVISION, CONTEXT = "t" * 64, "r1", "c" * 64
+CONTENT = ReviewedContent(TARGET, REVISION, CONTEXT)
 
 
 def test_every_human_reason_is_the_jury_s_or_the_queue_s():
@@ -51,20 +53,13 @@ def test_the_tightening_is_one_value_and_the_report_records_it():
     assert not tightening(off, 10_000).tightened, "a disabled queue never tightens"
 
 
-def _decision(f, verdict="false_positive", *, by="alice", target_id=TARGET):
-    p = f.provenance[0]
-    return Decision(key=queue_key(p.file, p.line, f.cwe, ReviewedContent(target_id, REVISION, CONTEXT)),
-                    target_id=target_id, revision=REVISION, context_hash=CONTEXT, file=p.file, line=p.line, cwe=f.cwe,
-                    decision=verdict, decision_event_id=1, decided_by=by, decided_at="2026-10-01T08:00:00Z", issue=7)
-
-
 def _settle(rows, findings, selection):
-    return settle(findings, rows, selection, ReviewedContent(TARGET, REVISION, CONTEXT))
+    return settle(findings, rows, selection, CONTENT)
 
 
 def test_a_usable_decision_settles_its_finding_and_the_jury_outcome_stays():
     f, c = finding("F-1"), row("all_needs_human")
-    d = _decision(f)
+    d = decision(f, content=CONTENT)
     assert _settle([c], [f], Selection(usable=[d], excluded=[])) == 1
     assert c.human_decision == {"decision": "false_positive", "key": d.key, "issue": 7, "decided_by": "alice",
                                 "decided_at": "2026-10-01T08:00:00Z"}
@@ -73,7 +68,7 @@ def test_a_usable_decision_settles_its_finding_and_the_jury_outcome_stays():
 
 def test_a_decision_that_is_not_usable_says_why_on_a_finding_that_still_needs_a_human():
     f, waiting, decided = finding("F-1"), row("all_needs_human"), row("accepted")
-    d = _decision(f, by="bob")
+    d = decision(f, by="bob", content=CONTENT)
     assert _settle([waiting], [f], Selection(usable=[], excluded=[(d, "untrained")])) == 0
     assert waiting.human_decision is None and waiting.human_reasons[-1] == f"{DECISION_NOT_USABLE}:untrained"
     before = list(decided.human_reasons)
@@ -84,8 +79,8 @@ def test_a_decision_that_is_not_usable_says_why_on_a_finding_that_still_needs_a_
 def test_a_decision_on_other_content_settles_nothing_and_says_nothing():
     f, c = finding("F-1"), row("all_needs_human")
     before = list(c.human_reasons)
-    other = _decision(f, target_id="o" * 64)
-    assert _settle([c], [f], Selection(usable=[other], excluded=[(_decision(f), "unbound")])) == 0
+    other = decision(f, content=ReviewedContent("o" * 64, REVISION, CONTEXT))
+    assert _settle([c], [f], Selection(usable=[other], excluded=[(decision(f, content=CONTENT), "unbound")])) == 0
     assert c.human_decision is None and c.human_reasons == before
 
 

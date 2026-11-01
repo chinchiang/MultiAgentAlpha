@@ -1,0 +1,30 @@
+focused: [tests/test_settlement.py, tests/test_review_status.py, tests/test_human_resolution.py]
+mutations:
+  - name: the blocking reasons are decided before the decisions settle
+    file: src/mara/settlement.py
+    old: "    applied = settle(findings, rows, selection, content)\n    reasons = blocking_reasons(rows, outcome_policy, gate_policy)\n"
+    new: "    reasons = blocking_reasons(rows, outcome_policy, gate_policy)\n    applied = settle(findings, rows, selection, content)\n"
+  - name: finish does not record the blocking reasons
+    file: src/mara/settlement.py
+    old: '        c.blocking_reason = reasons.get(c.finding_id)'
+    new: '        pass'
+  - name: finish returns the number of rows, not of rows a decision was recorded on
+    file: src/mara/settlement.py
+    old: '    return applied'
+    new: '    return len(rows)'
+  - name: finish settles against no reviewed content
+    file: src/mara/settlement.py
+    old: '    applied = settle(findings, rows, selection, content)'
+    new: '    applied = settle(findings, rows, selection, ReviewedContent("", "", ""))'
+  - name: a blocking finding is decided on the jury outcome, not the final outcome
+    file: src/mara/review_status.py
+    old: '    if c.final_outcome != "accepted":'
+    new: '    if c.jury_outcome != "accepted":'
+  - name: the pipeline settles with no usable decision
+    file: src/mara/pipeline.py
+    old: '        self.audit["human_decisions_applied"] = settlement.finish(findings, scoring.rows, selection, content,'
+    new: '        self.audit["human_decisions_applied"] = settlement.finish(findings, scoring.rows, Selection(usable=[], excluded=[]), content,'
+  - name: the pipeline records the blocking reasons under a gate that blocks nothing
+    file: src/mara/pipeline.py
+    old: '                                                                  outcome_policy=self.outcome_policy, gate_policy=self.gate_policy)'
+    new: '                                                                  outcome_policy=self.outcome_policy, gate_policy=GatePolicy(frozenset(), frozenset(), 0.0))'

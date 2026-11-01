@@ -154,10 +154,9 @@ def _scored(cfg, policy, f):
 
 
 def _blocking(cfg, policy, c):
-    from mara.review_status import GatePolicy, assess
-    from tests.review_facts import FACTS, dim
+    from mara.review_status import GatePolicy, blocking_reasons
 
-    return assess(FACTS, [c], [], [dim("xss", 80.0)], policy, GatePolicy.from_config(cfg)).blocking_reasons
+    return blocking_reasons([c], policy, GatePolicy.from_config(cfg))
 
 
 def test_tier_c_high_needs_a_human_until_the_queue_tightens():

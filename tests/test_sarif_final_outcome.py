@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import quote
 
-from mara import __version__
+from mara import __version__, settlement
 from mara.identity import norm_cwe, norm_path
 from mara.report.sarif_out import to_sarif
+from mara.reviewed_content import ReviewedContent
 from mara.schemas import ConsensusResult, Finding, ReviewReport
+from tests.usable_decisions import decision, usable
 
 
 def _results(report) -> dict[str, dict]:
@@ -146,7 +148,8 @@ def _without_gate_properties(doc: dict) -> dict:
     return doc
 
 
-_DECIDED = {"key": "k", "issue": 1, "decided_by": "alice", "decided_at": "2026-10-01T08:00:00Z"}
+# the reviewed content the rulings below are bound to: any, as the rows and the queue are compared as they stand
+_CONTENT = ReviewedContent("t" * 64, "r1", "c" * 64)
 
 # How the judges of one finding vote, both passes alike unless split: as they did in the seeded review, all for, all
 # against, one family or two for and the rest against, forward for and reverse against, or all asking for a human
@@ -212,19 +215,19 @@ def _variants(report, cfg) -> list[_Variant]:
     """Consensus rows scoring really produces: the seeded review's findings, skeptic, red team and tool results scored
     again by jury scoring (mara.scoring.jury) with the judges' votes re-cast, each finding taking every vote pattern in turn, on the mock
     panel, on the panel with a fourth judge, and on that panel with P8 unlocked. Tier, score, votes and jury outcome therefore agree as scoring writes
-    them; no rule of decide() or of tiering is copied here. Every other variant carries usable human rulings, a false
-    positive on every third finding and a true positive on the next (a ruling binds to content, whatever the jury
-    concluded). Each gets its blocking reasons from assess and the human queue built for it. The report's other
-    fields (review status, incomplete reasons, gate, dimensions, overall score) stay those of the seeded review, and the
-    queue keys are built without the reviewed content: both writers copy those as they stand, so the comparison does
-    not depend on them."""
+    them; no rule of decide() or of tiering is copied here. Every other variant carries usable decisions, as selected
+    for a reviewed content: a false positive on every third place and a true positive on the next, the findings at one
+    place sharing their ruling since a decision binds to a place (and to content, whatever the jury concluded). Each
+    variant's rows are finished as Pipeline.run finishes them (mara.settlement) and get the human queue built for them.
+    The report's other fields (review status, incomplete reasons, gate, dimensions, overall score) stay those of the
+    seeded review, and the queue keys are built without the reviewed content: both writers copy those as they stand, so
+    the comparison does not depend on them."""
     from collections import defaultdict
 
     from mara.context.repo_map import build_context
     from mara.human_queue import build_queue
-    from mara.review_status import GatePolicy, assess
+    from mara.review_status import GatePolicy
     from mara.tools.sarif import ToolResult
-    from tests.review_facts import FACTS
     from tests.scored_rows import policy, score
 
     finders = {f.id: set(f.finder_families) for f in report.findings}
@@ -246,14 +249,16 @@ def _variants(report, cfg) -> list[_Variant]:
             votes = [v for f in report.findings for v in _recast(by_finding[f.id], patterns[f.id])]
             consensus = score(report.findings, votes, cfg=panel, outcome_policy=outcome_policy, skeptic=skeptic,
                               redteam=redteam, tool_results=tools, tool_path_prefix=prefix).rows
+            # a decision binds to a place, so the findings at one place share one ruling: the first one's
+            ruled: dict[tuple, tuple[Finding, str | None]] = {}
             if k % 2:
-                for i, c in enumerate(consensus):
-                    ruling = ("false_positive", "true_positive", None)[i % 3]
-                    c.human_decision = {"decision": ruling, **_DECIDED} if ruling else None
-            # as Pipeline.run writes them from its assessment; the blocking reasons depend on no fact of the review
-            blocking = assess(FACTS, consensus, tools, report.dimensions, outcome_policy, gate_policy).blocking_reasons
-            for c in consensus:
-                c.blocking_reason = blocking.get(c.finding_id)
+                for i, f in enumerate(report.findings):
+                    place = (norm_path(f.provenance[0].file), f.provenance[0].line, norm_cwe(f.cwe))
+                    ruled.setdefault(place, (f, ("false_positive", "true_positive", None)[i % 3]))
+            rulings = [decision(f, ruling, content=_CONTENT) for f, ruling in ruled.values() if ruling]
+            # as Pipeline.run finishes them: the usable decisions settle the findings they bind to, then the blocking
+            # reasons follow from the final outcomes
+            settlement.finish(report.findings, consensus, usable(*rulings), _CONTENT, outcome_policy=outcome_policy, gate_policy=gate_policy)
             v = report.model_copy(update={"votes": votes, "consensus": consensus})
             v.human_queue = build_queue(v.findings, {c.finding_id: c for c in consensus}, skeptic, redteam, votes, panel)
             variants.append(_Variant(v, name, patterns))

@@ -1,7 +1,8 @@
 """Jury scoring (GLOSSARY.md: jury, jury signals): each finding's jury signals measured from its ballots, its finders, the
 tool results and the jury, its jury outcome decided from them by mara.scoring.outcome.decide, and the jury's agreement
 over the whole review (docs/adr/0005-jury-outcome.md). Pure: nothing is read from disk and nothing is written to the
-audit; the pipeline writes what it returns."""
+audit. The rows it returns hold the jury outcome as the jury concluded it; the pipeline has them finished by the usable
+decisions and the blocking reasons (mara.settlement) and writes the audit from what it returns."""
 
 from __future__ import annotations
 

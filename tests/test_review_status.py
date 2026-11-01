@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from mara.config import load_config
-from mara.review_status import INCOMPLETE_REASONS, GatePolicy, ReviewFacts, assess, secret_preflight
+from mara.review_status import INCOMPLETE_REASONS, GatePolicy, ReviewFacts, assess, blocking_reasons, secret_preflight
 from mara.schemas import ConsensusResult
 from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
@@ -79,7 +79,7 @@ def test_an_accepted_finding_at_a_blocking_tier_and_severity_blocks_on_its_final
             row("F-5", "A", "Critical", "accepted", decision="false_positive"),
             row("F-6", "C", "Critical", "needs_human", decision="true_positive")]
     a = assess(FACTS, rows, [], [dim("xss", 80.0)], OUTCOME, GATE)
-    assert a.blocking_reasons == {"F-1": "blocking_tier_and_severity", "F-4": "blocking_tier_and_severity"}
+    assert blocking_reasons(rows, OUTCOME, GATE) == {"F-1": "blocking_tier_and_severity", "F-4": "blocking_tier_and_severity"}
     assert (a.review_status, a.gate_passed, a.gate_reasons, a.overall_score) == ("complete", False, ("blocking_tier_and_severity",), 80.0)
 
 
@@ -89,12 +89,12 @@ def test_while_the_queue_is_tightened_an_accepted_tier_c_finding_at_the_severity
     rows = [row("F-1", "C", "High", "accepted"), row("F-2", "C", "Medium", "accepted"), row("F-3", "D", "Critical", "dropped")]
     tightened = replace(OUTCOME, exclude_tier_c=True)
     a = assess(FACTS, rows, [], [dim("xss", 80.0)], tightened, GATE)
-    assert a.blocking_reasons == {"F-1": "tier_c_while_tightened"} and a.tier_c_blocked_while_tightened == 1
+    assert blocking_reasons(rows, tightened, GATE) == {"F-1": "tier_c_while_tightened"} and a.tier_c_blocked_while_tightened == 1
     assert a.gate_reasons == ("tier_c_while_tightened",)
     # untightened, tier C at the floor goes to a human; accepted only by a human's ruling, it does not block
     untightened = [row("F-1", "C", "High", "needs_human", decision="true_positive"), row("F-2", "C", "Medium", "accepted")]
     a = assess(FACTS, untightened, [], [dim("xss", 80.0)], OUTCOME, GATE)
-    assert a.gate_passed and a.blocking_reasons == {} and a.tier_c_blocked_while_tightened == 0
+    assert a.gate_passed and blocking_reasons(untightened, OUTCOME, GATE) == {} and a.tier_c_blocked_while_tightened == 0
 
 
 def test_gate_reasons_come_in_a_fixed_order_without_repeats():
@@ -211,8 +211,9 @@ def test_the_new_rules_agree_with_the_old_on_every_combination_of_facts():
         for consensus, tool_results, d, tightened in itertools.product(rows, tools, dims, (False, True)):
             a = assess(facts, consensus, tool_results, d, replace(OUTCOME, exclude_tier_c=tightened), GATE)
             incomplete, overall, gate, blocking, tier_c = _old_rules(facts, consensus, tool_results, d, exclude_tier_c=tightened)
-            assert (list(a.incomplete_reasons), a.overall_score, a.gate_passed, a.blocking_reasons, a.tier_c_blocked_while_tightened) \
-                == (incomplete, overall, gate, blocking, tier_c), (facts, consensus, tool_results, d, tightened)
+            policy = replace(OUTCOME, exclude_tier_c=tightened)
+            assert (list(a.incomplete_reasons), a.overall_score, a.gate_passed, blocking_reasons(consensus, policy, GATE),
+                    a.tier_c_blocked_while_tightened) == (incomplete, overall, gate, blocking, tier_c), (facts, consensus, tool_results, d, tightened)
             assert a.review_status == ("incomplete" if incomplete else "complete")
             assert set(a.incomplete_reasons) <= INCOMPLETE_REASONS
             checked += 1

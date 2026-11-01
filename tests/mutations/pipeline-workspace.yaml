@@ -18,8 +18,8 @@ mutations:
     new: '        loaded = load_decisions(workspace_root() / "calib" / "decisions")'
   - name: the training register read from MARA_HOME
     file: src/mara/pipeline.py
-    old: '        sel = select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, self.workspace))'
-    new: '        sel = select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training))'
+    old: '        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, self.workspace))'
+    new: '        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training))'
   - name: the workspace checked against the target is MARA_HOME's
     file: src/mara/pipeline.py
     old: '        check_outside(target, workspace=self.workspace)'
