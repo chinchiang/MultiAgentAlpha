@@ -441,8 +441,13 @@ def check_g7(root: Path, config_path: Path) -> CheckResult:
 
 
 def _production_families(config_path: Path) -> list[str]:
-    raw = _raw_config(config_path)
-    return sorted({m.get("family", "?") for m in raw.get("models", []) if m.get("provider") != "mock"})
+    """The families a live report must cover: the validated config's production families (mara.govdocs), as a review
+    and `scripts/model_eval.py run` read them. A config the review refuses is refused here too."""
+    from mara.config import load_config
+    from mara.govdocs import production_families
+
+    # G-8 and G-9 report the evaluation and calibration reports, not the policies, which G-2 and G-3 report
+    return sorted(production_families(load_config(config_path, enforce_policies=False)))
 
 
 def _fresh_live_report(root: Path, pattern: str, today: dt.date, families: list[str]) -> tuple[list[str], list[str]]:
