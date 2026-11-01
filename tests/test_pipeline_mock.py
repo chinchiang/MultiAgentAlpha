@@ -73,7 +73,7 @@ def test_refuted_finding_the_jury_overrode_goes_to_human():
     sk = SkepticVerdict(finding_id="F-9001", verdict="refuted", reason="query is parameterised",
                         sanitizer_or_control="app.py:41 prepared statements",
                         source_family=ModelFamily.MOCK, source_model="mock-skeptic")
-    (cons,) = scored_rows.score([f], {f.id: {ModelFamily.MOCK}}, votes, skeptic={"F-9001": sk}).rows
+    (cons,) = scored_rows.score(scored_rows.found_by([f], ModelFamily.MOCK), votes, skeptic={"F-9001": sk}).rows
     assert cons.skeptic_refuted
     assert cons.tier != EvidenceTier.D  # the jury did override the refutation
     assert cons.needs_human and not cons.accepted
@@ -341,7 +341,7 @@ def test_an_unparseable_or_incomplete_reply_is_asked_once_more_but_signals_are_n
     # deepseek judge's forward pass is empty (its 1st exchange), then leaves a finding out (its 2nd)
     panel = (Panel().queue("skeptic", UNPARSEABLE, stands).queue("redteam", echo)
              .nth("judge", 1, EMPTY, family=ModelFamily.DEEPSEEK).nth("judge", 2, true_positive, family=ModelFamily.DEEPSEEK))
-    ballots = panel.run(_ctx(tmp_path), findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+    ballots = panel.run(_ctx(tmp_path), scored_rows.found_by(findings, ModelFamily.ANTHROPIC))
     assert len(panel.asked("skeptic")) == 2 and set(ballots.skeptic) == {"F-0001", "F-0002"}
     assert panel.audit["skeptic_retries"] == 1 and panel.audit["skeptic_retries[nemotron]"] == 1
     assert len(panel.asked("redteam")) == 1 and panel.audit["redteam_retries"] == 0, "an echo is a finding about the model, not noise"
@@ -356,7 +356,7 @@ def test_a_retried_skeptic_counts_only_the_answer_it_used(tmp_path):
     f = _finding()
     # no verdict at all, then the mock skeptic's own
     panel = Panel().queue("skeptic", items(lambda _: {}, drop=1))
-    ballots = panel.run(_ctx(tmp_path), [f], {f.id: {ModelFamily.ANTHROPIC}})
+    ballots = panel.run(_ctx(tmp_path), scored_rows.found_by([f], ModelFamily.ANTHROPIC))
     assert list(ballots.skeptic) == [f.id] and ballots.skeptic[f.id].source_family == ModelFamily.NEMOTRON
     assert not ballots.unchallenged
     assert panel.audit["skeptic_invalid_items"] == 0 and panel.audit["skeptic_retries"] == 1

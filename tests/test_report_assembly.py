@@ -35,8 +35,7 @@ MANIFEST = [{"name": "mock-a", "type": "mock", "family": "anthropic", "model": "
 def _stages(tmp_path: Path, base_ref: str | None = None) -> Stages:
     """Two findings: F-2 confirmed by both judge families, F-1 split between them (so it needs a human). The skeptic and
     the red team ruled on F-2 before F-1."""
-    finders = {"F-1": {ModelFamily.ANTHROPIC}, "F-2": {ModelFamily.ANTHROPIC}}
-    findings = [scored_rows.finding("F-1"), scored_rows.finding("F-2")]
+    findings = [scored_rows.finding("F-1"), scored_rows.finding("F-2")]  # found by anthropic (scored_rows.FINDER)
     votes = (scored_rows.votes("F-1", {ModelFamily.DEEPSEEK: "true_positive", ModelFamily.NEMOTRON: "false_positive"})
              + scored_rows.votes("F-2", scored_rows.CONFIRMED))
     skeptic = {fid: SkepticVerdict(finding_id=fid, verdict="stands", reason="r", sanitizer_or_control="", source_family=ModelFamily.NEMOTRON,
@@ -46,12 +45,12 @@ def _stages(tmp_path: Path, base_ref: str | None = None) -> Stages:
     ballots = Ballots(skeptic=skeptic, unchallenged=frozenset(), redteam=redteam, votes=votes)
     result = ToolResult("semgrep", "sql", "warning", "SQL injection", "other.py", 9, "CWE-89")
     tools = ToolEvidence(runs=[ToolRun("semgrep", True, [result], "pinned 1.0"), ToolRun("gitleaks", False, [], "missing")])
-    scoring = scored_rows.score(findings, finders, votes, skeptic=skeptic, redteam=redteam, tool_results=tools.results)
+    scoring = scored_rows.score(findings, votes, skeptic=skeptic, redteam=redteam, tool_results=tools.results)
     dims = [score_dimension("vulnerabilities", findings, {c.finding_id: c for c in scoring.rows}, True)]
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h", revision="r1")
-    return Stages(ctx=ctx, tools=tools, egress=SecretPreflight(blocked=False), context_view=None, reviewed=ReviewerFindings(raw_count=3, findings=findings, finders=finders),
-                  ballots=ballots, scoring=scoring, dimensions=dims, content=ReviewedContent("t" * 64, "r1", "h"),
-                  base_ref=base_ref)
+    return Stages(ctx=ctx, tools=tools, egress=SecretPreflight(blocked=False), context_view=None,
+                  reviewed=ReviewerFindings(raw_count=3, findings=findings), ballots=ballots, scoring=scoring, dimensions=dims,
+                  content=ReviewedContent("t" * 64, "r1", "h"), base_ref=base_ref)
 
 
 def _assembled(tmp_path: Path, *, base_ref: str | None = None, psirt_event: dict | None = None):

@@ -64,7 +64,7 @@ def test_idcheck_strips_nonexistent_refs():
 
 def _scoring(findings, votes):
     """Jury scoring of `findings`, found by anthropic, on `votes` and no other ballot, on the mock panel."""
-    return scored_rows.score(findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings}, votes)
+    return scored_rows.score(scored_rows.found_by(findings, ModelFamily.ANTHROPIC), votes)
 
 
 def _both_passes(fid, fam, verdict, reverse=None):

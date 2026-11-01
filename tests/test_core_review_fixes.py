@@ -21,6 +21,7 @@ from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provide
 from mara.providers.gemini_provider import MAX_TOKENS as GEMINI_MAX_TOKENS
 from mara.providers.gemini_provider import GeminiProvider
 from mara.schemas import Finding, ModelFamily, Provenance
+from tests import scored_rows
 from tests.fake_panel import REFUSAL, Panel
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,9 +68,9 @@ def test_exchange_chunks_bound_findings_and_evidence_size_and_count_a_shared_fil
 
 def test_skeptic_and_red_team_are_called_per_bounded_chunk(tmp_path):
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"})
-    findings = [_finding(i) for i in range(1, 46)]
+    findings = scored_rows.found_by([_finding(i) for i in range(1, 46)], ModelFamily.ANTHROPIC)
     panel = Panel().always("skeptic", REFUSAL).always("redteam", REFUSAL)
-    ballots = panel.run(ctx, findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})
+    ballots = panel.run(ctx, findings)
     assert [len(ex.finding_ids) for ex in panel.asked("skeptic")] == [len(ex.finding_ids) for ex in panel.asked("redteam")] == [20, 20, 5]
     assert panel.audit["skeptic_calls"] == panel.audit["redteam_calls"] == 3
     assert ballots.unchallenged == {f.id for f in findings}, "every chunk without a verdict leaves its findings unchallenged"
@@ -77,9 +78,9 @@ def test_skeptic_and_red_team_are_called_per_bounded_chunk(tmp_path):
 
 def test_judge_passes_are_bounded_mirrored_per_chunk_and_cover_every_finding(tmp_path):
     ctx = RepoContext(root=tmp_path, content={"app.py": "unsafe()\n"}, content_hash="h")
-    findings = [_finding(i) for i in range(1, 61)]
+    findings = scored_rows.found_by([_finding(i) for i in range(1, 61)], ModelFamily.ANTHROPIC)
     panel = Panel().always("judge", REFUSAL)
-    panel.run(ctx, findings, {f.id: {ModelFamily.ANTHROPIC} for f in findings})  # anthropic is excluded, two families judge
+    panel.run(ctx, findings)  # anthropic is excluded, two families judge
     calls = panel.asked("judge")
     assert calls and all(len(ex.finding_ids) <= MAX_PASS_FINDINGS for ex in calls)
     for fam in (ModelFamily.DEEPSEEK, ModelFamily.NEMOTRON):

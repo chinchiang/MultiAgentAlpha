@@ -15,7 +15,7 @@ from typing import TypeVar
 from .agents import judge, redteam, skeptic
 from .audit import Audit, ReplyRecord, log_tags, worth_retrying
 from .bias.blinding import blinded_batches
-from .bias.diversity import pick_independent
+from .bias.diversity import finders_of, pick_independent
 from .config import MaraConfig
 from .context.repo_map import MAX_TOTAL_CHARS, RepoContext, bundle_cost
 from .progress import Progress
@@ -43,11 +43,13 @@ class Ballots:
     votes: list[JudgeVote]
 
 
-def run(ctx: RepoContext, findings: list[Finding], finders: dict[str, set[ModelFamily]], *, cfg: MaraConfig,
+def run(ctx: RepoContext, findings: list[Finding], *, cfg: MaraConfig,
         providers: Mapping[str, Provider], audit: Audit, say: Callable[[str], None], progress: Progress) -> Ballots:
-    """The ballot round over `findings`, each found by the families in `finders`. The replies used and the discarded
+    """The ballot round over `findings`, each found by its `finder_families` (a finding without any raises ValueError
+    before any model is asked: mara.bias.diversity.finders_of). The replies used and the discarded
     attempts are counted in `audit`, every pipeline log line goes to `say`, and the skeptic, red team and jury
     stages are reported to `progress`."""
+    finders = finders_of(findings)
     rounds = _Round(cfg, providers, audit, say)
     progress.begin("skeptic")
     sk, unchallenged = rounds.skeptics(ctx, findings, finders)

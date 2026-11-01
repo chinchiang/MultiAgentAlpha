@@ -93,14 +93,14 @@ def _f(fid: str, file: str, line: int, cwe: str = "CWE-89", *, fam: ModelFamily 
     (_f("F-2", "app.py", 10, fam=ModelFamily.DEEPSEEK, verified=False), False),   # never unverified into verified
 ])
 def test_two_findings_are_merged_exactly_when_they_are_at_one_place_in_one_dimension_and_equally_verified(other, merged):
-    kept, finders = reviewer_round.dedupe([_f("F-1", "app.py", 10), other])
+    kept = reviewer_round.dedupe([_f("F-1", "app.py", 10), other])
     assert [k.id for k in kept] == (["F-1"] if merged else ["F-1", "F-2"])
-    assert finders["F-1"] == ({ModelFamily.ANTHROPIC, ModelFamily.DEEPSEEK} if merged else {ModelFamily.ANTHROPIC})
+    assert kept[0].finder_families == ([ModelFamily.ANTHROPIC, ModelFamily.DEEPSEEK] if merged else [ModelFamily.ANTHROPIC])
 
 
 def test_a_finding_built_around_the_validation_is_merged_by_its_normalised_weakness():
     """A finding whose CWE was set without validation (model_copy does not validate) is still the same weakness as its
     normalised spelling, as it is to corroboration and calibration (mara.identity.same_place)."""
     spelled = _f("F-2", "app.py", 10, fam=ModelFamily.DEEPSEEK).model_copy(update={"cwe": " cwe-89 "})
-    kept, finders = reviewer_round.dedupe([_f("F-1", "app.py", 10), spelled])
-    assert [k.id for k in kept] == ["F-1"] and finders["F-1"] == {ModelFamily.ANTHROPIC, ModelFamily.DEEPSEEK}
+    kept = reviewer_round.dedupe([_f("F-1", "app.py", 10), spelled])
+    assert [k.id for k in kept] == ["F-1"] and kept[0].finder_families == [ModelFamily.ANTHROPIC, ModelFamily.DEEPSEEK]

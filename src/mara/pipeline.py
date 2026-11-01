@@ -161,7 +161,7 @@ class Pipeline:
         context_view = self._context(ctx, egress)
         reviewed = reviewer_round.run(ctx, context_view, cfg=self.cfg, providers=self.providers, audit=self.audit, say=self._say,
                                       progress=self.progress, egress_blocked=egress.blocked)
-        ballots = ballot_round.run(ctx, reviewed.findings, reviewed.finders, cfg=self.cfg, providers=self.providers, audit=self.audit,
+        ballots = ballot_round.run(ctx, reviewed.findings, cfg=self.cfg, providers=self.providers, audit=self.audit,
                                    say=self._say, progress=self.progress)
         stages = self._score(ctx, tools, egress, context_view, reviewed, ballots, base_ref)
         assessment, signature = self._assess(stages, fail_on_gate)
@@ -252,7 +252,7 @@ class Pipeline:
         handed in."""
         self.progress.begin("scoring")
         findings = reviewed.findings
-        scoring = jury.score(findings, reviewed.finders, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
+        scoring = jury.score(findings, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
                              tool_path_prefix=ctx.repo_prefix)
         self.audit["position_flips"] = scoring.position_flips
         content = ReviewedContent.of_bundle(ctx)

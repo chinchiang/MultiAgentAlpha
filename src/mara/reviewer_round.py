@@ -26,12 +26,11 @@ from .scoring.idcheck import check_finding_refs
 
 @dataclass(frozen=True)
 class ReviewerFindings:
-    """What the reviewers stage hands in: how many findings the reviewers reported, and the deduplicated findings with
-    the families that found each."""
+    """What the reviewers stage hands in: how many findings the reviewers reported, and the deduplicated findings, each
+    with the families that found it (`Finding.finder_families`)."""
 
     raw_count: int
     findings: list[Finding]
-    finders: dict[str, set[ModelFamily]]
 
 
 def run(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConfig, providers: Mapping[str, Provider],
@@ -46,13 +45,12 @@ def run(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConfig, 
     else:
         progress.begin("reviewers")
         raw = _review(ctx, context_view, cfg=cfg, providers=providers, audit=audit, say=say)
-    findings, finders = dedupe(raw)
+    findings = dedupe(raw)
     if not egress_blocked:
         progress.done("reviewers", f"{len(raw)} raw finding(s), {len(findings)} after deduplication")
-    findings = [f.model_copy(update={"finder_families": sorted(finders[f.id], key=lambda x: x.value)}) for f in findings]
     audit["findings_raw"] = len(raw)
     audit["findings_deduped"] = len(findings)
-    return ReviewerFindings(raw_count=len(raw), findings=findings, finders=finders)
+    return ReviewerFindings(raw_count=len(raw), findings=findings)
 
 
 def _review(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConfig, providers: Mapping[str, Provider],
@@ -84,10 +82,10 @@ def _review(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConf
     return out
 
 
-def dedupe(findings: list[Finding]) -> tuple[list[Finding], dict[str, set[ModelFamily]]]:
+def dedupe(findings: list[Finding]) -> list[Finding]:
     """Merge findings of one dimension at one place (mara.identity.same_place: one file, one CWE, lines at most
-    NEAR_LINES apart), the first one kept and the families that found it collected; an unverified finding is never
-    merged into a verified one, nor a verified one into an unverified one."""
+    NEAR_LINES apart), the first one kept with the families that found it as its `finder_families`, sorted by name;
+    an unverified finding is never merged into a verified one, nor a verified one into an unverified one."""
     kept: list[Finding] = []
     finders: dict[str, set[ModelFamily]] = {}
     for f in findings:
@@ -107,4 +105,4 @@ def dedupe(findings: list[Finding]) -> tuple[list[Finding], dict[str, set[ModelF
             finders[f.id] = {f.source_family}
         else:
             finders[match.id].add(f.source_family)
-    return kept, finders
+    return [k.model_copy(update={"finder_families": sorted(finders[k.id], key=lambda x: x.value)}) for k in kept]

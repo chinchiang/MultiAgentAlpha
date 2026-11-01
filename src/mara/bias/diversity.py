@@ -5,7 +5,17 @@ from __future__ import annotations
 from itertools import combinations
 
 from ..config import MaraConfig, ModelSpec
-from ..schemas import JudgeVote, ModelFamily
+from ..schemas import Finding, JudgeVote, ModelFamily
+
+
+def finders_of(findings: list[Finding]) -> dict[str, set[ModelFamily]]:
+    """Each finding's finders by finding id, from its `finder_families`, which the reviewer round fills
+    (mara.reviewer_round). A finding without finders raises ValueError: judged as found by no family, every family
+    would count as independent of it."""
+    unfound = [f.id for f in findings if not f.finder_families]
+    if unfound:
+        raise ValueError(f"finding(s) without finder_families: {', '.join(unfound)} (the reviewer round fills them)")
+    return {f.id: set(f.finder_families) for f in findings}
 
 
 def pick_independent(cfg: MaraConfig, preferred: str, finder_families: set[ModelFamily]) -> tuple[ModelSpec, bool]:

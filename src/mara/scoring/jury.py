@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ..bias.diversity import pairwise_family_agreement
+from ..bias.diversity import finders_of, pairwise_family_agreement
 from ..schemas import SEVERITY_ORDER, ConsensusResult, Finding, JudgeVote, ModelFamily
 from ..tools.evidence import corroborates
 from ..tools.sarif import ToolResult
@@ -54,11 +54,13 @@ class JuryScoring:
     family_agreement: dict[str, float]
 
 
-def score(findings: list[Finding], finders: dict[str, set[ModelFamily]], ballots: Ballots, tool_results: list[ToolResult], *,
+def score(findings: list[Finding], ballots: Ballots, tool_results: list[ToolResult], *,
           jury: Jury, policy: OutcomePolicy, tool_path_prefix: str = "") -> JuryScoring:
-    """`findings`, each found by the families in `finders`, scored from the ballot round's `ballots` and the tool results
+    """`findings`, each found by its `finder_families` (a finding without any raises ValueError:
+    mara.bias.diversity.finders_of), scored from the ballot round's `ballots` and the tool results
     (whose paths may lie below `tool_path_prefix`, the target's own path below the repository top level), by `jury`
     under `policy`."""
+    finders = finders_of(findings)
     by_finding: dict[str, list[JudgeVote]] = defaultdict(list)
     for v in ballots.votes:
         by_finding[v.finding_id].append(v)
