@@ -1,0 +1,14 @@
+focused: [tests/test_budget_alpha.py]
+mutations:
+  - name: the budget sends the audit's value as it stands
+    file: src/mara/web/views.py
+    old: '"global_krippendorff_alpha": alpha(audit),'
+    new: '"global_krippendorff_alpha": audit.get(Count.GLOBAL_KRIPPENDORFF_ALPHA),'
+  - name: a jury with no alpha shows as 0
+    file: src/mara/web/views.py
+    old: '"global_krippendorff_alpha": alpha(audit),'
+    new: '"global_krippendorff_alpha": alpha(audit) or 0.0,'
+  - name: a run without a report shows a missing alpha as "n/a"
+    file: src/mara/web/views.py
+    old: '"global_krippendorff_alpha": alpha(audit),'
+    new: '"global_krippendorff_alpha": alpha(audit) if report else "n/a",'

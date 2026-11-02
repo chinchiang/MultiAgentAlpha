@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from ..audit import INCOMPLETE_COUNTERS, ROLES, Count, Role, by_family, read
+from ..audit import INCOMPLETE_COUNTERS, ROLES, Count, Role, alpha, by_family, read
 from ..schemas import DIMENSION_LABELS, SEVERITY_ORDER, ConsensusResult, ReviewReport
 from ..tools.evidence import is_alert
 from . import panel
@@ -146,7 +146,7 @@ def budget(manifest: dict[str, Any], report: ReviewReport | None, progress: dict
         # the page reads a backlog nobody knew as "unknown", and one with no report as missing
         "human_queue_backlog": None if tightening is None else ("unknown" if tightening.backlog is None else tightening.backlog),
         "human_queue_tightened": bool(tightening and tightening.tightened),
-        "global_krippendorff_alpha": audit.get(Count.GLOBAL_KRIPPENDORFF_ALPHA),
+        "global_krippendorff_alpha": alpha(audit),
         "position_flips": _num(audit, Count.POSITION_FLIPS),
     }
 
