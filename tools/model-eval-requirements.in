@@ -3,7 +3,7 @@
 # The hash-pinned closure lives in tools/model-eval-requirements.txt; regenerate it with
 #   python3 scripts/relock_requirements.py --in tools/model-eval-requirements.in --out tools/model-eval-requirements.txt --allow-sdist
 # (--allow-sdist because langdetect and ecoji publish no wheel).
-garak==0.17.0
+garak==0.17.1
 # Security floors for transitive dependencies (the resolver would otherwise keep an affected version):
 multidict>=6.9.1  # GHSA-54p9-h82j-f925 / CVE-2026-104874 (reference leak in items-view | and -), fixed in 6.9.1
 aiohttp>=3.14.4  # GHSA-2g87-pp6c-29x5, GHSA-5wr8-gcqf-gqf3, GHSA-494j-54xm-rwp3 (unbounded memory/CPU use, no initial request
@@ -16,8 +16,9 @@ litellm>=1.101.3  # GHSA-7hp6-4w63-5g45 / CVE-2026-114612 (the proxy's salt key 
 nltk>=3.10.4  # GHSA-j456-xh4h-cpf2 / CVE-2026-109956 (WekaClassifier model path bypasses nltk.pathsec) and
 #   GHSA-8mgp-746c-j5xp / CVE-2026-81726 (path traversal in model-artifact loading), fixed in 3.10.4
 opentelemetry-api>=1.45.1  # GHSA-xcq7-p3pf-p88h / CVE-2026-114603 (unbounded tracestate parsing), fixed in 1.45.1
-setuptools>=84.1.0  # GHSA-xmj3-9gf7-h52w (path escape through namespace_packages.txt when installing a legacy wheel on
-#   Windows), fixed in 84.1.0; also tools/build-requirements.txt's pin, installed first
+setuptools==84.1.0  # GHSA-xmj3-9gf7-h52w (path escape through namespace_packages.txt when installing a legacy wheel on
+#   Windows), fixed in 84.1.0; exactly tools/build-requirements.txt's pin, installed first: a later install of another
+#   version would replace it (tests/test_relock_requirements.py)
 filelock>=4.2.1  # GHSA-567q-5qvw-pf92 / CVE-2026-112907, GHSA-9vhv-jxww-xfm5 / CVE-2026-112913,
 #   GHSA-v4x8-3wr5-3wq8 / CVE-2026-112940 (Windows oplock, ReadWriteLock's SQLite side file, symlinks), fixed in 4.2.1;
 #   no 3.x release fixes them

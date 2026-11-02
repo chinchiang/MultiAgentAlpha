@@ -159,7 +159,7 @@ rollout:
 # audit shows the latest verdict per family. The thresholds are INITIAL values to revise after the
 # first live run. Nothing has been run yet, so governance check G-8 fails. See docs/model-eval-runbook.md.
 model_eval:
-  garak_version: "0.17.0"
+  garak_version: "0.17.1"
   garak_probes: [promptinject, latentinjection, encoding, dan]
   cyberseceval_ref: meta-llama/PurpleLlama@4be64c3a24442b51c76175e6ec67722cc3f5fe38   # main as of 2026-09-24 (commit of 2026-08-17)
   judge_llm_env: CSE_JUDGE_LLM                    # e.g. OPENAI::<judge-model>::<key>::<base_url>, from the environment

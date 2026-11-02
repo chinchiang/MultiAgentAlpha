@@ -220,7 +220,7 @@ class ModelEvalConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    garak_version: str = Field(default="0.17.0", description="garak release the runbook pins (tools/model-eval-requirements.txt)")
+    garak_version: str = Field(default="0.17.1", description="garak release the runbook pins (tools/model-eval-requirements.txt)")
     garak_probes: list[str] = Field(default_factory=lambda: ["promptinject", "latentinjection", "encoding", "dan"])
     cyberseceval_ref: str = Field(default="meta-llama/PurpleLlama@4be64c3a24442b51c76175e6ec67722cc3f5fe38",
                                   description="Commit of CybersecurityBenchmarks used (pinned 2026-09-24)")

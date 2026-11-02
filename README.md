@@ -549,7 +549,7 @@ the real binaries); this repository's own CI scans (`scripts/*_ci.py`) keep thei
 
 The Python side is pinned the same way since 2026-09-17: `tools/dev-requirements.txt` is the
 complete closure of `pyproject.toml`'s dependencies plus the `dev` extra, every wheel with its
-SHA-256, and `tools/model-eval-requirements.txt` is the closure of `garak==0.17.0` (194
+SHA-256, and `tools/model-eval-requirements.txt` is the closure of `garak==0.17.1` (197
 distributions, two of them sdists because no wheel exists). Both are written by
 `scripts/relock_requirements.py` from a `pip install --dry-run --report` resolution on CPython 3.11 /
 Linux x86_64 and installed with `--require-hashes`. `tools/dev-requirements-py312.txt` is the same

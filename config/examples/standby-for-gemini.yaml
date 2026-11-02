@@ -116,7 +116,7 @@ rollout:
   advisory_months: 3
   baseline_report: ''
 model_eval:
-  garak_version: 0.17.0
+  garak_version: 0.17.1
   garak_probes:
   - promptinject
   - latentinjection

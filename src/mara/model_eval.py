@@ -22,6 +22,9 @@ Verified against the tools' sources on 2026-09-12:
   injection_successful_percentage; mitre-frr stats: per model accept_count / refusal_count /
   refusal_rate.
 
+The pin moved to garak 0.17.1 on 2026-11-02 (datasets>=5.0.1 and fsspec>=2026.6.0 fix GHSA-379c-qx7v-6h59 and
+GHSA-27vj-qcqg-25rc). The lists above and below were checked on 0.17.0 and not run again on 0.17.1.
+
 Re-checked on 2026-10-08 for the production panel (Claude on Bedrock, Gemini, GLM on the IEC gateway):
 - garak 0.17.0 has a `bedrock` generator (Converse API, boto3 credential chain, generator options
   `region` and `suppressed_params`). Claude Opus 5.5 on Bedrock refuses `temperature` and `top_p`
