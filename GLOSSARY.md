@@ -109,7 +109,7 @@ The judges of a review as their votes are counted: one judge family each, the we
 _Avoid_: panel (see Panel: every model the config names, reviewers included), judges (the judges are the models; the jury is how their votes count)
 
 **Panel**:
-The models a config names, each with the role it plays in a review (context builder, reviewer, skeptic, red team, judge). The workbench shows it three ways: a run's record holds the panel of its config at launch, the environment page lists the panel of each config, and, for a report without a run record, the models the report's provider manifest lists, whose roles the report does not hold. Of a model's endpoint the workbench shows the host and nothing else.
+The models a config names, each with the role it plays in a review (context builder, reviewer, skeptic, red team, judge). The workbench shows it three ways: a run's record holds the panel of its config at launch, the environment page lists the panel of each config, and, for a report without a run record, the models the report's provider manifest lists, each under the roles the report's audit counted its family calling for, since the report holds no roles. Of a model's endpoint the workbench shows the host and nothing else.
 _Avoid_: jury (the jury is how the judges' votes count), team, roster
 
 **Jury signals**:

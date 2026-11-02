@@ -1,0 +1,22 @@
+focused: [tests/test_panel.py, tests/test_web_server.py]
+mutations:
+  - name: a model the report alone lists is claimed as configured
+    file: src/mara/web/views.py
+    old: 'unconfigured = None if not configured else False'
+    new: 'unconfigured = True'
+  - name: a model the report alone lists reads as reassigned
+    file: src/mara/web/views.py
+    old: 'unconfigured = None if not configured else False'
+    new: 'unconfigured = False'
+  - name: a family the run record names for no role reads as not said
+    file: src/mara/web/views.py
+    old: 'unconfigured = None if not configured else False'
+    new: 'unconfigured = None'
+  - name: every model of the report is listed as reviewer and judge again
+    file: src/mara/web/views.py
+    old: 'configured: dict[str, Any] = manifest.get("roles") or {}'
+    new: 'configured: dict[str, Any] = manifest.get("roles") or ({"reviewers": [p.get("name") for p in report.provider_manifest], "judges": [p.get("name") for p in report.provider_manifest]} if report else {})'
+  - name: a family with counters but no calls for the role is listed under it
+    file: src/mara/web/views.py
+    old: 'if f not in families_seen and counters.get(calls))'
+    new: 'if f not in families_seen and counters)'
