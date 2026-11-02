@@ -54,6 +54,10 @@ class JuryScoring:
     global_alpha: float | None
     family_agreement: dict[str, float]
 
+    def rows_by_id(self) -> dict[str, ConsensusResult]:
+        """The rows themselves by finding: the human decisions and blocking reasons recorded on them show in the result."""
+        return {c.finding_id: c for c in self.rows}
+
 
 def score(findings: list[Finding], ballots: Ballots, tool_results: list[ToolResult], *,
           jury: Jury, policy: OutcomePolicy, tool_path_prefix: str = "") -> JuryScoring:

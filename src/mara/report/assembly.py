@@ -74,7 +74,7 @@ def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *
         model_eval=metadata.model_eval,
     )
     # G-11: the human queue as an object with full context; decisions come back through calib/decisions
-    report.human_queue = build_queue(reviewed.findings, {c.finding_id: c for c in stages.scoring.rows}, ballots.skeptic,
+    report.human_queue = build_queue(reviewed.findings, stages.scoring.rows_by_id(), ballots.skeptic,
                                      ballots.redteam, ballots.votes, cfg, content=stages.content)
     # G-12: accepted tier-A Critical findings on a shipped product start the CRA Article 14 clock
     report.psirt = build_notifications(report, cfg, event=psirt_event)

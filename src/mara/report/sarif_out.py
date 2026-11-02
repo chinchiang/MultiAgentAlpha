@@ -30,8 +30,8 @@ def content_fingerprint(f: Finding, occurrence: int = 0) -> str:
 
 
 def to_sarif(report: ReviewReport) -> dict:
-    cons = {c.finding_id: c for c in report.consensus}
-    queued = {i.finding_id: i for i in report.human_queue}
+    cons = report.consensus_by_id()
+    queued = report.queue_by_id()
     rules: dict[str, dict] = {}
     results = []
     # the occurrence index among findings sharing dimension, CWE, file and quote is counted over every finding of the

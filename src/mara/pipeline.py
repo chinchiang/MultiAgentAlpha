@@ -257,7 +257,7 @@ class Pipeline:
         for why, n in selection.by_reason().items():
             if why != "unbound":
                 self.audit.set_reason(Count.HUMAN_DECISIONS_NOT_USABLE, why, n)
-        cons_by_id = {c.finding_id: c for c in scoring.rows}
+        cons_by_id = scoring.rows_by_id()
         dims = []
         for d in self.cfg.dimensions:
             dims.append(score_dimension(d, findings, cons_by_id, tools.ran_for(d)))
