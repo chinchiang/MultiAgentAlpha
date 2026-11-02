@@ -1,0 +1,26 @@
+focused: [tests/test_context_increment.py, tests/test_pipeline_mock.py, tests/test_security_regressions.py, tests/test_base_ref_trivy_hf_token.py, tests/test_invocation_checks.py, tests/test_audit_names.py]
+# an incremental review (--base) counts, in the bias audit, the files it kept because they changed and the files it kept
+# because they import or are imported by one of those (Pipeline._bundle); each mutation changes one of the two counts
+mutations:
+  - name: the changed files are counted as the related ones
+    file: src/mara/pipeline.py
+    old: '            self.audit.set(Count.BUNDLE_FILES_CHANGED, len(changed))'
+    new: '            self.audit.set(Count.BUNDLE_FILES_CHANGED, len(related))'
+  - name: the related files are counted as the changed ones
+    file: src/mara/pipeline.py
+    old: '            self.audit.set(Count.BUNDLE_FILES_RELATED, len(related))'
+    new: '            self.audit.set(Count.BUNDLE_FILES_RELATED, len(changed))'
+  - name: the changed files are not counted
+    file: src/mara/pipeline.py
+    old: '            self.audit.set(Count.BUNDLE_FILES_CHANGED, len(changed))'
+    new: '            pass'
+  - name: the related files are not counted
+    file: src/mara/pipeline.py
+    old: '            self.audit.set(Count.BUNDLE_FILES_RELATED, len(related))'
+    new: '            pass'
+  - name: a review of the whole target counts zero changed files
+    file: src/mara/pipeline.py
+    old: 'ctx = build_context(target)'
+    new: |-
+      ctx = build_context(target)
+              self.audit.set(Count.BUNDLE_FILES_CHANGED, 0)
