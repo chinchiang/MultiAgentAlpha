@@ -105,3 +105,43 @@ def test_evidence_inputs_inside_the_target_are_refused(tmp_path, flag):
     r = CliRunner().invoke(app, ["review", str(target), "--provider", "mock", "--config", str(ROOT / "config" / "mara.mock.yaml"),
                                  flag, str(target / "evidence"), "--out", str(tmp_path / "out")])
     assert r.exit_code != 0 and "inside the review target" in r.output
+
+
+# ---------------------------------------------------------------- the bias audit's count of an increment
+
+
+def _import_repo(tmp_path):
+    """A repository whose second commit changes app.py and tools.py: app.py imports lib and helpers, user imports
+    tools, and other.py has nothing to do with either. The increment is 2 changed files and 3 related ones (lib,
+    helpers, user), out of 6."""
+    root = tmp_path / "imports"
+    root.mkdir()
+    files = {"app.py": "import lib\nimport helpers\n", "lib.py": "X = 1\n", "helpers.py": "Y = 2\n", "user.py": "import tools\n",
+             "tools.py": "Z = 3\n", "other.py": "W = 4\n"}
+    for name, text in files.items():
+        (root / name).write_text(text, encoding="utf-8")
+    git(root, "init", "-q", "-b", "main")
+    commit(root, "one")
+    (root / "app.py").write_text("import lib\nimport helpers\nprint('changed')\n", encoding="utf-8")
+    (root / "tools.py").write_text("Z = 30\n", encoding="utf-8")
+    commit(root, "two")
+    return root
+
+
+def _mock_review(root, out, **kwargs):
+    from mara.config import load_config
+    from mara.pipeline import Pipeline
+
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=out)
+    return pipe.run(root, sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock", **kwargs)
+
+
+def test_an_incremental_review_counts_its_changed_and_its_related_files_in_the_bias_audit(tmp_path):
+    report = _mock_review(_import_repo(tmp_path), tmp_path / "out", base_ref="HEAD~1")
+    assert (report.bias_audit["bundle_files_changed"], report.bias_audit["bundle_files_related"]) == (2, 3)
+
+
+def test_a_review_of_the_whole_target_counts_no_increment(tmp_path):
+    report = _mock_review(_import_repo(tmp_path), tmp_path / "out")
+    assert "bundle_files_changed" not in report.bias_audit and "bundle_files_related" not in report.bias_audit
