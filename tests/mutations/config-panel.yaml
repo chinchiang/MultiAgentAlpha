@@ -1,0 +1,45 @@
+focused: [tests/test_panel.py, tests/test_web_server.py]
+# the panel of a config is described once, by src/mara/web/panel.py (GLOSSARY.md: Panel), and the run record, the
+# environment page and the report fallback add their own keys to it; each mutation puts back one thing it rules out.
+# A `old` is a line or a part of one that occurs once in its file.
+mutations:
+  - name: the endpoint host is the whole URL
+    file: src/mara/web/panel.py
+    old: '    return urlparse(base_url).hostname if base_url else None'
+    new: '    return base_url or None'
+  - name: the endpoint host keeps the credentials and the port
+    file: src/mara/web/panel.py
+    old: '    return urlparse(base_url).hostname if base_url else None'
+    new: '    return urlparse(base_url).netloc if base_url else None'
+  - name: a model row leaves out its host
+    file: src/mara/web/panel.py
+    old: '            "region": m.region, "endpoint_host": endpoint_host(m.base_url)}'
+    new: '            "region": m.region}'
+  - name: a model row holds the family as the enum
+    file: src/mara/web/panel.py
+    old: '"family": m.family.value,'
+    new: '"family": m.family,'
+  - name: a roles row takes the judges from the reviewers
+    file: src/mara/web/panel.py
+    old: '"redteam": r.redteam, "judges": list(r.judges)}'
+    new: '"redteam": r.redteam, "judges": list(r.reviewers)}'
+  - name: a roles row shares the config's lists
+    file: src/mara/web/panel.py
+    old: '    return {"context": r.context, "reviewers": list(r.reviewers), "skeptic": r.skeptic, "redteam": r.redteam, "judges": list(r.judges)}'
+    new: '    return {"context": r.context, "reviewers": r.reviewers, "skeptic": r.skeptic, "redteam": r.redteam, "judges": r.judges}'
+  - name: a manifest entry's type is not its provider
+    file: src/mara/web/panel.py
+    old: '"provider": entry.get("type"),'
+    new: '"provider": entry.get("provider"),'
+  - name: a run record leaves out the key's environment variable
+    file: src/mara/web/runs.py
+    old: '        models = [{**panel.model_row(m), "api_key_env": m.api_key_env} for m in cfg.models]'
+    new: '        models = [{**panel.model_row(m)} for m in cfg.models]'
+  - name: the environment page leaves out the credential
+    file: src/mara/web/env.py
+    old: '            models=[{**panel.model_row(m), "weight": m.weight, "credential": credential(m)} for m in cfg.models],'
+    new: '            models=[{**panel.model_row(m), "weight": m.weight} for m in cfg.models],'
+  - name: the report fallback reads the manifest's entries as they are
+    file: src/mara/web/views.py
+    old: '        models = {row["name"]: dict(row) for row in map(panel.manifest_row, report.provider_manifest)}'
+    new: '        models = {row["name"]: dict(row) for row in report.provider_manifest}'

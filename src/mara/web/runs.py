@@ -34,7 +34,6 @@ import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -55,7 +54,7 @@ from ..invocation import (
     review_args,
 )
 from ..schemas import ReviewReport
-from . import configs, procs, views
+from . import configs, panel, procs, views
 from .admission import LaunchError
 
 ARTIFACTS = (*REVIEW_ARTIFACTS, "run.log")
@@ -150,15 +149,12 @@ class RunRegistry:
         except InvocationError as e:  # the command line would refuse the same launch, on e.param
             message = {"provider_mismatch": f"{cfg_path.name}: {e}", "config_invalid": str(e)[:800]}.get(e.kind, str(e))
             raise LaunchError(e.kind, message) from e
-        models = [{"name": m.name, "family": m.family.value, "provider": m.provider, "model": m.model, "data_residency": m.data_residency,
-                   "region": m.region, "api_key_env": m.api_key_env, "endpoint_host": urlparse(m.base_url).hostname if m.base_url else None}
-                  for m in cfg.models]
-        r = cfg.roles
+        models = [{**panel.model_row(m), "api_key_env": m.api_key_env} for m in cfg.models]
         fields = {
             "target": str(target),
             "config": cfg_path.relative_to(self.workspace).as_posix(),
             "provider": req.provider,
-            "roles": {"context": r.context, "reviewers": list(r.reviewers), "skeptic": r.skeptic, "redteam": r.redteam, "judges": list(r.judges)},
+            "roles": panel.roles_row(cfg.roles),
             "models": models,
             "dimensions": list(cfg.dimensions),
             "rollout_phase": cfg.rollout.phase,

@@ -106,7 +106,11 @@ _Avoid_: valid decision (ambiguous between well-formed and usable)
 
 **Jury**:
 The judges of a review as their votes are counted: one judge family each, the weight each family's vote carries, the discount on a vote from a family among the finding's finders, and how many families independent of its finders a finding needs for a quorum.
-_Avoid_: panel (the panel is every model the config names, reviewers included), judges (the judges are the models; the jury is how their votes count)
+_Avoid_: panel (see Panel: every model the config names, reviewers included), judges (the judges are the models; the jury is how their votes count)
+
+**Panel**:
+The models a config names, each with the role it plays in a review (context builder, reviewer, skeptic, red team, judge). The workbench shows it three ways: a run's record holds the panel of its config at launch, the environment page lists the panel of each config, and, for a report without a run record, the models the report's provider manifest lists, whose roles the report does not hold. Of a model's endpoint the workbench shows the host and nothing else.
+_Avoid_: jury (the jury is how the judges' votes count), team, roster
 
 **Jury signals**:
 What the pipeline measures about one finding before it concludes anything: its evidence tier, weighted score and CVSS severity, whether its provenance is verified, whether the skeptic refuted it or left it unchallenged, whether enough independent judges voted, whether every judge family gave both passes, and their agreement and position consistency. They come from the finding's ballots, its finders, the tool evidence and the jury; the jury outcome is decided from them alone.

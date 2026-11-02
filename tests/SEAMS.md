@@ -134,6 +134,10 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
   patches it before invoking `mara` or `mara serve` reaches it, and no server listens. `cli.serve` calls it with keyword
   arguments only (`host`, `port`, `workspace`, `out_dir`, `open_browser`, `echo`), which the double records and the
   tests compare. `test_cli_default.py`.
+- `panel.model_row(m)`, `panel.roles_row(r)`, `panel.manifest_row(entry)`: pure, called directly. A test gives `model_row`
+  a `ModelSpec` built without its validation (`model_construct`): the validator refuses an endpoint with credentials, a
+  query, or plain http beyond the loopback, and the row must hold only the host whatever it was given.
+  `test_panel.py`.
 
 ## What the tests build instead of running
 
