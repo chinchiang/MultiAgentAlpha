@@ -93,7 +93,10 @@ def test_repository_lockfiles_are_complete(lock, top_level, wheels_only):
     if wheels_only:
         assert "Source distributions" not in text
     else:
-        assert "garak==0.17.0" in text, "the garak version pinned in config/mara.yaml model_eval.garak_version"
+        import yaml
+
+        garak = yaml.safe_load((ROOT / "config/mara.yaml").read_text(encoding="utf-8"))["model_eval"]["garak_version"]
+        assert f"garak=={garak}" in text, "the garak version pinned in config/mara.yaml model_eval.garak_version"
 
 
 def test_the_312_closure_pins_the_same_versions_as_the_311_one():
@@ -180,12 +183,15 @@ def test_workflows_never_pip_install_without_hashes():
 
 def test_the_garak_closures_hand_applied_bumps_are_kept_by_the_in_files_floors():
     """Each bump the lockfile's header lists as hand-applied has a floor in tools/model-eval-requirements.in at or above
-    the version the lockfile pins: the header says the floors keep them, so a full relock cannot go back."""
+    the version the lockfile pins: the header says the floors keep them, so a full relock cannot go back. A full relock
+    drops the header's hand-applied notes, so a lockfile without them has nothing to keep."""
     from packaging.requirements import Requirement
     from packaging.utils import canonicalize_name
     from packaging.version import Version
 
     lock_text = (ROOT / "tools/model-eval-requirements.txt").read_text(encoding="utf-8")
+    if "\n# Hand-applied" not in lock_text:
+        return
     header = lock_text.split("\n# Hand-applied", 1)[1].split("\n", 1)[1]
     bullets = [line for line in header.splitlines() if re.match(r"^# - \d{4}-\d\d-\d\d: ", line)]
     bumped = {canonicalize_name(m.group(1)) for line in bullets
