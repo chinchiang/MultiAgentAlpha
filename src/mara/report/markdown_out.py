@@ -22,7 +22,7 @@ def render_markdown(r: ReviewReport) -> str:
     """A blocked gate is enforced in the blocking phase or with `mara review --fail-on-gate`, and only recorded otherwise
     (G-10; docs/governance-templates.md). The header says which from the report's `gate_enforced` alone, which
     mara.review_status decided (docs/adr/0007-review-status-and-gate.md), and nothing for a report written before it."""
-    cons = {c.finding_id: c for c in r.consensus}
+    cons = r.consensus_by_id()
     overall = f"{r.overall_score}/100" if r.overall_score is not None else "unavailable (review incomplete)"
     lines = [
         f"# MARA review: {code(r.target)}",

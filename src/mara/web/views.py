@@ -15,7 +15,7 @@ Pure: every function reads only what it is given: a run's `run.json`, its report
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from typing import Any
 
 from ..audit import INCOMPLETE_COUNTERS, ROLES, Count, Role, by_family, read
@@ -152,22 +152,17 @@ def budget(manifest: dict[str, Any], report: ReviewReport | None, progress: dict
 
 
 def report_view(manifest: dict[str, Any], report: ReviewReport, progress: dict[str, Any] | None) -> dict[str, Any]:
-    cons = {c.finding_id: c for c in report.consensus}
-    sk = {v.finding_id: v for v in report.skeptic}
-    rt = {n.finding_id: n for n in report.redteam}
-    votes: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for v in report.votes:
-        votes[v.finding_id].append(v.model_dump(mode="json"))
+    cons, sk, rt, votes = report.consensus_by_id(), report.skeptic_by_id(), report.redteam_by_id(), report.votes_by_id()
     findings = []
     for f in report.findings:
         c = cons.get(f.id)
         findings.append({
             **f.model_dump(mode="json"),
-            "severity": c.cvss4_severity if c else "None",
+            "severity": c.cvss4_severity if c else None,  # no ruling is no severity, not the CVSS severity "None"
             "consensus": _consensus(c),
             "skeptic": sk[f.id].model_dump(mode="json") if f.id in sk else None,
             "redteam": rt[f.id].model_dump(mode="json") if f.id in rt else None,
-            "votes": votes.get(f.id, []),
+            "votes": [v.model_dump(mode="json") for v in votes.get(f.id, [])],
         })
     rank = {s: i for i, s in enumerate(SEVERITY_ORDER)}
     findings.sort(key=lambda x: (-rank.get(x["severity"], 0), x["id"]))

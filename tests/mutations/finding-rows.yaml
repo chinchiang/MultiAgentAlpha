@@ -1,0 +1,42 @@
+focused: [tests/test_finding_rows.py, tests/test_psirt.py, tests/test_sarif_final_outcome.py]
+# a finding's records sit in the report's lists, each row naming its finding; ReviewReport's lookups and JuryScoring.rows_by_id
+# hold a key only for a finding that has a row, hold the rows themselves, and follow the lists as they are when called; each
+# reader decides what a finding with no row means. Each mutation puts back one thing that rules out.
+# A `old` is a line, or a part of one, that occurs once in its file
+mutations:
+  - name: the skeptic's lookup holds the red team's notes
+    file: src/mara/schemas.py
+    old: '        return {v.finding_id: v for v in self.skeptic}'
+    new: '        return {n.finding_id: n for n in self.redteam}'
+  - name: the votes are not grouped under their finding
+    file: src/mara/schemas.py
+    old: '            out.setdefault(v.finding_id, []).append(v)'
+    new: '            out[v.finding_id] = [v]'
+  - name: the consensus lookup holds copies of the rows
+    file: src/mara/schemas.py
+    old: '        return {c.finding_id: c for c in self.consensus}'
+    new: '        return {c.finding_id: c.model_copy() for c in self.consensus}'
+  - name: the human queue lookup is remembered
+    file: src/mara/schemas.py
+    old: 'return {i.finding_id: i for i in self.human_queue}'
+    new: 'return self.__dict__.setdefault("_queue", {i.finding_id: i for i in self.human_queue})'
+  - name: a scoring's lookup holds copies of the rows
+    file: src/mara/scoring/jury.py
+    old: '        return {c.finding_id: c for c in self.rows}'
+    new: '        return {c.finding_id: c.model_copy() for c in self.rows}'
+  - name: the page gives a finding with no ruling the CVSS severity None again
+    file: src/mara/web/views.py
+    old: '"severity": c.cvss4_severity if c else None,  # no ruling is no severity, not the CVSS severity "None"'
+    new: '"severity": c.cvss4_severity if c else "None",'
+  - name: the SARIF report fails on a finding with no consensus row
+    file: src/mara/report/sarif_out.py
+    old: '        c = cons.get(f.id)'
+    new: '        c = cons[f.id]'
+  - name: the Markdown report fails on a finding with no consensus row
+    file: src/mara/report/markdown_out.py
+    old: 'accepted = [f for f in r.findings if cons.get(f.id) and cons[f.id].final_outcome == "accepted"]'
+    new: 'accepted = [f for f in r.findings if cons[f.id].final_outcome == "accepted"]'
+  - name: the PSIRT selection fails on a finding with no consensus row
+    file: src/mara/report/psirt_out.py
+    old: 'if c and c.final_outcome == "accepted"'
+    new: 'if c.final_outcome == "accepted"'

@@ -37,8 +37,8 @@ def select_psirt_findings(report: ReviewReport, cfg: MaraConfig) -> list[tuple]:
     ps = cfg.psirt
     if not (ps.enabled and ps.shipped):
         return []
-    cons = {c.finding_id: c for c in report.consensus}
-    red = {n.finding_id: n for n in report.redteam}
+    cons = report.consensus_by_id()
+    red = report.redteam_by_id()
     out = []
     for f in report.findings:
         c = cons.get(f.id)

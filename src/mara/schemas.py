@@ -357,6 +357,31 @@ class ReviewReport(BaseModel):
     psirt: list[dict] = Field(default_factory=list, description="G-12: CRA Article 14 early-warning payloads for accepted tier-A Critical findings")
     human_queue: list[HumanQueueItem] = Field(default_factory=list, description="G-11: findings that need a human decision, with full context")
 
+    # A finding's records sit in lists of their own, each row naming its finding by `finding_id`. The review writes one
+    # consensus row per finding, but the skeptic, the red team and the judges do not rule on every finding, and a human queue
+    # holds only those that need a human. The lookups below hold a key for a finding only when the report has a row for it,
+    # and are built from the lists as they are when called (a report's lists are set after it is built); what a reader does
+    # with a finding that has no row is the reader's: the page lists it without a ruling, the reports and the PSIRT selection
+    # leave it out.
+    def consensus_by_id(self) -> dict[str, ConsensusResult]:
+        return {c.finding_id: c for c in self.consensus}
+
+    def skeptic_by_id(self) -> dict[str, SkepticVerdict]:
+        return {v.finding_id: v for v in self.skeptic}
+
+    def redteam_by_id(self) -> dict[str, RedTeamNote]:
+        return {n.finding_id: n for n in self.redteam}
+
+    def votes_by_id(self) -> dict[str, list[JudgeVote]]:
+        """Each finding's votes, in the order they were cast."""
+        out: dict[str, list[JudgeVote]] = {}
+        for v in self.votes:
+            out.setdefault(v.finding_id, []).append(v)
+        return out
+
+    def queue_by_id(self) -> dict[str, HumanQueueItem]:
+        return {i.finding_id: i for i in self.human_queue}
+
     @model_validator(mode="before")
     @classmethod
     def _metadata_out_of_the_bias_audit(cls, data):
