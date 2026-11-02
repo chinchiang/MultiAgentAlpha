@@ -160,3 +160,14 @@ code that writes it, so it changes with that code:
   these instead of patching `runner.installed_version`, so the pin check (`mara.tools.pins`) runs as in a review.
   `test_tool_env.py`, `test_tool_target_config.py`, `test_base_ref_trivy_hf_token.py`, `test_tools_csp.py`,
   `test_install_tools.py`.
+
+## What a test must not read from the semgrep scan
+
+The number of accepted findings `scripts/semgrep_ci.py` reports is not a stable value: ten scans of the same tree gave
+117 to 122, with the same pinned semgrep and rules. Only
+`python.lang.security.audit.dangerous-subprocess-use-tainted-env-args` moves (a taint rule, found or not found from one
+scan to the next, at `scripts/calibration_run.py`, `scripts/osv_ci.py`, `scripts/semgrep_ci.py` and
+`scripts/trivy_ci.py`);
+`dangerous-subprocess-use-audit` is the same every time. The triage entries match by rule and path, so every position
+that moves is covered and the check's result does not change. A test or a script compares the untriaged count (0), not
+the accepted count.
