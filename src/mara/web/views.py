@@ -21,6 +21,7 @@ from typing import Any
 from ..audit import INCOMPLETE_COUNTERS, ROLES, Count, Role, by_family, read
 from ..schemas import DIMENSION_LABELS, SEVERITY_ORDER, ConsensusResult, ReviewReport
 from ..tools.evidence import is_alert
+from . import panel
 
 OUTCOMES = ("accepted", "rejected", "dropped", "needs_human")
 
@@ -72,8 +73,7 @@ def roles(manifest: dict[str, Any], report: ReviewReport | None) -> list[dict[st
     served = {p.get("name"): p for p in (report.provider_manifest if report else [])}
     models = {m.get("name"): m for m in manifest.get("models") or []}
     if not models and report:  # a run started outside the workbench: only the report's provider manifest
-        models = {p.get("name"): {"name": p.get("name"), "family": p.get("family"), "provider": p.get("type"), "model": p.get("model")}
-                  for p in report.provider_manifest}
+        models = {row["name"]: dict(row) for row in map(panel.manifest_row, report.provider_manifest)}
     configured: dict[str, Any] = manifest.get("roles") or {}
     if not configured and report:
         names = [p.get("name") for p in report.provider_manifest]

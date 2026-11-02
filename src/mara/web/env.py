@@ -26,7 +26,6 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from .. import __version__
 from ..config import ModelSpec
@@ -35,7 +34,7 @@ from ..policy import check_config_file
 from ..tools import pins, trivy_db
 from ..tools.csp_eval import node_exe
 from ..tools.runner import TOOL_DIMENSIONS, installed_manifest_entry, tool_path, tools_dir
-from . import jobs
+from . import jobs, panel
 from .configs import config_files
 
 WORKSPACE_ENV = ("MARA_HOME", "MARA_TOOLS_DIR", "MARA_TRIVY_CACHE_DIR", "MARA_NODE", "MARA_SEMGREP_CONFIG", "MARA_ZIZMOR_ONLINE",
@@ -173,13 +172,10 @@ def configs(workspace: Path) -> list[dict[str, Any]]:
         entry.update(
             provider_mode=config_provider_mode(m.provider for m in cfg.models),
             policies=[{"id": r.id, "name": r.name, "passed": r.passed, "reason": r.reason} for r in check.policies],
-            roles={"context": cfg.roles.context, "reviewers": list(cfg.roles.reviewers), "skeptic": cfg.roles.skeptic,
-                   "redteam": cfg.roles.redteam, "judges": list(cfg.roles.judges)},
+            roles=panel.roles_row(cfg.roles),
             dimensions=list(cfg.dimensions),
             rollout_phase=cfg.rollout.phase,
-            models=[{"name": m.name, "family": m.family.value, "provider": m.provider, "model": m.model, "data_residency": m.data_residency,
-                     "region": m.region, "weight": m.weight, "endpoint_host": urlparse(m.base_url).hostname if m.base_url else None,
-                     "credential": credential(m)} for m in cfg.models],
+            models=[{**panel.model_row(m), "weight": m.weight, "credential": credential(m)} for m in cfg.models],
         )
         out.append(entry)
     return out
