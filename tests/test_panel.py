@@ -114,6 +114,33 @@ def test_the_demos_scrub_finds_the_host_of_every_model_row():
     assert row["endpoint_host"] == "llm.example.com" and _demo()._strip_hosts(row)["endpoint_host"] is None
 
 
+def test_a_report_without_a_run_record_lists_a_model_only_under_the_roles_the_audit_counted_it_calling():
+    """The report holds no roles, so the page lists a model under a role only on the evidence of the audit (its family
+    has calls counted for that role), names its provider by the manifest's `type`, and does not claim the model was
+    configured for the role (`configured` is None: the report does not say, which is not a reassignment, False)."""
+    from mara.audit import Audit
+    from tests.reply_records import ballot, extraction
+
+    entries = [{"name": "a", "type": "bedrock", "family": "anthropic", "model": "m1", "served_models": ["s1"]},
+               {"name": "b", "type": "gemini", "family": "gemini", "model": "m2", "served_models": []},
+               {"name": "c", "type": "openai_compatible", "family": "glm", "model": "m3", "served_models": []},
+               {"name": "d", "type": "openai_compatible", "family": "deepseek", "model": "m4", "served_models": []}]
+    a = Audit()
+    a.record(extraction("reviewer", "anthropic"))
+    a.record(extraction("reviewer", "gemini"))
+    a.record(ballot("judge", "anthropic", 1))
+    a.record(ballot("skeptic", "glm", 1))
+    report = ReviewReport.model_construct(bias_audit=dict(a), provider_manifest=entries)
+    groups = {g["role"]: g["members"] for g in views.roles({}, report)}
+    assert list(groups) == ["reviewers", "skeptic", "judges"]
+    row = lambda m: (m["name"], m["family"], m["provider"], m["model"], m["configured"])  # noqa: E731
+    assert [row(m) for m in groups["reviewers"]] == [("a", "anthropic", "bedrock", "m1", None), ("b", "gemini", "gemini", "m2", None)]
+    assert [row(m) for m in groups["skeptic"]] == [("c", "glm", "openai_compatible", "m3", None)]
+    assert [row(m) for m in groups["judges"]] == [("a", "anthropic", "bedrock", "m1", None)]
+    assert views.roles({}, ReviewReport.model_construct(bias_audit={}, provider_manifest=entries)) == []
+    assert views.roles({}, None) == []
+
+
 # characterization: the builders as they were before they shared a description. They pass on their first run.
 
 
@@ -176,17 +203,3 @@ def test_characterization_a_run_record_and_the_environment_page_describe_a_model
         for shown in fields["models"]:
             assert {k: shown[k] for k in CORE} == {k: page[path][shown["name"]][k] for k in CORE}, (path, shown["name"])
         assert fields["roles"] == page_roles[path]
-
-
-def test_characterization_a_report_without_a_run_record_shows_every_model_it_served_as_reviewer_and_judge():
-    """The report holds no roles, so the page cannot tell which model played which: it lists each model under
-    reviewers and judges, and names its provider by the manifest's `type`."""
-    entries = [{"name": "a", "type": "bedrock", "family": "anthropic", "model": "m1", "served_models": ["s1"]},
-               {"name": "b", "type": "gemini", "family": "gemini", "model": "m2", "served_models": []}]
-    report = ReviewReport.model_construct(bias_audit={}, provider_manifest=entries)
-    groups = {g["role"]: g["members"] for g in views.roles({}, report)}
-    assert list(groups) == ["reviewers", "judges"]
-    for members in groups.values():
-        assert [(m["name"], m["family"], m["provider"], m["model"], m["configured"]) for m in members] == [
-            ("a", "anthropic", "bedrock", "m1", True), ("b", "gemini", "gemini", "m2", True)]
-    assert views.roles({}, None) == []

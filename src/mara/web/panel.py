@@ -1,6 +1,7 @@
 """The panel of a config (GLOSSARY.md: Panel): the models it names and the role each plays, described once for
 everything the workbench shows of it: a run's record (`runs.RunRegistry.prepare`), the environment page's config list
-(`env.configs`), and, for a run that has no record, the models a report's provider manifest lists (`views.roles`).
+(`env.configs`), and, for a run that has no record, the models a report's provider manifest lists, each under the
+roles its audit counted it calling for (`views.roles`).
 
 A model's row holds seven keys, `model_row`, and each place adds the keys of its own on top (the run record the name of
 the key's environment variable, the environment page the weight and whether the credential is present). Of a model's

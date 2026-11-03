@@ -75,9 +75,9 @@ def roles(manifest: dict[str, Any], report: ReviewReport | None) -> list[dict[st
     if not models and report:  # a run started outside the workbench: only the report's provider manifest
         models = {row["name"]: dict(row) for row in map(panel.manifest_row, report.provider_manifest)}
     configured: dict[str, Any] = manifest.get("roles") or {}
-    if not configured and report:
-        names = [p.get("name") for p in report.provider_manifest]
-        configured = {"reviewers": names, "judges": names}
+    # no run record: the report names no roles, so a model is listed only under a role the audit counted its family calling
+    # for, and `configured` is None (the report does not say), not False (the pipeline reassigned the role)
+    unconfigured = None if not configured else False
     by_fam = by_family(audit)
     out = []
     for role in ROLE_ORDER:
@@ -95,14 +95,14 @@ def roles(manifest: dict[str, Any], report: ReviewReport | None) -> list[dict[st
         # a family the audit counts calls for although the manifest does not name it for this role
         for fam in sorted(f for f, counters in by_fam.items() if f not in families_seen and counters.get(calls)):
             spec = next((m for m in models.values() if m.get("family") == fam), {"name": fam, "family": fam})
-            members.append(_member(spec, served.get(spec.get("name")), by_fam[fam], role, audit_role, fam, configured_member=False))
+            members.append(_member(spec, served.get(spec.get("name")), by_fam[fam], role, audit_role, fam, configured_member=unconfigured))
         if members:
             out.append({"role": role, "members": members})
     return out
 
 
 def _member(spec: dict[str, Any], served: dict[str, Any] | None, counters: dict[str, Any], role: str, audit_role: Role, fam: str,
-            *, configured_member: bool) -> dict[str, Any]:
+            *, configured_member: bool | None) -> dict[str, Any]:
     """One family's row for a role; `counters` are that family's counters (mara.audit.by_family)."""
     failures = {k: _num(counters, k) for k in _FAILURES[role]}
     # a report of EXCHANGE_VERSION 4 counted the context agent's echoes in the reviewers' canary_echoes
