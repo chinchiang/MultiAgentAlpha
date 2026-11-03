@@ -23,7 +23,19 @@ Verified against the tools' sources on 2026-09-12:
   refusal_rate.
 
 The pin moved to garak 0.17.1 on 2026-11-02 (datasets>=5.0.1 and fsspec>=2026.6.0 fix GHSA-379c-qx7v-6h59 and
-GHSA-27vj-qcqg-25rc). The lists above and below were checked on 0.17.0 and not run again on 0.17.1.
+GHSA-27vj-qcqg-25rc). The lists above and below were checked on 0.17.0. On 2026-11-03 the hash-pinned closure
+(197 distributions) was installed on CPython 3.11 / Linux x86_64 (`pip check` clean, `python -m garak --version` is 0.17.1),
+and without calling any endpoint (credentials unset) the command line was read back on 0.17.1:
+- `--target_type`, `--target_name`, `--spec`, `--generator_option_file` and `--report_prefix` exist; `--probes` is
+  marked DEPRECATED in favour of `--spec`, which is what `garak_command` uses.
+- `--list_probes` has promptinject, latentinjection, encoding, dan and test.Test; `--list_generators` has
+  openai.OpenAICompatible, bedrock (BedrockGenerator, Converse API) and anthropic.
+- The bedrock generator's options still hold `region` (default us-east-1) and `suppressed_params`; the
+  OpenAICompatible generator still takes `uri` and reads OPENAICOMPATIBLE_API_KEY.
+- `scripts/model_eval.py plan` prints the same commands for the three families.
+Not checked on 0.17.1, because it needs the endpoints: that a probe runs, the report JSONL's `eval` rows
+(`total_evaluated`, `nones`), Opus 5.5 on Bedrock with `temperature` and `top_p` suppressed, and the IEC gateway's
+certificate chain through SSL_CERT_FILE. The first run on the G-8 host starts with `garak_probes: [test.Test]`.
 
 Re-checked on 2026-10-08 for the production panel (Claude on Bedrock, Gemini, GLM on the IEC gateway):
 - garak 0.17.0 has a `bedrock` generator (Converse API, boto3 credential chain, generator options
