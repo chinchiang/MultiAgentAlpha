@@ -10,8 +10,16 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara.config import load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
-from mara.reviewed_content import ReviewedContent  # noqa: E402
-from tests import scored_rows  # noqa: E402
+from tests.aat_records import (  # noqa: E402
+    aat_decision,
+    aat_finding,
+    aat_posterior,
+    aat_run,
+    accepted_row,
+    dropped_row,
+    rejected_row,
+    trained_register,
+)
 
 
 def test_label_driven_mock_and_calibrate(root, tmp_path):
@@ -209,79 +217,22 @@ def test_suggested_weights_discount_refutations_and_invalid_output():
 
 # ------------------------------------------------------------------ assessment #60: Alternative Annotator Test
 
-def _aat_run(sample, findings, consensus=()):
-    return (sample, {"target_id": "target-s9", "revision": "rev", "coverage": {"content_hash": "ctx"}, "findings": findings,
-                     "consensus": list(consensus)}, [])
-
-
-def _dec(file, line, cwe, decision, trained=True):
-    from mara.decisions import Decision
-    from mara.human_queue import queue_key
-
-    return Decision.parse({"key": queue_key(file, line, cwe, ReviewedContent("target-s9", "rev", "ctx")),
-                           "decision": decision, "file": file, "line": line, "cwe": cwe, "issue": line,
-                           "decided_by": "alice" if trained else "mallory", "decided_at": "2026-10-01T08:00:00Z",
-                           "target_id": "target-s9", "revision": "rev", "context_hash": "ctx", "decision_event_id": line})
-
-
-def _trained():
-    """G-13: alice holds a valid adjudicator record; mallory has none."""
-    import datetime as dt
-
-    from mara.decisions import TrainingRequirement
-    from mara.training import Record, Register
-
-    alice = Record("alice", "adjudicator", "2026-09", dt.date(2026, 9, 1), dt.date(2027, 9, 1), None, "quiz", "quiz")
-    return TrainingRequirement(required=True, register=Register("2026-09", 365, 0.8, [alice]))
-
-
-def _post(sample, fid, argmax):
-    p = [0.1, 0.1, 0.1]
-    p[argmax] = 0.7
-    return (sample, fid), p
-
-
-def _finding(i, cwe="CWE-79"):
-    return {"id": f"F-{i}", "cwe": cwe, "provenance": [{"file": "app.py", "line": i * 10}]}
-
-
-def _row(i, state):
-    """The consensus row jury scoring writes for F-i in `state` (tests/scored_rows.py), as report.json holds it."""
-    return scored_rows.row(state, f"F-{i}").model_dump(mode="json")
-
-
-def _rejected(i):
-    """A rejected finding, the rejection P8 unlocks: a tool corroborates it (tier A) and one of three independent judge
-    families confirmed it. Only tier A can be rejected, and only with a fourth judge family on the mock panel
-    (docs/adr/0005-jury-outcome.md)."""
-    return _row(i, "rejected")
-
-
-def _accepted(i):
-    return _row(i, "accepted")
-
-
-def _dropped(i):
-    """A dropped finding: every family called it a false positive, so it is tier D, out on the evidence rather than the vote."""
-    return _row(i, "dropped")
-
-
 def test_aat_agreement_is_tested_against_chance_and_needs_ten_items():
     import calibrate
 
-    findings = [_finding(i) for i in range(1, 13)]
-    decisions = [_dec("app.py", i * 10, "CWE-79", "true_positive" if i % 2 else "false_positive") for i in range(1, 12)]
-    post = dict([_post("s9", f"F-{i}", 0 if i % 2 else 1) for i in range(1, 11)])
-    post[_post("s9", "F-11", 2)[0]] = _post("s9", "F-11", 2)[1]   # pipeline abstains: excluded, not tested
-    post[_post("s9", "F-12", 1)[0]] = _post("s9", "F-12", 1)[1]   # no human decision: not tested
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post, _trained())
+    findings = [aat_finding(i) for i in range(1, 13)]
+    decisions = [aat_decision("app.py", i * 10, "CWE-79", "true_positive" if i % 2 else "false_positive") for i in range(1, 12)]
+    post = dict([aat_posterior("s9", f"F-{i}", 0 if i % 2 else 1) for i in range(1, 11)])
+    post[aat_posterior("s9", "F-11", 2)[0]] = aat_posterior("s9", "F-11", 2)[1]   # pipeline abstains: excluded, not tested
+    post[aat_posterior("s9", "F-12", 1)[0]] = aat_posterior("s9", "F-12", 1)[1]   # no human decision: not tested
+    aat = calibrate.alternative_annotator_test([aat_run("s9", findings)], decisions, post, trained_register())
     assert aat["n"] == 10 and aat["agreement"] == 1.0 and aat["chance_agreement"] == 0.5 and aat["kappa"] == 1.0
     assert aat["p_value"] == 0.001 and aat["agreement_passed"] and aat["excluded"] == 1  # one-sided: 0.5 ** 10
     # agreement alone is not enough: none of these was a rejection the pipeline would make unsupervised
     assert aat["rejection"]["n"] == 0 and not aat["passed"] and "不採納安全性未達" in aat["why"]
-    weak = calibrate.alternative_annotator_test([_aat_run("s9", findings[:2])], decisions[:2],
-                                                {_post("s9", "F-1", 0)[0]: _post("s9", "F-1", 0)[1],
-                                                 _post("s9", "F-2", 1)[0]: _post("s9", "F-2", 1)[1]}, _trained())
+    weak = calibrate.alternative_annotator_test([aat_run("s9", findings[:2])], decisions[:2],
+                                                {aat_posterior("s9", "F-1", 0)[0]: aat_posterior("s9", "F-1", 0)[1],
+                                                 aat_posterior("s9", "F-2", 1)[0]: aat_posterior("s9", "F-2", 1)[1]}, trained_register())
     assert weak["n"] == 2 and weak["agreement"] == 1.0 and not weak["agreement_passed"]  # significant needs n >= 10
 
 
@@ -290,10 +241,10 @@ def test_aat_constant_labeller_agrees_only_at_chance_and_fails():
     false positive agrees 90% of the time, which the old fixed-0.5 baseline read as p = 0.0004."""
     import calibrate
 
-    findings = [_finding(i) for i in range(1, 21)]
-    decisions = [_dec("app.py", i * 10, "CWE-79", "true_positive" if i <= 2 else "false_positive") for i in range(1, 21)]
-    post = dict(_post("s9", f"F-{i}", 1) for i in range(1, 21))
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post, _trained())
+    findings = [aat_finding(i) for i in range(1, 21)]
+    decisions = [aat_decision("app.py", i * 10, "CWE-79", "true_positive" if i <= 2 else "false_positive") for i in range(1, 21)]
+    post = dict(aat_posterior("s9", f"F-{i}", 1) for i in range(1, 21))
+    aat = calibrate.alternative_annotator_test([aat_run("s9", findings)], decisions, post, trained_register())
     assert aat["n"] == 20 and aat["agreement"] == 0.9 and aat["chance_agreement"] == 0.9 and aat["kappa"] == 0.0
     assert aat["p_value"] > 0.5 and not aat["agreement_passed"] and not aat["passed"]
 
@@ -304,12 +255,12 @@ def test_aat_rejection_safety_bounds_the_miss_rate_of_unsupervised_rejections():
     def run(n_rejected, misses=0):
         rej = range(1, n_rejected + 1)
         acc = range(100, 120)
-        findings = [_finding(i) for i in [*rej, *acc]]
-        decisions = ([_dec("app.py", i * 10, "CWE-79", "true_positive" if i <= misses else "false_positive") for i in rej]
-                     + [_dec("app.py", i * 10, "CWE-79", "true_positive") for i in acc])
-        post = dict([_post("s9", f"F-{i}", 1) for i in rej] + [_post("s9", f"F-{i}", 0) for i in acc])
-        consensus = [_rejected(i) for i in rej] + [_accepted(i) for i in acc]
-        return calibrate.alternative_annotator_test([_aat_run("s9", findings, consensus)], decisions, post, _trained())
+        findings = [aat_finding(i) for i in [*rej, *acc]]
+        decisions = ([aat_decision("app.py", i * 10, "CWE-79", "true_positive" if i <= misses else "false_positive") for i in rej]
+                     + [aat_decision("app.py", i * 10, "CWE-79", "true_positive") for i in acc])
+        post = dict([aat_posterior("s9", f"F-{i}", 1) for i in rej] + [aat_posterior("s9", f"F-{i}", 0) for i in acc])
+        consensus = [rejected_row(i) for i in rej] + [accepted_row(i) for i in acc]
+        return calibrate.alternative_annotator_test([aat_run("s9", findings, consensus)], decisions, post, trained_register())
 
     ok = run(59)  # zero misses in 59: the 95% upper bound 1 - 0.05 ** (1/59) = 0.0495 <= 0.05
     from mara.policy import AAT_METHOD
@@ -328,10 +279,10 @@ def test_aat_rejection_safety_counts_rejected_findings_not_dropped_ones():
     on the evidence, so a human confirming one is not a miss of unsupervised rejection."""
     import calibrate
 
-    findings = [_finding(1), _finding(2)]
-    decisions = [_dec("app.py", 10, "CWE-79", "true_positive"), _dec("app.py", 20, "CWE-79", "true_positive")]
-    post = dict([_post("s9", "F-1", 1), _post("s9", "F-2", 1)])
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings, [_rejected(1), _dropped(2)])], decisions, post, _trained())
+    findings = [aat_finding(1), aat_finding(2)]
+    decisions = [aat_decision("app.py", 10, "CWE-79", "true_positive"), aat_decision("app.py", 20, "CWE-79", "true_positive")]
+    post = dict([aat_posterior("s9", "F-1", 1), aat_posterior("s9", "F-2", 1)])
+    aat = calibrate.alternative_annotator_test([aat_run("s9", findings, [rejected_row(1), dropped_row(2)])], decisions, post, trained_register())
     assert (aat["rejection"]["n"], aat["rejection"]["misses"]) == (1, 1)
 
 
@@ -340,10 +291,10 @@ def test_aat_stops_on_a_consensus_row_that_does_not_validate():
     import calibrate
     import pytest
 
-    broken = {k: v for k, v in _rejected(1).items() if k != "tier"}
+    broken = {k: v for k, v in rejected_row(1).items() if k != "tier"}
     with pytest.raises(ValueError):
-        calibrate.alternative_annotator_test([_aat_run("s9", [_finding(1)], [broken])], [_dec("app.py", 10, "CWE-79", "true_positive")],
-                                             dict([_post("s9", "F-1", 1)]), _trained())
+        calibrate.alternative_annotator_test([aat_run("s9", [aat_finding(1)], [broken])], [aat_decision("app.py", 10, "CWE-79", "true_positive")],
+                                             dict([aat_posterior("s9", "F-1", 1)]), trained_register())
 
 
 def test_aat_stops_on_an_invalid_consensus_row_even_where_no_decision_is_bound():
@@ -351,10 +302,11 @@ def test_aat_stops_on_an_invalid_consensus_row_even_where_no_decision_is_bound()
     import calibrate
     import pytest
 
-    broken = {k: v for k, v in _rejected(2).items() if k != "tier"}
+    broken = {k: v for k, v in rejected_row(2).items() if k != "tier"}
     with pytest.raises(ValueError):
-        calibrate.alternative_annotator_test([_aat_run("s9", [_finding(1), _finding(2)], [_rejected(1), broken])],
-                                             [_dec("app.py", 10, "CWE-79", "true_positive")], dict([_post("s9", "F-1", 1)]), _trained())
+        calibrate.alternative_annotator_test([aat_run("s9", [aat_finding(1), aat_finding(2)], [rejected_row(1), broken])],
+                                             [aat_decision("app.py", 10, "CWE-79", "true_positive")], dict([aat_posterior("s9", "F-1", 1)]),
+                                             trained_register())
 
 
 def test_aat_binds_one_decision_to_one_finding_by_key():
@@ -363,11 +315,12 @@ def test_aat_binds_one_decision_to_one_finding_by_key():
     # the old +-3-line match let the line-10 decision count for the line-12 finding as well
     findings = [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 10}]},
                 {"id": "F-2", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 12}]}]
-    post = dict([_post("s9", "F-1", 0), _post("s9", "F-2", 0)])
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [_dec("app.py", 10, "CWE-79", "true_positive")], post, _trained())
+    post = dict([aat_posterior("s9", "F-1", 0), aat_posterior("s9", "F-2", 0)])
+    aat = calibrate.alternative_annotator_test([aat_run("s9", findings)], [aat_decision("app.py", 10, "CWE-79", "true_positive")], post,
+                                               trained_register())
     assert aat["n"] == 1
-    contradictory = [_dec("app.py", 10, "CWE-79", "true_positive"), _dec("app.py", 10, "CWE-79", "false_positive")]
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], contradictory, post, _trained())
+    contradictory = [aat_decision("app.py", 10, "CWE-79", "true_positive"), aat_decision("app.py", 10, "CWE-79", "false_positive")]
+    aat = calibrate.alternative_annotator_test([aat_run("s9", findings)], contradictory, post, trained_register())
     assert aat["n"] == 0 and aat["excluded"] == 1
 
 
@@ -375,13 +328,13 @@ def test_aat_ignores_untrained_adjudicators():
     import calibrate
 
     findings = [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 26}]}]
-    untrained = _dec("app.py", 26, "CWE-79", "true_positive", trained=False)
-    post = {_post("s9", "F-1", 1)[0]: _post("s9", "F-1", 1)[1]}
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [untrained], post, _trained())
+    untrained = aat_decision("app.py", 26, "CWE-79", "true_positive", trained=False)
+    post = {aat_posterior("s9", "F-1", 1)[0]: aat_posterior("s9", "F-1", 1)[1]}
+    aat = calibrate.alternative_annotator_test([aat_run("s9", findings)], [untrained], post, trained_register())
     assert aat["n"] == 0 and not aat["passed"] and aat["why"]  # G-13: the decision is not bound at all
     from mara.decisions import TrainingRequirement
 
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [untrained], post, TrainingRequirement(required=False))
+    aat = calibrate.alternative_annotator_test([aat_run("s9", findings)], [untrained], post, TrainingRequirement(required=False))
     assert aat["n"] == 1 and aat["agreement"] == 0.0 and not aat["passed"]
 
 
@@ -389,11 +342,11 @@ def test_aat_disagreement_fails_and_empty_decisions_report_why():
     import calibrate
 
     findings = [{"id": "F-1", "cwe": "CWE-79", "provenance": [{"file": "app.py", "line": 26}]}]
-    decisions = [_dec("app.py", 26, "CWE-79", "true_positive")]
-    post = {_post("s9", "F-1", 1)[0]: _post("s9", "F-1", 1)[1]}  # pipeline says false_positive, human said tp
-    aat = calibrate.alternative_annotator_test([_aat_run("s9", findings)], decisions, post, _trained())
+    decisions = [aat_decision("app.py", 26, "CWE-79", "true_positive")]
+    post = {aat_posterior("s9", "F-1", 1)[0]: aat_posterior("s9", "F-1", 1)[1]}  # pipeline says false_positive, human said tp
+    aat = calibrate.alternative_annotator_test([aat_run("s9", findings)], decisions, post, trained_register())
     assert aat["n"] == 1 and aat["agreement"] == 0.0 and not aat["passed"]
-    empty = calibrate.alternative_annotator_test([_aat_run("s9", findings)], [], post, _trained())
+    empty = calibrate.alternative_annotator_test([aat_run("s9", findings)], [], post, trained_register())
     assert empty["n"] == 0 and not empty["passed"] and empty["why"]
 
 
