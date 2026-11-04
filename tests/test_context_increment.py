@@ -27,7 +27,7 @@ def commit(root, msg):
 # ---------------------------------------------------------------- line numbers
 
 
-@pytest.mark.parametrize("sep", ["\x0c", "\x1c", "\x1d", "\x1e", "\x85", " ", " ", "\x0b"])
+@pytest.mark.parametrize("sep", ["\x0c", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029", "\x0b"])
 def test_only_newlines_end_a_line(sep):
     """str.splitlines() also breaks on form feeds, separators and NEL, which semgrep, git and every SARIF
     producer count as ordinary characters: the bundle and the quote check numbered lines differently
