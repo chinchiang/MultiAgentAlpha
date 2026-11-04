@@ -239,6 +239,7 @@ def _gone_pid() -> int:
     return int(done.stdout)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="mutate._alive takes every run for alive on Windows, where os.kill ends it")
 def test_a_file_changed_since_a_killed_run_left_it_is_not_restored_and_no_run_starts(tmp_path, capsys):
     """Neither the original nor the mutant: someone edited it since, and restoring it would lose that edit."""
     root = _repo(tmp_path)
