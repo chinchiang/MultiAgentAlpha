@@ -24,6 +24,7 @@ from typing import Any
 import anthropic
 
 from ..config import ModelSpec
+from ..credentials import key_env
 from .base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 
 # Adaptive thinking counts against max_tokens, and a review batch is up to 400k characters of
@@ -50,7 +51,8 @@ class AnthropicProvider(Provider):
         if client is not None:  # BedrockProvider and tests
             self.client = client
             return
-        api_key = os.environ.get(spec.api_key_env) if spec.api_key_env else None
+        name = key_env(spec.provider, spec.api_key_env)
+        api_key = os.environ.get(name) if name else None
         # Zero-arg client also resolves ANTHROPIC_API_KEY / `ant auth login` profiles.
         self.client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
 

@@ -224,6 +224,10 @@ _Avoid_: bias audit, config (the config is what was asked for; the metadata are 
 The dated file a live calibration or evaluation leaves for a policy or governance check to read: `calib/latest.json` (policy P8), the front matter of `docs/garak-*.md` and `docs/cyberseceval-*.md` (check G-8) and the front matter of `docs/calibration-*.md` (check G-9). It says its date, its mode (live, mock or dry-run) and the families it covers; `calib/latest.json` has named its families since they were added, and policy P8 asks it for none. It stands when it is not dated in the future, is at most 90 days old, is live (the mode is written `live`, in lower case) and covers the families asked of it; `mara.evidence` says whether it stands, and each problem it finds is the reader's to word.
 _Avoid_: evidence (see Tool evidence, evidence tier), report (a review's report), attestation
 
+**Key variable**:
+The environment variable a model's API key is read from, named by `mara.credentials.key_env`: the model's `api_key_env`, else its provider's own default (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`), else none. An openai_compatible model with no `api_key_env` has none, never another vendor's. It names the variable and never reads it; the workbench shows the name and whether it is set, never the value.
+_Avoid_: credential (the workbench's word for the key variable or the AWS chain), secret, token
+
 ## Exports
 
 **Finding detail**:

@@ -175,6 +175,16 @@ and `latest_record`, and `mara.model_eval.render_garak_report`) and hand what th
 reads the front matter of a Markdown report reads it through `mara.evidence.read_front_matter`, which `mara.govdocs`
 imports by name.
 
+## The key variable (`src/mara/credentials.py`)
+
+`test_credentials.py` reads `mara.credentials.key_env(provider, api_key_env)` at its interface, as a hand-written table (not
+derived from the module's own defaults), and each place that asks it through that place's own interface: the provider
+adapters by constructing them (`OpenAICompatibleProvider(spec).client.headers`, `GeminiProvider(spec).client.headers`, and
+`AnthropicProvider(spec)` with the Anthropic SDK's client class patched as a module attribute to record its keyword
+arguments), `mara.model_eval.garak_command` (its returned environment) and `target_key_env`, and
+`mara.web.env.credential`. A test of a self-hosted endpoint sets the Anthropic key in the environment and asserts it is not
+used. A spec built without validation stands in where the spec's data-residency rules are not what is tested.
+
 ## What a test must not read from the semgrep scan
 
 The number of accepted findings `scripts/semgrep_ci.py` reports is not a stable value: ten scans of the same tree gave

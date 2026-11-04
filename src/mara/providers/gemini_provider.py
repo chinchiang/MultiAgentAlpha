@@ -24,11 +24,11 @@ from collections.abc import Callable
 import httpx
 
 from ..config import ModelSpec
+from ..credentials import key_env
 from .base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 from .openai_compatible import MAX_ATTEMPTS, RETRY_STATUSES, retry_delay
 
 API_BASE = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_KEY_ENV = "GEMINI_API_KEY"
 # Thinking counts against maxOutputTokens (thoughtsTokenCount): 16000 left a reviewer over a 400k-character
 # batch, or a judge pass, too little room to answer - the other providers raised their caps for the same reason.
 MAX_TOKENS = 32768
@@ -40,7 +40,7 @@ class GeminiProvider(Provider):
                  max_attempts: int = MAX_ATTEMPTS, sleep: Callable[[float], None] = time.sleep):
         super().__init__(spec)
         self.max_attempts, self.sleep = max(1, max_attempts), sleep
-        key = os.environ.get(spec.api_key_env or DEFAULT_KEY_ENV, "")
+        key = os.environ.get(key_env(spec.provider, spec.api_key_env) or "", "")
         headers = {"x-goog-api-key": key} if key else {}
         # `client` is for tests (httpx.MockTransport)
         self.client = client or httpx.Client(base_url=API_BASE, headers=headers, timeout=timeout)

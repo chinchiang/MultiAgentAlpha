@@ -32,6 +32,7 @@ import certifi
 import httpx
 
 from ..config import ModelSpec
+from ..credentials import key_env
 from .base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply, wire_schema
 
 MAX_ATTEMPTS = 3
@@ -74,7 +75,8 @@ class OpenAICompatibleProvider(Provider):
         self.max_attempts, self.sleep = max(1, max_attempts), sleep
         if not spec.base_url:
             raise ValueError(f"model {spec.name}: base_url required for openai_compatible provider")
-        key = os.environ.get(spec.api_key_env, "") if spec.api_key_env else ""
+        name = key_env(spec.provider, spec.api_key_env)
+        key = os.environ.get(name, "") if name else ""
         headers = ({spec.api_key_header: key} if spec.api_key_header else {"Authorization": f"Bearer {key}"}) if key else {}
         # `client` is for tests (httpx.MockTransport); production always builds its own from the spec.
         # An explicit transport switches off httpx's HTTP_PROXY/HTTPS_PROXY/ALL_PROXY handling (the
