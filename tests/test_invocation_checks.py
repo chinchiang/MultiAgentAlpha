@@ -80,7 +80,10 @@ def test_a_base_git_resolves_is_accepted_whatever_its_characters(repo, base):
     invocation.check_base(repo, base)
 
 
-def test_a_target_that_is_not_a_git_repository_has_no_base_to_diff_against(tmp_path):
+def test_a_target_that_is_not_a_git_repository_has_no_base_to_diff_against(tmp_path, monkeypatch):
+    """git looks for a repository in every parent directory; above tmp_path is the host's, which can be one (a home
+    directory kept in git), so the search stops at tmp_path."""
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     plain = tmp_path / "plain"
     plain.mkdir()
     with pytest.raises(InvocationError) as e:

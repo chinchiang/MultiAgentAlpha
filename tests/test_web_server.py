@@ -841,7 +841,10 @@ def test_the_page_lists_exactly_the_configs_a_launch_accepts(tmp_path):
     (workspace / "config" / "plain.yaml").write_text(mock, encoding="utf-8")
     (workspace / "config" / "short.yml").write_text(mock, encoding="utf-8")
     (outside / "mara.yaml").write_text(mock, encoding="utf-8")
-    (workspace / "config" / "elsewhere.yaml").symlink_to(outside / "mara.yaml")
+    try:
+        (workspace / "config" / "elsewhere.yaml").symlink_to(outside / "mara.yaml")
+    except OSError as e:  # Windows without Developer Mode or admin rights (WinError 1314)
+        pytest.skip(f"cannot create a symlink here: {e}")
     (workspace / "config" / "notes.toml").write_text(mock, encoding="utf-8")
     reg = runs.RunRegistry(workspace, workspace / "out")
     job_reg = jobs_mod.JobRegistry(workspace, workspace / "out")
