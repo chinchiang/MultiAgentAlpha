@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from mara.audit import ROLES, Count, alpha, by_family, by_pair  # noqa: E402
 from mara.decisions import Decision, TrainingRequirement, select  # noqa: E402
 from mara.decisions import load as load_decision_dir  # noqa: E402
+from mara.evidence import header_fields  # noqa: E402
 from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
 from mara.reviewed_content import ReviewedContent  # noqa: E402
 from mara.schemas import ConsensusResult  # noqa: E402
@@ -43,7 +44,7 @@ from mara.workspace import resolve  # noqa: E402
 def anchor_paths() -> dict[str, Path]:
     """Where this script reads and writes MARA's own state: the workspace (MARA_HOME, else the working directory),
     the same place policy P8 and the pipeline read it. ROOT, the checkout this script lives in, used to be written
-    instead, so with MARA_HOME set P8 never saw the calibration evidence written for it."""
+    instead, so with MARA_HOME set P8 never saw the Evidence record written for it."""
     return {"decisions": resolve("calib/decisions"), "history": resolve("calib/history.json"), "latest": resolve("calib/latest.json")}
 
 VERDICT_IDX = {"true_positive": 0, "false_positive": 1, "needs_human": 2}
@@ -315,8 +316,8 @@ def clopper_pearson_upper(k: int, n: int, confidence: float = 0.95) -> float:
 def alternative_annotator_test(runs, decisions: list[Decision], post, training: TrainingRequirement, *,
                                min_items: int = 10, min_agreement: float = 0.8,
                                max_miss_rate: float = 0.05, confidence: float = 0.95) -> dict:
-    """Assessment #60: the evidence policy P8 needs before the pipeline may reject a non-D finding
-    without a human. Both parts must pass.
+    """Assessment #60: the test policy P8 needs, recorded in the Evidence record calib/latest.json, before the pipeline may
+    reject a non-D finding without a human. Both parts must pass.
 
     1. Agreement beyond chance. The unsupervised label (Dawid-Skene posterior argmax) against the
        human decision on every bound item where the pipeline did not abstain: agreement >=
@@ -545,7 +546,7 @@ def suggest_weights(stats, rel, families, model_eval: dict | None = None, penalt
 def front_matter(mode: str, date: str, families, runs, model_eval: dict | None, tool_labels: int = 0) -> str:
     import yaml
 
-    meta = {"report": "calibration", "date": date, "mode": mode, "families": list(families),
+    meta = {"report": "calibration", **header_fields(date, mode, families),
             "samples": [s for s, _, _ in runs], "labels": sum(len(labs) for _, _, labs in runs),
             "tool_labels": tool_labels,
             "provider_modes": sorted({rep.get("provider_mode", "?") for _, rep, _ in runs}),
@@ -709,6 +710,12 @@ def render(runs, stats, families, rates, pair, alpha, rel, n_items, weights, mod
     return "\n".join(L)
 
 
+def latest_record(date: str, mode: str, families, aat: dict, alpha) -> dict:
+    """What calib/latest.json holds: the Evidence record policy P8 reads (mara.evidence.header_fields first), the
+    Alternative Annotator Test and the jury's global alpha."""
+    return {**header_fields(date, mode, families), "aat": aat, "global_alpha": alpha}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out-dir", default="calib-out")
@@ -724,7 +731,7 @@ def main() -> int:
         raise SystemExit(f"--date must be YYYY-MM-DD, got {args.date!r}") from None
     if when > dt.date.today():
         # the date names the report, calib/latest.json and the history row; policy P8 and governance
-        # checks G-8/G-9 measure freshness from it, so a future date would keep stale evidence "fresh"
+        # checks G-8/G-9 measure freshness from it, so a future date would keep a stale Evidence record "fresh"
         raise SystemExit(f"--date {when.isoformat()} is in the future; a calibration records a run that happened")
     date = when.isoformat()
     out_dir = Path(args.out_dir) if Path(args.out_dir).is_absolute() else ROOT / args.out_dir
@@ -772,7 +779,7 @@ def main() -> int:
     if args.mode == "live":
         latest = anchors["latest"]
         latest.write_text(
-            json.dumps({"date": date, "mode": args.mode, "aat": aat, "global_alpha": alpha}, ensure_ascii=False, indent=2) + "\n",
+            json.dumps(latest_record(date, args.mode, families, aat, alpha), ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
     print(f"wrote {out}")

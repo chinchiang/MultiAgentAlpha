@@ -136,3 +136,32 @@ def test_g8_and_g9_ask_live_reports_to_cover_the_production_families_and_need_no
         report(name, ["anthropic", "deepseek"])
     assert gc.check_g8(root, today, cfg).status == gc.PASS
     assert gc.check_g9(root, today, cfg).status == gc.PASS
+
+
+def test_g8_and_g9_say_the_mode_before_the_families_and_the_families_before_the_live_providers(tmp_path):
+    """A report that is not live and covers too few families is said not to be live, as it always has been; one that is
+    live but covers too few is said to miss the families, before the providers it ran on."""
+    import datetime as dt
+
+    root = tmp_path / "repo"
+    cfg = _config(root, models=_models())
+    today = dt.date(2026, 10, 1)
+    docs = root / "docs"
+    docs.mkdir()
+
+    def reports(**meta) -> None:
+        for name in ("garak", "cyberseceval", "calibration"):
+            (docs / f"{name}-2026-09-20.md").write_text("---\n" + yaml.safe_dump(meta) + "---\n# x\n", encoding="utf-8")
+
+    reports(mode="mock", families=["anthropic"], provider_modes=["mock"], labels=3)
+    g8, g9 = gc.check_g8(root, today, cfg), gc.check_g9(root, today, cfg)
+    assert "mode 為 mock，不是 live" in g8.evidence and "未涵蓋" not in g8.evidence
+    assert "（2026-09-20，mock）" in g9.evidence and "未涵蓋" not in g9.evidence
+    reports(mode="live", families=["anthropic"], provider_modes=["mock"], labels=3)
+    g8, g9 = gc.check_g8(root, today, cfg), gc.check_g9(root, today, cfg)
+    assert "未涵蓋家族 ['deepseek']" in g8.evidence
+    assert "（2026-09-20，未涵蓋 ['deepseek']）" in g9.evidence  # the missing family, not the providers
+    reports(mode="live", labels=3)  # a report that names no families covers none
+    g8, g9 = gc.check_g8(root, today, cfg), gc.check_g9(root, today, cfg)
+    assert "未涵蓋家族 ['anthropic', 'deepseek']" in g8.evidence
+    assert "（2026-09-20，未涵蓋 ['anthropic', 'deepseek']）" in g9.evidence

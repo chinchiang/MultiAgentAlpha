@@ -390,14 +390,14 @@ def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkey
     calib.mkdir()
     from mara.policy import AAT_METHOD
 
-    evidence = {"date": dt.date.today().isoformat(), "mode": "live", "aat": {
+    record = {"date": dt.date.today().isoformat(), "mode": "live", "aat": {
         "method": AAT_METHOD, "passed": True, "n": 12, "agreement": 1.0, "chance_agreement": 0.5, "p_value": 0.0002,
         "rejection": {"n": 59, "misses": 0, "miss_rate_upper": 0.0495, "passed": True}}}
-    (calib / "latest.json").write_text(json.dumps(evidence), encoding="utf-8")
+    (calib / "latest.json").write_text(json.dumps(record), encoding="utf-8")
     assert _p8(_allow()).passed and "Alternative Annotator Test passed" in _p8(_allow()).reason
 
     def bad(mutate, match):
-        ev = json.loads(json.dumps(evidence))
+        ev = json.loads(json.dumps(record))
         mutate(ev)
         (calib / "latest.json").write_text(json.dumps(ev), encoding="utf-8")
         with pytest.raises(ValueError, match=match):  # P8 also blocks the config from loading at all
@@ -405,23 +405,83 @@ def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkey
 
     (calib / "latest.json").unlink()
     with pytest.raises(ValueError, match="P8 unsupervised-reject"):
-        _allow()  # no evidence at all
-    (calib / "latest.json").write_text(json.dumps(evidence), encoding="utf-8")
+        _allow()  # no record at all
+    (calib / "latest.json").write_text(json.dumps(record), encoding="utf-8")
     bad(lambda ev: ev["aat"].update(passed=False), "did not pass")
     bad(lambda ev: ev["aat"]["rejection"].update(passed=False), "did not pass")
     # a result from the first, untagged AAT (fixed 0.5 baseline, rejections never examined) is no evidence
     bad(lambda ev: ev["aat"].pop("method"), "uses method None")
     bad(lambda ev: ev["aat"].pop("rejection"), "did not pass")
-    # evidence of the wrong shape is a failed policy, never an exception pydantic would not turn into a refusal
+    # a record of the wrong shape is a failed policy, never an exception pydantic would not turn into a refusal
     bad(lambda ev: ev.update(aat=["passed"]), "uses method None")
     bad(lambda ev: ev["aat"].update(rejection="passed"), "did not pass")
     bad(lambda ev: ev.update(mode="mock"), "not live")
     bad(lambda ev: ev.update(date=(dt.date.today() - dt.timedelta(days=91)).isoformat()), "rerun the calibration")
     bad(lambda ev: ev.update(date=(dt.date.today() + dt.timedelta(days=1)).isoformat()), "in the future")
-    ev = json.loads(json.dumps(evidence))
-    ev["date"] = (dt.date.today() - dt.timedelta(days=90)).isoformat()
-    (calib / "latest.json").write_text(json.dumps(ev), encoding="utf-8")
-    assert _p8(_allow()).passed  # exactly 90 days is still within the window
+
+
+# ---------------------------------------------------------------- P8 reads the Evidence record at the `today` it is given
+
+def _p8_at(tmp_path, monkeypatch, record, today):
+    """P8 on `record` as calib/latest.json (written as given when it is not text), at a fixed `today`. The config is built
+    without its policies: P8 would refuse a failing record before the test could read why."""
+    from mara.policy import p8_unsupervised_reject
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "calib").mkdir(exist_ok=True)
+    (tmp_path / "calib" / "latest.json").write_text(record if isinstance(record, str) else json.dumps(record), encoding="utf-8")
+    cfg = MaraConfig.model_validate(dict(_base(), gate=dict(unsupervised_reject_allowed=True)), context={"skip_policies": True})
+    return p8_unsupervised_reject(cfg, today=today)
+
+
+def _passing_record(**over):
+    from mara.policy import AAT_METHOD
+
+    record = {"date": "2025-02-20", "mode": "live", "aat": {
+        "method": AAT_METHOD, "passed": True, "n": 12, "agreement": 1.0, "chance_agreement": 0.5, "p_value": 0.0002,
+        "rejection": {"n": 59, "misses": 0, "miss_rate_upper": 0.0495, "passed": True}}}
+    return {**record, **over}
+
+
+def test_p8_reads_the_age_of_the_record_against_the_today_it_is_given(tmp_path, monkeypatch):
+    # 2025-02-20 is neither in the past nor the future of the real date, so a P8 that ignores `today` cannot pass these
+    ok = _p8_at(tmp_path, monkeypatch, _passing_record(), dt.date(2025, 3, 1))
+    assert ok.passed and "Alternative Annotator Test passed 2025-02-20 (9 days ago" in ok.reason
+    assert _p8_at(tmp_path, monkeypatch, _passing_record(), dt.date(2025, 5, 21)).passed  # 90 days: still within the window
+    stale = _p8_at(tmp_path, monkeypatch, _passing_record(), dt.date(2025, 5, 22))
+    assert not stale.passed and "the test passed 91 days ago (limit 90); rerun the calibration" in stale.reason
+    future = _p8_at(tmp_path, monkeypatch, _passing_record(), dt.date(2025, 2, 19))
+    assert not future.passed and "the recorded date 2025-02-20 is in the future" in future.reason
+
+
+@pytest.mark.parametrize(
+    ("record", "reason"),
+    [
+        # one fault: the reason says it
+        pytest.param(_passing_record(mode="mock"), "ran in mode 'mock', not live", id="mock"),
+        pytest.param(_passing_record(date="2024-11-01"), "rerun the calibration", id="stale"),
+        pytest.param(_passing_record(date="2025-03-02"), "in the future", id="future"),
+        pytest.param(_passing_record(date="soon"), "no valid date", id="a-date-that-is-not-one"),
+        pytest.param(_passing_record(date=20250220), "no valid date", id="a-date-that-is-a-number"),
+        pytest.param(_passing_record(date="20250220"), "no valid date", id="a-date-that-is-not-YYYY-MM-DD"),
+        # several faults: P8 says the mode's first, then the test's, then the date's
+        pytest.param({**_passing_record(mode="mock", date="2024-11-01"), "aat": {}}, "not live", id="mock-before-the-test-and-the-date"),
+        pytest.param({**_passing_record(date="2024-11-01"), "aat": {"passed": True}}, "uses method None", id="the-method-before-the-date"),
+        pytest.param(_passing_record(date="2025-03-02", aat={**_passing_record()["aat"], "passed": False}), "did not pass",
+                     id="the-result-before-the-date"),
+        pytest.param(_passing_record(mode=None), "ran in mode None, not live", id="no-mode"),
+        pytest.param(_passing_record(mode=5), "ran in mode None, not live", id="a-mode-that-is-not-text"),
+    ],
+)
+def test_p8_says_the_first_thing_that_is_wrong_in_the_order_it_always_has(tmp_path, monkeypatch, record, reason):
+    result = _p8_at(tmp_path, monkeypatch, record, dt.date(2025, 3, 1))
+    assert not result.passed and reason in result.reason
+
+
+@pytest.mark.parametrize("text", ["", "not json", "[]", "3", "null"])
+def test_p8_refuses_a_record_that_is_not_a_json_object(tmp_path, monkeypatch, text):
+    result = _p8_at(tmp_path, monkeypatch, text, dt.date(2025, 3, 1))
+    assert not result.passed and "missing or unreadable" in result.reason
 
 
 # ---------------------------------------------------------------- one check of a config file

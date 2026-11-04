@@ -17,7 +17,7 @@ mutations:
     new: '    config = default_config(inv.provider, root)'
   - name: P8 reads an aat of any shape
     file: src/mara/policy.py
-    old: '    aat = aat if isinstance(aat, dict) else {}  # evidence of another shape records no passing test'
+    old: '    aat = aat if isinstance(aat, dict) else {}  # a record whose test is of another shape records no passing test'
     new: '    aat = aat or {}'
   - name: P8 reads a rejection of any shape
     file: src/mara/policy.py

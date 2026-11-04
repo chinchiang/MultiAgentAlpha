@@ -1,6 +1,6 @@
 """The MARA workspace: where MARA's own trust anchors live, never inside the code under review.
 
-Relative paths for MARA's own state - calib/latest.json (policy P8's evidence), the human-queue
+Relative paths for MARA's own state - calib/latest.json (the Evidence record policy P8 reads), the human-queue
 backlog, the ML-BOM, the PSIRT ledger, and the default tool directory .mara-tools (the pinned,
 verified binaries) - resolve against the workspace root: MARA_HOME when set, the working directory
 otherwise; so do the defaults of `mara review --config/--out`. A review whose workspace, tool directory,

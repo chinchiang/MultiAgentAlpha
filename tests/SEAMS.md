@@ -161,6 +161,20 @@ code that writes it, so it changes with that code:
   `test_tool_env.py`, `test_tool_target_config.py`, `test_base_ref_trivy_hf_token.py`, `test_tools_csp.py`,
   `test_install_tools.py`.
 
+## The Evidence record (`src/mara/evidence.py`)
+
+`test_evidence_record.py` reads `mara.evidence` at its interface: `Header` (made by `Header.from_json` and `Header.from_front_matter`),
+`standing` and `header_fields`, always at a fixed `today`, never at the real date. `mara.policy.p8_unsupervised_reject` takes
+the same `today`, and reads `calib/latest.json` through `mara.workspace.resolve`: a test of it changes into a temporary
+directory and writes the file there. `governance_check` is a script, not a package: the tests put `scripts/` on the import
+path and call `check_g8` and `check_g9`, which take `today` and a config path. A record's mode is `live` in lower case or
+the record is not live; the writers write `live`, `mock` or `dry-run`, and a test that writes a record by hand writes one of
+those. The round trips in `test_evidence_record.py` run the real writers (`scripts/calibrate.py`'s `main`, `front_matter`
+and `latest_record`, and `mara.model_eval.render_garak_report`) and hand what they wrote to the real readers; they patch
+`load_runs` and `training_requirement` of `scripts/calibrate.py` as module names and nothing of the readers. A test that
+reads the front matter of a Markdown report reads it through `mara.evidence.read_front_matter`, which `mara.govdocs`
+imports by name.
+
 ## What a test must not read from the semgrep scan
 
 The number of accepted findings `scripts/semgrep_ci.py` reports is not a stable value: ten scans of the same tree gave

@@ -1,0 +1,138 @@
+focused:
+- tests/test_evidence_record.py
+- tests/test_policy.py
+- tests/test_governance_check.py
+- tests/test_governance_config.py
+mutations:
+- name: a record stands for ninety-one days
+  file: src/mara/evidence.py
+  old: MAX_AGE_DAYS = 90
+  new: MAX_AGE_DAYS = 91
+- name: a record ninety days old is stale
+  file: src/mara/evidence.py
+  old: 'elif age > MAX_AGE_DAYS:'
+  new: 'elif age >= MAX_AGE_DAYS:'
+- name: a record dated in the future stands
+  file: src/mara/evidence.py
+  old: 'if age < 0:'
+  new: 'if False:'
+- name: a mode written in capitals is live
+  file: src/mara/evidence.py
+  old: 'if header.mode != LIVE:'
+  new: 'if (header.mode or '''').lower() != LIVE:'
+- name: a record is live whatever its mode
+  file: src/mara/evidence.py
+  old: 'if header.mode != LIVE:'
+  new: 'if False:'
+- name: no family is ever asked for
+  file: src/mara/evidence.py
+  old: 'if families is not None:'
+  new: 'if False:'
+- name: a record that names no families is an error
+  file: src/mara/evidence.py
+  old: covered = set(header.families or ())
+  new: covered = set(header.families)
+- name: the families missing are named in alphabetical order
+  file: src/mara/evidence.py
+  old: missing = tuple(f for f in families if f not in covered)
+  new: missing = tuple(sorted(f for f in families if f not in covered))
+- name: the families of a header are written as they come
+  file: src/mara/evidence.py
+  old: 'return {"date": date, "mode": mode, "families": sorted(families)}'
+  new: 'return {"date": date, "mode": mode, "families": list(families)}'
+- name: the families of a header are written as family
+  file: src/mara/evidence.py
+  old: 'return {"date": date, "mode": mode, "families": sorted(families)}'
+  new: 'return {"date": date, "mode": mode, "family": sorted(families)}'
+- name: a mode no run has is written
+  file: src/mara/evidence.py
+  old: 'if mode not in MODES:'
+  new: 'if False:'
+- name: a date that is not YYYY-MM-DD is read as a date
+  file: src/mara/evidence.py
+  old: 'if not isinstance(value, str) or not _ISO_DATE.fullmatch(value):'
+  new: 'if not isinstance(value, str):'
+- name: a date that is not a date is an error
+  file: src/mara/evidence.py
+  old: '    except ValueError:'
+  new: '    except KeyError:'
+- name: a mode that is not text is the mode
+  file: src/mara/evidence.py
+  old: return value if isinstance(value, str) else None
+  new: return value
+- name: families that are not strings are kept
+  file: src/mara/evidence.py
+  old: return tuple(f for f in value if isinstance(f, str)) if isinstance(value, list | tuple) else None
+  new: return tuple(value) if isinstance(value, list | tuple) else None
+- name: policy P8 reads the clock, not the today it is given
+  file: src/mara/policy.py
+  old: today = today or dt.date.today()
+  new: today = dt.date.today()
+- name: policy P8 hears nothing of what keeps a record from standing
+  file: src/mara/policy.py
+  old: problems = standing(header, today)
+  new: problems = []
+- name: policy P8 lets a mock record through
+  file: src/mara/policy.py
+  old: '        if isinstance(problem, NotLive):'
+  new: '        if False and isinstance(problem, NotLive):'
+- name: policy P8 lets a stale record through
+  file: src/mara/policy.py
+  old: '        if isinstance(problem, Stale):'
+  new: '        if False and isinstance(problem, Stale):'
+- name: policy P8 lets a record dated in the future through
+  file: src/mara/policy.py
+  old: '        if isinstance(problem, Future):'
+  new: '        if False and isinstance(problem, Future):'
+- name: policy P8 lets a record with no date through
+  file: src/mara/policy.py
+  old: '        if isinstance(problem, NoDate):'
+  new: '        if False and isinstance(problem, NoDate):'
+- name: check G-8 hears nothing of the families a report misses
+  file: scripts/governance_check.py
+  old: missing = next((x.families for x in found if isinstance(x, MissingFamilies)), ())
+  new: missing = ()
+- name: check G-8 says the families before the mode
+  file: scripts/governance_check.py
+  old: "        if not_live:\n            problems.append(f\"`docs/{p.name}`（{d}）mode 為 {not_live.mode or '未標示'}，不是 live\")\n        elif missing:\n            problems.append(f\"`docs/{p.name}`（{d}）未涵蓋家族 {list(missing)}\")\n"
+  new: "        if missing:\n            problems.append(f\"`docs/{p.name}`（{d}）未涵蓋家族 {list(missing)}\")\n        elif not_live:\n            problems.append(f\"`docs/{p.name}`（{d}）mode 為 {not_live.mode or '未標示'}，不是 live\")\n"
+- name: check G-8 opens a report before it looks at its date
+  file: scripts/governance_check.py
+  old: "        date_problem = _date_problem(d, today)\n        if isinstance(date_problem, Future):\n            # a report dated"
+  new: "        read_front_matter(p)\n        date_problem = _date_problem(d, today)\n        if isinstance(date_problem, Future):\n            # a report dated"
+- name: check G-9 hears nothing of the families a report misses
+  file: scripts/governance_check.py
+  old: missing = next((list(x.families) for x in found if isinstance(x, MissingFamilies)), [])
+  new: missing = []
+- name: check G-9 does not ask for the live providers
+  file: scripts/governance_check.py
+  old: 'if missing or "live" not in (meta.get("provider_modes") or ["live"]):'
+  new: 'if missing:'
+- name: check G-9 lists a stale report among the refused
+  file: scripts/governance_check.py
+  old: "        if isinstance(date_problem, Stale):\n            continue\n"
+  new: "        if isinstance(date_problem, Stale):\n            rejected.append(f\"`docs/{p.name}`（{d}，過期）\")\n            continue\n"
+- name: the latest json calls the test something else
+  file: scripts/calibrate.py
+  old: '"aat": aat, "global_alpha": alpha}'
+  new: '"aat_result": aat, "global_alpha": alpha}'
+- name: the latest json carries no header
+  file: scripts/calibrate.py
+  old: 'return {**header_fields(date, mode, families), "aat": aat, "global_alpha": alpha}'
+  new: 'return {"aat": aat, "global_alpha": alpha}'
+- name: a calibration writes its latest json by hand
+  file: scripts/calibrate.py
+  old: json.dumps(latest_record(date, args.mode, families, aat, alpha), ensure_ascii=False, indent=2)
+  new: 'json.dumps({"date": date, "mode": args.mode, "aat": aat, "global_alpha": alpha}, ensure_ascii=False, indent=2)'
+- name: a calibration report writes its header by hand
+  file: scripts/calibrate.py
+  old: '    meta = {"report": "calibration", **header_fields(date, mode, families),'
+  new: '    meta = {"report": "calibration", "date": date, "mode": mode, "families": list(families),'
+- name: an evaluation report leaves out its mode
+  file: src/mara/model_eval.py
+  old: '**header_fields(summary["date"], summary["mode"], families),'
+  new: '"date": summary["date"], "families": families,'
+- name: an evaluation report writes its families as they come
+  file: src/mara/model_eval.py
+  old: '**header_fields(summary["date"], summary["mode"], families),'
+  new: '"date": summary["date"], "mode": summary["mode"], "families": families,'
