@@ -1,0 +1,18 @@
+focused: [tests/test_line_width.py]
+mutations:
+  - name: the diff is read in the locale's encoding
+    file: scripts/line_width.py
+    old: 'capture_output=True, encoding="utf-8", check=True).stdout'
+    new: 'capture_output=True, text=True, check=True).stdout'
+  - name: git quotes a path beyond ascii
+    file: scripts/line_width.py
+    old: 'git = ["git", "-c", "core.quotepath=false", "-C", str(a.repo)]'
+    new: 'git = ["git", "-C", str(a.repo)]'
+  - name: a diff line is split at every line boundary splitlines knows
+    file: scripts/line_width.py
+    old: 'for line in diff.split("\n"):'
+    new: 'for line in diff.splitlines():'
+  - name: the error names git's arguments by a fixed position
+    file: scripts/line_width.py
+    old: 'e.cmd[len(git):len(git) + 2]'
+    new: 'e.cmd[3:5]'
