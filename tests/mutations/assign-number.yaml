@@ -1,0 +1,22 @@
+focused: [tests/test_assign_number.py]
+mutations:
+  - name: git quotes a tracked path beyond ascii
+    file: scripts/assign_number.py
+    old: '["git", "-c", "core.quotepath=false", "ls-files"]'
+    new: '["git", "ls-files"]'
+  - name: the tracked files are read in the locale's encoding
+    file: scripts/assign_number.py
+    old: 'cwd=ROOT, capture_output=True, encoding="utf-8",'
+    new: 'cwd=ROOT, capture_output=True, text=True,'
+  - name: git quotes a leftover path beyond ascii
+    file: scripts/assign_number.py
+    old: '["git", "-c", "core.quotepath=false", "grep", "-l",'
+    new: '["git", "grep", "-l",'
+  - name: the leftovers are read in the locale's encoding
+    file: scripts/assign_number.py
+    old: 'encoding="utf-8").stdout.strip()'
+    new: 'text=True).stdout.strip()'
+  - name: the script's own placeholder constant taken for a leftover
+    file: scripts/assign_number.py
+    old: 'PLACEHOLDER, "--", ".", ":!scripts/assign_number.py"]'
+    new: 'PLACEHOLDER]'

@@ -23,7 +23,8 @@ SKIP = {".git", "__pycache__", ".pytest_cache", ".ruff_cache", "out", "build", "
 
 
 def tracked_text_files() -> list[Path]:
-    out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(["git", "-c", "core.quotepath=false", "ls-files"], cwd=ROOT, capture_output=True, encoding="utf-8",
+                         check=True).stdout
     files = []
     for rel in out.splitlines():
         p = ROOT / rel
@@ -69,7 +70,9 @@ def main() -> int:
         return 0
     for script in ("build_report.py", "build_html.py", "count_words.py", "check_citations.py"):
         subprocess.run([sys.executable, str(ROOT / "scripts" / script)], cwd=ROOT, check=True)
-    leftovers = subprocess.run(["git", "grep", "-l", PLACEHOLDER], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    # This script keeps the placeholder as its constant, so it is no leftover.
+    leftovers = subprocess.run(["git", "-c", "core.quotepath=false", "grep", "-l", PLACEHOLDER, "--", ".", ":!scripts/assign_number.py"],
+                               cwd=ROOT, capture_output=True, encoding="utf-8").stdout.strip()
     if leftovers:
         print("placeholder still present in:", leftovers, file=sys.stderr)
         return 1
