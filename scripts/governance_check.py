@@ -28,12 +28,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from actions_inventory import inventory_workflow  # noqa: E402
 
+from mara.evidence import LIVE, MAX_AGE_DAYS, Future, Header, MissingFamilies, NotLive, Stale, standing  # noqa: E402
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import tools_dir  # noqa: E402
 
 PASS, FAIL, MANUAL = "PASS", "FAIL", "MANUAL"
 STATUS_ZH = {PASS: "通過", FAIL: "失敗", MANUAL: "需人工"}
-FRESH_DAYS = 90
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 COVERED_MARKERS = ("fable", "mythos")
 ALLOWED_RESIDENCY = {"on_prem", "vendor_api_zdr"}
@@ -452,6 +452,12 @@ def _production_families(config_path: Path) -> list[str]:
     return sorted(production_families(load_config(config_path, enforce_policies=False)))
 
 
+def _date_problem(date: dt.date, today: dt.date):
+    """What is wrong with a report's date alone (mara.evidence): read before the report is, as a report too old or too new
+    to count is never opened."""
+    return next(iter(standing(Header(date, LIVE, None), today)), None)
+
+
 def _fresh_live_report(root: Path, pattern: str, today: dt.date, families: list[str]) -> tuple[list[str], list[str]]:
     """(evidence for a fresh live report covering the families, problems otherwise)."""
     from mara.govdocs import read_front_matter
@@ -459,23 +465,25 @@ def _fresh_live_report(root: Path, pattern: str, today: dt.date, families: list[
     files = _dated_files(root / "docs", [pattern], today)
     problems, ev = [], []
     for p, d, age in files:
-        if age < 0:
+        date_problem = _date_problem(d, today)
+        if isinstance(date_problem, Future):
             # a report dated in the future would otherwise count as fresh until long after it expired
             problems.append(f"`docs/{p.name}` 的日期 {d} 晚於今天，不是實際執行的紀錄")
             continue
-        if age > FRESH_DAYS:
-            problems.append(f"`docs/{p.name}` 已 {age} 天（> {FRESH_DAYS}）")
+        if isinstance(date_problem, Stale):
+            problems.append(f"`docs/{p.name}` 已 {date_problem.age_days} 天（> {date_problem.limit}）")
             continue
         meta, _ = read_front_matter(p)
-        mode = str(meta.get("mode", "")).lower()
-        covered = set(meta.get("families") or [])
-        missing = [f for f in families if f not in covered]
-        if mode != "live":
-            problems.append(f"`docs/{p.name}`（{d}）mode 為 {mode or '未標示'}，不是 live")
+        header = Header.from_front_matter(meta, d)
+        found = standing(header, today, families)
+        not_live = next((x for x in found if isinstance(x, NotLive)), None)
+        missing = next((x.families for x in found if isinstance(x, MissingFamilies)), ())
+        if not_live:
+            problems.append(f"`docs/{p.name}`（{d}）mode 為 {not_live.mode or '未標示'}，不是 live")
         elif missing:
-            problems.append(f"`docs/{p.name}`（{d}）未涵蓋家族 {missing}")
+            problems.append(f"`docs/{p.name}`（{d}）未涵蓋家族 {list(missing)}")
         else:
-            ev.append(f"`docs/{p.name}`（{d}，{age} 天前，live，家族 {sorted(covered)}）")
+            ev.append(f"`docs/{p.name}`（{d}，{age} 天前，live，家族 {sorted(header.families or ())}）")
             break
     if not files:
         problems.append(f"沒有 `docs/{pattern}`")
@@ -486,7 +494,7 @@ def check_g8(root: Path, today: dt.date, config_path: Path | None = None) -> Che
     families = _production_families(config_path) if config_path else []
     ev_g, pr_g = _fresh_live_report(root, "garak-*.md", today, families)
     ev_c, pr_c = _fresh_live_report(root, "cyberseceval-*.md", today, families)
-    need = (f"需要：{FRESH_DAYS} 天內用 `scripts/model_eval.py run` 對 {families or '三個家族'} 執行 garak 與 CyberSecEval 4"
+    need = (f"需要：{MAX_AGE_DAYS} 天內用 `scripts/model_eval.py run` 對 {families or '三個家族'} 執行 garak 與 CyberSecEval 4"
             "（prompt-injection、mitre-frr），`report --mode live` 產生 `docs/garak-<date>.md` 與 `docs/cyberseceval-<date>.md`；見 `docs/model-eval-runbook.md`")
     if ev_g and ev_c:
         summary = ""
@@ -509,27 +517,28 @@ def check_g9(root: Path, today: dt.date, config_path: Path | None = None) -> Che
     files = _dated_files(root / "docs", ["calibration-*.md"], today)
     fresh, rejected = [], []
     for p, d, age in files:
-        if age < 0:
+        date_problem = _date_problem(d, today)
+        if isinstance(date_problem, Future):
             rejected.append(f"`docs/{p.name}`（{d}，日期晚於今天）")
             continue
-        if age > FRESH_DAYS:
+        if isinstance(date_problem, Stale):
             continue
-        meta, body = read_front_matter(p)
-        head = body[:600] if meta else p.read_text(encoding="utf-8")[:600]
-        mode = str(meta.get("mode", "")).lower() if meta else ("mock" if re.search(r"執行模式[:：]\s*\**mock", head) else "")
-        if mode != "live":
-            rejected.append(f"`docs/{p.name}`（{d}，{mode or 'mode 未標示'}）")
+        meta, _ = read_front_matter(p)
+        header = Header.from_front_matter(meta, d)
+        found = standing(header, today, families)
+        not_live = next((x for x in found if isinstance(x, NotLive)), None)
+        if not_live:
+            rejected.append(f"`docs/{p.name}`（{d}，{not_live.mode or 'mode 未標示'}）")
             continue
-        covered = set(meta.get("families") or [])
-        missing = [f for f in families if f not in covered]
+        missing = next((list(x.families) for x in found if isinstance(x, MissingFamilies)), [])
         if missing or "live" not in (meta.get("provider_modes") or ["live"]):
             rejected.append(f"`docs/{p.name}`（{d}，未涵蓋 {missing or meta.get('provider_modes')}）")
             continue
-        fresh.append(f"`docs/{p.name}`（{d}，{age} 天前，live，家族 {sorted(covered)}，{meta.get('labels', '?')} 個標籤）")
+        fresh.append(f"`docs/{p.name}`（{d}，{age} 天前，live，家族 {sorted(header.families or ())}，{meta.get('labels', '?')} 個標籤）")
     if fresh:
         return CheckResult("G-9", PASS, "；".join(fresh))
     detail = "；".join(rejected) if rejected else (f"最新校準報告 {files[0][2]} 天前" if files else "無校準報告")
-    return CheckResult("G-9", FAIL, f"{detail}。需要：{FRESH_DAYS} 天內以真實家族 {families or ''} 執行 "
+    return CheckResult("G-9", FAIL, f"{detail}。需要：{MAX_AGE_DAYS} 天內以真實家族 {families or ''} 執行 "
                        "`scripts/calibration_run.py --mode live`（check-config → 每個樣本 mara review → calibrate --mode live），"
                        "報告 front matter 的 mode 為 live 且 families 涵蓋設定中的家族")
 
@@ -703,7 +712,7 @@ def render(results: list[CheckResult], *, root: Path, config_path: Path, date: s
     L = [f"# 治理合規檢查（{date}）", "",
          "依附錄 E 的 prompt 8，對報告第十部治理建議 G-1 到 G-13 做可自動判定的檢查。本檔由 `scripts/governance_check.py` 產生；"
          "「需人工」表示無法從檔案判定，該列的證據欄寫明需要什麼證據。任一「失敗」使腳本以非零結束。", "",
-         f"- 掃描根目錄：`{root.name}/`；設定檔：`{_shown(config_path, root)}`；報告與紀錄的新鮮度門檻：{FRESH_DAYS} 天。",
+         f"- 掃描根目錄：`{root.name}/`；設定檔：`{_shown(config_path, root)}`；報告與紀錄的新鮮度門檻：{MAX_AGE_DAYS} 天。",
          "- 標準條文取自報告第 25.4 節對應總表；標 * 者的 ISO 控制項標題尚未對照正本（附錄 B）。", "",
          "| 建議 | 內容 | 狀態 | 證據 | 對應標準條文 |", "|---|---|---|---|---|"]
     for r in results:

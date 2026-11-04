@@ -256,9 +256,13 @@ def test_governance_g8_g9_fail_here_and_pass_on_live_reports(tmp_path):
     (root / "docs" / "calibration-2026-09-01.md").write_text(fm("calibration", "live", fams, "provider_modes: [live]\nlabels: 51\n"), encoding="utf-8")
     r = gc.check_g9(root, TODAY, root / "config" / "mara.yaml")
     assert r.status == gc.PASS and "51 個標籤" in r.evidence
-    # the legacy mock report without front matter is still recognised as mock
+    # a report with no front matter says nothing of its mode, whatever its body says: it is not taken for a mock report, or
+    # for anything. Beside the live report the check still passes; with that one gone it fails for want of a mode.
     (root / "docs" / "calibration-2026-09-05.md").write_text("# 第一次校準報告\n\n執行模式：**mock**。\n", encoding="utf-8")
-    assert "mock" in gc.check_g9(root, TODAY, root / "config" / "mara.yaml").evidence or gc.check_g9(root, TODAY, root / "config" / "mara.yaml").status == gc.PASS
+    assert gc.check_g9(root, TODAY, root / "config" / "mara.yaml").status == gc.PASS
+    (root / "docs" / "calibration-2026-09-01.md").unlink()
+    r = gc.check_g9(root, TODAY, root / "config" / "mara.yaml")
+    assert r.status == gc.FAIL and "（2026-09-05，mode 未標示）" in r.evidence
 
 
 def test_pipeline_records_model_eval_status(tmp_path, monkeypatch):

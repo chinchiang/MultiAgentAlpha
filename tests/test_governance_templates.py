@@ -217,6 +217,18 @@ def test_drill_cli_rehearse_record_check(tmp_path):
     assert r.returncode == 2 and "same form" in r.stderr and "Traceback" not in r.stderr
 
 
+def test_drill_cli_rehearse_reads_the_family_a_standby_document_declares(tmp_path):
+    """A standby may be a document whose front matter says `standby_for` (mara.govdocs.read_front_matter reads it): the
+    family it names is the one rehearse checks against the production families, before it looks at anything else."""
+    drills = tmp_path / "drills.yaml"
+    shutil.copy(ROOT / "ops" / "model-swap-drills.yaml", drills)
+    standby = tmp_path / "standby.md"
+    standby.write_text("---\nstandby_for: nothere\n---\n# a standby written as a document\n", encoding="utf-8")
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "model_swap_drill.py"), "--drills", str(drills), "--today", "2026-09-12",
+                        "rehearse", "--standby", str(standby)], capture_output=True, text=True)
+    assert r.returncode == 2 and "standby_for='nothere' is not a production family" in r.stderr and "Traceback" not in r.stderr
+
+
 # ---------------------------------------------------------------- G-10
 
 def _cfg(**rollout) -> MaraConfig:

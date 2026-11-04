@@ -220,6 +220,10 @@ _Avoid_: metric, statistic (a counter counts; the jury's agreement and alpha are
 What a report records about the circumstances of its review rather than about how the review went: the rollout phase, the human queue's tightening, the ML-BOM status and signature, and the model families' red-team evaluations. Each is a field of the report of its own, none is in the bias audit, and a report written before a value was recorded reads it as not recorded.
 _Avoid_: bias audit, config (the config is what was asked for; the metadata are what was in force)
 
+**Evidence record**:
+The dated file a live calibration or evaluation leaves for a policy or governance check to read: `calib/latest.json` (policy P8), the front matter of `docs/garak-*.md` and `docs/cyberseceval-*.md` (check G-8) and the front matter of `docs/calibration-*.md` (check G-9). It says its date, its mode (live, mock or dry-run) and the families it covers; `calib/latest.json` has named its families since they were added, and policy P8 asks it for none. It stands when it is not dated in the future, is at most 90 days old, is live (the mode is written `live`, in lower case) and covers the families asked of it; `mara.evidence` says whether it stands, and each problem it finds is the reader's to word.
+_Avoid_: evidence (see Tool evidence, evidence tier), report (a review's report), attestation
+
 ## Exports
 
 **Finding detail**:

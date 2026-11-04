@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, get_args
 from .audit import Count, read
 from .decisions import TrainingRequirement, select
 from .decisions import load as load_decisions
+from .evidence import read_front_matter
 from .reviewed_content import ReviewedContent
 from .schemas import ConsensusResult, JuryOutcomeValue
 
@@ -51,22 +52,6 @@ POLICY_MAX_AGE_DAYS = 365
 DRILL_MAX_HOURS = 7 * 24
 DRILL_MAX_AGE_DAYS = 365
 ROLLOUT_PHASES = ("not_started", "shadow", "advisory", "blocking")
-
-
-# ---------------------------------------------------------------- front matter
-
-def read_front_matter(path: Path | str) -> tuple[dict, str]:
-    """(front matter dict, body) for a Markdown file starting with a `---` YAML block."""
-    import yaml
-
-    text = Path(path).read_text(encoding="utf-8")
-    if not text.startswith("---\n"):
-        return {}, text
-    end = text.find("\n---\n", 4)
-    if end < 0:
-        return {}, text
-    meta = yaml.safe_load(text[4:end]) or {}
-    return (meta if isinstance(meta, dict) else {}), text[end + 5:]
 
 
 def _date(v) -> dt.date | None:

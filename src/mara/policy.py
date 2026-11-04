@@ -3,8 +3,8 @@
 Every policy is evaluated on its own, so `mara check-config` and the workbench's environment page can list all
 violations at once (evaluate_policies, or check_config_file for a config file); `MaraConfig` then refuses to load when
 any policy fails. A policy is a function of the parsed configuration and never reaches the network. Pure, except that
-P7 reads the workspace's ML-BOM and its signature bundle, P8 the workspace's calib/latest.json, and check_config_file
-the config file it is given.
+P7 reads the workspace's ML-BOM and its signature bundle, P8 the workspace's calib/latest.json and, unless it is given a
+`today`, the clock, and check_config_file the config file it is given.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .config import INVALID_FILE_ERRORS, MaraConfig, load_config
+from .evidence import Future, Header, NoDate, NotLive, Stale, standing
 from .schemas import ModelFamily
 from .workspace import resolve
 
@@ -25,7 +26,6 @@ PRIVATE_SUFFIXES = (".internal", ".local", ".lan")
 MAX_SELF_JUDGE_DISCOUNT = 0.5
 MIN_HUMAN_THRESHOLD_ALPHA = 0.3
 MIN_FAMILIES = 3
-AAT_MAX_AGE_DAYS = 90
 AAT_EVIDENCE = Path("calib/latest.json")  # below the MARA workspace root (mara.workspace.resolve)
 # scripts/calibrate.py::alternative_annotator_test tags its result with this; P8 accepts no other.
 # The untagged first version tested agreement against a fixed 0.5 baseline (a constant labeller
@@ -291,13 +291,13 @@ def p7_ml_bom(cfg: MaraConfig) -> PolicyResult:
     return PolicyResult("P7", "ml-bom", True, f"{len(complete)}/{len(statuses)} self-hosted models complete in {mb.path}{sig}: {summary}")
 
 
-def p8_unsupervised_reject(cfg: MaraConfig) -> PolicyResult:
+def p8_unsupervised_reject(cfg: MaraConfig, today: dt.date | None = None) -> PolicyResult:
     """Assessment #60: unsupervised rejection needs a passing Alternative Annotator Test.
 
-    `gate.unsupervised_reject_allowed: true` is only valid while `calib/latest.json` (written by
-    scripts/calibrate.py) records a passing test on a live calibration within the last 90 days.
-    While it is false - the default - every rejected non-D finding goes to the human queue
-    instead of being dropped without review.
+    `gate.unsupervised_reject_allowed: true` is only valid while the Evidence record `calib/latest.json` (written by
+    scripts/calibrate.py) stands (mara.evidence) and records a passing test. While it is false - the default - every
+    rejected non-D finding goes to the human queue instead of being dropped without review. The first thing wrong is
+    said, in this order: the mode, the test, the date.
     """
     if not cfg.gate.unsupervised_reject_allowed:
         return PolicyResult(
@@ -314,33 +314,37 @@ def p8_unsupervised_reject(cfg: MaraConfig) -> PolicyResult:
             "unsupervised_reject_allowed is true but calib/latest.json is missing or unreadable; "
             "run scripts/calibrate.py --mode live first",
         )
+    today = today or dt.date.today()
+    header = Header.from_json(latest)
+    problems = standing(header, today)
+    for problem in problems:
+        if isinstance(problem, NotLive):
+            return PolicyResult("P8", "unsupervised-reject", False,
+                                f"the recorded test ran in mode {problem.mode!r}, not live; a mock run can never justify unsupervised rejection")
     aat = latest.get("aat")
-    aat = aat if isinstance(aat, dict) else {}  # evidence of another shape records no passing test
-    if latest.get("mode") != "live":
-        return PolicyResult("P8", "unsupervised-reject", False,
-                            f"the recorded test ran in mode {latest.get('mode')!r}, not live; a mock run can never justify unsupervised rejection")
+    aat = aat if isinstance(aat, dict) else {}  # a record whose test is of another shape records no passing test
     if aat.get("method") != AAT_METHOD:
         return PolicyResult("P8", "unsupervised-reject", False,
                             f"the recorded test uses method {aat.get('method')!r}, not {AAT_METHOD!r}; rerun scripts/calibrate.py --mode live")
     rejection = aat.get("rejection")
     if not aat.get("passed") or not (isinstance(rejection, dict) and rejection.get("passed")):
         return PolicyResult("P8", "unsupervised-reject", False, "the recorded Alternative Annotator Test did not pass")
-    try:
-        when = dt.date.fromisoformat(str(latest.get("date")))
-    except ValueError:
-        return PolicyResult("P8", "unsupervised-reject", False, "calib/latest.json has no valid date")
-    age = (dt.date.today() - when).days
-    if age < 0:
-        return PolicyResult(
-            "P8", "unsupervised-reject", False,
-            f"the recorded date {when.isoformat()} is in the future; calib/latest.json must record a real, past run",
-        )
-    if age > AAT_MAX_AGE_DAYS:
-        return PolicyResult("P8", "unsupervised-reject", False,
-                            f"the test passed {age} days ago (limit {AAT_MAX_AGE_DAYS}); rerun the calibration")
+    for problem in problems:
+        if isinstance(problem, NoDate):
+            return PolicyResult("P8", "unsupervised-reject", False, "calib/latest.json has no valid date")
+        if isinstance(problem, Future):
+            return PolicyResult(
+                "P8", "unsupervised-reject", False,
+                f"the recorded date {problem.date.isoformat()} is in the future; calib/latest.json must record a real, past run",
+            )
+        if isinstance(problem, Stale):
+            return PolicyResult("P8", "unsupervised-reject", False,
+                                f"the test passed {problem.age_days} days ago (limit {problem.limit}); rerun the calibration")
+    assert header.date is not None  # a record that stands has a date
+    age = (today - header.date).days
     return PolicyResult(
         "P8", "unsupervised-reject", True,
-        f"Alternative Annotator Test passed {when.isoformat()} ({age} days ago, n={aat.get('n')}, "
+        f"Alternative Annotator Test passed {header.date.isoformat()} ({age} days ago, n={aat.get('n')}, "
         f"agreement={aat.get('agreement')} vs chance {aat.get('chance_agreement')}, p={aat.get('p_value')}; "
         f"{aat['rejection'].get('n')} decided rejections, miss-rate upper bound {aat['rejection'].get('miss_rate_upper')})",
     )

@@ -60,6 +60,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .evidence import header_fields
+
 if TYPE_CHECKING:
     from .config import MaraConfig
 
@@ -440,7 +442,7 @@ def family_eval_status(root: Path | str, families: list[str]) -> dict[str, dict]
 def _front_matter(kind: str, summary: dict, families: list[str]) -> str:
     import yaml
 
-    meta = {"report": kind, "date": summary["date"], "mode": summary["mode"], "families": families,
+    meta = {"report": kind, **header_fields(summary["date"], summary["mode"], families),
             "tool": "garak" if kind == "garak" else "cyberseceval",
             "version": summary["garak_version"] if kind == "garak" else summary["cyberseceval_ref"],
             "thresholds": summary["thresholds"], "governance": "G-8"}
