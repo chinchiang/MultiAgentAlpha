@@ -222,13 +222,21 @@ class FamilyDrillStatus:
         return self.config_ok and self.drill_ok
 
 
-def _standby_family_of(prod: list[str], cfg_path: Path, replaced: str) -> tuple[str, str]:
-    """(standby family, problem) after loading the standby config through the policies."""
+def _declared_standby_for(path: Path) -> str:
+    """The family a standby names in `standby_for`: in the front matter of a `.md` document, else in the YAML config."""
     import yaml
 
+    path = Path(path)
+    if path.suffix == ".md":
+        return str(read_front_matter(path)[0].get("standby_for", ""))
+    return str((yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("standby_for", ""))
+
+
+def _standby_family_of(prod: list[str], cfg_path: Path, replaced: str) -> tuple[str, str]:
+    """(standby family, problem) after loading the standby config through the policies."""
     from .config import load_config
 
-    declared = str((yaml.safe_load(Path(cfg_path).read_text(encoding="utf-8")) or {}).get("standby_for", ""))
+    declared = _declared_standby_for(cfg_path)
     if declared != replaced:
         return "", f"declares standby_for: {declared!r}, not {replaced!r}"
     try:

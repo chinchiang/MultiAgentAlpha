@@ -229,6 +229,27 @@ def test_drill_cli_rehearse_reads_the_family_a_standby_document_declares(tmp_pat
     assert r.returncode == 2 and "standby_for='nothere' is not a production family" in r.stderr and "Traceback" not in r.stderr
 
 
+def test_drill_cli_rehearse_says_a_standby_document_is_not_a_config_instead_of_crashing(tmp_path):
+    """A standby document that names a real production family gets past the family check and reaches
+    govdocs._standby_family_of, which read the whole Markdown file as one YAML document and died on the `---` that
+    closes the front matter (ComposerError, a traceback). It is not a config, so it is reported as one that does not load."""
+    drills = tmp_path / "drills.yaml"
+    shutil.copy(ROOT / "ops" / "model-swap-drills.yaml", drills)
+    standby = tmp_path / "standby.md"
+    standby.write_text("---\nstandby_for: glm\n---\n# a standby written as a document\n", encoding="utf-8")
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "model_swap_drill.py"), "--drills", str(drills), "--today", "2026-09-12",
+                        "rehearse", "--standby", str(standby)], capture_output=True, text=True)
+    assert "Traceback" not in r.stderr and r.returncode == 2 and "does not load" in r.stderr
+
+
+@pytest.mark.parametrize("declared, problem_starts", [("glm", "does not load"), ("deepseek", "declares standby_for: 'deepseek', not 'glm'")])
+def test_a_standby_document_is_read_by_its_front_matter(tmp_path, declared, problem_starts):
+    standby = tmp_path / "standby.md"
+    standby.write_text(f"---\nstandby_for: {declared}\n---\n# a standby written as a document\n", encoding="utf-8")
+    family, problem = govdocs._standby_family_of(["anthropic", "gemini", "glm"], standby, "glm")
+    assert family == "" and problem.startswith(problem_starts)
+
+
 # ---------------------------------------------------------------- G-10
 
 def _cfg(**rollout) -> MaraConfig:

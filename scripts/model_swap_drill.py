@@ -61,11 +61,7 @@ def cmd_rehearse(a: argparse.Namespace) -> int:
 
     prod = load_config(a.config)
     prod_fams = govdocs.production_families(prod)
-    replaced = str(a.replaced or (govdocs.read_front_matter(a.standby)[0].get("standby_for") if a.standby.suffix == ".md" else "") or "")
-    if not replaced:
-        import yaml
-
-        replaced = str((yaml.safe_load(a.standby.read_text(encoding="utf-8")) or {}).get("standby_for", ""))
+    replaced = str(a.replaced or govdocs._declared_standby_for(a.standby))
     if replaced not in prod_fams:
         print(f"ERROR: standby_for={replaced!r} is not a production family {prod_fams}", file=sys.stderr)
         return 2
