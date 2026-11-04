@@ -4,8 +4,10 @@
 
 ruff checks line length in src/ only (pyproject.toml ignores E501 for tests/ and scripts/, which hold lines wider than
 that); this checks every Python file, but only the lines the commits since the merge base of --base and --head add,
-so the lines already there are left alone. A line is as wide as its characters. Each wider line is printed as
-path:line: width. Exit 0 when none is wider, 1 when one is, 2 when git cannot tell the change.
+so the lines already there are left alone. A line is as wide as its characters. The diff is read as UTF-8 whatever
+the locale's encoding, with paths as they are (core.quotepath=false), and split at newlines only, as git ends its
+lines. Each wider line is printed as path:line: width. Exit 0 when none is wider, 1 when one is, 2 when git cannot
+tell the change.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ HUNK = re.compile(r"^@@ -\S+ \+(\d+)(?:,\d+)? @@")
 def added_lines(diff: str) -> list[tuple[str, int, str]]:
     """(path, line number, text) of every line a `git diff --unified=0` adds."""
     lines, path, number = [], None, 0
-    for line in diff.splitlines():
+    for line in diff.split("\n"):  # git ends a line at a newline only; splitlines() also splits at FF, FS, NEL, LS, PS
         if line.startswith("+++ "):
             path = line[len("+++ b/"):] if line.startswith("+++ b/") else None  # +++ /dev/null: a deleted file
         elif m := HUNK.match(line):
@@ -40,13 +42,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--head", default="HEAD")
     ap.add_argument("--repo", type=Path, default=Path("."), help=argparse.SUPPRESS)  # a repository other than this one (tests)
     a = ap.parse_args(argv)
-    git = ["git", "-C", str(a.repo)]
+    git = ["git", "-c", "core.quotepath=false", "-C", str(a.repo)]  # paths as they are, not quoted octal escapes
     try:
         base = subprocess.run([*git, "merge-base", a.base, a.head], capture_output=True, text=True, check=True).stdout.strip()
         diff = subprocess.run([*git, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/",
-                               f"{base}..{a.head}", "--", "*.py"], capture_output=True, text=True, check=True).stdout
+                               f"{base}..{a.head}", "--", "*.py"], capture_output=True, encoding="utf-8", check=True).stdout
     except subprocess.CalledProcessError as e:
-        print(f"ERROR: git {' '.join(e.cmd[3:5])} failed for --base {a.base}: {e.stderr.strip()}", file=sys.stderr)
+        print(f"ERROR: git {' '.join(e.cmd[len(git):len(git) + 2])} failed for --base {a.base}: {e.stderr.strip()}", file=sys.stderr)
         return 2
     wide = [(path, n, len(text)) for path, n, text in added_lines(diff) if len(text) > LIMIT]
     for path, n, width in sorted(wide):
