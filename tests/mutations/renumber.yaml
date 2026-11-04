@@ -40,3 +40,11 @@ mutations:
     file: scripts/renumber.py
     old: '    if renamed != message:'
     new: '    if False:'
+  - name: git's output read in the locale's encoding
+    file: scripts/renumber.py
+    old: 'capture_output=True, encoding="utf-8", check=check)'
+    new: 'capture_output=True, text=True, check=check)'
+  - name: the renamed message written in the locale's encoding
+    file: scripts/renumber.py
+    old: 'input=renamed, encoding="utf-8", check=True)'
+    new: 'input=renamed, text=True, check=True)'

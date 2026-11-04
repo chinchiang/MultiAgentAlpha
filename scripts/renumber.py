@@ -8,7 +8,8 @@ It resolves the conflicts the version alone causes: the CHANGELOG keeps both sid
 new version; src/mara/__init__.py is main's with the new version; the demo is main's, re-assembled by
 scripts/build_workbench_demo.py, which reads mara from this working tree (run it here, not in another worktree). Then it
 finishes the rebase and makes the first sentence's closing ", v<old>" in the commit message ", v<new>"; other mentions of
-the old version are left for a human.
+the old version are left for a human. git's output is read, and the message written back, as UTF-8 whatever the locale's
+encoding.
 
 It refuses, changing nothing, outside a rebase (git leaves REBASE_HEAD behind when one ends, so the rebase's state
 directory decides), with more commits still to apply, with a conflict in any other file, without a CHANGELOG conflict,
@@ -34,7 +35,7 @@ CONFLICT_RE = re.compile(r"^<<<<<<< [^\n]*\n(.*?)^=======\n(.*?)^>>>>>>> [^\n]*\
 
 
 def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], capture_output=True, text=True, check=check)
+    return subprocess.run(["git", *args], capture_output=True, encoding="utf-8", check=check)
 
 
 class Refusal(Exception):
@@ -128,7 +129,7 @@ def renumber(target: str | None) -> None:
     _git("-c", "core.editor=true", "rebase", "--continue")
     renamed = _subject(message, old, target)
     if renamed != message:
-        subprocess.run(["git", "commit", "-q", "--amend", "-F", "-"], input=renamed, text=True, check=True)
+        subprocess.run(["git", "commit", "-q", "--amend", "-F", "-"], input=renamed, encoding="utf-8", check=True)
     print(f"renumber: v{old} -> v{target}")
 
 
