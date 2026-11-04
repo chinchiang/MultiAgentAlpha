@@ -8,12 +8,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.locale_env import not_utf8_env
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "renumber.py"
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-c", "commit.gpgsign=false", *args], cwd=repo, capture_output=True, text=True, check=check)
+    return subprocess.run(["git", "-c", "commit.gpgsign=false", *args], cwd=repo, capture_output=True, encoding="utf-8", check=check)
 
 
 def _renumber(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -111,6 +113,45 @@ def test_a_collision_on_the_changelog_alone_takes_the_next_version_and_finishes_
     assert _git(repo, "status", "--porcelain").stdout == ""
     again = _renumber(repo)  # REBASE_HEAD is still there, the rebase is not
     assert again.returncode == 2 and "no rebase in progress" in again.stderr, again.stdout + again.stderr
+
+
+def _collide_on_the_changelog(repo: Path, branch_files: dict[str, str], message: str) -> None:
+    """The branch and main both take v0.13.26; the rebase stops on the CHANGELOG alone."""
+    _git(repo, "switch", "-q", "-c", "branch")
+    _release(repo, "0.13.26", "| 2026-10-28 | v0.13.26 | 分支的修正。報告正文未變 | t | 0 |\n", message, branch_files)
+    _git(repo, "switch", "-q", "main")
+    _release(repo, "0.13.26", "| 2026-10-27 | v0.13.26 | main 的修正。報告正文未變 | t | 0 |\n", "main's fix, v0.13.26")
+    _git(repo, "switch", "-q", "branch")
+    assert _git(repo, "rebase", "main", check=False).returncode != 0
+
+
+def _renumber_in_a_locale_that_is_not_utf8(repo: Path) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(SCRIPT)], cwd=repo, env=not_utf8_env(), capture_output=True, encoding="utf-8")
+
+
+def test_a_branch_whose_files_hold_text_beyond_ascii_is_renumbered_whatever_the_locale(tmp_path):
+    """The drift check reads `git diff` of the branch's files; read in the locale's encoding (cp950 on a Windows host),
+    a line beyond ASCII raised UnicodeDecodeError in subprocess's reader thread and renumber died on a None diff."""
+    repo = _repo(tmp_path)
+    _collide_on_the_changelog(repo, {"src/mara/feature.py": "LIMIT = 4  # 四個\n"}, "The feature waits for four, v0.13.26")
+
+    res = _renumber_in_a_locale_that_is_not_utf8(repo)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert not _rebasing(repo)
+    assert (repo / "src/mara/feature.py").read_text(encoding="utf-8") == "LIMIT = 4  # 四個\n"
+    assert _rows(repo)[0] == "v0.13.27 分支的修正。報告正文未變"
+
+
+def test_a_commit_message_beyond_ascii_is_written_back_as_utf8_whatever_the_locale(tmp_path):
+    """The renamed message went to `git commit --amend -F -` encoded in the locale's encoding: on ASCII it raised
+    UnicodeEncodeError, on cp950 git stored cp950 bytes as the UTF-8 message. Read back as bytes, not through a locale."""
+    repo = _repo(tmp_path)
+    _collide_on_the_changelog(repo, {"src/mara/feature.py": "LIMIT = 4\n"}, "功能等四個, v0.13.26. 第一句寫版本\n\n內文。")
+
+    res = _renumber_in_a_locale_that_is_not_utf8(repo)
+    assert res.returncode == 0, res.stdout + res.stderr
+    raw = subprocess.run(["git", "log", "-1", "--format=%B"], cwd=repo, capture_output=True, check=True).stdout
+    assert raw.decode("utf-8").rstrip("\n") == "功能等四個, v0.13.27. 第一句寫版本\n\n內文。"
 
 
 def test_a_collision_on_the_version_and_the_demo_too_takes_the_version_asked_for(tmp_path):

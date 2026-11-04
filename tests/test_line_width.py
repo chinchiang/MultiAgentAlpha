@@ -3,12 +3,13 @@ scripts/check_local.py and by CI on a pull request; the lines already there are 
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from tests.locale_env import not_utf8_env
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -71,16 +72,9 @@ def test_the_change_is_read_from_the_merge_base_so_a_base_that_moved_on_adds_not
 
 
 def _run_in_a_locale_that_is_not_utf8(repo: Path) -> subprocess.CompletedProcess:
-    """The script as check_local and CI run it, in a child whose locale encoding is not UTF-8: the Windows code page
-    (cp950 on the host this was found on), or ASCII on Linux, with the C locale and neither PEP 538 nor PEP 540 to turn
-    it into UTF-8."""
-    env = {**os.environ, "LC_ALL": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0", "PYTHONIOENCODING": "utf-8"}
-    probe = subprocess.run([sys.executable, "-c", "import locale; print(locale.getencoding())"], env=env,
-                           capture_output=True, text=True, check=True).stdout.strip()
-    if probe.lower().replace("-", "") in ("utf8", "cp65001"):
-        pytest.skip(f"this host's locale encoding is {probe} even with LC_ALL=C and PYTHONUTF8=0")
+    """The script as check_local and CI run it, in a child whose locale encoding is not UTF-8 (tests/locale_env.py)."""
     return subprocess.run([sys.executable, str(ROOT / "scripts" / "line_width.py"), "--base", "main", "--repo", str(repo)],
-                          env=env, capture_output=True, encoding="utf-8")
+                          env=not_utf8_env(), capture_output=True, encoding="utf-8")
 
 
 def test_a_change_with_text_beyond_ascii_is_read_as_utf8_whatever_the_locale(tmp_path):
