@@ -47,6 +47,21 @@ def test_the_newest_changelog_row_says_whether_the_report_body_and_the_demo_chan
     assert any("展示頁" in s and "擷取" in s for s in sentences), "no sentence says whether the demo was recaptured"
 
 
+def test_every_changelog_row_is_one_line_of_printable_text():
+    """v0.5.3 and v0.5.9 meant the escapes `\\n`, `\\r\\n`, `\\x1c`, `.\\app.py` and got the characters
+    themselves (a shell heredoc expanded them): each row broke over several lines, so the table lost
+    them, and BEL, FS, RS, NEL, LS and PS sat in the text."""
+    text = (ROOT / "docs" / "CHANGELOG.md").read_text(encoding="utf-8")
+    hidden = sorted({hex(ord(c)) for c in text if (ord(c) < 0x20 and c != "\n") or c in "\x7f\x85\u2028\u2029"})
+    assert not hidden, f"control or line-separator characters in docs/CHANGELOG.md: {hidden}"
+    lines = text.split("\n")
+    header = lines.index("|---|---|---|---|---|")
+    table = lines[header + 1:lines.index("", header)]
+    broken = [n for n, line in enumerate(table, header + 2)
+              if not re.fullmatch(r"\| \d{4}-\d{2}-\d{2} \| v\d+\.\d+\.\d+ \| .* \|", line)]
+    assert not broken, f"docs/CHANGELOG.md lines that are not a whole row: {broken}"
+
+
 def test_pyproject_takes_the_version_from_the_package():
     meta = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert "version" not in meta["project"] and meta["project"]["dynamic"] == ["version"]
