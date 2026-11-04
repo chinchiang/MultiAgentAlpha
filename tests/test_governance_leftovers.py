@@ -65,8 +65,8 @@ def test_a_self_hosted_target_never_gets_another_vendors_key(monkeypatch):
     assert me.target_key_env(t) == ""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret")
     assert "sk-ant-secret" not in me.cse_spec(t, me.NO_KEY)
-    assert me.target_key_env(me.EvalTarget("gemini", "g", "m", "gemini", "", "")) == me.GEMINI_KEY_ENV
-    assert me.target_key_env(me.EvalTarget("anthropic", "a", "m", "anthropic", "", "")) == me.ANTHROPIC_KEY_ENV
+    assert me.target_key_env(me.EvalTarget("gemini", "g", "m", "gemini", "", "")) == "GEMINI_API_KEY"
+    assert me.target_key_env(me.EvalTarget("anthropic", "a", "m", "anthropic", "", "")) == "ANTHROPIC_API_KEY"
     assert me.target_key_env(me.EvalTarget("glm", "g", "m", "openai_compatible", "https://x", "GLM_KEY")) == "GLM_KEY"
     src = (ROOT / "scripts" / "model_eval.py").read_text(encoding="utf-8")
     assert "else me.ANTHROPIC_KEY_ENV" not in src, "the script uses target_key_env"

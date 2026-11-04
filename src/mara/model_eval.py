@@ -60,6 +60,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .credentials import key_env
 from .evidence import header_fields
 
 if TYPE_CHECKING:
@@ -67,7 +68,7 @@ if TYPE_CHECKING:
 
 MASK = "$" + "{KEY}"
 GARAK_KEY_ENV = "OPENAICOMPATIBLE_API_KEY"
-ANTHROPIC_KEY_ENV = "ANTHROPIC_API_KEY"
+ANTHROPIC_KEY_ENV = "ANTHROPIC_API_KEY"  # the variable garak's anthropic generator reads (mara.credentials says where the key comes from)
 METRICS = ("garak_pass_rate", "prompt_injection_success", "false_refusal")
 
 
@@ -116,7 +117,6 @@ GEMINI_SUPPRESSED_PARAMS = ["stop", "frequency_penalty", "presence_penalty"]
 # Share of empty (null / blank) outputs above which a garak run is not a measurement: a failed call or a model that spent
 # its budget thinking leaves an empty output, and detectors score empty outputs as passes.
 MAX_EMPTY_OUTPUT_RATE = 0.2
-GEMINI_KEY_ENV = "GEMINI_API_KEY"
 
 
 def unsupported(target: EvalTarget, tool: str | None = None) -> str | None:
@@ -170,8 +170,8 @@ def garak_command(target: EvalTarget, probes: list[str], out_dir: Path | str,
         argv = ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible", "--target_name", target.model, "--spec", spec,
                 "--generator_option_file", str(option_file or out_dir / f"garak-{target.slug}.generator.json"),
                 "--report_prefix", str(out_dir / f"garak-{target.slug}")]
-        key_env = target.api_key_env or (GEMINI_KEY_ENV if target.provider == "gemini" else "")
-        env = {GARAK_KEY_ENV: f"${key_env}"} if key_env else {}
+        source = key_env(target.provider, target.api_key_env)
+        env = {GARAK_KEY_ENV: f"${source}"} if source else {}
     elif target.provider == "bedrock":
         # no key: boto3 resolves AWS_PROFILE / the SSO cache, as for the review itself
         argv = ["python3", "-m", "garak", "--target_type", "bedrock", "--target_name", target.model, "--spec", spec,
@@ -181,7 +181,7 @@ def garak_command(target: EvalTarget, probes: list[str], out_dir: Path | str,
     elif target.provider == "anthropic":
         argv = ["python3", "-m", "garak", "--target_type", "anthropic", "--target_name", target.model, "--spec", spec,
                 "--report_prefix", str(out_dir / f"garak-{target.slug}")]
-        env = {ANTHROPIC_KEY_ENV: f"${target.api_key_env or ANTHROPIC_KEY_ENV}"}
+        env = {ANTHROPIC_KEY_ENV: f"${key_env(target.provider, target.api_key_env)}"}
     else:
         raise ValueError(f"{target.name}: no garak generator for provider {target.provider}")
     return argv, env
@@ -245,12 +245,10 @@ def argv_without_secrets(argv: list[str], secrets: dict[str, str]) -> tuple[list
 
 
 def target_key_env(target: EvalTarget) -> str:
-    """The environment variable holding the key for `target`: its own api_key_env, else the vendor default for the
-    vendor APIs. An openai_compatible endpoint without api_key_env gets none: falling back to ANTHROPIC_API_KEY sent
-    the Anthropic key to the self-hosted (or third-party) base_url inside the CyberSecEval spec."""
-    if target.api_key_env:
-        return target.api_key_env
-    return {"gemini": GEMINI_KEY_ENV, "anthropic": ANTHROPIC_KEY_ENV}.get(target.provider, "")
+    """The environment variable holding the key for `target` (mara.credentials.key_env), "" for none. An
+    openai_compatible endpoint without api_key_env gets none: falling back to ANTHROPIC_API_KEY sent the Anthropic key
+    to the self-hosted (or third-party) base_url inside the CyberSecEval spec."""
+    return key_env(target.provider, target.api_key_env) or ""
 
 
 NO_KEY = "no-key"  # what a keyless OpenAI-compatible endpoint gets in a CyberSecEval spec

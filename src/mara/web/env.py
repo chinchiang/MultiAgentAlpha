@@ -29,6 +29,7 @@ from typing import Any
 
 from .. import __version__
 from ..config import ModelSpec
+from ..credentials import key_env
 from ..invocation import config_provider_mode
 from ..policy import check_config_file
 from ..tools import pins, trivy_db
@@ -39,7 +40,6 @@ from .configs import config_files
 
 WORKSPACE_ENV = ("MARA_HOME", "MARA_TOOLS_DIR", "MARA_TRIVY_CACHE_DIR", "MARA_NODE", "MARA_SEMGREP_CONFIG", "MARA_ZIZMOR_ONLINE",
                  "MARA_SUMMARY_KEY", "SSL_CERT_FILE", "SSL_CERT_DIR", "AWS_PROFILE", "AWS_REGION")
-DEFAULT_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}  # the providers' own defaults
 NODE_MIN_MAJOR = 18
 
 _cache_lock = threading.Lock()
@@ -153,7 +153,7 @@ def credential(m: ModelSpec) -> dict[str, Any]:
     if m.provider == "bedrock":
         return {"kind": "aws_chain", "env": "AWS_PROFILE",
                 "present": bool(os.environ.get("AWS_PROFILE") or os.environ.get("AWS_ACCESS_KEY_ID"))}
-    name = m.api_key_env or DEFAULT_KEY_ENV.get(m.provider)
+    name = key_env(m.provider, m.api_key_env)
     return {"kind": "env", "env": name, "present": bool(name and os.environ.get(name))}
 
 
