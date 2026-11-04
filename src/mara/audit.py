@@ -222,8 +222,12 @@ class Audit(defaultdict[str, Any]):
         super().__init__(int)
 
     def __setitem__(self, key: str, value: Any) -> None:
-        # a read of a key not there stores the default (0) through this method, so a name not held is refused on a read too
         super().__setitem__(_held(key), value)
+
+    def __missing__(self, key: str) -> Any:
+        # a read of a key not there: refused when the name is not held. defaultdict stores the default (0) through
+        # __setitem__ on Python 3.12, but not on 3.13, where a misspelled read returned 0 without this check.
+        return super().__missing__(_held(key))
 
     def add(self, key: str, family: str, n: int = 1) -> None:
         """Count `n` under `key`, in total and for `family`."""
