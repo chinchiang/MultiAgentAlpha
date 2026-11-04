@@ -61,7 +61,9 @@ def test_a_placeholder_left_in_a_file_beyond_ascii_is_named_and_the_script_itsel
 
 
 def test_the_file_list_is_read_as_utf8_whatever_the_locale(tmp_path):
-    repo = _repo(tmp_path, {"docs/報告.md": f"編號 {PLACEHOLDER}\n"})
+    # The name beyond ascii is on a .csv, which the script lists but never opens: in Linux's C locale the filesystem
+    # encoding is ascii too, and no str path beyond ascii opens there.
+    repo = _repo(tmp_path, {"docs/筆記.csv": "編號\n", "docs/report.md": f"{PLACEHOLDER}\n"})
     res = _assign(repo, "--dry-run", env=not_utf8_env())
     assert res.returncode == 0, res.stdout + res.stderr
-    assert "would edit: " + str(Path("docs/報告.md")) in res.stdout.splitlines()
+    assert res.stdout.splitlines() == ["would edit: " + str(Path("docs/report.md"))]
