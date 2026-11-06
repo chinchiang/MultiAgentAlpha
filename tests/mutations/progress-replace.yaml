@@ -1,0 +1,22 @@
+focused: [tests/test_progress.py]
+mutations:
+  - name: a record another process holds for a moment is not tried again
+    file: src/mara/progress.py
+    old: '_replace(tmp, self.path)  # a reader sees'
+    new: 'os.replace(tmp, self.path)  # a reader sees'
+  - name: a record left running is not tried again when it is closed
+    file: src/mara/progress.py
+    old: '        _replace(tmp, path)'
+    new: '        os.replace(tmp, path)'
+  - name: a record held for good is waited for some 20 seconds
+    file: src/mara/progress.py
+    old: 'REPLACE_RETRIES = 10'
+    new: 'REPLACE_RETRIES = 1000'
+  - name: a refusal that outlasts the retries fails the review
+    file: src/mara/progress.py
+    old: '            except OSError as e:'
+    new: '            except FileNotFoundError as e:'
+  - name: the temporary file of a record not written is left behind
+    file: src/mara/progress.py
+    old: '                    tmp.unlink(missing_ok=True)'
+    new: '                    pass'
