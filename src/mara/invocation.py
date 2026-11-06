@@ -1,15 +1,16 @@
-"""The review invocation (GLOSSARY.md: Review invocation, Usage error, Provider mode): what one call of `mara review`
-takes and what it leaves, for the command line, the pipeline and the workbench alike
+"""The review invocation (GLOSSARY.md: Review invocation, Admitted invocation, Usage error, Provider mode): what one
+call of `mara review` takes and what it leaves, for the command line, the pipeline and the workbench alike
 (docs/adr/0006-local-web-workbench.md, docs/adr/0007-review-status-and-gate.md).
 
 A config's models classify as mock, live or mixed by their providers, and a review runs only in the provider mode its
 models have: a mixed config runs in neither. Once its reports are written, a review exits EXIT_PSIRT when an internal
 PSIRT hand-off failed, which outranks EXIT_GATE for an enforced blocked gate, and 0 otherwise; EXIT_GATE is also a
 usage error's code, so whether a review finished is its progress record's to say (GLOSSARY.md: Progress record).
-A review is refused in one order, by the command line and the workbench alike: check_paths, load, then the target's
-own options, check_calibration_sample and check_base; the pipeline repeats those two, and the provider mode, before it
-starts. check_paths reads the file system, load reads the config file, check_base runs git and calibration_answer_key
-reads the answer key of a calibration sample; the rest is pure.
+A review invocation is admitted in one order, by admit, for the command line and the workbench alike: check_paths; then
+its progress record starts; then load, and the target's own options, check_calibration_sample and check_base. Neither
+calls those checks itself. The pipeline repeats check_base, calibration_answer_key and check_provider_mode before it
+starts. check_paths reads the file system, load reads the config file, check_base runs git, calibration_answer_key reads
+the answer key of a calibration sample and admit writes the progress record; the rest is pure.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from .config import INVALID_FILE_ERRORS, load_config
+from .progress import Progress
 
 if TYPE_CHECKING:
     from .config import MaraConfig
@@ -193,6 +195,35 @@ class ReviewInvocation:
     base: str | None = None
     calibration_sample: bool = False
     progress_file: Path | None = None
+
+
+@dataclass(frozen=True)
+class AdmittedInvocation:
+    """A review invocation that passed every check, in order (admit): its config file, that config, loaded, and its
+    progress record, started (a no-op one without --progress-file)."""
+
+    invocation: ReviewInvocation
+    config_path: Path
+    config: MaraConfig
+    progress: Progress
+
+
+def admit(inv: ReviewInvocation, workspace: Path) -> AdmittedInvocation:
+    """`inv`, admitted against the MARA workspace `workspace`, in order: check_paths; then the progress record starts;
+    then load, check_calibration_sample and check_base. InvocationError otherwise. Anything raised once the record has
+    started leaves it failed, its error a usage error's kind or else the exception's name."""
+    config_path = check_paths(inv, workspace)
+    record = Progress(inv.progress_file)  # only now: a progress file inside the target is refused by check_paths
+    try:
+        config = load(config_path, inv.provider)
+        if inv.calibration_sample:
+            check_calibration_sample(inv.target, workspace)
+        if inv.base:  # an empty --base is no base
+            check_base(inv.target, inv.base)
+    except BaseException as e:  # whatever ends the review before it starts, the record must not read as running
+        record.finish(ok=False, error=e.kind if isinstance(e, InvocationError) else type(e).__name__)
+        raise
+    return AdmittedInvocation(invocation=inv, config_path=config_path, config=config, progress=record)
 
 
 # the options naming a file or directory other than the config and the output directory: evidence inputs, which the

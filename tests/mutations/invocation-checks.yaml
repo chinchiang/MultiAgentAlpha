@@ -1,4 +1,4 @@
-focused: [tests/test_invocation_checks.py, tests/test_web_server.py]
+focused: [tests/test_invocation_checks.py, tests/test_invocation_admit.py, tests/test_web_server.py]
 mutations:
   - name: a base git cannot find a merge base for is accepted
     file: src/mara/context/repo_map.py
@@ -20,15 +20,15 @@ mutations:
     file: src/mara/pipeline.py
     old: '        if base_ref:  # an empty one is no base; a refused one leaves no output directory behind'
     new: '        if base_ref is not None:  # an empty one is no base; a refused one leaves no output directory behind'
-  - name: the command line checks an empty base
-    file: src/mara/cli.py
-    old: '        if base:  # an empty --base is no base'
-    new: '        if base is not None:  # an empty --base is no base'
-  - name: the workbench does not check the base
-    file: src/mara/web/runs.py
-    old: "            if inv.base:\n                check_base(target, inv.base)\n"
+  - name: admit checks an empty base
+    file: src/mara/invocation.py
+    old: '        if inv.base:  # an empty --base is no base'
+    new: '        if inv.base is not None:  # an empty --base is no base'
+  - name: admit does not check the base
+    file: src/mara/invocation.py
+    old: "        if inv.base:  # an empty --base is no base\n            check_base(inv.target, inv.base)\n"
     new: ""
-  - name: the workbench does not check the calibration sample
-    file: src/mara/web/runs.py
-    old: "            if inv.calibration_sample:\n                check_calibration_sample(target, self.workspace)\n"
+  - name: admit does not check the calibration sample
+    file: src/mara/invocation.py
+    old: "        if inv.calibration_sample:\n            check_calibration_sample(inv.target, workspace)\n"
     new: ""

@@ -170,7 +170,7 @@ def test_a_usage_error_leaves_a_failed_record_not_a_finished_one(root, tmp_path,
                                    "--progress-file", str(out / "progress.json")])
     assert res.exit_code == 2
     d = prog.read(out / "progress.json")
-    assert d["status"] == "failed" and d["error"] == "BadParameter" and not (out / "report.json").exists()
+    assert d["status"] == "failed" and d["error"] == "provider_mismatch" and not (out / "report.json").exists()
 
 
 def test_a_progress_file_inside_the_target_is_refused(root, tmp_path, monkeypatch):

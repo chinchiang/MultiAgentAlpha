@@ -180,6 +180,10 @@ _Avoid_: launch (the workbench's request that becomes one), arguments, command l
 A review invocation whose options cannot make a review, named with the option at fault: a config or output path inside the target, a config not found or that fails to load, a provider mode its models do not have, or another option's value the review cannot use (an unreadable PSIRT event, a base that git cannot diff against HEAD, a calibration sample that is not a labelled sample of the workspace). The command line exits 2 on it, which a blocked gate also does; the workbench names the ones it can check before it starts a run.
 _Avoid_: refusal (a model's declined reply), rejection (a jury outcome), launch error
 
+**Admitted invocation**:
+A review invocation that passed every check, in one order: its paths (the config, the output directory and the path options outside the target, the config file there), then its config (loaded under the policies, its models of the review's provider mode), then the target's own options (a calibration sample of the workspace, a base git can diff against HEAD). It holds the loaded config and the review's progress record, which starts only once the paths are admitted and is left failed by any usage error after them, naming its kind. A review runs only from an admitted invocation. The command line and the workbench admit an invocation the same way, against the workspace each is given; the pipeline repeats the base, the calibration sample and the provider mode before it starts.
+_Avoid_: validated invocation, checked invocation, launch (the workbench's request that becomes a review invocation)
+
 **Review scope**:
 What one review covered: the whole target (full) or the files changed against a base together with the modules related to them (incremental); unknown for a report written before reviews recorded their scope. Scores of reviews with different scopes cannot be compared.
 _Avoid_: mode (the provider mode is a different thing), diff review

@@ -12,21 +12,17 @@ from rich.console import Console
 from rich.table import Table
 from typer.core import TyperGroup
 
-from .config import MaraConfig
 from .invocation import (
     EXIT_GATE,
     EXIT_PSIRT,
+    AdmittedInvocation,
     InvocationError,
     ProviderMode,
     ReviewInvocation,
-    check_base,
-    check_calibration_sample,
-    check_paths,
+    admit,
     exit_code,
-    load,
 )
 from .pipeline import Pipeline
-from .progress import Progress
 from .report.markdown_out import enforcement_wording, write_markdown
 from .report.sarif_out import write_sarif
 from .schemas import DIMENSION_LABELS, ReviewReport
@@ -88,14 +84,14 @@ def review(
                            fail_on_gate=fail_on_gate, notify_psirt=notify_psirt, psirt_event=psirt_event, psirt_resend=psirt_resend,
                            base=base, calibration_sample=calibration_sample, progress_file=progress_file)
     with _usage_errors():
-        # before the config is even read; the pipeline repeats the workspace, tool and trivy checks
+        # the paths before the config is even read; the pipeline repeats the workspace, tool and trivy checks
         # pre-recorded SARIF is tool evidence, mock fixtures are the models' answers and a PSIRT event
         # starts legal clocks: from inside the target, the reviewed repository would supply its own verdict
         # the progress file is an output: inside the target it would be bundled into the next review
-        cfg_path = check_paths(inv, root())
-    progress = Progress(progress_file)  # a no-op without --progress-file
+        admitted = admit(inv, root())
+    progress = admitted.progress  # a no-op without --progress-file; admit leaves it failed on a usage error of its own
     try:
-        report, cfg, psirt_failed = _review(inv, cfg_path, progress)
+        report, psirt_failed = _review(admitted)
     except BaseException as e:
         # the reports were not all written: the workbench must not read a usage error's exit 2 as a blocked gate
         progress.finish(ok=False, error=type(e).__name__)
@@ -109,7 +105,7 @@ def review(
     why = {EXIT_PSIRT: ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else ""),
            EXIT_GATE: ""}.get(code, ", G-10")
     if not report.gate_passed:
-        console.print(f"rollout phase [bold]{cfg.rollout.phase}[/bold]: the gate blocked: "
+        console.print(f"rollout phase [bold]{admitted.config.rollout.phase}[/bold]: the gate blocked: "
                       f"{enforcement_wording(bool(report.gate_enforced))} (exit {code}{why})")
     if psirt_failed:
         console.print("[bold red]PSIRT hand-off failed for at least one finding; see the ledger and retry with --notify-psirt[/bold red]")
@@ -117,20 +113,15 @@ def review(
         raise typer.Exit(code=code)
 
 
-def _review(inv: ReviewInvocation, cfg_path: Path, progress: Progress) -> tuple[ReviewReport, MaraConfig, bool]:
-    """Load the config file `cfg_path`, check the target's own options against it (a calibration sample, then a base;
-    mara.invocation), run the review `inv` and write every report; returns (report, config, PSIRT send failed). A usage
-    error, from these checks or from the pipeline's own, is click's on the option it names; any other exception is not."""
+def _review(admitted: AdmittedInvocation) -> tuple[ReviewReport, bool]:
+    """Run the review of the admitted invocation `admitted` and write every report; returns (report, PSIRT send
+    failed). These are click's usage errors, each on the option it names: a usage error of the pipeline's own checks,
+    a --psirt-event that is not a readable JSON event, and a workspace inside the target (on TARGET). Any other
+    exception is not."""
     from .workspace import WorkspaceInsideTarget, resolve
 
+    inv, cfg, progress = admitted.invocation, admitted.config, admitted.progress
     target, out, psirt_event, base = inv.target, inv.out, inv.psirt_event, inv.base
-    with _usage_errors():
-        cfg = load(cfg_path, inv.provider)
-        # the target's own options, after the config as the workbench checks them; the pipeline repeats both
-        if inv.calibration_sample:
-            check_calibration_sample(target)
-        if base:  # an empty --base is no base
-            check_base(target, base)
     pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress)
     event = None
     if psirt_event:
@@ -181,7 +172,7 @@ def _review(inv: ReviewInvocation, cfg_path: Path, progress: Progress) -> tuple[
     console.print(f"[bold]wrote[/bold] {out/'report.sarif'}, {out/'report.md'}, {out/'report.json'}"
                   + (f", {out/'human_queue.md'} ({len(report.human_queue)} item(s))" if cfg.human_queue.enabled else "")
                   + (f", {out/'psirt-notifications.json'} ({len(report.psirt)} PSIRT payload(s))" if cfg.psirt.enabled else ""))
-    return report, cfg, psirt_failed
+    return report, psirt_failed
 
 
 @app.command()

@@ -187,5 +187,5 @@ def test_a_config_that_fails_validation_is_a_usage_error_on_config_with_a_failed
     assert res.exit_code == 2, (res.exit_code, repr(res.exception), res.output)
     assert "Invalidvaluefor--config:" in said and reason in said, res.output
     record = progress.read(out / "progress.json")
-    assert record["status"] == "failed" and record["error"] == "BadParameter", record
+    assert record["status"] == "failed" and record["error"] == "config_invalid", record
     assert not (out / "report.json").exists()
