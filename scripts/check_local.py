@@ -1,6 +1,6 @@
-"""Before a push, six of the checks CI runs on a pull request, and on request its three osv-scanner scans, run here with every output kept.
+"""Before a push, seven of the checks CI runs on a pull request, and on request its three osv-scanner scans, run here with every output kept.
 
-  .venv/bin/python scripts/check_local.py                     # ruff, line width, mypy, semgrep, the whole suite, gitleaks
+  .venv/bin/python scripts/check_local.py                     # ruff, line width, control characters, mypy, semgrep, the suite, gitleaks
   .venv/bin/python scripts/check_local.py --only ruff mypy    # some of them
   .venv/bin/python scripts/check_local.py --only osv          # the three osv-scanner scans (the network)
   .venv/bin/python scripts/check_local.py --base origin/main  # the base of the branch's change (default origin/main)
@@ -12,7 +12,9 @@ head (the short summary of -rs lists skips only). The checks, as .github/workflo
   ruff      ruff check src tests scripts
   lines     scripts/line_width.py: the lines the commits since the merge base with --base add to Python files are
             within 150 columns (CI runs it on a pull request)
-  mypy      python -m mypy from .venv-typecheck: CPython 3.12 with the hash-pinned closure CI installs (the 3.12 dev
+  chars     scripts/control_chars.py: what the commits since the merge base with --base add, their lines in every text
+            file and their messages, holds no control character (CI runs it on a pull request)
+  mypy     python -m mypy from .venv-typecheck: CPython 3.12 with the hash-pinned closure CI installs (the 3.12 dev
             requirements, the build requirements, this package without its dependencies, the typecheck requirements),
             built on first use and again whenever one of those requirement files changes
   semgrep   scripts/semgrep_ci.py --target . --triage tools/semgrep-triage.yaml: L0's scan of the repository with the
@@ -27,7 +29,7 @@ the hash-locked closures, each with its own config:
   osv-semgrep     scripts/osv_ci.py on tools/semgrep-requirements.txt, with tools/osv-semgrep.toml
 Not run here: the whole suite on CPython 3.12, the other repository scanners (trivy, zizmor, csp-evaluator, and
 osv-scanner on the seeded fixture), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
-When a check that reads the branch's commits (lines, gitleaks) ran and the working tree has changes git status lists,
+When a check that reads the branch's commits (lines, chars, gitleaks) ran and the working tree has changes git status lists,
 the summary warns that it did not see them. Exit 0 when every check passed, 1 otherwise; the warning changes neither.
 """
 
@@ -99,6 +101,7 @@ def _osv(name: str) -> Check:
 CHECKS: dict[str, Check] = {
     "ruff": lambda a: ([sys.executable, "-m", "ruff", "check", *RUFF_PATHS], {}, None),
     "lines": lambda a: ([sys.executable, str(ROOT / "scripts" / "line_width.py"), "--base", a.base], {}, None),
+    "chars": lambda a: ([sys.executable, str(ROOT / "scripts" / "control_chars.py"), "--base", a.base], {}, None),
     "mypy": lambda a: ([str(typecheck_python(a.python312)), "-m", "mypy"], {}, None),
     "pytest": lambda a: ([sys.executable, "-m", "pytest", "-q", "-rs"], {"GITHUB_ACTIONS": "true"},
                          _clear_bytecode),
@@ -108,12 +111,12 @@ CHECKS: dict[str, Check] = {
                             "--event", "pull_request", "--report", str(a.logs / "gitleaks.sarif")], {}, None),
     **{name: _osv(name) for name in OSV_SCANS},
 }
-DEFAULT_CHECKS = ("ruff", "lines", "mypy", "semgrep", "pytest", "gitleaks")  # the osv scans need the network, so run by name
+DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks")  # the osv scans need the network: by name
 OSV_CHECKS = tuple(OSV_SCANS)
 GROUPS = {"osv": OSV_CHECKS}
 
 
-COMMIT_CHECKS = ("lines", "gitleaks")  # the checks that read the branch's commits, not the working tree
+COMMIT_CHECKS = ("lines", "chars", "gitleaks")  # the checks that read the branch's commits, not the working tree
 
 
 def uncommitted(root: Path) -> list[str]:

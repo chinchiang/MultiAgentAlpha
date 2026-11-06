@@ -1,4 +1,4 @@
-"""scripts/check_local.py: six of the checks a pull request's CI runs, and on request its three osv-scanner scans, run
+"""scripts/check_local.py: seven of the checks a pull request's CI runs, and on request its three osv-scanner scans, run
 before the push with every output kept."""
 
 from __future__ import annotations
@@ -114,12 +114,12 @@ def test_a_repeated_only_runs_every_check_it_names_once(tmp_path, monkeypatch):
     assert ran == ["b", "a", "a"]
 
 
-NINE = ["ruff", "lines", "mypy", "semgrep", "pytest", "gitleaks", "osv-runtime", "osv-model-eval", "osv-semgrep"]
+TEN = ["ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks", "osv-runtime", "osv-model-eval", "osv-semgrep"]
 
 
 def test_only_osv_runs_the_three_osv_scans(tmp_path, monkeypatch):
     """`osv` names L0's three osv-scanner closure scans; a scan named again runs once."""
-    ran = _recording(monkeypatch, NINE)
+    ran = _recording(monkeypatch, TEN)
     assert check_local.main(["--only", "osv", "--logs", str(tmp_path / "1")]) == 0
     assert ran == ["osv-runtime", "osv-model-eval", "osv-semgrep"]
     ran.clear()
@@ -127,16 +127,16 @@ def test_only_osv_runs_the_three_osv_scans(tmp_path, monkeypatch):
     assert ran == ["osv-runtime", "osv-model-eval", "osv-semgrep", "ruff"]
 
 
-def test_without_only_the_six_checks_run_in_their_order_and_no_osv_scan(tmp_path, monkeypatch):
+def test_without_only_the_seven_checks_run_in_their_order_and_no_osv_scan(tmp_path, monkeypatch):
     """The osv scans need the network: they run when named, never by default. semgrep needs none, so it runs by default,
     after the static checks and before the suite."""
-    ran = _recording(monkeypatch, NINE)
+    ran = _recording(monkeypatch, TEN)
     assert check_local.main(["--logs", str(tmp_path)]) == 0
-    assert ran == ["ruff", "lines", "mypy", "semgrep", "pytest", "gitleaks"]
+    assert ran == ["ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks"]
 
 
 def test_only_semgrep_runs_the_semgrep_check_alone(tmp_path, monkeypatch):
-    ran = _recording(monkeypatch, NINE)
+    ran = _recording(monkeypatch, TEN)
     assert check_local.main(["--only", "semgrep", "--logs", str(tmp_path)]) == 0
     assert ran == ["semgrep"]
 
@@ -198,8 +198,11 @@ def test_a_failed_suite_names_its_failed_tests_in_the_summary(tmp_path, monkeypa
                      "def test_passes():\n    assert True\n\n\ndef test_fails():\n    assert 1 == 2\n\n\n"
                      "def test_errors(broken):\n    pass\n\n\nclass TestGroup:\n    def test_fails_too(self):\n        assert False\n",
                      encoding="utf-8")
+    # its rootdir the suite's own directory: run from the repository, pytest takes the repository's for rootdir, and a file
+    # outside it on another drive has every directory above it listed, %TEMP% among them, where a tmp* directory that
+    # another process removes meanwhile stops the collection (FileNotFoundError)
     monkeypatch.setattr(check_local, "CHECKS", {"pytest": lambda a: ([sys.executable, "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider",
-                                                                     str(suite)], {}, None)})
+                                                                     "--rootdir", str(suite.parent), str(suite)], {}, None)})
     monkeypatch.setattr(check_local, "uncommitted", lambda root: [])
     assert check_local.main(["--only", "pytest", "--logs", str(tmp_path / "logs")]) == 1
     out = capsys.readouterr().out

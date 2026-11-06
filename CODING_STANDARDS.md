@@ -1,8 +1,8 @@
 # Coding standards
 
 The judgement calls a review checks. What a tool checks is not here: lint (`ruff check`), the width of the lines a
-change adds (`scripts/line_width.py`), types (mypy) and the tests run in CI and, before a push, in
-`scripts/check_local.py`.
+change adds (`scripts/line_width.py`), the control characters it adds to a text file or a commit message
+(`scripts/control_chars.py`), types (mypy) and the tests run in CI and, before a push, in `scripts/check_local.py`.
 
 ## Module docstrings name their terms, their decisions and their purity
 

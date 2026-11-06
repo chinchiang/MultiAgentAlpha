@@ -1,0 +1,22 @@
+focused: [tests/test_control_chars.py]
+mutations:
+  - name: only Python files are read
+    file: scripts/control_chars.py
+    old: 'f"{base}..{a.head}"], capture_output=True, encoding="utf-8", check=True).stdout'
+    new: 'f"{base}..{a.head}", "--", "*.py"], capture_output=True, encoding="utf-8", check=True).stdout'
+  - name: the lines already there are read as added
+    file: scripts/control_chars.py
+    old: 'f"{base}..{a.head}"], capture_output=True, encoding="utf-8", check=True).stdout'
+    new: '"4b825dc642cb6eb9a060e54bf8d69288fbee4904", a.head], capture_output=True, encoding="utf-8", check=True).stdout'
+  - name: the commit messages are not read
+    file: scripts/control_chars.py
+    old: '        hits += [f"commit'
+    new: '        hits += [] and [f"commit'
+  - name: NEL and the line and paragraph separators are not control characters
+    file: scripts/control_chars.py
+    old: ' | {chr(0x85), chr(0x2028), chr(0x2029)}'
+    new: ''
+  - name: a commit message's lines are counted from 0
+    file: scripts/control_chars.py
+    old: 'enumerate(message.split("\n"), 1)'
+    new: 'enumerate(message.split("\n"))'
