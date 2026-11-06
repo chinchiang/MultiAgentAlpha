@@ -1,0 +1,30 @@
+focused: [tests/test_invocation_admit.py]
+mutations:
+  - name: the progress record starts before the paths are checked
+    file: src/mara/invocation.py
+    old: "    config_path = check_paths(inv, workspace)\n    record = Progress(inv.progress_file)"
+    new: "    record = Progress(inv.progress_file)\n    config_path = check_paths(inv, workspace)"
+  - name: the config is read before the paths are checked
+    file: src/mara/invocation.py
+    old: "    config_path = check_paths(inv, workspace)\n"
+    new: "    load(inv.config or default_config(inv.provider, workspace), inv.provider)\n    config_path = check_paths(inv, workspace)\n"
+  - name: the base is checked before the config
+    file: src/mara/invocation.py
+    old: "        config = load(config_path, inv.provider)\n"
+    new: "        if inv.base:\n            check_base(inv.target, inv.base)\n        config = load(config_path, inv.provider)\n"
+  - name: a calibration sample is one of the environment's workspace
+    file: src/mara/invocation.py
+    old: 'check_calibration_sample(inv.target, workspace)'
+    new: 'check_calibration_sample(inv.target)'
+  - name: a usage error after the paths leaves the record running
+    file: src/mara/invocation.py
+    old: "        record.finish(ok=False, error=e.kind if isinstance(e, InvocationError) else type(e).__name__)\n"
+    new: ""
+  - name: the record names a usage error by its exception, not its kind
+    file: src/mara/invocation.py
+    old: 'error=e.kind if isinstance(e, InvocationError) else type(e).__name__'
+    new: 'error=type(e).__name__'
+  - name: only a usage error leaves the record failed
+    file: src/mara/invocation.py
+    old: '    except BaseException as e:'
+    new: '    except InvocationError as e:'

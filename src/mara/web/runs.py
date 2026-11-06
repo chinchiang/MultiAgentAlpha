@@ -2,12 +2,9 @@
 `mara review` subprocess per run, one directory per run under `<out>/runs/<run-id>/`.
 
 A launch is checked first for what only the workbench asks (a target directory, a config `configs` allows, evidence
-inputs inside the workspace), then with the command line's own checks (GLOSSARY.md: Review invocation), in its order:
-`invocation.check_paths` (the config, output and evidence paths outside the target), `invocation.load` (the config
-loaded under policies P1-P8, the provider mode matching its models), `invocation.check_calibration_sample` (the target
-a labelled sample of the workspace) and `invocation.check_base` (the base a git revision that has a merge base with
-HEAD). A browser is told why a launch is refused instead of seeing a failed run, and the subprocess runs the command
-line's checks again. `run.json` is the
+inputs inside the workspace), then admitted as the command line admits it (`invocation.admit`; GLOSSARY.md: Admitted
+invocation), against the workbench's workspace. A browser is told why a launch is refused instead of seeing a failed
+run, and the subprocess admits it again. `run.json` is the
 record of a run: the request as given, the argv, the roles and models of the config at launch (the config file may
 change later, and the report keeps only the provider manifest), status and exit code. The exit code alone is ambiguous
 (2 is a usage error and an enforced gate alike), so a run counts as finished only when its progress record says the
@@ -44,11 +41,8 @@ from ..invocation import (
     InvocationError,
     ProviderMode,
     ReviewInvocation,
-    check_base,
-    check_calibration_sample,
-    check_paths,
+    admit,
     default_config,
-    load,
     option,
     outcome,
     review_args,
@@ -140,12 +134,7 @@ class RunRegistry:
                                mock_fixtures=dirs.get("mock_fixtures"), fail_on_gate=req.fail_on_gate, base=base or None,
                                calibration_sample=req.calibration_sample)
         try:
-            check_paths(inv, self.workspace)
-            cfg = load(cfg_path, provider)
-            if inv.calibration_sample:
-                check_calibration_sample(target, self.workspace)
-            if inv.base:
-                check_base(target, inv.base)
+            cfg = admit(inv, self.workspace).config  # inv has no progress file yet: admit writes no record
         except InvocationError as e:  # the command line would refuse the same launch, on e.param
             message = {"provider_mismatch": f"{cfg_path.name}: {e}", "config_invalid": str(e)[:800]}.get(e.kind, str(e))
             raise LaunchError(e.kind, message) from e

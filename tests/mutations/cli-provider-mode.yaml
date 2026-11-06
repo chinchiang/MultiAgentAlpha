@@ -1,7 +1,8 @@
-focused: [tests/test_cli_provider_mode.py]
-# the provider mode checks are mutated in invocation.load, the command line's call of check_provider_mode, never in
-# check_provider_mode or config_provider_mode: Pipeline.run calls those too, and a mutant without both checks runs a
-# live review on a live config
+focused: [tests/test_cli_provider_mode.py, tests/test_invocation_admit.py]
+# the provider mode checks are mutated in invocation.load, which invocation.admit calls for the command line and the
+# workbench alike, never in check_provider_mode or config_provider_mode: Pipeline.run calls those too, and a mutant
+# without both checks runs a live review on a live config. A hint is dropped where the command line turns admit's
+# usage error into click's, for a provider mismatch alone.
 mutations:
   - name: --provider a plain string again
     file: src/mara/cli.py
@@ -17,16 +18,16 @@ mutations:
     new: '    check_provider_mode((m.provider for m in cfg.models), provider_mode) if provider_mode != "live" else None'
   - name: the live check without its hint
     file: src/mara/cli.py
-    old: "    with _usage_errors():\n        cfg = load(cfg_path, inv.provider)\n"
-    new: "    try:\n        cfg = load(cfg_path, inv.provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=None if inv.provider == \"live\" else e.param) from e\n"
+    old: "        admitted = admit(inv, root())\n"
+    new: "        try:\n            admitted = admit(inv, root())\n        except InvocationError as e:\n            hint = None if inv.provider == \"live\" and e.kind == \"provider_mismatch\" else e.param\n            raise typer.BadParameter(str(e), param_hint=hint) from e\n"
   - name: the mock check removed
     file: src/mara/invocation.py
     old: '    check_provider_mode((m.provider for m in cfg.models), provider_mode)'
     new: '    check_provider_mode((m.provider for m in cfg.models), provider_mode) if provider_mode != "mock" else None'
   - name: the mock check without its hint
     file: src/mara/cli.py
-    old: "    with _usage_errors():\n        cfg = load(cfg_path, inv.provider)\n"
-    new: "    try:\n        cfg = load(cfg_path, inv.provider)\n    except InvocationError as e:\n        raise typer.BadParameter(str(e), param_hint=None if inv.provider == \"mock\" else e.param) from e\n"
+    old: "        admitted = admit(inv, root())\n"
+    new: "        try:\n            admitted = admit(inv, root())\n        except InvocationError as e:\n            hint = None if inv.provider == \"mock\" and e.kind == \"provider_mismatch\" else e.param\n            raise typer.BadParameter(str(e), param_hint=hint) from e\n"
   - name: the live check refuses only an all-mock config
     file: src/mara/invocation.py
     old: '    check_provider_mode((m.provider for m in cfg.models), provider_mode)'

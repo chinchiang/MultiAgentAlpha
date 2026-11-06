@@ -58,16 +58,18 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
 
 - `cli.Pipeline.run`: replaced by `run(self, target, **kw)`, which records `kw` and stops. `cli._review` calls it as
   `run(target, sarif_dir=..., provider_mode=..., ...)`, the target positional and every option a keyword. `review`
-  checks the target's options before `Pipeline.run` (`invocation.check_calibration_sample`, `check_base`), so patching
-  `run` does not skip them: a test that gives `--base` gives a git repository for a target, one with a merge base for
-  that ref, and `--calibration-sample` a target below the workspace's `calib/samples/`.
+  admits the invocation before `Pipeline.run` (`invocation.admit`, which checks the target's options with
+  `check_calibration_sample` and `check_base`), so patching `run` does not skip them: a test that gives `--base` gives a
+  git repository for a target, one with a merge base for that ref, and `--calibration-sample` a target below the
+  workspace's `calib/samples/`.
   `test_governance_leftovers.py`, `test_security_regressions.py`, `test_invocation_checks.py`.
 - `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]`. `cli._review` builds
   `Pipeline(cfg, out_dir=..., ...)`, the config positional and the rest keywords. `test_security_regressions.py`.
-- `invocation.load_config`: patched as a module name. `cli._review` calls `load(...)`, which `cli` imports by name from
-  `mara.invocation` (a patch of `load` itself goes in `cli.load`); `load` calls `load_config(...)`. `review` calls
-  `check_paths` first, so a config inside the target is never read.
-  `test_security_regressions.py`.
+- `invocation.load_config`: patched as a module name. `review` calls `admit(...)`, which `cli` imports by name from
+  `mara.invocation` (a patch of `admit` itself goes in `cli.admit`); `admit` calls `load(...)` and `load` calls
+  `load_config(...)`, both in `mara.invocation`, so the one patch reaches the command line and the workbench alike.
+  `admit` calls `check_paths` first, so a config inside the target is never read.
+  `test_security_regressions.py`, `test_invocation_admit.py`.
 - `cli.console`: patched as a module name; output goes through the module's `console`. `test_policy.py`.
 
 ## The agents: the Provider seam (`src/mara/providers/base.py`)
