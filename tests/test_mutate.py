@@ -57,6 +57,21 @@ def test_a_mutation_a_test_catches_and_one_none_does_are_told_apart_and_the_sour
     assert "1 of 2 caught" in capsys.readouterr().out
 
 
+def test_a_mutation_of_several_lines_is_applied_to_a_file_with_crlf_endings_and_the_file_is_restored_byte_for_byte(tmp_path):
+    # a Windows checkout with core.autocrlf=true has CRLF endings; a list's `old` and `new` are written with \n
+    root = _repo(tmp_path)
+    crlf = SOURCE.replace("\n", "\r\n").encode("utf-8")
+    (root / "src" / "window.py").write_bytes(crlf)
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "def limit():\n    return 3", "new": "def limit():\n    return 4"}]
+    code = mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                        "--focused-only"])
+    (run,) = (tmp_path / "runs").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [(r["mutation"], r["caught"]) for r in results] == [("a wider window", True)]
+    assert code == 0
+    assert (root / "src" / "window.py").read_bytes() == crlf
+
+
 def test_every_run_keeps_its_own_results(tmp_path):
     root = _repo(tmp_path)
     path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"}])

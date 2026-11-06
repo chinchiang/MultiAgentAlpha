@@ -156,7 +156,11 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite
     `run_dir` while it is mutated (restore_left)."""
     path = root / m["file"]
     original = path.read_bytes()
-    mutant = original.decode("utf-8").replace(m["old"], m["new"]).encode("utf-8")
+    text = original.decode("utf-8")
+    old, new = m["old"], m["new"]
+    if "\r\n" in text:  # a list is read with its newlines as \n, as load reads the file (a Windows checkout has CRLF)
+        old, new = old.replace("\n", "\r\n"), new.replace("\n", "\r\n")
+    mutant = text.replace(old, new).encode("utf-8")
     for kind, data in (("original", original), ("mutant", mutant)):
         (run_dir / kind / m["file"]).parent.mkdir(parents=True, exist_ok=True)
         (run_dir / kind / m["file"]).write_bytes(data)
