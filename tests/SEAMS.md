@@ -185,6 +185,15 @@ arguments), `mara.model_eval.garak_command` (its returned environment) and `targ
 `mara.web.env.credential`. A test of a self-hosted endpoint sets the Anthropic key in the environment and asserts it is not
 used. A spec built without validation stands in where the spec's data-residency rules are not what is tested.
 
+## The progress record's replace (`src/mara/progress.py`)
+
+`test_progress.py` makes another process hold the progress record by patching replace on the os module that
+`mara.progress` imports: it raises a PermissionError a given number of times, then replaces as usual. So
+`mara.progress._replace` keeps calling it through the module, as os.replace; importing replace from os by name would leave
+the patch unreached, and the tests would pass on a replace never refused. Both writers, `Progress._write` and
+`mara.progress.close_abandoned`, go through `_replace`. The patch is the `os` module's own attribute, the same object
+everywhere, and monkeypatch restores it when the test ends.
+
 ## What a test must not read from the semgrep scan
 
 The number of accepted findings `scripts/semgrep_ci.py` reports is not a stable value: ten scans of the same tree gave

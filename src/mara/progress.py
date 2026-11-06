@@ -6,7 +6,8 @@ every pipeline log line, so `mara serve` can show where a running review is befo
 `Pipeline.run()` works; the workbench draws them as its pipeline stepper.
 
 Progress is a view, never evidence: nothing reads it back into a report, and a progress file that cannot be
-written is logged and skipped rather than failing the review it describes. Without a path every call is a no-op,
+written is logged and skipped rather than failing the review it describes. A replace Windows refuses while another
+process holds the file is tried again for about 200 ms first. Without a path every call is a no-op,
 so the pipeline always has one and tests and other callers need not pass it.
 """
 
@@ -17,6 +18,7 @@ import json
 import logging
 import os
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +39,23 @@ NOTE_CHARS = 300
 
 def _now() -> str:
     return dt.datetime.now(dt.UTC).isoformat(timespec="milliseconds")
+
+
+REPLACE_RETRIES = 10
+REPLACE_PAUSE = 0.02  # seconds: about 200 ms in all, longer than another process held the record in any we saw
+
+
+def _replace(tmp: Path, path: Path) -> None:
+    """os.replace(tmp, path), tried again for a moment while Windows refuses it: another process (a scanner, an
+    indexer) holding the record open refuses the replace for up to some 200 ms. Any other error, or a refusal that
+    outlasts the retries, is raised."""
+    for _ in range(REPLACE_RETRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            time.sleep(REPLACE_PAUSE)
+    os.replace(tmp, path)
 
 
 class Progress:
@@ -136,9 +155,9 @@ class Progress:
             try:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 tmp.write_text(text, encoding="utf-8")
-                os.replace(tmp, self.path)  # a reader sees the old or the new file, never half of one
+                _replace(tmp, self.path)  # a reader sees the old or the new file, never half of one
             except OSError as e:
-                # a view of the review, never part of it: a reader holding the file open on Windows, a full disk
+                # a view of the review, never part of it: a full disk, a reader holding the file open longer than _replace waits
                 _log.warning("progress file %s not written: %s", self.path, e)
                 try:
                     tmp.unlink(missing_ok=True)
@@ -161,7 +180,7 @@ def close_abandoned(path: Path, error: str) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-        os.replace(tmp, path)
+        _replace(tmp, path)
     except OSError as e:
         _log.warning("progress file %s not closed: %s", path, e)
         tmp.unlink(missing_ok=True)

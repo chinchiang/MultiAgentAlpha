@@ -4,6 +4,7 @@ leaves a failed record instead of one that reads as a blocked gate."""
 
 import json
 import re
+import time
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,54 @@ def test_stages_are_recorded_in_order_and_the_file_is_replaced_atomically(tmp_pa
     assert stages["bundle"]["started_at"] <= stages["bundle"]["finished_at"]
     assert stages["context"]["status"] == "skipped" and stages["tools"]["status"] == "pending"
     assert [f.name for f in tmp_path.iterdir()] == ["progress.json"], "no temporary file is left behind"
+
+
+def _refuse_replace(monkeypatch, times: int | None) -> None:
+    """os.replace refused as Windows refuses it while another process holds the target open: `times` times, then
+    replaced as usual; None: every time."""
+    real, refused = prog.os.replace, [0]
+
+    def replace(src, dst):
+        if times is None or refused[0] < times:
+            refused[0] += 1
+            raise PermissionError(13, "Access is denied", str(dst))
+        return real(src, dst)
+
+    monkeypatch.setattr(prog.os, "replace", replace)
+
+
+def test_a_record_another_process_holds_for_a_moment_is_still_written(tmp_path, monkeypatch, caplog):
+    path = tmp_path / "progress.json"
+    p = prog.Progress(path)
+    _refuse_replace(monkeypatch, 1)
+    p.log("L2: after the refusal")
+    assert prog.read(path)["log"] == ["L2: after the refusal"]
+    assert not [r for r in caplog.records if r.name == "mara.progress"]
+    assert [f.name for f in tmp_path.iterdir()] == ["progress.json"]
+
+
+def test_a_record_held_for_good_is_given_up_on_with_one_warning_and_the_review_goes_on(tmp_path, monkeypatch, caplog):
+    path = tmp_path / "progress.json"
+    p = prog.Progress(path)
+    _refuse_replace(monkeypatch, None)
+    started = time.monotonic()
+    p.log("L2: never written")
+    assert time.monotonic() - started < 2, "a record held for good is given up on, not waited for"
+    assert prog.read(path)["log"] == []
+    [warning] = [r.getMessage() for r in caplog.records if r.name == "mara.progress"]
+    assert warning.startswith(f"progress file {path} not written: ") and "Access is denied" in warning
+    assert [f.name for f in tmp_path.iterdir()] == ["progress.json"], "the temporary file is removed"
+
+
+def test_a_record_left_running_is_closed_even_when_another_process_holds_it_for_a_moment(tmp_path, monkeypatch, caplog):
+    path = tmp_path / "progress.json"
+    prog.Progress(path).begin("tools")
+    _refuse_replace(monkeypatch, 1)
+    prog.close_abandoned(path, "the review was cancelled")
+    d = prog.read(path)
+    assert d["status"] == "failed" and d["error"] == "the review was cancelled"
+    assert [s["status"] for s in d["stages"][:3]] == ["pending", "failed", "pending"]
+    assert not [r for r in caplog.records if r.name == "mara.progress"]
 
 
 def test_a_failure_marks_the_running_stage_failed(tmp_path):
