@@ -53,3 +53,6 @@ python_version = "3.11"  # the oldest supported interpreter, even when run on 3.
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "src"]
+# a passing test's tmp_path is removed at the end of the session; kept, the suite's thousands of temporary trees piled up
+# under pytest-of-<user> and pytest spent a minute or more removing old ones at the end of every run, even of one test
+tmp_path_retention_policy = "failed"
