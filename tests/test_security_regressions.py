@@ -527,7 +527,7 @@ def test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_i
     class Stop(Exception):
         pass
 
-    def fake_load(path):
+    def fake_load(path, workspace=None):
         seen["config"] = Path(path)
         raise Stop
 

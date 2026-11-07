@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 import re
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
 from .schemas import DIMENSIONS, SEVERITY_ORDER, EvidenceTier, ModelFamily, RolloutPhase
+
+if TYPE_CHECKING:
+    from .policy import PolicyResult
+    from .workspace import Workspace
 
 
 class ModelSpec(BaseModel):
@@ -302,16 +307,20 @@ class MaraConfig(BaseModel):
             if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+", host):
                 raise ValueError(f"vendor_api_hosts: {host!r} must be a lower-case host name such as api.example-vendor.com "
                                  "(no scheme, port, path or wildcard)")
-        # `mara check-config` validates the structure first and then renders every policy result;
-        # load_config runs the policies here so a violating file is refused outright.
+        # `mara check-config` validates the structure first and then renders every policy result. P1 to P6 read nothing
+        # but the config, so a config one of them fails is never built; load_config runs P7 and P8, which read a workspace.
         if info.context and info.context.get("skip_policies"):
             return self
-        from .policy import evaluate_policies
+        from .policy import config_policies
 
-        failed = [r for r in evaluate_policies(self) if not r.passed]
-        if failed:
-            raise ValueError("configuration violates policy: " + " | ".join(f"{r.id} {r.name}: {r.reason}" for r in failed))
+        _refuse_violations(config_policies(self))
         return self
+
+
+def _refuse_violations(results: list[PolicyResult]) -> None:
+    failed = [r for r in results if not r.passed]
+    if failed:
+        raise ValueError("configuration violates policy: " + " | ".join(f"{r.id} {r.name}: {r.reason}" for r in failed))
 
 
 # What makes a config file unusable: it cannot be read, is not YAML, or fails validation (pydantic's ValidationError
@@ -319,10 +328,17 @@ class MaraConfig(BaseModel):
 INVALID_FILE_ERRORS = (OSError, ValueError, yaml.YAMLError)
 
 
-def load_config(path: str | Path, *, enforce_policies: bool = True) -> MaraConfig:
+def load_config(path: str | Path, workspace: Workspace | None = None, *, enforce_policies: bool = True,
+                today: dt.date | None = None) -> MaraConfig:
     """The config at `path`, validated and with its defaults. A file violating a policy is refused unless
     `enforce_policies` is false, for a caller that reports the policies itself (policy.check_config_file,
-    scripts/governance_check.py). An empty file is a config with no keys and is refused for the fields it lacks. What
-    can be wrong with the file is INVALID_FILE_ERRORS; any other exception is a bug."""
+    scripts/governance_check.py): P1 to P6 when the config is built, then P7 and P8 against the files of `workspace`, P8 at
+    `today` (the environment's workspace and the clock when not given). An empty file is a config with no keys and is
+    refused for the fields it lacks. What can be wrong with the file is INVALID_FILE_ERRORS; any other exception is a bug."""
     with open(path, encoding="utf-8") as fh:
-        return MaraConfig.model_validate(yaml.safe_load(fh) or {}, context=None if enforce_policies else {"skip_policies": True})
+        cfg = MaraConfig.model_validate(yaml.safe_load(fh) or {}, context=None if enforce_policies else {"skip_policies": True})
+    if enforce_policies:
+        from .policy import workspace_policies
+
+        _refuse_violations(workspace_policies(cfg, workspace, today))
+    return cfg

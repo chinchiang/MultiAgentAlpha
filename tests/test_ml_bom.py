@@ -182,10 +182,16 @@ def test_cli_round_trip_and_cosign_commands(tmp_path, monkeypatch):
 
 
 def _cfg_with(tmp_path: Path, bom_path: Path, model_id: str, **ml_bom) -> MaraConfig:
+    """config/examples/ml-bom-required.yaml with its BOM at `bom_path` and `ml_bom` over it, loaded in the workspace
+    `tmp_path`: P7 refuses it there when it fails."""
+    from mara.workspace import Workspace
+
     raw = yaml.safe_load((ROOT / "config" / "examples" / "ml-bom-required.yaml").read_text(encoding="utf-8"))
     raw["models"][1]["model"] = model_id
     raw["ml_bom"] = {**raw["ml_bom"], "path": str(bom_path), **ml_bom}
-    return MaraConfig.model_validate(raw)
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    return load_config(config, Workspace(tmp_path))
 
 
 def test_policy_p7_three_states(tmp_path):
@@ -224,6 +230,44 @@ def test_policy_p7_three_states(tmp_path):
     # the repository configs
     assert [x.passed for x in __import__("mara.policy", fromlist=["evaluate_policies"]).evaluate_policies(load_config(ROOT / "config" / "mara.yaml"))].count(False) == 0
     assert load_config(ROOT / "config" / "examples" / "ml-bom-required.yaml").ml_bom.required
+
+
+def _signed_bom_in(workspace: Path, weights: Path) -> None:
+    """A complete ML-BOM at sbom/ml-bom.cdx.json below `workspace`, and a bundle made for it beside it."""
+    import base64
+
+    (workspace / "sbom").mkdir(parents=True)
+    bom = workspace / "sbom" / "ml-bom.cdx.json"
+    bom.write_text(json.dumps(mlbom.build_bom([_entry(mlbom.hash_dir(weights))])), encoding="utf-8")
+    digest = base64.b64encode(hashlib.sha256(bom.read_bytes()).digest()).decode()
+    (workspace / "sbom" / "ml-bom.cdx.json.sigstore.json").write_text(
+        json.dumps({"messageSignature": {"messageDigest": {"algorithm": "SHA2_256", "digest": digest}, "signature": "x"}}), encoding="utf-8")
+
+
+def test_policy_p7_reads_the_ml_bom_and_bundle_of_the_workspace_it_is_given_not_of_the_environment(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    # the environment's workspace (MARA_HOME, and the working directory) holds neither the BOM nor its bundle
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.setenv("MARA_HOME", str(elsewhere))
+    monkeypatch.chdir(elsewhere)
+    given = tmp_path / "given"
+    weights = _weights(tmp_path)
+    _signed_bom_in(given, weights)
+    raw = yaml.safe_load((ROOT / "config" / "examples" / "ml-bom-required.yaml").read_text(encoding="utf-8"))
+    raw["models"][1]["model"] = "example/model-7b"
+    raw["ml_bom"] = {**raw["ml_bom"], "path": "sbom/ml-bom.cdx.json", "required": True, "require_signature": True,
+                     "bundle": "sbom/ml-bom.cdx.json.sigstore.json"}
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    assert load_config(config, Workspace(given)).ml_bom.required
+
+    # and a workspace without them is refused, whatever the environment holds
+    _signed_bom_in(elsewhere, weights)
+    with pytest.raises(ValueError, match="P7 ml-bom"):
+        load_config(config, Workspace(tmp_path / "empty"))
 
 
 _COMPONENT = {"type": "machine-learning-model", "name": "example/model-7b"}
