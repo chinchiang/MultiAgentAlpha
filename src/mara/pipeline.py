@@ -36,7 +36,7 @@ from .scoring.dimension_score import score_dimension
 from .scoring.outcome import OutcomePolicy
 from .tools.evidence import ToolEvidence
 from .tools.runner import ToolRun, load_prerecorded, run_all
-from .workspace import check_outside
+from .workspace import Workspace, check_outside
 from .workspace import root as workspace_root
 
 
@@ -145,7 +145,7 @@ class Pipeline:
         target = Path(target).resolve()
         # before anything runs: the tools come from, and P8/the backlog were read from, the MARA
         # workspace; none of it may be supplied by the repository under review
-        check_outside(target, workspace=self.workspace)
+        check_outside(target, workspace=Workspace.from_env(root=self.workspace))
         answer_key = calibration_answer_key(target, self.workspace) if calibration_sample else None
         if base_ref:  # an empty one is no base; a refused one leaves no output directory behind
             check_base(target, base_ref)

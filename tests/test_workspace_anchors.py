@@ -144,3 +144,46 @@ def test_no_script_reads_or_writes_model_eval_summaries_in_its_checkout():
     offenders = [f"{p.name}:{n}" for p in sorted((ROOT / "scripts").glob("*.py"))
                  for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1) if pattern.search(line)]
     assert offenders == [], offenders
+
+
+# ---------------------------------------------------------------- check_outside judges the workspace it is given
+
+def _outside_environment(monkeypatch, tmp_path):
+    """MARA_HOME, MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR all well outside any target."""
+    env = tmp_path / "environment"
+    env.mkdir()
+    monkeypatch.setenv("MARA_HOME", str(env))
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(env / "tools"))
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(env / "cache"))
+    return env
+
+
+@pytest.mark.parametrize("anchor, match", [("root", "MARA workspace"), ("tools_dir", "tool directory"), ("trivy_cache", "trivy")])
+def test_check_outside_refuses_a_target_that_holds_an_anchor_of_the_workspace_it_is_given(tmp_path, monkeypatch, anchor, match):
+    """Each anchor is the given workspace's own, never the environment's, which here lies outside the target."""
+    from mara import workspace
+    from mara.workspace import Workspace
+
+    _outside_environment(monkeypatch, tmp_path)
+    target = tmp_path / "target"
+    target.mkdir()
+    safe = tmp_path / "safe"
+    anchors = {"root": safe / "root", "tools_dir": safe / "tools", "trivy_cache": safe / "cache"}
+    anchors[anchor] = target / anchor
+    ws = Workspace(anchors["root"], anchors["tools_dir"], anchors["trivy_cache"])
+    with pytest.raises(workspace.WorkspaceInsideTarget, match=match):
+        workspace.check_outside(target, workspace=ws)
+
+
+def test_check_outside_accepts_a_target_when_the_anchors_of_the_workspace_it_is_given_lie_outside_it(tmp_path, monkeypatch):
+    """The environment's anchors are not consulted: they lie inside the target here, the given workspace's do not."""
+    from mara import workspace
+    from mara.workspace import Workspace
+
+    target = tmp_path / "target"
+    target.mkdir()
+    monkeypatch.setenv("MARA_HOME", str(target))
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(target / "tools"))
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(target / "cache"))
+    safe = tmp_path / "safe"
+    workspace.check_outside(target, workspace=Workspace(safe, safe / "tools", safe / "cache"))
