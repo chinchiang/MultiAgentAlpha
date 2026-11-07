@@ -259,6 +259,12 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 scripts/line_width.py --base "$BASE_SHA"
+      - name: Control characters in what the pull request adds (its lines in every text file, its commit messages)
+        # a heredoc, sed or a tool input can write an escape as the character itself; no tracked text file holds one
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/control_chars.py --base "$BASE_SHA"
       - name: Unit and end-to-end tests (mock providers, no network; tool tests against the locked binaries)
         run: pytest -q -rs
       - name: Mock review of the seeded fixture (gate expected to block)

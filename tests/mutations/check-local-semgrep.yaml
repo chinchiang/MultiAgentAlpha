@@ -2,12 +2,12 @@ focused: [tests/test_check_local.py]
 mutations:
   - name: semgrep left out of the default checks
     file: scripts/check_local.py
-    old: 'DEFAULT_CHECKS = ("ruff", "lines", "mypy", "semgrep", "pytest", "gitleaks")'
-    new: 'DEFAULT_CHECKS = ("ruff", "lines", "mypy", "pytest", "gitleaks")'
+    old: 'DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks")'
+    new: 'DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "pytest", "gitleaks")'
   - name: semgrep run after the suite
     file: scripts/check_local.py
-    old: 'DEFAULT_CHECKS = ("ruff", "lines", "mypy", "semgrep", "pytest", "gitleaks")'
-    new: 'DEFAULT_CHECKS = ("ruff", "lines", "mypy", "pytest", "semgrep", "gitleaks")'
+    old: 'DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks")'
+    new: 'DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "pytest", "semgrep", "gitleaks")'
   - name: semgrep against another triage file
     file: scripts/check_local.py
     old: '"--triage", "tools/semgrep-triage.yaml"], {}, None),'
