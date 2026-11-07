@@ -165,3 +165,24 @@ def test_the_tool_directory_and_a_tool_are_those_of_the_workspace_given_not_of_M
     in_workspace = _fake_tool(ws.tools_dir, "gitleaks")
     assert runner.tool_path("gitleaks", workspace=ws) == in_workspace != in_environment
     assert runner.tool_path("gitleaks") == in_environment  # without a workspace, as before
+
+
+def _manifest(tools: Path, tool: str, version: str) -> None:
+    tools.mkdir(parents=True, exist_ok=True)
+    (tools / "manifest.json").write_text(json.dumps({"tools": {tool: {"version": version, "signature_verified": True}}}),
+                                         encoding="utf-8")
+
+
+def test_the_manifest_entry_and_version_of_a_tool_are_those_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    environment = tmp_path / "environment-tools"
+    _manifest(environment, "gitleaks", "1.0.0")
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    assert runner.installed_manifest_entry("gitleaks", workspace=ws) is None  # the environment's manifest is not the workspace's
+    assert runner.installed_version("gitleaks", workspace=ws) is None
+    _manifest(ws.tools_dir, "gitleaks", "2.0.0")
+    assert runner.installed_manifest_entry("gitleaks", workspace=ws) == {"version": "2.0.0", "signature_verified": True}
+    assert runner.installed_version("gitleaks", workspace=ws) == "2.0.0"
+    assert runner.installed_version("gitleaks") == "1.0.0"  # without a workspace, as before
