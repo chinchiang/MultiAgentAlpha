@@ -71,7 +71,7 @@ def every_tool(tmp_path, monkeypatch, parent_env):
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     rules = tmp_path / "rules"
     rules.mkdir()
-    monkeypatch.setattr(semgrep_rules, "installed_rule_paths", lambda: [rules])
+    monkeypatch.setattr(semgrep_rules, "installed_rule_paths", lambda workspace=None: [rules])
     monkeypatch.delenv("MARA_SEMGREP_CONFIG", raising=False)
     target = tmp_path / "target"
     (target / ".github" / "workflows").mkdir(parents=True)
@@ -301,3 +301,46 @@ def test_run_alls_trivy_scan_uses_the_trivy_cache_of_the_workspace_given_not_of_
     empty = Workspace(ws.root, tools_dir=tools, trivy_cache=tmp_path / "empty-cache")
     [run] = runner.run_all(target, tmp_path / "out2", enabled=["trivy"], workspace=empty)
     assert not run.ran and f"no offline database under {empty.trivy_cache}" in run.note
+
+
+def test_run_alls_semgrep_scan_uses_the_rules_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    def install(tools: Path, *, rules: bool) -> Path:
+        """<tools>/manifest.json records semgrep at its locked version and, with `rules`, the rules checkout below
+        <tools>/semgrep-rules with its one rule directory."""
+        entries = {"semgrep": {"version": tool_installs.locked("semgrep"), "signature_verified": True}}
+        rule_dir = tools / semgrep_rules.RULES_DIR_NAME / "python"
+        if rules:
+            rule_dir.mkdir(parents=True)
+            entries[semgrep_rules.RULES_DIR_NAME] = {"version": "1", "paths": ["python"]}
+        tools.mkdir(parents=True, exist_ok=True)
+        (tools / "manifest.json").write_text(json.dumps({"tools": entries}), encoding="utf-8")
+        return rule_dir
+
+    scans: list[list[str]] = []
+
+    def fake_subprocess_run(cmd, *a, **kw):
+        scans.append(list(cmd))
+        Path(cmd[cmd.index("--output") + 1]).write_text(EMPTY_SARIF, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
+    monkeypatch.delenv("MARA_SEMGREP_CONFIG", raising=False)
+    environment = tmp_path / "environment-tools"
+    in_environment = install(environment, rules=True)
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    _fake_tool(ws.tools_dir, "semgrep")
+    tool_installs.lock_into(ws.root)
+    target = tmp_path / "target"
+    target.mkdir()
+
+    install(ws.tools_dir, rules=False)  # the workspace has semgrep but no rules; the environment's rules are not its own
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["semgrep"], workspace=ws)
+    assert not run.ran and f"not installed under {ws.tools_dir / 'semgrep-rules'}" in run.note and not scans
+
+    in_workspace = install(ws.tools_dir, rules=True)
+    [run] = runner.run_all(target, tmp_path / "out2", enabled=["semgrep"], workspace=ws)
+    [scan] = scans
+    assert run.ran and scan[scan.index("--config") + 1] == str(in_workspace) != str(in_environment)

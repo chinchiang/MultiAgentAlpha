@@ -211,7 +211,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, wo
                 from .semgrep_rules import default_configs, normalize_sarif, override_configs, scan_env
                 from .semgrep_rules import scan_args as semgrep_args
 
-                configs = default_configs()
+                configs = default_configs(workspace=workspace)
                 override = override_configs()
                 if override:
                     # MARA_SEMGREP_CONFIG replaced the pinned rules: the run is still recorded, but never as pinned
@@ -222,7 +222,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, wo
                     version = f"{version}; {rules_note}" if version else rules_note
                 if not configs:
                     runs.append(ToolRun(tool=tool, ran=False, note="pinned semgrep-rules not installed under "
-                                        f"{tools_dir() / 'semgrep-rules'} (scripts/install_tools.py); no registry fallback"))
+                                        f"{tools_dir(workspace=workspace) / 'semgrep-rules'} (scripts/install_tools.py); no registry fallback"))
                     continue
                 cp = _run(semgrep_args(exe, configs, sarif) + SEMGREP_TARGET_FLAGS + ["."], target, env=scan_env())
                 if sarif.exists() and sarif.read_text(encoding="utf-8").strip():
