@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -139,3 +140,28 @@ def test_blank_override_falls_back_to_the_pinned_rules(every_tool, monkeypatch):
     assert semgrep_rules.override_configs() == []
     [run] = runner.run_all(target, out, enabled=["semgrep"])
     assert run.note == f"pinned {tool_installs.locked('semgrep')}"
+
+
+# ---------------------------------------------------------------- the tool directory of the workspace the runner is given
+
+def _fake_tool(tools: Path, name: str) -> Path:
+    """An executable `name` in <tools>/bin, as tool_path finds one (a .cmd on Windows)."""
+    binary = tools / "bin" / (f"{name}.cmd" if sys.platform == "win32" else name)
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary.chmod(0o755)
+    return binary
+
+
+def test_the_tool_directory_and_a_tool_are_those_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    environment = tmp_path / "environment-tools"
+    in_environment = _fake_tool(environment, "gitleaks")
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    assert runner.tools_dir(workspace=ws) == ws.tools_dir
+    assert runner.tool_path("gitleaks", workspace=ws) is None  # the environment's copy is not the workspace's
+    in_workspace = _fake_tool(ws.tools_dir, "gitleaks")
+    assert runner.tool_path("gitleaks", workspace=ws) == in_workspace != in_environment
+    assert runner.tool_path("gitleaks") == in_environment  # without a workspace, as before

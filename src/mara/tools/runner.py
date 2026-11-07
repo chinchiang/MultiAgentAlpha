@@ -23,9 +23,13 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import pins
 from .sarif import ToolResult, read_sarif, scan_complete
+
+if TYPE_CHECKING:
+    from ..workspace import Workspace
 
 _log = logging.getLogger("mara.tools")
 NOT_INSTALLED = "not installed under {bin_dir}; run `python scripts/install_tools.py`"
@@ -55,17 +59,21 @@ def tool_env(*extra: str, **set_vars: str) -> dict[str, str]:
     return env
 
 
-def tools_dir(workspace: Path | None = None) -> Path:
-    """MARA_TOOLS_DIR, or .mara-tools; a relative one below `workspace`, the MARA workspace by default."""
+def tools_dir(root: Path | None = None, *, workspace: Workspace | None = None) -> Path:
+    """The tool directory of `workspace` when one is given, whatever MARA_TOOLS_DIR says. Otherwise MARA_TOOLS_DIR, or
+    .mara-tools; a relative one below `root`, the MARA workspace root by default."""
     from ..workspace import resolve
 
+    if workspace is not None:
+        return workspace.tools_dir.resolve()
     d = Path(os.environ.get("MARA_TOOLS_DIR") or ".mara-tools")
-    return (workspace / d if workspace is not None and not d.is_absolute() else resolve(d)).resolve()
+    return (root / d if root is not None and not d.is_absolute() else resolve(d)).resolve()
 
 
-def tool_path(tool: str) -> Path | None:
-    """The pinned, verified binary for `tool`, or None. Never consults PATH."""
-    base = tools_dir() / "bin" / tool
+def tool_path(tool: str, *, workspace: Workspace | None = None) -> Path | None:
+    """The pinned, verified binary for `tool` in the tool directory of `workspace` (the environment's when not given),
+    or None. Never consults PATH."""
+    base = tools_dir(workspace=workspace) / "bin" / tool
     candidates = [base.with_suffix(".cmd"), base.with_suffix(".bat"), base.with_suffix(".exe"), base] if sys.platform == "win32" else [base]
     for p in candidates:
         if p.is_file() and os.access(p, os.X_OK):
