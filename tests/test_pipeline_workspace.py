@@ -153,7 +153,8 @@ def test_a_pipeline_runs_the_tools_installed_in_the_workspace_it_is_given_not_be
     real_run = subprocess.run
 
     def fake_subprocess_run(cmd, *a, **kw):
-        if Path(cmd[0]).name != "gitleaks":  # runner.subprocess is the shared module: git and the rest run as they are
+        if Path(cmd[0]).stem != "gitleaks":  # runner.subprocess is the shared module: git and the rest run as they are (the
+            # stem: a fake tool is gitleaks.cmd on Windows)
             return real_run(cmd, *a, **kw)
         started.append(Path(cmd[0]))
         Path(cmd[cmd.index("--report-path") + 1]).write_text(EMPTY_SARIF, encoding="utf-8")
