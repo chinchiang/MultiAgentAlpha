@@ -16,11 +16,21 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class Workspace:
-    """The MARA workspace a reader is given: its relative paths resolve below `root`, never against the environment."""
+    """The MARA workspace a reader is given: its relative paths resolve below `root`, never against the environment.
+    The tool directory is `tools_dir` and the trivy cache `trivy_cache`; when not given they are <root>/.mara-tools and
+    <tool directory>/trivy-cache. Building a workspace reads no environment variable."""
 
     root: Path
+    tools_dir: Path
+    trivy_cache: Path
+
+    def __init__(self, root: Path, tools_dir: Path | None = None, trivy_cache: Path | None = None) -> None:
+        tools = tools_dir if tools_dir is not None else root / ".mara-tools"
+        object.__setattr__(self, "root", root)
+        object.__setattr__(self, "tools_dir", tools)
+        object.__setattr__(self, "trivy_cache", trivy_cache if trivy_cache is not None else tools / "trivy-cache")
 
 
 class WorkspaceInsideTarget(ValueError):
