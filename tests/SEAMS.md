@@ -22,8 +22,8 @@ it names. When a module changes between importing a name (`from .config import l
 changes the class itself, the same object wherever it is imported.
 
 A review's tool runner is given, not patched: a test passes it to `Pipeline(cfg, ..., run_tools=...)` (below).
-`run_all` is that parameter's default, bound when the class is defined, so a patch of `mara.pipeline.run_all` or
-`mara.tools.runner.run_all` reaches no review.
+A pipeline given none takes `run_all` from `mara.pipeline` when it is built, so a patch of `mara.pipeline.run_all` made
+before `Pipeline(cfg)` reaches that review, and one made after it, or of `mara.tools.runner.run_all`, reaches none.
 
 ## The pipeline (`src/mara/pipeline.py`)
 
@@ -35,13 +35,18 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   instead); and in live mode with a `sarif_dir`, again for the secret preflight, into `<out_dir>/live-secret-preflight`
   with `enabled=["gitleaks"]`. `test_security_regressions.py`, `test_redteam_strip.py`, `test_tool_evidence.py`; the
   two calls: `test_tool_evidence.py::test_a_review_takes_its_tool_runs_from_the_runner_it_is_given`,
-  `test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress`.
+  `test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress`. A runner that is given is
+  called as it is, with nothing added, whatever its signature; one that is not is `run_all` of the pipeline's workspace
+  (the next seam).
 - `Pipeline(cfg, ..., workspace=...)`: tests pass a directory of their own as the MARA workspace. The pipeline fixes
   it when it is built (`Pipeline.workspace`; MARA_HOME, else the working directory, when none is given) and reads
   the ticket backlog, the ML-BOM, the decision files and training register, the signature bundle, the model
   evaluations and the calibration samples there, so a test setting MARA_HOME before `Pipeline(cfg)` still reaches
-  them and one setting it after does not. The tool runner keeps its own (`run_tools=`, MARA_TOOLS_DIR).
-  `test_pipeline_workspace.py`.
+  them and one setting it after does not. A tool runner that is not given is `run_all` with that workspace: its tool
+  directory is MARA_TOOLS_DIR when that is set, else `.mara-tools` below the workspace, with the workspace's version lock
+  and MARA_TRIVY_CACHE_DIR or the cache below the tool directory. `tests/conftest.py` sets MARA_TOOLS_DIR to an empty
+  directory for every test, so a test that installs a tool below the workspace unsets it first.
+  `test_pipeline_workspace.py`, `test_pipeline_workspace.py::test_a_pipeline_runs_the_tools_installed_in_the_workspace_it_is_given_not_below_mara_home`.
 - `Pipeline.providers`: the dict, or its items, replaced after `Pipeline(cfg)` and before `run()`. `Pipeline.run`
   reads them when it runs (the provider mode check, binding the target, the reviewer round, the ballot round, the provider
   manifest); nothing built in `Pipeline.__init__` holds them. `fake_panel.py`, `test_exchange.py`, `test_audit.py`,
@@ -160,12 +165,20 @@ code that writes it, so it changes with that code:
 - `tests/fake_panel.py`: the ballot round's fake panel, above.
 - `tests/tool_installs.py`: what `scripts/install_tools.py` leaves for `runner.run_all`, the workspace's lock and a
   tool directory's manifest recording each tool at its locked version. A test faking a tool's binary gives the runner
-  these instead of patching `runner.installed_version`, so the pin check (`mara.tools.pins`) runs as in a review.
+  these instead of patching `runner.installed_version`, so the pin check (`mara.tools.pins`) runs as in a review. A
+  `run_all` given a workspace reads the lock below that workspace's root (`lock_into(workspace.root)`), not below
+  MARA_HOME, and runs no tool for a workspace without one.
   `test_tool_env.py`, `test_tool_target_config.py`, `test_base_ref_trivy_hf_token.py`, `test_tools_csp.py`,
   `test_install_tools.py`.
 
 ## The MARA workspace (`src/mara/workspace.py`)
 
+- `Workspace(root, tools_dir=None, trivy_cache=None)`: the tool directory is `<root>/.mara-tools` and the trivy cache
+  `<tool directory>/trivy-cache` when not given, and building one reads no environment variable, whatever MARA_HOME,
+  MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR say. `Workspace.from_env(root=None)` reads them (a reader given no workspace still does too): the root
+  is `root`, else MARA_HOME, else the working directory; MARA_TOOLS_DIR (a relative one below the root) and
+  MARA_TRIVY_CACHE_DIR win over what the root derives. A test starts by removing the three from the environment.
+  `test_workspace.py`.
 - `Workspace(root)`: tests pass `Workspace(tmp_path)` to `mara.config.load_config` (`load_config(path, workspace,
   today=...)`), `mara.policy.evaluate_policies` and `mara.policy.workspace_policies`. Policy P7 (`mara.policy.p7_ml_bom`)
   reads the ML-BOM and its signature bundle, P8 (`mara.policy.p8_unsupervised_reject`) `calib/latest.json`, below that
@@ -181,6 +194,21 @@ code that writes it, so it changes with that code:
   Evidence record below the `tmp_path` it lists and sets MARA_HOME elsewhere. `mara check-config` still passes none (the
   environment's). `test_policy.py::test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment`,
   `test_panel.py::test_the_environment_page_lists_policies_as_the_workspace_it_is_given_holds_evidence_for_them`.
+- `mara.workspace.check_outside(target, extra, workspace=...)` judges the root, the tool directory and the trivy cache of
+  the `Workspace` it is given (`Workspace.from_env()` when none), so a test puts them inside or outside `target` through
+  that workspace and sets the environment's elsewhere. `test_workspace_anchors.py`.
+- The tool runner reads the tool directory of a workspace passed as the keyword `workspace=` (when it is left out, the
+  environment's): `mara.tools.runner.tools_dir`, `tool_path`, `installed_manifest_entry`, `installed_version` and
+  `run_all`; `mara.tools.trivy_db.cache_dir`, `mara.tools.csp_eval.driver_path` and `run_csp_eval`,
+  `mara.tools.semgrep_rules.rules_dir`, `installed_rule_paths` and `default_configs`. `tools_dir`'s first parameter is
+  `root`, below which a relative MARA_TOOLS_DIR lies, and `workspace` wins when both are given. A test that replaces
+  `runner.tool_path` or `semgrep_rules.installed_rule_paths` with a fake gives it `workspace=None` too, since `run_all`
+  calls them with the keyword (the `every_tool` fixture of `test_tool_env.py`). The scripts still read the
+  environment's. `test_tool_env.py`, `test_trivy_db.py`.
+- The environment page lists the tools and the trivy database of the workspace it lists: `mara.web.env.tools(workspace)`
+  and `mara.web.env.environment` take the tool directory MARA_TOOLS_DIR names, else the one below that workspace, so a
+  test installs a tool below the workspace it lists and unsets MARA_TOOLS_DIR; `mara.web.env.trivy(cache, workspace=...)`
+  takes an explicit `cache` before the workspace's trivy cache. `test_panel.py`.
 
 ## The Evidence record (`src/mara/evidence.py`)
 

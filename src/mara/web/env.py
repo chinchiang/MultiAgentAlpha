@@ -58,12 +58,13 @@ def _sha256(path: Path) -> str | None:
 def tools(workspace: Path) -> dict[str, Any]:
     lock_path = workspace / pins.LOCK
     lock = pins.read_lock(lock_path)
-    tdir = tools_dir()
+    ws = Workspace.from_env(root=workspace)  # the tool directory MARA_TOOLS_DIR names, else the one below `workspace`
+    tdir = tools_dir(workspace=ws)
     rows = []
     for name, spec in pins.locked_tools(lock).items():
-        entry = installed_manifest_entry(name)
+        entry = installed_manifest_entry(name, workspace=ws)
         kind = str(spec.get("kind", ""))
-        installed = (tdir / name).is_dir() if kind == "git" else tool_path(name) is not None
+        installed = (tdir / name).is_dir() if kind == "git" else tool_path(name, workspace=ws) is not None
         locked = str(spec.get("version", ""))
         have = str(entry.get("version")) if entry and entry.get("version") is not None else None
         status = pins.install_status(locked, entry, installed=installed)
@@ -102,8 +103,10 @@ def tools(workspace: Path) -> dict[str, Any]:
     }
 
 
-def trivy(cache: Path | None = None) -> dict[str, Any]:
-    cache = cache or trivy_db.cache_dir()
+def trivy(cache: Path | None = None, *, workspace: Workspace | None = None) -> dict[str, Any]:
+    """The state of the offline database in `cache`, else in the trivy cache of `workspace` (the environment's when
+    neither is given)."""
+    cache = cache or trivy_db.cache_dir(workspace=workspace)
     db = trivy_db.db_path(cache)
     limit = trivy_db.max_age_hours()
     try:
@@ -191,7 +194,7 @@ def environment(workspace: Path, out_dir: Path) -> dict[str, Any]:
         "out_dir": str(out_dir),
         "env_vars": {name: bool(os.environ.get(name)) for name in WORKSPACE_ENV},
         "tools": tools(workspace),
-        "trivy_db": trivy(),
+        "trivy_db": trivy(workspace=Workspace.from_env(root=workspace)),
         "node": node(),
         "actions": jobs.available(workspace),
     }

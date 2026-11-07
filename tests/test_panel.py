@@ -228,3 +228,48 @@ def test_the_environment_page_lists_policies_as_the_workspace_it_is_given_holds_
 
     (entry,) = env.configs(tmp_path)
     assert entry["structure_ok"] and entry["loadable"], [p for p in entry["policies"] if not p["passed"]]
+
+
+# ---------------------------------------------------------------- the tools and the trivy database of the workspace the page lists
+
+def _page_workspace(tmp_path, monkeypatch):
+    """A MARA workspace with gitleaks installed below it, its lock and manifest; MARA_HOME and the working directory are
+    elsewhere and MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR are unset (tests/conftest.py sets the first for every test)."""
+    from tests import tool_installs
+    from tests.test_tool_env import _fake_tool
+
+    ws, elsewhere = tmp_path / "ws", tmp_path / "elsewhere"
+    ws.mkdir()
+    elsewhere.mkdir()
+    monkeypatch.delenv("MARA_TOOLS_DIR", raising=False)
+    monkeypatch.delenv("MARA_TRIVY_CACHE_DIR", raising=False)
+    monkeypatch.setenv("MARA_HOME", str(elsewhere))
+    monkeypatch.chdir(elsewhere)
+    _fake_tool(ws / ".mara-tools", "gitleaks")
+    tool_installs.manifest(ws / ".mara-tools", "gitleaks")
+    tool_installs.lock_into(ws)
+    return ws
+
+
+def test_the_tools_the_page_lists_are_those_installed_in_the_workspace_it_lists_not_below_mara_home(tmp_path, monkeypatch):
+    ws = _page_workspace(tmp_path, monkeypatch)
+    page = env.tools(ws)
+    assert page["tools_dir"] == str(ws / ".mara-tools")
+    assert {r["name"]: r["status"] for r in page["rows"]}["gitleaks"] == "ok"
+
+
+def test_the_trivy_cache_the_page_lists_is_that_of_the_workspace_given_and_an_explicit_cache_still_wins(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(tmp_path / "environment-cache"))
+    ws = Workspace(tmp_path / "ws", trivy_cache=tmp_path / "workspace-cache")
+    assert env.trivy(workspace=ws)["cache_dir"] == str(tmp_path / "workspace-cache")
+    assert env.trivy(cache=tmp_path / "explicit", workspace=ws)["cache_dir"] == str(tmp_path / "explicit")
+    assert env.trivy()["cache_dir"] == str(tmp_path / "environment-cache")  # given neither, as before
+
+
+def test_the_environment_page_takes_its_tool_directory_and_trivy_cache_from_the_workspace_it_lists(tmp_path, monkeypatch):
+    ws = _page_workspace(tmp_path, monkeypatch)
+    page = env.environment(ws, tmp_path / "out")
+    assert page["tools"]["tools_dir"] == str(ws / ".mara-tools")
+    assert page["trivy_db"]["cache_dir"] == str(ws / ".mara-tools" / "trivy-cache")

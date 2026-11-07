@@ -111,7 +111,7 @@ def trivy_env(tmp_path, monkeypatch):
     tool_installs.manifest(tmp_path / "tools", "trivy")
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(tmp_path / "cache"))
-    monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
+    monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
     monkeypatch.setattr(runner, "_run", fake_run)
     target = tmp_path / "target"
     target.mkdir()

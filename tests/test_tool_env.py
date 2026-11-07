@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -65,12 +66,12 @@ def every_tool(tmp_path, monkeypatch, parent_env):
         return subprocess.CompletedProcess(cmd, 0, stdout=EMPTY_SARIF if Path(cmd[0]).name == "zizmor" else "", stderr="")
 
     monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
-    monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
+    monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
     tool_installs.manifest(tmp_path / "tools", *runner.TOOL_DIMENSIONS)  # each at its locked version
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     rules = tmp_path / "rules"
     rules.mkdir()
-    monkeypatch.setattr(semgrep_rules, "installed_rule_paths", lambda: [rules])
+    monkeypatch.setattr(semgrep_rules, "installed_rule_paths", lambda workspace=None: [rules])
     monkeypatch.delenv("MARA_SEMGREP_CONFIG", raising=False)
     target = tmp_path / "target"
     (target / ".github" / "workflows").mkdir(parents=True)
@@ -139,3 +140,234 @@ def test_blank_override_falls_back_to_the_pinned_rules(every_tool, monkeypatch):
     assert semgrep_rules.override_configs() == []
     [run] = runner.run_all(target, out, enabled=["semgrep"])
     assert run.note == f"pinned {tool_installs.locked('semgrep')}"
+
+
+# ---------------------------------------------------------------- the tool directory of the workspace the runner is given
+
+def _fake_tool(tools: Path, name: str) -> Path:
+    """An executable `name` in <tools>/bin, as tool_path finds one (a .cmd on Windows)."""
+    binary = tools / "bin" / (f"{name}.cmd" if sys.platform == "win32" else name)
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary.chmod(0o755)
+    return binary
+
+
+def test_the_tool_directory_and_a_tool_are_those_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    environment = tmp_path / "environment-tools"
+    in_environment = _fake_tool(environment, "gitleaks")
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    assert runner.tools_dir(workspace=ws) == ws.tools_dir
+    assert runner.tool_path("gitleaks", workspace=ws) is None  # the environment's copy is not the workspace's
+    in_workspace = _fake_tool(ws.tools_dir, "gitleaks")
+    assert runner.tool_path("gitleaks", workspace=ws) == in_workspace != in_environment
+    assert runner.tool_path("gitleaks") == in_environment  # without a workspace, as before
+
+
+def _manifest(tools: Path, tool: str, version: str) -> None:
+    tools.mkdir(parents=True, exist_ok=True)
+    (tools / "manifest.json").write_text(json.dumps({"tools": {tool: {"version": version, "signature_verified": True}}}),
+                                         encoding="utf-8")
+
+
+def test_the_manifest_entry_and_version_of_a_tool_are_those_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    environment = tmp_path / "environment-tools"
+    _manifest(environment, "gitleaks", "1.0.0")
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    assert runner.installed_manifest_entry("gitleaks", workspace=ws) is None  # the environment's manifest is not the workspace's
+    assert runner.installed_version("gitleaks", workspace=ws) is None
+    _manifest(ws.tools_dir, "gitleaks", "2.0.0")
+    assert runner.installed_manifest_entry("gitleaks", workspace=ws) == {"version": "2.0.0", "signature_verified": True}
+    assert runner.installed_version("gitleaks", workspace=ws) == "2.0.0"
+    assert runner.installed_version("gitleaks") == "1.0.0"  # without a workspace, as before
+
+
+def test_the_csp_driver_is_that_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    def put_driver(tools: Path) -> Path:
+        driver = tools / csp_eval.PACKAGE_DIR / csp_eval.DRIVER_NAME
+        driver.parent.mkdir(parents=True)
+        driver.write_text("// driver\n", encoding="utf-8")
+        return driver
+
+    environment = tmp_path / "environment-tools"
+    in_environment = put_driver(environment)
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    assert csp_eval.driver_path(workspace=ws) is None  # the environment's driver is not the workspace's
+    in_workspace = put_driver(ws.tools_dir)
+    assert csp_eval.driver_path(workspace=ws) == in_workspace != in_environment
+    assert csp_eval.driver_path() == in_environment  # without a workspace, as before
+
+
+def test_the_semgrep_rules_directory_is_below_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    environment = tmp_path / "environment-tools"
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    assert semgrep_rules.rules_dir(workspace=ws) == tmp_path / "ws" / ".mara-tools" / "semgrep-rules"
+    assert semgrep_rules.rules_dir() == environment / "semgrep-rules"  # without a workspace, as before
+
+
+def test_run_all_finds_a_tool_and_its_manifest_in_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    started: list[Path] = []
+
+    def fake_subprocess_run(cmd, *a, **kw):
+        started.append(Path(cmd[0]))
+        Path(cmd[cmd.index("--report-path") + 1]).write_text(EMPTY_SARIF, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
+    environment = tmp_path / "environment-tools"
+    in_environment = _fake_tool(environment, "gitleaks")
+    tool_installs.manifest(environment, "gitleaks")
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    target = tmp_path / "target"
+    target.mkdir()
+
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["gitleaks"], workspace=ws)
+    assert not run.ran and str(ws.tools_dir / "bin") in run.note and not started  # the environment's gitleaks is not used
+
+    in_workspace = _fake_tool(ws.tools_dir, "gitleaks")
+    tool_installs.manifest(ws.tools_dir, "gitleaks")
+    tool_installs.lock_into(ws.root)  # the workspace's own lock, which run_all reads
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["gitleaks"], workspace=ws)
+    assert run.ran and started == [in_workspace] != [in_environment]
+
+
+def test_run_all_reads_the_version_lock_of_the_workspace_given_not_of_the_environments_root(tmp_path, monkeypatch):
+    """The tool is installed at 1.2.3. The lock of MARA_HOME pins it at 1.2.3 first, then at 9.9.9; the workspace's lock
+    does not exist first, then pins 1.2.3: only the workspace's lock decides whether the tool runs."""
+    from mara.tools import pins
+    from mara.workspace import Workspace
+
+    def write_lock(root: Path, version: str) -> None:
+        (root / pins.LOCK).parent.mkdir(parents=True, exist_ok=True)
+        (root / pins.LOCK).write_text(f"tools:\n  gitleaks:\n    version: {version}\n", encoding="utf-8")
+
+    started: list[Path] = []
+
+    def fake_subprocess_run(cmd, *a, **kw):
+        started.append(Path(cmd[0]))
+        Path(cmd[cmd.index("--report-path") + 1]).write_text(EMPTY_SARIF, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
+    home = tmp_path / "home"
+    monkeypatch.setenv("MARA_HOME", str(home))
+    ws = Workspace(tmp_path / "ws")
+    binary = _fake_tool(ws.tools_dir, "gitleaks")
+    _manifest(ws.tools_dir, "gitleaks", "1.2.3")
+    target = tmp_path / "target"
+    target.mkdir()
+
+    write_lock(home, "1.2.3")  # the environment's root pins what is installed; the workspace has no lock
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["gitleaks"], workspace=ws)
+    assert not run.ran and "tools/versions.lock ''" in run.note and not started
+
+    write_lock(home, "9.9.9")  # the environment's root pins something else; the workspace pins what is installed
+    write_lock(ws.root, "1.2.3")
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["gitleaks"], workspace=ws)
+    assert run.ran and started == [binary]
+
+
+def test_run_alls_trivy_scan_uses_the_trivy_cache_of_the_workspace_given_not_of_MARA_TRIVY_CACHE_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+    from tests.test_trivy_ci import _sarif, _setup
+
+    tools, cache = _setup(tmp_path, _sarif())  # a fake trivy and a recorded, fresh database
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "environment-tools"))
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(tmp_path / "environment-cache"))  # no database there
+    target = tmp_path / "target"
+    target.mkdir()
+    ws = Workspace(tmp_path / "ws", tools_dir=tools, trivy_cache=cache)
+    tool_installs.lock_into(ws.root)
+
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["trivy"], workspace=ws)
+    assert run.ran, run.note
+    assert f"--cache-dir {cache}" in (tools / "argv.txt").read_text(encoding="utf-8")
+
+    empty = Workspace(ws.root, tools_dir=tools, trivy_cache=tmp_path / "empty-cache")
+    [run] = runner.run_all(target, tmp_path / "out2", enabled=["trivy"], workspace=empty)
+    assert not run.ran and f"no offline database under {empty.trivy_cache}" in run.note
+
+
+def test_run_alls_semgrep_scan_uses_the_rules_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    def install(tools: Path, *, rules: bool, rule_dir_name: str = "python") -> Path:
+        """<tools>/manifest.json records semgrep at its locked version and, with `rules`, the rules checkout below
+        <tools>/semgrep-rules with its one rule directory, named `rule_dir_name` in the manifest too."""
+        entries = {"semgrep": {"version": tool_installs.locked("semgrep"), "signature_verified": True}}
+        rule_dir = tools / semgrep_rules.RULES_DIR_NAME / rule_dir_name
+        if rules:
+            rule_dir.mkdir(parents=True)
+            entries[semgrep_rules.RULES_DIR_NAME] = {"version": "1", "paths": [rule_dir_name]}
+        tools.mkdir(parents=True, exist_ok=True)
+        (tools / "manifest.json").write_text(json.dumps({"tools": entries}), encoding="utf-8")
+        return rule_dir
+
+    scans: list[list[str]] = []
+
+    def fake_subprocess_run(cmd, *a, **kw):
+        scans.append(list(cmd))
+        Path(cmd[cmd.index("--output") + 1]).write_text(EMPTY_SARIF, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
+    monkeypatch.delenv("MARA_SEMGREP_CONFIG", raising=False)
+    environment = tmp_path / "environment-tools"
+    in_environment = install(environment, rules=True, rule_dir_name="other")  # a name the workspace's manifest does not list
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    _fake_tool(ws.tools_dir, "semgrep")
+    tool_installs.lock_into(ws.root)
+    target = tmp_path / "target"
+    target.mkdir()
+
+    install(ws.tools_dir, rules=False)  # the workspace has semgrep but no rules; the environment's rules are not its own
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["semgrep"], workspace=ws)
+    assert not run.ran and f"not installed under {ws.tools_dir / 'semgrep-rules'}" in run.note and not scans
+
+    in_workspace = install(ws.tools_dir, rules=True)
+    [run] = runner.run_all(target, tmp_path / "out2", enabled=["semgrep"], workspace=ws)
+    [scan] = scans
+    assert run.ran and scan[scan.index("--config") + 1] == str(in_workspace) != str(in_environment)
+
+
+def test_run_alls_csp_evaluator_step_uses_the_driver_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    def put_driver(tools: Path) -> None:
+        driver = tools / csp_eval.PACKAGE_DIR / csp_eval.DRIVER_NAME
+        driver.parent.mkdir(parents=True)
+        driver.write_text("// driver\n", encoding="utf-8")
+
+    environment = tmp_path / "environment-tools"
+    put_driver(environment)
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    monkeypatch.setenv("MARA_NODE", str(tmp_path / "node"))  # never started: the target holds no policy to evaluate
+    ws = Workspace(tmp_path / "ws")
+    _fake_tool(ws.tools_dir, "csp-evaluator")
+    tool_installs.manifest(ws.tools_dir, "csp-evaluator")
+    tool_installs.lock_into(ws.root)
+    target = tmp_path / "target"
+    target.mkdir()
+
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["csp-evaluator"], workspace=ws)  # the workspace has no driver
+    assert not run.ran and f"missing under {ws.tools_dir}" in run.note
+
+    put_driver(ws.tools_dir)
+    [run] = runner.run_all(target, tmp_path / "out2", enabled=["csp-evaluator"], workspace=ws)
+    assert run.ran, run.note

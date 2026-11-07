@@ -83,7 +83,8 @@ def check_paths(inv: ReviewInvocation, root: Path) -> Path:
     config = inv.config if inv.config is not None else default_config(inv.provider, root)
     try:
         check_outside(inv.target, {f"the config file {config}": config, f"the output directory {inv.out}": inv.out,
-                                   **{f"{flag} {p}": p for flag, p in path_options(inv).items()}})
+                                   **{f"{flag} {p}": p for flag, p in path_options(inv).items()}},
+                      workspace=Workspace.from_env(root=root))
     except WorkspaceInsideTarget as e:
         raise InvocationError(str(e), param="TARGET", kind="inside_target") from e
     if not config.is_file():

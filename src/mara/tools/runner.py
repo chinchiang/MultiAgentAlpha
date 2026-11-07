@@ -23,9 +23,13 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import pins
 from .sarif import ToolResult, read_sarif, scan_complete
+
+if TYPE_CHECKING:
+    from ..workspace import Workspace
 
 _log = logging.getLogger("mara.tools")
 NOT_INSTALLED = "not installed under {bin_dir}; run `python scripts/install_tools.py`"
@@ -55,17 +59,21 @@ def tool_env(*extra: str, **set_vars: str) -> dict[str, str]:
     return env
 
 
-def tools_dir(workspace: Path | None = None) -> Path:
-    """MARA_TOOLS_DIR, or .mara-tools; a relative one below `workspace`, the MARA workspace by default."""
+def tools_dir(root: Path | None = None, *, workspace: Workspace | None = None) -> Path:
+    """The tool directory of `workspace` when one is given, whatever MARA_TOOLS_DIR says. Otherwise MARA_TOOLS_DIR, or
+    .mara-tools; a relative one below `root`, the MARA workspace root by default."""
     from ..workspace import resolve
 
+    if workspace is not None:
+        return workspace.tools_dir.resolve()
     d = Path(os.environ.get("MARA_TOOLS_DIR") or ".mara-tools")
-    return (workspace / d if workspace is not None and not d.is_absolute() else resolve(d)).resolve()
+    return (root / d if root is not None and not d.is_absolute() else resolve(d)).resolve()
 
 
-def tool_path(tool: str) -> Path | None:
-    """The pinned, verified binary for `tool`, or None. Never consults PATH."""
-    base = tools_dir() / "bin" / tool
+def tool_path(tool: str, *, workspace: Workspace | None = None) -> Path | None:
+    """The pinned, verified binary for `tool` in the tool directory of `workspace` (the environment's when not given),
+    or None. Never consults PATH."""
+    base = tools_dir(workspace=workspace) / "bin" / tool
     candidates = [base.with_suffix(".cmd"), base.with_suffix(".bat"), base.with_suffix(".exe"), base] if sys.platform == "win32" else [base]
     for p in candidates:
         if p.is_file() and os.access(p, os.X_OK):
@@ -73,8 +81,9 @@ def tool_path(tool: str) -> Path | None:
     return None
 
 
-def installed_manifest_entry(tool: str) -> dict | None:
-    manifest = tools_dir() / "manifest.json"
+def installed_manifest_entry(tool: str, *, workspace: Workspace | None = None) -> dict | None:
+    """The manifest entry of `tool` in the tool directory of `workspace` (the environment's when not given), or None."""
+    manifest = tools_dir(workspace=workspace) / "manifest.json"
     if not manifest.is_file():
         return None
     try:
@@ -84,8 +93,8 @@ def installed_manifest_entry(tool: str) -> dict | None:
     return entry if isinstance(entry, dict) else None
 
 
-def installed_version(tool: str) -> str | None:
-    entry = installed_manifest_entry(tool)
+def installed_version(tool: str, *, workspace: Workspace | None = None) -> str | None:
+    entry = installed_manifest_entry(tool, workspace=workspace)
     return entry.get("version") if entry else None
 
 TOOL_DIMENSIONS = {
@@ -168,7 +177,8 @@ def has_actions_inputs(target: Path) -> bool:
     return False
 
 
-def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> list[ToolRun]:
+def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, workspace: Workspace | None = None) -> list[ToolRun]:
+    """Run the deterministic tools over `target`, from the tool directory of `workspace` (the environment's when not given)."""
     # tools run with cwd=target, so the report path must be absolute or it lands inside the target
     out_dir = out_dir.resolve()
     target = target.resolve()
@@ -177,16 +187,16 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
     from ..workspace import resolve
 
     # the workspace's lock, read once: a tool runs only at the version it pins, as the CI scripts require
-    locked = pins.locked_versions(resolve(pins.LOCK))
+    locked = pins.locked_versions(workspace.root / pins.LOCK if workspace is not None else resolve(pins.LOCK))
     runs: list[ToolRun] = []
     wanted = enabled or list(TOOL_DIMENSIONS)
     for tool in wanted:
-        exe_path = tool_path(tool)
+        exe_path = tool_path(tool, workspace=workspace)
         if exe_path is None:
-            runs.append(ToolRun(tool=tool, ran=False, note=NOT_INSTALLED.format(bin_dir=tools_dir() / "bin")))
+            runs.append(ToolRun(tool=tool, ran=False, note=NOT_INSTALLED.format(bin_dir=tools_dir(workspace=workspace) / "bin")))
             continue
         exe = str(exe_path)
-        version = installed_version(tool)
+        version = installed_version(tool, workspace=workspace)
         not_pinned = pins.mismatch(tool, locked.get(tool, ""), version)
         if not_pinned:
             runs.append(ToolRun(tool=tool, ran=False, note=not_pinned))
@@ -201,7 +211,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 from .semgrep_rules import default_configs, normalize_sarif, override_configs, scan_env
                 from .semgrep_rules import scan_args as semgrep_args
 
-                configs = default_configs()
+                configs = default_configs(workspace=workspace)
                 override = override_configs()
                 if override:
                     # MARA_SEMGREP_CONFIG replaced the pinned rules: the run is still recorded, but never as pinned
@@ -212,7 +222,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                     version = f"{version}; {rules_note}" if version else rules_note
                 if not configs:
                     runs.append(ToolRun(tool=tool, ran=False, note="pinned semgrep-rules not installed under "
-                                        f"{tools_dir() / 'semgrep-rules'} (scripts/install_tools.py); no registry fallback"))
+                                        f"{tools_dir(workspace=workspace) / 'semgrep-rules'} (scripts/install_tools.py); no registry fallback"))
                     continue
                 cp = _run(semgrep_args(exe, configs, sarif) + SEMGREP_TARGET_FLAGS + ["."], target, env=scan_env())
                 if sarif.exists() and sarif.read_text(encoding="utf-8").strip():
@@ -252,7 +262,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 from .trivy_db import read_metadata
                 from .trivy_db import scan_args as trivy_args
 
-                cache = tdb.cache_dir()
+                cache = tdb.cache_dir(workspace=workspace)
                 if not tdb.db_path(cache).is_file():
                     note = f"no offline database under {cache}; run scripts/trivy_db.py download (or import a bundle)"
                     runs.append(ToolRun(tool=tool, ran=False, note=note))
@@ -272,7 +282,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
                 # Parses CSPs out of the target and grades them with the pinned npm package; the
                 # SARIF is written by the wrapper itself (node runs the driver inside the package dir).
                 from .csp_eval import run_csp_eval
-                cp = run_csp_eval(target, sarif, version=version)
+                cp = run_csp_eval(target, sarif, version=version, workspace=workspace)
             if not sarif.exists() or not sarif.read_text(encoding="utf-8").strip():
                 tail = " ".join((cp.stderr or cp.stdout).strip().splitlines()[-2:])[:300]
                 note = f"exit {cp.returncode}, no SARIF produced" + (f": {tail}" if tail else "")

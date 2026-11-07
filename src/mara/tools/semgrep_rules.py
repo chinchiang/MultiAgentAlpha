@@ -18,22 +18,28 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .runner import installed_manifest_entry, tool_env, tools_dir
+
+if TYPE_CHECKING:
+    from ..workspace import Workspace
 
 RULES_DIR_NAME = "semgrep-rules"
 _PREFIX_RE = re.compile(r"^.*?\b" + re.escape(RULES_DIR_NAME) + r"\.")
 _TEXT_PREFIX_RE = re.compile(r"'[^'\s]*\b" + re.escape(RULES_DIR_NAME) + r"\.")
 
 
-def rules_dir() -> Path:
-    return tools_dir() / RULES_DIR_NAME
+def rules_dir(*, workspace: Workspace | None = None) -> Path:
+    """The rules checkout in the tool directory of `workspace` (the environment's when not given)."""
+    return tools_dir(workspace=workspace) / RULES_DIR_NAME
 
 
-def installed_rule_paths() -> list[Path]:
-    """The pinned rule directories the installer recorded in the manifest, if they exist on disk."""
-    entry = installed_manifest_entry(RULES_DIR_NAME) or {}
-    base = rules_dir()
+def installed_rule_paths(*, workspace: Workspace | None = None) -> list[Path]:
+    """The pinned rule directories the installer recorded in the manifest of the tool directory of `workspace` (the
+    environment's when not given), if they exist on disk."""
+    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=workspace) or {}
+    base = rules_dir(workspace=workspace)
     return [base / p for p in entry.get("paths", []) if (base / p).is_dir()]
 
 
@@ -57,14 +63,14 @@ def unpinned_note(configs: list[str]) -> str:
     return note
 
 
-def default_configs() -> list[str]:
+def default_configs(*, workspace: Workspace | None = None) -> list[str]:
     """MARA_SEMGREP_CONFIG (comma-separated) wins; otherwise the installed pinned rule directories;
     otherwise none. There is no silent fallback to the registry ruleset p/default: it fetches rules
     from semgrep.dev, which the pinned-rules setup exists to avoid (data-residency policy P5), and it
     would label an unpinned rule set as the pinned run. Without rules the runner records semgrep as
     not run, which keeps the review incomplete; p/default stays available explicitly, through
     MARA_SEMGREP_CONFIG."""
-    return override_configs() or [str(p) for p in installed_rule_paths()]
+    return override_configs() or [str(p) for p in installed_rule_paths(workspace=workspace)]
 
 
 def scan_env() -> dict[str, str]:

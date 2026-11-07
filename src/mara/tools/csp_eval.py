@@ -22,9 +22,13 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .runner import tool_env
 from .sarif import ToolResult
+
+if TYPE_CHECKING:
+    from ..workspace import Workspace
 
 DRIVER_NAME = "mara_driver.js"
 PACKAGE_DIR = "csp-evaluator"
@@ -135,14 +139,15 @@ def extract_policies(root: Path, skipped: list[str] | None = None) -> tuple[list
     return policies, truncated
 
 
-def driver_path() -> Path | None:
-    p = tools_dir() / PACKAGE_DIR / DRIVER_NAME
+def driver_path(*, workspace: Workspace | None = None) -> Path | None:
+    """The pinned evaluator's driver in the tool directory of `workspace` (the environment's when not given), or None."""
+    p = tools_dir(workspace=workspace) / PACKAGE_DIR / DRIVER_NAME
     return p if p.is_file() else None
 
 
-def tools_dir() -> Path:
+def tools_dir(*, workspace: Workspace | None = None) -> Path:
     from .runner import tools_dir as _t
-    return _t()
+    return _t(workspace=workspace)
 
 
 def node_exe() -> str | None:
@@ -234,13 +239,14 @@ def build_sarif(policies: list[CspPolicy], results: list[ToolResult], *, version
 
 
 def run_csp_eval(target: Path, sarif_path: Path, *, version: str | None = None,
-                 node: str | None = None) -> subprocess.CompletedProcess:
-    """Extract the CSPs in `target`, evaluate them, write `sarif_path`. Returns a synthetic
+                 node: str | None = None, workspace: Workspace | None = None) -> subprocess.CompletedProcess:
+    """Extract the CSPs in `target`, evaluate them with the driver in the tool directory of `workspace` (the
+    environment's when not given), write `sarif_path`. Returns a synthetic
     CompletedProcess so the runner's shared exit-code/SARIF handling applies unchanged:
     0 ok (SARIF written), 66 package missing, 127 no node interpreter, 1 evaluation failed."""
-    driver = driver_path()
+    driver = driver_path(workspace=workspace)
     if driver is None:
-        return subprocess.CompletedProcess([], 66, "", f"{PACKAGE_DIR}/{DRIVER_NAME} missing under {tools_dir()}")
+        return subprocess.CompletedProcess([], 66, "", f"{PACKAGE_DIR}/{DRIVER_NAME} missing under {tools_dir(workspace=workspace)}")
     node = node or node_exe()
     if not node:
         return subprocess.CompletedProcess([], 127, "", "node interpreter not found on PATH (node >= 18 required)")

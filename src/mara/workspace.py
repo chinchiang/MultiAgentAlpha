@@ -16,11 +16,31 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class Workspace:
-    """The MARA workspace a reader is given: its relative paths resolve below `root`, never against the environment."""
+    """The MARA workspace a reader is given: its relative paths resolve below `root`, never against the environment.
+    The tool directory is `tools_dir` and the trivy cache `trivy_cache`; when not given they are <root>/.mara-tools and
+    <tool directory>/trivy-cache. Building a workspace reads no environment variable."""
 
     root: Path
+    tools_dir: Path
+    trivy_cache: Path
+
+    def __init__(self, root: Path, tools_dir: Path | None = None, trivy_cache: Path | None = None) -> None:
+        tools = tools_dir if tools_dir is not None else root / ".mara-tools"
+        object.__setattr__(self, "root", root)
+        object.__setattr__(self, "tools_dir", tools)
+        object.__setattr__(self, "trivy_cache", trivy_cache if trivy_cache is not None else tools / "trivy-cache")
+
+    @classmethod
+    def from_env(cls, root: Path | None = None) -> Workspace:
+        """The workspace the environment names: `root` when given, else MARA_HOME or the working directory; the tool
+        directory MARA_TOOLS_DIR (a relative one below the root) and the trivy cache MARA_TRIVY_CACHE_DIR, each
+        derived from the root when its variable is not set. The one place that reads these three variables."""
+        base = Path(root).resolve() if root is not None else Path(os.environ.get("MARA_HOME") or ".").resolve()
+        tools = (base / (os.environ.get("MARA_TOOLS_DIR") or ".mara-tools")).resolve()
+        cache = os.environ.get("MARA_TRIVY_CACHE_DIR")
+        return cls(base, tools, Path(cache).resolve() if cache else None)
 
 
 class WorkspaceInsideTarget(ValueError):
@@ -41,18 +61,15 @@ def _inside(anchor: Path, target: Path) -> bool:
     return anchor == target or target in anchor.parents
 
 
-def check_outside(target: Path, extra: dict[str, Path] | None = None, *, workspace: Path | None = None) -> None:
-    """Raise WorkspaceInsideTarget when the workspace root (`workspace`, MARA_HOME or the working directory by default),
-    the tool directory or the trivy cache lies inside `target` (or is it). The tool directory and the trivy cache are the
-    ones the tool runner uses, from the environment. `extra` names further anchors to check (the CLI's config file and
-    output directory)."""
-    from .tools.runner import tools_dir
-    from .tools.trivy_db import cache_dir
-
+def check_outside(target: Path, extra: dict[str, Path] | None = None, *, workspace: Workspace | None = None) -> None:
+    """Raise WorkspaceInsideTarget when the root, the tool directory or the trivy cache of `workspace` (the
+    environment's, Workspace.from_env, when not given) lies inside `target` (or is it). `extra` names further anchors
+    to check (the CLI's config file and output directory)."""
     target = Path(target).resolve()
-    anchors = {"the MARA workspace (MARA_HOME or the working directory)": workspace if workspace is not None else root(),
-               "the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": tools_dir(),
-               "the trivy database (MARA_TRIVY_CACHE_DIR)": cache_dir(), **(extra or {})}
+    ws = workspace if workspace is not None else Workspace.from_env()
+    anchors = {"the MARA workspace (MARA_HOME or the working directory)": ws.root,
+               "the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": ws.tools_dir,
+               "the trivy database (MARA_TRIVY_CACHE_DIR)": ws.trivy_cache, **(extra or {})}
     inside = [f"{name} {path}" for name, path in anchors.items() if _inside(path.resolve(), target)]
     if inside:
         raise WorkspaceInsideTarget(

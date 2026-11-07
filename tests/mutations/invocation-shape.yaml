@@ -10,8 +10,8 @@ mutations:
     new: '    return "--" + field'
   - name: check_paths skips the path options
     file: src/mara/invocation.py
-    old: '                                   **{f"{flag} {p}": p for flag, p in path_options(inv).items()}})'
-    new: '                                   })'
+    old: '                                   **{f"{flag} {p}": p for flag, p in path_options(inv).items()}},'
+    new: '                                   },'
   - name: review_args gives --config without a config
     file: src/mara/invocation.py
     old: "    if inv.config is not None:\n        args += [\"--config\", str(inv.config)]\n"
