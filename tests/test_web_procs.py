@@ -31,7 +31,10 @@ def _start(children, tmp_path, child_id="a", code="pass", tag=None):
 
 
 # the tests below give a child time to outlive a SIGTERM or expect it killed by SIGKILL (-9), which Windows cannot
-posix_signals = pytest.mark.skipif(sys.platform == "win32", reason="Windows ends a child at once (Popen.terminate is TerminateProcess) and has no SIGKILL: a child cannot ignore terminate() or outlive the grace, nor exit with -9")
+posix_signals = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows ends a child at once (Popen.terminate is TerminateProcess) and has no SIGKILL: "
+           "a child cannot ignore terminate() or outlive the grace, nor exit with -9")
 
 # a child that touches the file argv[1] names once it ignores SIGTERM, then sleeps
 _IGNORING_SIGTERM = ("import signal, sys, time\nfrom pathlib import Path\n"

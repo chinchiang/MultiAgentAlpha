@@ -412,7 +412,10 @@ _SLOW_TO_STOP = ("import signal, sys, time\nfrom pathlib import Path\n"
                  "signal.signal(signal.SIGTERM, lambda *_: (time.sleep(2), sys.exit(0)))\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n")
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Windows ends a child at once (Popen.terminate is TerminateProcess) and has no SIGKILL: a child cannot ignore terminate() or outlive the grace, nor exit with -9")
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows ends a child at once (Popen.terminate is TerminateProcess) and has no SIGKILL: "
+           "a child cannot ignore terminate() or outlive the grace, nor exit with -9")
 @pytest.mark.parametrize("launched", ["run", "job"])
 def test_no_run_or_job_starts_once_the_server_exit_began(tmp_path, monkeypatch, launched):
     """A launch still being handled when the exit took the children (the server does not wait for its request threads):
