@@ -128,3 +128,38 @@ def test_a_pipeline_looks_its_calibration_samples_up_in_the_workspace_it_is_give
     report = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=FIXTURES, out_dir=tmp_path / "out",
                       workspace=given).run(sample, sarif_dir=SARIF, provider_mode="mock", calibration_sample=True)
     assert report.target == str(sample.resolve())
+
+
+def test_a_pipeline_runs_the_tools_installed_in_the_workspace_it_is_given_not_below_mara_home(tmp_path, monkeypatch):
+    """With the default tool runner and no MARA_TOOLS_DIR the tool directory is <workspace>/.mara-tools of the workspace
+    the pipeline was given, whatever MARA_HOME names; a gitleaks installed there, with the workspace's lock, is the one
+    that starts."""
+    import subprocess
+
+    from mara.tools import runner
+    from tests import tool_installs
+    from tests.test_tool_env import EMPTY_SARIF, _fake_tool
+
+    given, elsewhere = tmp_path / "given", tmp_path / "elsewhere"
+    given.mkdir()
+    elsewhere.mkdir()
+    monkeypatch.delenv("MARA_TOOLS_DIR", raising=False)
+    monkeypatch.setenv("MARA_HOME", str(elsewhere))
+    monkeypatch.chdir(elsewhere)
+    binary = _fake_tool(given / ".mara-tools", "gitleaks")
+    tool_installs.manifest(given / ".mara-tools", "gitleaks")
+    tool_installs.lock_into(given)
+    started: list[Path] = []
+    real_run = subprocess.run
+
+    def fake_subprocess_run(cmd, *a, **kw):
+        if Path(cmd[0]).name != "gitleaks":  # runner.subprocess is the shared module: git and the rest run as they are
+            return real_run(cmd, *a, **kw)
+        started.append(Path(cmd[0]))
+        Path(cmd[cmd.index("--report-path") + 1]).write_text(EMPTY_SARIF, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "out", workspace=given).run(TARGET, provider_mode="mock")
+    assert started == [binary]

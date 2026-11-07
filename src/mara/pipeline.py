@@ -6,6 +6,7 @@ schemas; reviewers never see each other's output; judges never see model identit
 from __future__ import annotations
 
 import datetime as dt
+import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,15 +62,17 @@ class Stages:
 
 class Pipeline:
     def __init__(self, cfg: MaraConfig, *, mock_fixtures: str | None = None, out_dir: Path | None = None,
-                 progress: Progress | None = None, run_tools: Callable[..., list[ToolRun]] = run_all,
+                 progress: Progress | None = None, run_tools: Callable[..., list[ToolRun]] | None = None,
                  workspace: Path | None = None):
         self.cfg = cfg
         # the MARA workspace MARA's own evidence is read from (mara.workspace), fixed here for the whole review: the
         # ticket backlog, the ML-BOM, the decision files and training register, the signature bundle, the model
         # evaluations and the calibration samples; MARA_HOME (else the working directory) when none is given
         self.workspace = (Path(workspace) if workspace is not None else workspace_root()).resolve()
-        # a runner with run_all's signature (mara.tools.runner), for the main tool run and the live secret preflight
-        self._run_tools = run_tools
+        # a runner with run_all's signature (mara.tools.runner), for the main tool run and the live secret preflight; one
+        # that is not given is run_all of this workspace: its root, the tool directory and trivy cache the environment names
+        self._run_tools = run_tools if run_tools is not None else functools.partial(
+            run_all, workspace=Workspace.from_env(root=self.workspace))
         # the live view `mara serve` draws (mara.progress); a no-op unless `mara review --progress-file` is given
         self.progress = progress if progress is not None else Progress()
         self.out_dir = out_dir or self.workspace / "out"  # the workspace, like `mara review --out`
