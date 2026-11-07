@@ -344,3 +344,30 @@ def test_run_alls_semgrep_scan_uses_the_rules_of_the_workspace_given_not_of_MARA
     [run] = runner.run_all(target, tmp_path / "out2", enabled=["semgrep"], workspace=ws)
     [scan] = scans
     assert run.ran and scan[scan.index("--config") + 1] == str(in_workspace) != str(in_environment)
+
+
+def test_run_alls_csp_evaluator_step_uses_the_driver_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    def put_driver(tools: Path) -> None:
+        driver = tools / csp_eval.PACKAGE_DIR / csp_eval.DRIVER_NAME
+        driver.parent.mkdir(parents=True)
+        driver.write_text("// driver\n", encoding="utf-8")
+
+    environment = tmp_path / "environment-tools"
+    put_driver(environment)
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    monkeypatch.setenv("MARA_NODE", str(tmp_path / "node"))  # never started: the target holds no policy to evaluate
+    ws = Workspace(tmp_path / "ws")
+    _fake_tool(ws.tools_dir, "csp-evaluator")
+    tool_installs.manifest(ws.tools_dir, "csp-evaluator")
+    tool_installs.lock_into(ws.root)
+    target = tmp_path / "target"
+    target.mkdir()
+
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["csp-evaluator"], workspace=ws)  # the workspace has no driver
+    assert not run.ran and f"missing under {ws.tools_dir}" in run.note
+
+    put_driver(ws.tools_dir)
+    [run] = runner.run_all(target, tmp_path / "out2", enabled=["csp-evaluator"], workspace=ws)
+    assert run.ran, run.note

@@ -282,7 +282,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, wo
                 # Parses CSPs out of the target and grades them with the pinned npm package; the
                 # SARIF is written by the wrapper itself (node runs the driver inside the package dir).
                 from .csp_eval import run_csp_eval
-                cp = run_csp_eval(target, sarif, version=version)
+                cp = run_csp_eval(target, sarif, version=version, workspace=workspace)
             if not sarif.exists() or not sarif.read_text(encoding="utf-8").strip():
                 tail = " ".join((cp.stderr or cp.stdout).strip().splitlines()[-2:])[:300]
                 note = f"exit {cp.returncode}, no SARIF produced" + (f": {tail}" if tail else "")
