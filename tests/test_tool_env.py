@@ -205,3 +205,13 @@ def test_the_csp_driver_is_that_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp
     in_workspace = put_driver(ws.tools_dir)
     assert csp_eval.driver_path(workspace=ws) == in_workspace != in_environment
     assert csp_eval.driver_path() == in_environment  # without a workspace, as before
+
+
+def test_the_semgrep_rules_directory_is_below_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    environment = tmp_path / "environment-tools"
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    assert semgrep_rules.rules_dir(workspace=ws) == tmp_path / "ws" / ".mara-tools" / "semgrep-rules"
+    assert semgrep_rules.rules_dir() == environment / "semgrep-rules"  # without a workspace, as before

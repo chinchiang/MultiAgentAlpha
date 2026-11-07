@@ -18,16 +18,21 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .runner import installed_manifest_entry, tool_env, tools_dir
+
+if TYPE_CHECKING:
+    from ..workspace import Workspace
 
 RULES_DIR_NAME = "semgrep-rules"
 _PREFIX_RE = re.compile(r"^.*?\b" + re.escape(RULES_DIR_NAME) + r"\.")
 _TEXT_PREFIX_RE = re.compile(r"'[^'\s]*\b" + re.escape(RULES_DIR_NAME) + r"\.")
 
 
-def rules_dir() -> Path:
-    return tools_dir() / RULES_DIR_NAME
+def rules_dir(*, workspace: Workspace | None = None) -> Path:
+    """The rules checkout in the tool directory of `workspace` (the environment's when not given)."""
+    return tools_dir(workspace=workspace) / RULES_DIR_NAME
 
 
 def installed_rule_paths() -> list[Path]:
