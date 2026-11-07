@@ -203,8 +203,12 @@ code that writes it, so it changes with that code:
   `mara.tools.semgrep_rules.rules_dir`, `installed_rule_paths` and `default_configs`. `tools_dir`'s first parameter is
   `root`, below which a relative MARA_TOOLS_DIR lies, and `workspace` wins when both are given. A test that replaces
   `runner.tool_path` or `semgrep_rules.installed_rule_paths` with a fake gives it `workspace=None` too, since `run_all`
-  calls them with the keyword (the `every_tool` fixture of `test_tool_env.py`). `mara.web.env` and the scripts still read
-  the environment's. `test_tool_env.py`, `test_trivy_db.py`.
+  calls them with the keyword (the `every_tool` fixture of `test_tool_env.py`). The scripts still read the
+  environment's. `test_tool_env.py`, `test_trivy_db.py`.
+- The environment page lists the tools and the trivy database of the workspace it lists: `mara.web.env.tools(workspace)`
+  and `mara.web.env.environment` take the tool directory MARA_TOOLS_DIR names, else the one below that workspace, so a
+  test installs a tool below the workspace it lists and unsets MARA_TOOLS_DIR; `mara.web.env.trivy(cache, workspace=...)`
+  takes an explicit `cache` before the workspace's trivy cache. `test_panel.py`.
 
 ## The Evidence record (`src/mara/evidence.py`)
 
