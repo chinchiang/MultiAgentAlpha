@@ -280,3 +280,24 @@ def test_run_all_reads_the_version_lock_of_the_workspace_given_not_of_the_enviro
     write_lock(ws.root, "1.2.3")
     [run] = runner.run_all(target, tmp_path / "out", enabled=["gitleaks"], workspace=ws)
     assert run.ran and started == [binary]
+
+
+def test_run_alls_trivy_scan_uses_the_trivy_cache_of_the_workspace_given_not_of_MARA_TRIVY_CACHE_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+    from tests.test_trivy_ci import _sarif, _setup
+
+    tools, cache = _setup(tmp_path, _sarif())  # a fake trivy and a recorded, fresh database
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "environment-tools"))
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(tmp_path / "environment-cache"))  # no database there
+    target = tmp_path / "target"
+    target.mkdir()
+    ws = Workspace(tmp_path / "ws", tools_dir=tools, trivy_cache=cache)
+    tool_installs.lock_into(ws.root)
+
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["trivy"], workspace=ws)
+    assert run.ran, run.note
+    assert f"--cache-dir {cache}" in (tools / "argv.txt").read_text(encoding="utf-8")
+
+    empty = Workspace(ws.root, tools_dir=tools, trivy_cache=tmp_path / "empty-cache")
+    [run] = runner.run_all(target, tmp_path / "out2", enabled=["trivy"], workspace=empty)
+    assert not run.ran and f"no offline database under {empty.trivy_cache}" in run.note

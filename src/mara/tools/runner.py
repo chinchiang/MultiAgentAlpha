@@ -262,7 +262,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, wo
                 from .trivy_db import read_metadata
                 from .trivy_db import scan_args as trivy_args
 
-                cache = tdb.cache_dir()
+                cache = tdb.cache_dir(workspace=workspace)
                 if not tdb.db_path(cache).is_file():
                     note = f"no offline database under {cache}; run scripts/trivy_db.py download (or import a bundle)"
                     runs.append(ToolRun(tool=tool, ran=False, note=note))
