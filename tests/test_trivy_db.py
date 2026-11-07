@@ -168,3 +168,16 @@ def test_trivy_only_from_tools_dir_and_version_must_match_lock(tmp_path):
     empty.mkdir()
     r = _run(empty, "download", cache=tmp_path / "c")
     assert r.returncode == 2 and "not installed" in r.stderr and "PATH is never used" in r.stderr
+
+
+def test_the_trivy_cache_is_that_of_the_workspace_given_not_of_the_environment(tmp_path, monkeypatch):
+    """With a workspace the cache is its own, whether MARA_TRIVY_CACHE_DIR or only MARA_TOOLS_DIR points elsewhere."""
+    from mara.workspace import Workspace
+
+    ws = Workspace(tmp_path / "ws")
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(tmp_path / "environment-cache"))
+    assert tdb.cache_dir(workspace=ws) == ws.trivy_cache == tmp_path / "ws" / ".mara-tools" / "trivy-cache"
+    monkeypatch.delenv("MARA_TRIVY_CACHE_DIR")
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "environment-tools"))
+    assert tdb.cache_dir(workspace=ws) == ws.trivy_cache  # not <MARA_TOOLS_DIR>/trivy-cache
+    assert tdb.cache_dir() == tmp_path / "environment-tools" / "trivy-cache"  # without a workspace, as before
