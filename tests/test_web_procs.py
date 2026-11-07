@@ -30,6 +30,9 @@ def _start(children, tmp_path, child_id="a", code="pass", tag=None):
                           env=dict(os.environ), tag=tag)
 
 
+# the tests below give a child time to outlive a SIGTERM or expect it killed by SIGKILL (-9), which Windows cannot
+posix_signals = pytest.mark.skipif(sys.platform == "win32", reason="Windows ends a child at once (Popen.terminate is TerminateProcess) and has no SIGKILL: a child cannot ignore terminate() or outlive the grace, nor exit with -9")
+
 # a child that touches the file argv[1] names once it ignores SIGTERM, then sleeps
 _IGNORING_SIGTERM = ("import signal, sys, time\nfrom pathlib import Path\n"
                      "signal.signal(signal.SIGTERM, signal.SIG_IGN)\nPath(sys.argv[1]).touch()\ntime.sleep(60)\n")
@@ -81,6 +84,7 @@ def test_stopping_a_running_child_records_its_exit_as_stopped(tmp_path):
     assert (child_id, code != 0, stopped) == ("a", True, True)
 
 
+@posix_signals
 def test_stopping_a_child_still_running_after_the_grace_kills_it(tmp_path):
     """What a cancel does through Children.stop(), with the grace shortened."""
     ready = tmp_path / "ready"
@@ -181,6 +185,7 @@ def test_a_child_that_cannot_be_started_is_not_registered(tmp_path):
     assert children.stop("a") == "unknown"
 
 
+@posix_signals
 @pytest.mark.parametrize("stopping", ["stop", "shutdown"])
 def test_while_a_child_is_being_stopped_whether_it_runs_is_answered_at_once(tmp_path, stopping):
     """Stopping waits for the child to exit, which may take its whole grace: it runs outside the lock reads take."""
@@ -225,6 +230,7 @@ def test_children_of_one_table_share_its_lock(tmp_path):
     assert records == [("j", 0, False)]
 
 
+@posix_signals
 def test_a_table_stops_every_running_child_at_once(tmp_path):
     """Each child takes 2 s to exit after SIGTERM: stopped one by one, the second would get it only after the first exited."""
     table, records = procs.ChildTable(), []
@@ -244,6 +250,7 @@ def test_a_table_stops_every_running_child_at_once(tmp_path):
     assert sorted(records) == [("j", 0, True), ("r", 0, True)]
 
 
+@posix_signals
 def test_a_child_still_running_after_the_grace_is_killed(tmp_path):
     records = []
     children = procs.Children("test", lambda child_id, code, stopped: records.append((child_id, code, stopped)))
@@ -271,6 +278,7 @@ def _start_in_table(codes, tmp_path, records):
     return table, pids
 
 
+@posix_signals
 def test_children_still_running_after_the_grace_share_one_deadline(tmp_path):
     """Both ignore SIGTERM: a deadline for each child in turn would take twice the grace."""
     records = []
@@ -282,6 +290,7 @@ def test_children_still_running_after_the_grace_share_one_deadline(tmp_path):
     assert sorted(records) == [("j", -9, True), ("r", -9, True)]
 
 
+@posix_signals
 def test_only_the_children_still_running_after_the_grace_are_killed(tmp_path, monkeypatch):
     """A child that exited on SIGTERM is not killed: its pid may be another process's by then."""
     killed, real = [], procs.kill

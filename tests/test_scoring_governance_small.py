@@ -136,7 +136,9 @@ def test_the_cli_table_names_the_same_count_awaiting_decision(tmp_path):
                                    "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"), "--out", str(tmp_path / "out")],
                              env={"COLUMNS": "200"})  # wide enough that rich does not wrap the header
     header = next(x for x in re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", res.output).splitlines() if "Dimension" in x)
-    assert [c.strip() for c in header.strip("┃│ ").split("┃")] == ["Dimension", "Score", "Accepted", "Rejected", "Awaiting decision", "Tool"]
+    # rich draws the header's heavy bars "┃", and light ones "│" when it takes the console for a legacy Windows one
+    # (stdout is not a terminal that does virtual terminal sequences, as under a pipe)
+    assert [c.strip() for c in re.split("[┃│]", header.strip("┃│ "))] == ["Dimension", "Score", "Accepted", "Rejected", "Awaiting decision", "Tool"]
 
 
 # ---------------------------------------------------------------- G-1 review_by
