@@ -32,6 +32,16 @@ class Workspace:
         object.__setattr__(self, "tools_dir", tools)
         object.__setattr__(self, "trivy_cache", trivy_cache if trivy_cache is not None else tools / "trivy-cache")
 
+    @classmethod
+    def from_env(cls, root: Path | None = None) -> Workspace:
+        """The workspace the environment names: `root` when given, else MARA_HOME or the working directory; the tool
+        directory MARA_TOOLS_DIR (a relative one below the root) and the trivy cache MARA_TRIVY_CACHE_DIR, each
+        derived from the root when its variable is not set. The one place that reads these three variables."""
+        base = Path(root).resolve() if root is not None else Path(os.environ.get("MARA_HOME") or ".").resolve()
+        tools = (base / (os.environ.get("MARA_TOOLS_DIR") or ".mara-tools")).resolve()
+        cache = os.environ.get("MARA_TRIVY_CACHE_DIR")
+        return cls(base, tools, Path(cache).resolve() if cache else None)
+
 
 class WorkspaceInsideTarget(ValueError):
     """A MARA trust anchor resolves inside the repository under review."""

@@ -24,3 +24,59 @@ def test_a_workspace_given_a_tool_directory_derives_the_trivy_cache_below_it_and
     cache = tmp_path / "cache"
     ws = Workspace(tmp_path, tools_dir=tools, trivy_cache=cache)
     assert (ws.tools_dir, ws.trivy_cache) == (tools, cache)
+
+
+def _environment(monkeypatch, **variables):
+    for name in ("MARA_HOME", "MARA_TOOLS_DIR", "MARA_TRIVY_CACHE_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in variables.items():
+        monkeypatch.setenv(name, str(value))
+
+
+def test_a_workspace_from_the_environment_is_MARA_HOME_or_the_working_directory_and_derives_the_rest(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    _environment(monkeypatch, MARA_HOME=home)
+    ws = Workspace.from_env()
+    assert (ws.root, ws.tools_dir, ws.trivy_cache) == (home, home / ".mara-tools", home / ".mara-tools" / "trivy-cache")
+
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    _environment(monkeypatch)
+    monkeypatch.chdir(cwd)
+    ws = Workspace.from_env()
+    assert (ws.root, ws.tools_dir) == (cwd, cwd / ".mara-tools")
+
+
+def test_a_workspace_from_the_environment_takes_its_tool_directory_and_trivy_cache_from_the_variables(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    tools, cache = tmp_path / "tools", tmp_path / "cache"
+    _environment(monkeypatch, MARA_HOME=home, MARA_TOOLS_DIR=tools, MARA_TRIVY_CACHE_DIR=cache)
+    ws = Workspace.from_env()
+    assert (ws.tools_dir, ws.trivy_cache) == (tools, cache)
+
+    _environment(monkeypatch, MARA_HOME=home, MARA_TOOLS_DIR=tools)  # a cache not named is below the tool directory
+    assert Workspace.from_env().trivy_cache == tools / "trivy-cache"
+
+
+def test_a_relative_MARA_TOOLS_DIR_is_below_the_root(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    _environment(monkeypatch, MARA_HOME=home, MARA_TOOLS_DIR="bin-of-tools")
+    ws = Workspace.from_env()
+    assert (ws.tools_dir, ws.trivy_cache) == (home / "bin-of-tools", home / "bin-of-tools" / "trivy-cache")
+
+
+def test_a_workspace_from_the_environment_at_a_given_root_ignores_MARA_HOME_and_keeps_the_other_variables(tmp_path, monkeypatch):
+    given, home, tools = tmp_path / "given", tmp_path / "home", tmp_path / "tools"
+    given.mkdir()
+    home.mkdir()
+    _environment(monkeypatch, MARA_HOME=home)
+    ws = Workspace.from_env(root=given)
+    assert (ws.root, ws.tools_dir) == (given, given / ".mara-tools")
+
+    _environment(monkeypatch, MARA_HOME=home, MARA_TOOLS_DIR=tools)
+    assert Workspace.from_env(root=given).tools_dir == tools
+    _environment(monkeypatch, MARA_HOME=home, MARA_TOOLS_DIR="relative")
+    assert Workspace.from_env(root=given).tools_dir == given / "relative"
