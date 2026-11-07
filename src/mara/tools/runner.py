@@ -81,8 +81,9 @@ def tool_path(tool: str, *, workspace: Workspace | None = None) -> Path | None:
     return None
 
 
-def installed_manifest_entry(tool: str) -> dict | None:
-    manifest = tools_dir() / "manifest.json"
+def installed_manifest_entry(tool: str, *, workspace: Workspace | None = None) -> dict | None:
+    """The manifest entry of `tool` in the tool directory of `workspace` (the environment's when not given), or None."""
+    manifest = tools_dir(workspace=workspace) / "manifest.json"
     if not manifest.is_file():
         return None
     try:
@@ -92,8 +93,8 @@ def installed_manifest_entry(tool: str) -> dict | None:
     return entry if isinstance(entry, dict) else None
 
 
-def installed_version(tool: str) -> str | None:
-    entry = installed_manifest_entry(tool)
+def installed_version(tool: str, *, workspace: Workspace | None = None) -> str | None:
+    entry = installed_manifest_entry(tool, workspace=workspace)
     return entry.get("version") if entry else None
 
 TOOL_DIMENSIONS = {
