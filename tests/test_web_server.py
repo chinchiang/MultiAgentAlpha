@@ -19,6 +19,7 @@ import pytest
 from mara import progress as prog
 from mara.schemas import ReviewReport
 from mara.web import procs, runs
+from mara.web.admission import LaunchError
 from mara.web.server import make_server
 from tests.held_children import LostExit, UnrecordedExit
 
@@ -195,6 +196,16 @@ def test_a_launch_is_refused_as_the_command_line_would_refuse_it(server, body, c
     assert res.status == 400 and _error(data) == code, data
     after = set(server.runs.runs_dir.glob("*")) if server.runs.runs_dir.exists() else set()
     assert after == before, "a refused launch leaves no run behind"
+
+
+@pytest.mark.parametrize("value", ["fixtures/vuln\x00sample", "\x00", "/absolute/with\x00nul"])
+def test_a_path_with_a_nul_byte_is_refused_as_bad_path_whatever_the_hosts_resolve_does(tmp_path, monkeypatch, value):
+    """Path.resolve refuses a NUL byte on POSIX and lets it pass on Windows, where the path then reads as one that is not a
+    directory. The refusal is the code's own, so this test gives resolve the Windows behaviour and CI, on Linux, holds it."""
+    monkeypatch.setattr(Path, "resolve", lambda self, strict=False: self)
+    with pytest.raises(LaunchError) as refused:
+        runs.resolve_path(tmp_path, value)
+    assert refused.value.code == "bad_path"
 
 
 def test_evidence_inputs_must_lie_inside_the_workspace(server, tmp_path):
