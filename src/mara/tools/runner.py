@@ -177,7 +177,8 @@ def has_actions_inputs(target: Path) -> bool:
     return False
 
 
-def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> list[ToolRun]:
+def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, workspace: Workspace | None = None) -> list[ToolRun]:
+    """Run the deterministic tools over `target`, from the tool directory of `workspace` (the environment's when not given)."""
     # tools run with cwd=target, so the report path must be absolute or it lands inside the target
     out_dir = out_dir.resolve()
     target = target.resolve()
@@ -186,16 +187,16 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None) -> li
     from ..workspace import resolve
 
     # the workspace's lock, read once: a tool runs only at the version it pins, as the CI scripts require
-    locked = pins.locked_versions(resolve(pins.LOCK))
+    locked = pins.locked_versions(workspace.root / pins.LOCK if workspace is not None else resolve(pins.LOCK))
     runs: list[ToolRun] = []
     wanted = enabled or list(TOOL_DIMENSIONS)
     for tool in wanted:
-        exe_path = tool_path(tool)
+        exe_path = tool_path(tool, workspace=workspace)
         if exe_path is None:
-            runs.append(ToolRun(tool=tool, ran=False, note=NOT_INSTALLED.format(bin_dir=tools_dir() / "bin")))
+            runs.append(ToolRun(tool=tool, ran=False, note=NOT_INSTALLED.format(bin_dir=tools_dir(workspace=workspace) / "bin")))
             continue
         exe = str(exe_path)
-        version = installed_version(tool)
+        version = installed_version(tool, workspace=workspace)
         not_pinned = pins.mismatch(tool, locked.get(tool, ""), version)
         if not_pinned:
             runs.append(ToolRun(tool=tool, ran=False, note=not_pinned))

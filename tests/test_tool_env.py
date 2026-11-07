@@ -66,7 +66,7 @@ def every_tool(tmp_path, monkeypatch, parent_env):
         return subprocess.CompletedProcess(cmd, 0, stdout=EMPTY_SARIF if Path(cmd[0]).name == "zizmor" else "", stderr="")
 
     monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
-    monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
+    monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
     tool_installs.manifest(tmp_path / "tools", *runner.TOOL_DIMENSIONS)  # each at its locked version
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     rules = tmp_path / "rules"
@@ -215,3 +215,68 @@ def test_the_semgrep_rules_directory_is_below_the_tool_directory_of_the_workspac
     ws = Workspace(tmp_path / "ws")
     assert semgrep_rules.rules_dir(workspace=ws) == tmp_path / "ws" / ".mara-tools" / "semgrep-rules"
     assert semgrep_rules.rules_dir() == environment / "semgrep-rules"  # without a workspace, as before
+
+
+def test_run_all_finds_a_tool_and_its_manifest_in_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    started: list[Path] = []
+
+    def fake_subprocess_run(cmd, *a, **kw):
+        started.append(Path(cmd[0]))
+        Path(cmd[cmd.index("--report-path") + 1]).write_text(EMPTY_SARIF, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
+    environment = tmp_path / "environment-tools"
+    in_environment = _fake_tool(environment, "gitleaks")
+    tool_installs.manifest(environment, "gitleaks")
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    target = tmp_path / "target"
+    target.mkdir()
+
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["gitleaks"], workspace=ws)
+    assert not run.ran and str(ws.tools_dir / "bin") in run.note and not started  # the environment's gitleaks is not used
+
+    in_workspace = _fake_tool(ws.tools_dir, "gitleaks")
+    tool_installs.manifest(ws.tools_dir, "gitleaks")
+    tool_installs.lock_into(ws.root)  # the workspace's own lock, which run_all reads
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["gitleaks"], workspace=ws)
+    assert run.ran and started == [in_workspace] != [in_environment]
+
+
+def test_run_all_reads_the_version_lock_of_the_workspace_given_not_of_the_environments_root(tmp_path, monkeypatch):
+    """The tool is installed at 1.2.3. The lock of MARA_HOME pins it at 1.2.3 first, then at 9.9.9; the workspace's lock
+    does not exist first, then pins 1.2.3: only the workspace's lock decides whether the tool runs."""
+    from mara.tools import pins
+    from mara.workspace import Workspace
+
+    def write_lock(root: Path, version: str) -> None:
+        (root / pins.LOCK).parent.mkdir(parents=True, exist_ok=True)
+        (root / pins.LOCK).write_text(f"tools:\n  gitleaks:\n    version: {version}\n", encoding="utf-8")
+
+    started: list[Path] = []
+
+    def fake_subprocess_run(cmd, *a, **kw):
+        started.append(Path(cmd[0]))
+        Path(cmd[cmd.index("--report-path") + 1]).write_text(EMPTY_SARIF, encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
+    home = tmp_path / "home"
+    monkeypatch.setenv("MARA_HOME", str(home))
+    ws = Workspace(tmp_path / "ws")
+    binary = _fake_tool(ws.tools_dir, "gitleaks")
+    _manifest(ws.tools_dir, "gitleaks", "1.2.3")
+    target = tmp_path / "target"
+    target.mkdir()
+
+    write_lock(home, "1.2.3")  # the environment's root pins what is installed; the workspace has no lock
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["gitleaks"], workspace=ws)
+    assert not run.ran and "tools/versions.lock ''" in run.note and not started
+
+    write_lock(home, "9.9.9")  # the environment's root pins something else; the workspace pins what is installed
+    write_lock(ws.root, "1.2.3")
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["gitleaks"], workspace=ws)
+    assert run.ran and started == [binary]

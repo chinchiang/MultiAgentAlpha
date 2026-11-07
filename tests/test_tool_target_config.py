@@ -36,7 +36,7 @@ def test_every_tool_is_handed_neutral_config_instead_of_the_targets(tmp_path, mo
         return subprocess.CompletedProcess(cmd, 0, stdout=EMPTY_SARIF if exe == "zizmor" else "", stderr="")
 
     monkeypatch.setenv("MARA_SEMGREP_CONFIG", str(tmp_path / "rules.yml"))
-    monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
+    monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
     tool_installs.manifest(tmp_path / "tools", *runner.TOOL_DIMENSIONS)  # each at its locked version
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     monkeypatch.setattr(runner, "_run", fake_run)
@@ -68,7 +68,7 @@ def test_semgrep_without_pinned_rules_does_not_fall_back_to_the_registry(tmp_pat
     """Without the pinned semgrep-rules the runner used to scan with p/default from semgrep.dev and label
     the run as the pinned one; now semgrep is not run, which keeps the review incomplete."""
     monkeypatch.delenv("MARA_SEMGREP_CONFIG", raising=False)
-    monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
+    monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
     tool_installs.manifest(tmp_path / "tools", *runner.TOOL_DIMENSIONS)  # each at its locked version
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     monkeypatch.setattr(runner, "_run", lambda *a, **k: pytest.fail("semgrep must not be invoked without its pinned rules"))
@@ -99,7 +99,7 @@ def _zizmor_with(monkeypatch, tmp_path, returncode, stderr):
     def fake_run(cmd, cwd, timeout=600, env=None):
         return subprocess.CompletedProcess(cmd, returncode, stdout="", stderr=stderr)
 
-    monkeypatch.setattr(runner, "tool_path", lambda tool: tmp_path / "bin" / tool)
+    monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
     tool_installs.manifest(tmp_path / "tools", "zizmor")  # at its locked version
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     monkeypatch.setattr(runner, "_run", fake_run)
