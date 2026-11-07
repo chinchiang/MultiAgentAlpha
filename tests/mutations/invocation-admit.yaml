@@ -10,8 +10,8 @@ mutations:
     new: "    load(inv.config or default_config(inv.provider, workspace), inv.provider)\n    config_path = check_paths(inv, workspace)\n"
   - name: the base is checked before the config
     file: src/mara/invocation.py
-    old: "        config = load(config_path, inv.provider)\n"
-    new: "        if inv.base:\n            check_base(inv.target, inv.base)\n        config = load(config_path, inv.provider)\n"
+    old: "        config = load(config_path, inv.provider, Workspace(workspace))\n"
+    new: "        if inv.base:\n            check_base(inv.target, inv.base)\n        config = load(config_path, inv.provider, Workspace(workspace))\n"
   - name: a calibration sample is one of the environment's workspace
     file: src/mara/invocation.py
     old: 'check_calibration_sample(inv.target, workspace)'
