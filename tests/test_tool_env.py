@@ -186,3 +186,22 @@ def test_the_manifest_entry_and_version_of_a_tool_are_those_of_the_workspace_giv
     assert runner.installed_manifest_entry("gitleaks", workspace=ws) == {"version": "2.0.0", "signature_verified": True}
     assert runner.installed_version("gitleaks", workspace=ws) == "2.0.0"
     assert runner.installed_version("gitleaks") == "1.0.0"  # without a workspace, as before
+
+
+def test_the_csp_driver_is_that_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    def put_driver(tools: Path) -> Path:
+        driver = tools / csp_eval.PACKAGE_DIR / csp_eval.DRIVER_NAME
+        driver.parent.mkdir(parents=True)
+        driver.write_text("// driver\n", encoding="utf-8")
+        return driver
+
+    environment = tmp_path / "environment-tools"
+    in_environment = put_driver(environment)
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    ws = Workspace(tmp_path / "ws")
+    assert csp_eval.driver_path(workspace=ws) is None  # the environment's driver is not the workspace's
+    in_workspace = put_driver(ws.tools_dir)
+    assert csp_eval.driver_path(workspace=ws) == in_workspace != in_environment
+    assert csp_eval.driver_path() == in_environment  # without a workspace, as before

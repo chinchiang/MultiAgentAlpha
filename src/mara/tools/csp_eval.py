@@ -22,9 +22,13 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .runner import tool_env
 from .sarif import ToolResult
+
+if TYPE_CHECKING:
+    from ..workspace import Workspace
 
 DRIVER_NAME = "mara_driver.js"
 PACKAGE_DIR = "csp-evaluator"
@@ -135,14 +139,15 @@ def extract_policies(root: Path, skipped: list[str] | None = None) -> tuple[list
     return policies, truncated
 
 
-def driver_path() -> Path | None:
-    p = tools_dir() / PACKAGE_DIR / DRIVER_NAME
+def driver_path(*, workspace: Workspace | None = None) -> Path | None:
+    """The pinned evaluator's driver in the tool directory of `workspace` (the environment's when not given), or None."""
+    p = tools_dir(workspace=workspace) / PACKAGE_DIR / DRIVER_NAME
     return p if p.is_file() else None
 
 
-def tools_dir() -> Path:
+def tools_dir(*, workspace: Workspace | None = None) -> Path:
     from .runner import tools_dir as _t
-    return _t()
+    return _t(workspace=workspace)
 
 
 def node_exe() -> str | None:
