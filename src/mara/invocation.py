@@ -9,8 +9,9 @@ usage error's code, so whether a review finished is its progress record's to say
 A review invocation is admitted in one order, by admit, for the command line and the workbench alike: check_paths; then
 its progress record starts; then load, and the target's own options, check_calibration_sample and check_base. Neither
 calls those checks itself. The pipeline repeats check_base, calibration_answer_key and check_provider_mode before it
-starts. check_paths reads the file system, load reads the config file, check_base runs git, calibration_answer_key reads
-the answer key of a calibration sample and admit writes the progress record; the rest is pure.
+starts. check_paths reads the file system, load reads the config file and, for P7 and P8, the ML-BOM, its bundle and the
+Evidence record of the MARA workspace it is given, check_base runs git, calibration_answer_key reads the answer key of a
+calibration sample and admit writes the progress record; the rest is pure.
 """
 
 from __future__ import annotations
