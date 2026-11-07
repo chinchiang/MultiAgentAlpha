@@ -375,17 +375,22 @@ def _plain(text: str) -> str:
     return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
 
 
-def _p8(cfg):
-    return [r for r in evaluate_policies(cfg) if r.id == "P8"][0]
+def _p8(cfg, workspace):
+    return [r for r in evaluate_policies(cfg, workspace) if r.id == "P8"][0]
 
 
-def _allow(**gate_over):
-    return MaraConfig.model_validate(dict(_base(), gate=dict(unsupervised_reject_allowed=True, **gate_over)))
+def _allow(workspace, **gate_over):
+    """A config that allows unsupervised rejection, loaded in `workspace`: P8 refuses it there when it fails."""
+    config = workspace.root / "mara.yaml"
+    config.write_text(yaml.safe_dump(dict(_base(), gate=dict(unsupervised_reject_allowed=True, **gate_over))), encoding="utf-8")
+    return load_config(config, workspace)
 
 
-def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)  # P8 reads calib/latest.json relative to the working directory
-    assert _p8(MaraConfig.model_validate(_base())).passed  # the default (false) is always allowed
+def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path):
+    from mara.workspace import Workspace
+
+    ws = Workspace(tmp_path)  # P8 reads calib/latest.json below the workspace it is given
+    assert _p8(MaraConfig.model_validate(_base()), ws).passed  # the default (false) is always allowed
     calib = tmp_path / "calib"
     calib.mkdir()
     from mara.policy import AAT_METHOD
@@ -394,18 +399,18 @@ def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkey
         "method": AAT_METHOD, "passed": True, "n": 12, "agreement": 1.0, "chance_agreement": 0.5, "p_value": 0.0002,
         "rejection": {"n": 59, "misses": 0, "miss_rate_upper": 0.0495, "passed": True}}}
     (calib / "latest.json").write_text(json.dumps(record), encoding="utf-8")
-    assert _p8(_allow()).passed and "Alternative Annotator Test passed" in _p8(_allow()).reason
+    assert _p8(_allow(ws), ws).passed and "Alternative Annotator Test passed" in _p8(_allow(ws), ws).reason
 
     def bad(mutate, match):
         ev = json.loads(json.dumps(record))
         mutate(ev)
         (calib / "latest.json").write_text(json.dumps(ev), encoding="utf-8")
         with pytest.raises(ValueError, match=match):  # P8 also blocks the config from loading at all
-            _allow()
+            _allow(ws)
 
     (calib / "latest.json").unlink()
     with pytest.raises(ValueError, match="P8 unsupervised-reject"):
-        _allow()  # no record at all
+        _allow(ws)  # no record at all
     (calib / "latest.json").write_text(json.dumps(record), encoding="utf-8")
     bad(lambda ev: ev["aat"].update(passed=False), "did not pass")
     bad(lambda ev: ev["aat"]["rejection"].update(passed=False), "did not pass")
@@ -423,15 +428,15 @@ def test_p8_unsupervised_reject_needs_a_recent_passing_live_aat(tmp_path, monkey
 # ---------------------------------------------------------------- P8 reads the Evidence record at the `today` it is given
 
 def _p8_at(tmp_path, monkeypatch, record, today):
-    """P8 on `record` as calib/latest.json (written as given when it is not text), at a fixed `today`. The config is built
-    without its policies: P8 would refuse a failing record before the test could read why."""
+    """P8 on `record` as calib/latest.json (written as given when it is not text) of the workspace `tmp_path`, at a fixed
+    `today`. Building the config runs no P8, so a failing record reaches P8 itself, which says why."""
     from mara.policy import p8_unsupervised_reject
+    from mara.workspace import Workspace
 
-    monkeypatch.chdir(tmp_path)
     (tmp_path / "calib").mkdir(exist_ok=True)
     (tmp_path / "calib" / "latest.json").write_text(record if isinstance(record, str) else json.dumps(record), encoding="utf-8")
-    cfg = MaraConfig.model_validate(dict(_base(), gate=dict(unsupervised_reject_allowed=True)), context={"skip_policies": True})
-    return p8_unsupervised_reject(cfg, today=today)
+    cfg = MaraConfig.model_validate(dict(_base(), gate=dict(unsupervised_reject_allowed=True)))
+    return p8_unsupervised_reject(cfg, today=today, workspace=Workspace(tmp_path))
 
 
 def _passing_record(**over):
@@ -482,6 +487,49 @@ def test_p8_says_the_first_thing_that_is_wrong_in_the_order_it_always_has(tmp_pa
 def test_p8_refuses_a_record_that_is_not_a_json_object(tmp_path, monkeypatch, text):
     result = _p8_at(tmp_path, monkeypatch, text, dt.date(2025, 3, 1))
     assert not result.passed and "missing or unreadable" in result.reason
+
+
+# ---------------------------------------------------------------- P8 reads the workspace it is given
+
+def test_p8_reads_the_evidence_record_of_the_workspace_it_is_given_not_of_the_environment(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    # the environment's workspace (MARA_HOME, and the working directory) holds no Evidence record
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.setenv("MARA_HOME", str(elsewhere))
+    monkeypatch.chdir(elsewhere)
+    given = tmp_path / "given"
+    (given / "calib").mkdir(parents=True)
+    (given / "calib" / "latest.json").write_text(json.dumps(_passing_record()), encoding="utf-8")
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(dict(_base(), gate=dict(unsupervised_reject_allowed=True))), encoding="utf-8")
+
+    cfg = load_config(config, Workspace(given), today=dt.date(2025, 3, 1))
+    assert cfg.gate.unsupervised_reject_allowed
+
+    # and a workspace without the record is refused, whatever the environment holds
+    (elsewhere / "calib").mkdir()
+    (elsewhere / "calib" / "latest.json").write_text(json.dumps(_passing_record()), encoding="utf-8")
+    with pytest.raises(ValueError, match="P8 unsupervised-reject"):
+        load_config(config, Workspace(tmp_path / "empty"), today=dt.date(2025, 3, 1))
+
+
+def test_a_config_is_built_without_reading_a_workspace_and_its_workspace_refuses_it_when_it_loads(tmp_path, monkeypatch):
+    from mara.workspace import Workspace
+
+    # no workspace holds the Evidence record P8 needs or the ML-BOM P7 needs, the environment's included
+    monkeypatch.setenv("MARA_HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    raw = dict(_base(), gate=dict(unsupervised_reject_allowed=True), ml_bom=dict(required=True, path="sbom/none.cdx.json"))
+
+    cfg = MaraConfig.model_validate(raw)  # P1 to P6 pass: the config is valid on its own
+    assert cfg.gate.unsupervised_reject_allowed and cfg.ml_bom.required
+
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match="P7 ml-bom.*P8 unsupervised-reject"):
+        load_config(config, Workspace(tmp_path), today=dt.date(2025, 3, 1))
 
 
 # ---------------------------------------------------------------- one check of a config file
@@ -561,3 +609,28 @@ def test_check_config_prints_a_structure_error_whole(tmp_path):
     res = CliRunner().invoke(app, ["check-config", str(path)])
     assert res.exit_code == 1 and "invalid config structure" in cli_output.plain(res.output)
     assert "[type=value_error" in cli_output.plain(res.output), res.output
+
+
+def test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment(tmp_path, monkeypatch):
+    """P8 of the check reads the Evidence record of the workspace given: a record there passes the file although
+    MARA_HOME points to a workspace with none, and a record only the environment holds does not."""
+    from mara.policy import AAT_METHOD
+    from mara.workspace import Workspace
+
+    record = {"date": dt.date.today().isoformat(), "mode": "live", "aat": {
+        "method": AAT_METHOD, "passed": True, "n": 12, "agreement": 1.0, "chance_agreement": 0.5, "p_value": 0.0002,
+        "rejection": {"n": 59, "misses": 0, "miss_rate_upper": 0.0495, "passed": True}}}
+    given, environment = tmp_path / "given", tmp_path / "environment"
+    for ws in (given, environment):
+        (ws / "calib").mkdir(parents=True)
+    config = tmp_path / "allow.yaml"
+    config.write_text(yaml.safe_dump(dict(_base(), gate=dict(unsupervised_reject_allowed=True))), encoding="utf-8")
+    monkeypatch.setenv("MARA_HOME", str(environment))
+
+    (given / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
+    assert policy.check_config_file(config, Workspace(given)).passed
+
+    (given / "calib" / "latest.json").unlink()
+    (environment / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
+    check = policy.check_config_file(config, Workspace(given))
+    assert check.structure_ok and not check.passed and [r.id for r in check.policies if not r.passed] == ["P8"]

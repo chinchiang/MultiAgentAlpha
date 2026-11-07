@@ -172,6 +172,10 @@ _Avoid_: tool match, confirmation (a judge's vote is not corroboration)
 
 ## Reviews
 
+**MARA workspace**:
+The directory MARA's own state lives in, never inside the code under review: the Evidence record `calib/latest.json`, the ML-BOM and its signature bundle, the human-queue backlog, the PSIRT ledger, the calibration samples and, unless `MARA_TOOLS_DIR` names another, the tool directory `.mara-tools`. A relative path of MARA's own resolves below it. It is `MARA_HOME` when set and the working directory otherwise. Policies P7 and P8 read the ML-BOM, its bundle and the Evidence record of the workspace they are given (the environment's when none is), and a config is built without reading any workspace. A review whose workspace lies inside its target is refused.
+_Avoid_: home, root (the directory of the workspace), working directory (the workspace only when `MARA_HOME` is not set)
+
 **Review invocation**:
 One call of `mara review`: the target, the config, the provider mode, the output directory and the options it is given, the usage errors it can meet, and what it leaves, the reports in its output directory and an exit code. The command line, the pipeline and the workbench share one definition of it, so a usage error's message is worded once: the command line shows it on the option at fault, the workbench after its code's label, at times with the config file's name before it or cut short.
 _Avoid_: launch (the workbench's request that becomes one), arguments, command line (the invocation is the same from the workbench)
@@ -181,7 +185,7 @@ A review invocation whose options cannot make a review, named with the option at
 _Avoid_: refusal (a model's declined reply), rejection (a jury outcome), launch error
 
 **Admitted invocation**:
-A review invocation that passed every check, in one order: its paths (the config, the output directory and the path options outside the target, the config file there), then its config (loaded under the policies, its models of the review's provider mode), then the target's own options (a calibration sample of the workspace, a base git can diff against HEAD). It holds the loaded config and the review's progress record, which starts only once the paths are admitted and is left failed by any usage error after them, naming its kind. A review runs only from an admitted invocation. The command line and the workbench admit an invocation the same way, against the workspace each is given; the pipeline repeats the base, the calibration sample and the provider mode before it starts.
+A review invocation that passed every check, in one order: its paths (the config, the output directory and the path options outside the target, the config file there), then its config (loaded under the policies, P7 and P8 reading the files of the MARA workspace it is admitted against, its models of the review's provider mode), then the target's own options (a calibration sample of the workspace, a base git can diff against HEAD). It holds the loaded config and the review's progress record, which starts only once the paths are admitted and is left failed by any usage error after them, naming its kind. A review runs only from an admitted invocation. The command line and the workbench admit an invocation the same way, against the workspace each is given; the pipeline repeats the base, the calibration sample and the provider mode before it starts.
 _Avoid_: validated invocation, checked invocation, launch (the workbench's request that becomes a review invocation)
 
 **Review scope**:

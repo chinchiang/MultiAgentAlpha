@@ -6,6 +6,7 @@ usage error after that leaves it failed, naming the usage error's kind."""
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 import json
 import shutil
 from pathlib import Path
@@ -76,7 +77,7 @@ def test_a_live_review_of_a_config_with_a_mock_model_is_refused_before_the_revie
 
 
 def test_any_other_exception_after_the_paths_leaves_the_record_failed_with_its_name(tmp_path, monkeypatch):
-    def load_config(path):
+    def load_config(path, workspace=None):
         raise RuntimeError("a bug, not a usage error")
 
     monkeypatch.setattr(invocation, "load_config", load_config)
@@ -104,6 +105,33 @@ def test_a_calibration_sample_is_one_of_the_workspace_admit_is_given_not_of_the_
         invocation.admit(dataclasses.replace(inv, config=workspace / "config" / "mara.mock.yaml"), ROOT)
     assert (e.value.kind, e.value.param) == ("bad_calibration_sample", "--calibration-sample")
     assert progress.read(inv.progress_file)["error"] == "bad_calibration_sample"
+
+
+def test_the_config_is_loaded_under_the_policies_of_the_workspace_admit_is_given_not_of_the_environment(tmp_path, monkeypatch):
+    from mara.policy import AAT_METHOD
+
+    # a config that allows unsupervised rejection, which policy P8 lets load only beside a passing Evidence record
+    cfg = yaml.safe_load((ROOT / "config" / "mara.mock.yaml").read_text(encoding="utf-8"))
+    cfg["gate"] = {**cfg.get("gate", {}), "unsupervised_reject_allowed": True}
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    workspace = tmp_path / "workspace"
+    (workspace / "calib").mkdir(parents=True)
+    record = {"date": dt.date.today().isoformat(), "mode": "live", "aat": {
+        "method": AAT_METHOD, "passed": True, "n": 12, "agreement": 1.0, "chance_agreement": 0.5, "p_value": 0.0002,
+        "rejection": {"n": 59, "misses": 0, "miss_rate_upper": 0.0495, "passed": True}}}
+    (workspace / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"  # the environment names another workspace, with no Evidence record
+    elsewhere.mkdir()
+    monkeypatch.setenv("MARA_HOME", str(elsewhere))
+    monkeypatch.chdir(elsewhere)
+    inv = _inv(tmp_path / "out", config=config, progress_file=tmp_path / "out" / "progress.json")
+
+    assert invocation.admit(inv, workspace).config.gate.unsupervised_reject_allowed
+    with pytest.raises(InvocationError) as e:  # and no Evidence record below the workspace given: P8 refuses the config
+        invocation.admit(inv, tmp_path / "out")
+    assert (e.value.kind, e.value.param) == ("config_invalid", "--config")
+    assert "P8 unsupervised-reject" in str(e.value)
 
 
 def test_a_base_git_cannot_diff_against_is_refused_last(tmp_path):

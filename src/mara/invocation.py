@@ -9,8 +9,9 @@ usage error's code, so whether a review finished is its progress record's to say
 A review invocation is admitted in one order, by admit, for the command line and the workbench alike: check_paths; then
 its progress record starts; then load, and the target's own options, check_calibration_sample and check_base. Neither
 calls those checks itself. The pipeline repeats check_base, calibration_answer_key and check_provider_mode before it
-starts. check_paths reads the file system, load reads the config file, check_base runs git, calibration_answer_key reads
-the answer key of a calibration sample and admit writes the progress record; the rest is pure.
+starts. check_paths reads the file system, load reads the config file and, for P7 and P8, the ML-BOM, its bundle and the
+Evidence record of the MARA workspace it is given, check_base runs git, calibration_answer_key reads the answer key of a
+calibration sample and admit writes the progress record; the rest is pure.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple
 
 from .config import INVALID_FILE_ERRORS, load_config
 from .progress import Progress
+from .workspace import Workspace
 
 if TYPE_CHECKING:
     from .config import MaraConfig
@@ -129,12 +131,12 @@ def check_calibration_sample(target: Path, workspace: Path | None = None) -> Non
     calibration_answer_key(target, workspace)
 
 
-def load(config: Path, provider_mode: ProviderMode) -> MaraConfig:
-    """The config file `config`, validated (structure and policies), whose models' providers classify as
-    `provider_mode`. InvocationError config_invalid on --config for a file load_config refuses, else
-    check_provider_mode's provider_mismatch."""
+def load(config: Path, provider_mode: ProviderMode, workspace: Workspace | None = None) -> MaraConfig:
+    """The config file `config`, validated (structure and policies, P7 and P8 against the files of `workspace`, the
+    environment's when not given), whose models' providers classify as `provider_mode`. InvocationError config_invalid
+    on --config for a file load_config refuses, else check_provider_mode's provider_mismatch."""
     try:
-        cfg = load_config(config)
+        cfg = load_config(config, workspace)
     except INVALID_FILE_ERRORS as e:  # unreadable, not YAML, or refused
         raise InvocationError(" ".join(str(e).split()), param="--config", kind="config_invalid") from e
     check_provider_mode((m.provider for m in cfg.models), provider_mode)
@@ -215,7 +217,7 @@ def admit(inv: ReviewInvocation, workspace: Path) -> AdmittedInvocation:
     config_path = check_paths(inv, workspace)
     record = Progress(inv.progress_file)  # only now: a progress file inside the target is refused by check_paths
     try:
-        config = load(config_path, inv.provider)
+        config = load(config_path, inv.provider, Workspace(workspace))
         if inv.calibration_sample:
             check_calibration_sample(inv.target, workspace)
         if inv.base:  # an empty --base is no base

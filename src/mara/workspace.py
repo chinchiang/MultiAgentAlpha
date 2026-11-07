@@ -12,7 +12,15 @@ supply the binaries the runner executes, the evidence the policies trust and the
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass(frozen=True)
+class Workspace:
+    """The MARA workspace a reader is given: its relative paths resolve below `root`, never against the environment."""
+
+    root: Path
 
 
 class WorkspaceInsideTarget(ValueError):

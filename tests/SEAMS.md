@@ -12,9 +12,10 @@ server takes from socketserver, is defined nowhere in it: write it bare, not aft
 ## Patch a name where it is looked up
 
 `mara.invocation` imports `load_config` by name (`from .config import load_config`), so a test patches it in the module
-that calls it: `invocation.load_config`. A patch of `mara.config.load_config` leaves the invocation's own reference in
-place, so the test reads the real config: it fails for another reason, or passes without testing what it names. When a
-module changes between importing a name (`from .config import load_config`) and calling it through its module
+that calls it: `invocation.load_config`, which `invocation.load` calls with the config's path and the MARA workspace
+(`load_config(path, workspace)`), so a fake takes both. A patch of `mara.config.load_config` leaves the invocation's
+own reference in place, so the test reads the real config: it fails for another reason, or passes without testing what
+it names. When a module changes between importing a name (`from .config import load_config`) and calling it through its module
 (`config.load_config(...)`), the patches of that name move with it. `mara.policy` imports it by name too
 (`check_config_file` calls it), so a test that makes the check meet an exception that is not about the file patches
 `policy.load_config` (`test_policy.py`). A patch of a class attribute (`cli.Pipeline.run`)
@@ -163,12 +164,30 @@ code that writes it, so it changes with that code:
   `test_tool_env.py`, `test_tool_target_config.py`, `test_base_ref_trivy_hf_token.py`, `test_tools_csp.py`,
   `test_install_tools.py`.
 
+## The MARA workspace (`src/mara/workspace.py`)
+
+- `Workspace(root)`: tests pass `Workspace(tmp_path)` to `mara.config.load_config` (`load_config(path, workspace,
+  today=...)`), `mara.policy.evaluate_policies` and `mara.policy.workspace_policies`. Policy P7 (`mara.policy.p7_ml_bom`)
+  reads the ML-BOM and its signature bundle, P8 (`mara.policy.p8_unsupervised_reject`) `calib/latest.json`, below that
+  root and never below MARA_HOME or the working directory; when no workspace is given they read the environment's
+  (`mara.workspace.root`). `test_policy.py`, `test_ml_bom.py`.
+- `MaraConfig` reads no workspace when it is built: its validator runs P1 to P6 only (`mara.policy.config_policies`),
+  and `mara.config.load_config` runs P7 and P8 once the config is built. A test that needs P7 or P8 to refuse a config
+  writes it to a file and loads it with `load_config` in a workspace of its own; one that builds a config with
+  `model_validate` meets P1 to P6 only.
+  `test_policy.py::test_a_config_is_built_without_reading_a_workspace_and_its_workspace_refuses_it_when_it_loads`.
+- `mara.policy.check_config_file(path, workspace)` reports the policies of a config file with P7 and P8 read from that
+  workspace; `mara.web.env.configs(workspace)` passes the workspace it lists, so a test of the environment page puts the
+  Evidence record below the `tmp_path` it lists and sets MARA_HOME elsewhere. `mara check-config` still passes none (the
+  environment's). `test_policy.py::test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment`,
+  `test_panel.py::test_the_environment_page_lists_policies_as_the_workspace_it_is_given_holds_evidence_for_them`.
+
 ## The Evidence record (`src/mara/evidence.py`)
 
 `test_evidence_record.py` reads `mara.evidence` at its interface: `Header` (made by `Header.from_json` and `Header.from_front_matter`),
 `standing` and `header_fields`, always at a fixed `today`, never at the real date. `mara.policy.p8_unsupervised_reject` takes
-the same `today`, and reads `calib/latest.json` through `mara.workspace.resolve`: a test of it changes into a temporary
-directory and writes the file there. `governance_check` is a script, not a package: the tests put `scripts/` on the import
+the same `today` and a `Workspace`, and reads `calib/latest.json` below the workspace's root: a test of it writes the
+file below `tmp_path` and passes `Workspace(tmp_path)` (the MARA workspace, above). `governance_check` is a script, not a package: the tests put `scripts/` on the import
 path and call `check_g8` and `check_g9`, which take `today` and a config path. A record's mode is `live` in lower case or
 the record is not live; the writers write `live`, `mock` or `dry-run`, and a test that writes a record by hand writes one of
 those. The round trips in `test_evidence_record.py` run the real writers (`scripts/calibrate.py`'s `main`, `front_matter`
