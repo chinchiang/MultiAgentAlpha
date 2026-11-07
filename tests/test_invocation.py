@@ -95,6 +95,11 @@ def test_a_finished_review_reads_back_as_whether_its_gate_was_enforced_and_its_p
     assert outcome(code, recorded) == FinishedReview(gate_enforced=gate_enforced, psirt_failed=psirt_failed)
 
 
+def native(path: str) -> str:
+    """A path as the argv spells it: `str(Path(...))`, so with the host's separators (backslashes on Windows)."""
+    return str(Path(path))
+
+
 def parsed(inv: ReviewInvocation) -> dict:
     """The parameters the real `mara review` command reads from `review_args(inv)`, as it parses them (strings, before
     Typer converts them)."""
@@ -110,17 +115,17 @@ def test_the_argv_of_an_invocation_with_every_option_is_read_back_by_mara_review
                            psirt_event=Path("/w/event.json"), psirt_resend=True, base="origin/main", calibration_sample=True,
                            progress_file=Path("/w/out/runs/r1/progress.json"))
     assert parsed(inv) == {
-        "target": "/w/target", "config": "/w/config/mara.mock.yaml", "provider": "mock", "out": "/w/out/runs/r1",
-        "sarif_dir": "/w/sarif", "mock_fixtures": "/w/fixtures", "fail_on_gate": True, "notify_psirt": True,
-        "psirt_event": "/w/event.json", "psirt_resend": True, "base": "origin/main", "calibration_sample": True,
-        "progress_file": "/w/out/runs/r1/progress.json",
+        "target": native("/w/target"), "config": native("/w/config/mara.mock.yaml"), "provider": "mock", "out": native("/w/out/runs/r1"),
+        "sarif_dir": native("/w/sarif"), "mock_fixtures": native("/w/fixtures"), "fail_on_gate": True, "notify_psirt": True,
+        "psirt_event": native("/w/event.json"), "psirt_resend": True, "base": "origin/main", "calibration_sample": True,
+        "progress_file": native("/w/out/runs/r1/progress.json"),
     }
 
 
 def test_the_argv_of_an_invocation_with_no_option_set_is_read_back_with_every_default():
     inv = ReviewInvocation(target=Path("/w/target"), config=None, provider="live", out=Path("/w/out"))
     assert parsed(inv) == {
-        "target": "/w/target", "config": None, "provider": "live", "out": "/w/out", "sarif_dir": None,
+        "target": native("/w/target"), "config": None, "provider": "live", "out": native("/w/out"), "sarif_dir": None,
         "mock_fixtures": None, "fail_on_gate": False, "notify_psirt": False, "psirt_event": None, "psirt_resend": False,
         "base": None, "calibration_sample": False, "progress_file": None,
     }
