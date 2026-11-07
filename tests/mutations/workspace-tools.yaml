@@ -1,0 +1,125 @@
+focused:
+- tests/test_workspace.py
+- tests/test_workspace_anchors.py
+- tests/test_tool_env.py
+- tests/test_trivy_db.py
+- tests/test_panel.py
+- tests/test_pipeline_workspace.py
+- tests/test_invocation_checks.py
+mutations:
+- name: from_env ignores MARA_TOOLS_DIR
+  file: src/mara/workspace.py
+  old: '        tools = (base / (os.environ.get("MARA_TOOLS_DIR") or ".mara-tools")).resolve()'
+  new: '        tools = (base / ".mara-tools").resolve()'
+- name: from_env ignores MARA_TRIVY_CACHE_DIR
+  file: src/mara/workspace.py
+  old: '        cache = os.environ.get("MARA_TRIVY_CACHE_DIR")'
+  new: '        cache = None'
+- name: from_env ignores the root it is given
+  file: src/mara/workspace.py
+  old: '        base = Path(root).resolve() if root is not None else Path(os.environ.get("MARA_HOME") or ".").resolve()'
+  new: '        base = Path(os.environ.get("MARA_HOME") or ".").resolve()'
+- name: a workspace derives its tool directory from the working directory, not its root
+  file: src/mara/workspace.py
+  old: '        tools = tools_dir if tools_dir is not None else root / ".mara-tools"'
+  new: '        tools = tools_dir if tools_dir is not None else Path(".mara-tools").resolve()'
+- name: a workspace derives its trivy cache beside its tool directory, not below it
+  file: src/mara/workspace.py
+  old: '        object.__setattr__(self, "trivy_cache", trivy_cache if trivy_cache is not None else tools / "trivy-cache")'
+  new: '        object.__setattr__(self, "trivy_cache", trivy_cache if trivy_cache is not None else root / "trivy-cache")'
+- name: check_outside judges the environment's tool directory
+  file: src/mara/workspace.py
+  old: '"the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": ws.tools_dir,'
+  new: '"the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": Workspace.from_env().tools_dir,'
+- name: check_outside judges the environment's trivy cache
+  file: src/mara/workspace.py
+  old: '"the trivy database (MARA_TRIVY_CACHE_DIR)": ws.trivy_cache, **(extra or {})}'
+  new: '"the trivy database (MARA_TRIVY_CACHE_DIR)": Workspace.from_env().trivy_cache, **(extra or {})}'
+- name: tools_dir ignores the workspace it is given
+  file: src/mara/tools/runner.py
+  old: "    if workspace is not None:\n        return workspace.tools_dir.resolve()\n"
+  new: ''
+- name: tool_path looks in the environment's tool directory
+  file: src/mara/tools/runner.py
+  old: '    base = tools_dir(workspace=workspace) / "bin" / tool'
+  new: '    base = tools_dir() / "bin" / tool'
+- name: the manifest is read from the environment's tool directory
+  file: src/mara/tools/runner.py
+  old: '    manifest = tools_dir(workspace=workspace) / "manifest.json"'
+  new: '    manifest = tools_dir() / "manifest.json"'
+- name: run_all finds the tool in the environment's tool directory
+  file: src/mara/tools/runner.py
+  old: '        exe_path = tool_path(tool, workspace=workspace)'
+  new: '        exe_path = tool_path(tool)'
+- name: run_all reads the installed version from the environment's manifest
+  file: src/mara/tools/runner.py
+  old: '        version = installed_version(tool, workspace=workspace)'
+  new: '        version = installed_version(tool)'
+- name: run_all names the environment's directory for a tool not installed
+  file: src/mara/tools/runner.py
+  old: NOT_INSTALLED.format(bin_dir=tools_dir(workspace=workspace) / "bin")
+  new: NOT_INSTALLED.format(bin_dir=tools_dir() / "bin")
+- name: run_all reads the version lock of the environment's root
+  file: src/mara/tools/runner.py
+  old: workspace.root / pins.LOCK if workspace is not None else resolve(pins.LOCK)
+  new: resolve(pins.LOCK)
+- name: run_all scans with trivy against the environment's cache
+  file: src/mara/tools/runner.py
+  old: '                cache = tdb.cache_dir(workspace=workspace)
+
+    '
+  new: '                cache = tdb.cache_dir()
+
+    '
+- name: run_all scans with semgrep against the environment's rules
+  file: src/mara/tools/runner.py
+  old: '                configs = default_configs(workspace=workspace)
+
+    '
+  new: '                configs = default_configs()
+
+    '
+- name: run_all grades CSPs with the environment's driver
+  file: src/mara/tools/runner.py
+  old: '                cp = run_csp_eval(target, sarif, version=version, workspace=workspace)
+
+    '
+  new: '                cp = run_csp_eval(target, sarif, version=version)
+
+    '
+- name: cache_dir ignores the workspace it is given
+  file: src/mara/tools/trivy_db.py
+  old: "    if workspace is not None:\n        return workspace.trivy_cache.resolve()\n"
+  new: ''
+- name: the CSP driver is looked for in the environment's tool directory
+  file: src/mara/tools/csp_eval.py
+  old: '    p = tools_dir(workspace=workspace) / PACKAGE_DIR / DRIVER_NAME'
+  new: '    p = tools_dir() / PACKAGE_DIR / DRIVER_NAME'
+- name: a missing CSP driver is reported under the environment's tool directory
+  file: src/mara/tools/csp_eval.py
+  old: missing under {tools_dir(workspace=workspace)}"
+  new: missing under {tools_dir()}"
+- name: the rules directory is below the environment's tool directory
+  file: src/mara/tools/semgrep_rules.py
+  old: '    return tools_dir(workspace=workspace) / RULES_DIR_NAME'
+  new: '    return tools_dir() / RULES_DIR_NAME'
+- name: the installed rules are read from the environment's manifest
+  file: src/mara/tools/semgrep_rules.py
+  old: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=workspace) or {}'
+  new: '    entry = installed_manifest_entry(RULES_DIR_NAME) or {}'
+- name: the page lists the tools of the environment's root, not of the workspace it lists
+  file: src/mara/web/env.py
+  old: '    ws = Workspace.from_env(root=workspace)  #'
+  new: '    ws = Workspace.from_env()  #'
+- name: the page reads an explicit cache or the environment's, never the workspace's
+  file: src/mara/web/env.py
+  old: '    cache = cache or trivy_db.cache_dir(workspace=workspace)'
+  new: '    cache = cache or trivy_db.cache_dir()'
+- name: the environment page shows the environment's trivy cache
+  file: src/mara/web/env.py
+  old: '        "trivy_db": trivy(workspace=Workspace.from_env(root=workspace)),'
+  new: '        "trivy_db": trivy(),'
+- name: check_paths judges the environment's workspace
+  file: src/mara/invocation.py
+  old: '                      workspace=Workspace.from_env(root=root))'
+  new: '                      )'

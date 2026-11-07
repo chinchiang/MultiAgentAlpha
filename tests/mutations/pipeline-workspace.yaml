@@ -22,7 +22,7 @@ mutations:
     new: '        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training))'
   - name: the workspace checked against the target is MARA_HOME's
     file: src/mara/pipeline.py
-    old: '        check_outside(target, workspace=self.workspace)'
+    old: '        check_outside(target, workspace=Workspace.from_env(root=self.workspace))'
     new: '        check_outside(target)'
   - name: the calibration samples looked up in MARA_HOME
     file: src/mara/pipeline.py
@@ -38,5 +38,17 @@ mutations:
     new: 'family_eval_status(workspace_root(), evaluated).items()}'
   - name: check_outside ignores the workspace it is given
     file: src/mara/workspace.py
-    old: '    anchors = {"the MARA workspace (MARA_HOME or the working directory)": workspace if workspace is not None else root(),'
-    new: '    anchors = {"the MARA workspace (MARA_HOME or the working directory)": root(),'
+    old: '    ws = workspace if workspace is not None else Workspace.from_env()'
+    new: '    ws = Workspace.from_env()'
+  - name: the default tool runner is not given the pipeline's workspace
+    file: src/mara/pipeline.py
+    old: "        self._run_tools = run_tools if run_tools is not None else functools.partial(\n            run_all, workspace=Workspace.from_env(root=self.workspace))"
+    new: "        self._run_tools = run_tools if run_tools is not None else run_all"
+  - name: the default tool runner is given the environment's workspace
+    file: src/mara/pipeline.py
+    old: "            run_all, workspace=Workspace.from_env(root=self.workspace))"
+    new: "            run_all, workspace=Workspace.from_env())"
+  - name: a tool runner that is given is called with the pipeline's workspace too
+    file: src/mara/pipeline.py
+    old: "        self._run_tools = run_tools if run_tools is not None else functools.partial(\n            run_all, workspace=Workspace.from_env(root=self.workspace))"
+    new: "        self._run_tools = functools.partial(run_tools or run_all, workspace=Workspace.from_env(root=self.workspace))"

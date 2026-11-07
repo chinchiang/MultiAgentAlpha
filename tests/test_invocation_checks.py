@@ -1,7 +1,8 @@
 """The review invocation's checks of the target's own options (GLOSSARY.md: Review invocation, Usage error): a `--base`
 that git cannot read as a revision, and a `--calibration-sample` whose target is not a labelled sample, are usage errors
 on their own option, found before a review starts, by the command line, the workbench and the pipeline alike
-(docs/adr/0006-local-web-workbench.md). Tests call `invocation.check_base` and so on by module, so a missing function
+(docs/adr/0006-local-web-workbench.md); and so is a workspace, config file or output directory inside the target, which
+`invocation.check_paths` refuses. Tests call `invocation.check_base` and so on by module, so a missing function
 fails its own test."""
 
 from __future__ import annotations
@@ -180,3 +181,22 @@ def test_the_pipeline_refuses_a_target_that_is_not_a_sample_of_its_workspace(tmp
         _pipeline(tmp_path, tmp_path / "ws").run(repo, provider_mode="mock", calibration_sample=True)
     assert isinstance(e.value, InvocationError)
     assert (e.value.param, e.value.kind) == ("--calibration-sample", "bad_calibration_sample")
+
+
+def test_the_paths_are_refused_when_the_workspace_they_are_checked_against_lies_inside_the_target_though_MARA_HOME_does_not(
+        tmp_path, monkeypatch):
+    """check_paths judges the root it is given, the workspace the review is admitted against, not the environment's."""
+    target = tmp_path / "target"
+    root = target / "mara-workspace"
+    root.mkdir(parents=True)
+    config = tmp_path / "mara.yaml"
+    config.write_text("models: []\n", encoding="utf-8")
+    environment = tmp_path / "environment"
+    environment.mkdir()
+    monkeypatch.setenv("MARA_HOME", str(environment))
+    monkeypatch.chdir(environment)
+    inv = invocation.ReviewInvocation(target=target, config=config, provider="mock", out=tmp_path / "out")
+    with pytest.raises(InvocationError, match="MARA workspace") as refused:
+        invocation.check_paths(inv, root)
+    assert (refused.value.kind, refused.value.param) == ("inside_target", "TARGET")
+    assert invocation.check_paths(inv, tmp_path / "elsewhere") == config  # a root outside the target is fine
