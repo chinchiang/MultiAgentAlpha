@@ -609,3 +609,28 @@ def test_check_config_prints_a_structure_error_whole(tmp_path):
     res = CliRunner().invoke(app, ["check-config", str(path)])
     assert res.exit_code == 1 and "invalid config structure" in cli_output.plain(res.output)
     assert "[type=value_error" in cli_output.plain(res.output), res.output
+
+
+def test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment(tmp_path, monkeypatch):
+    """P8 of the check reads the Evidence record of the workspace given: a record there passes the file although
+    MARA_HOME points to a workspace with none, and a record only the environment holds does not."""
+    from mara.policy import AAT_METHOD
+    from mara.workspace import Workspace
+
+    record = {"date": dt.date.today().isoformat(), "mode": "live", "aat": {
+        "method": AAT_METHOD, "passed": True, "n": 12, "agreement": 1.0, "chance_agreement": 0.5, "p_value": 0.0002,
+        "rejection": {"n": 59, "misses": 0, "miss_rate_upper": 0.0495, "passed": True}}}
+    given, environment = tmp_path / "given", tmp_path / "environment"
+    for ws in (given, environment):
+        (ws / "calib").mkdir(parents=True)
+    config = tmp_path / "allow.yaml"
+    config.write_text(yaml.safe_dump(dict(_base(), gate=dict(unsupervised_reject_allowed=True))), encoding="utf-8")
+    monkeypatch.setenv("MARA_HOME", str(environment))
+
+    (given / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
+    assert policy.check_config_file(config, Workspace(given)).passed
+
+    (given / "calib" / "latest.json").unlink()
+    (environment / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
+    check = policy.check_config_file(config, Workspace(given))
+    assert check.structure_ok and not check.passed and [r.id for r in check.policies if not r.passed] == ["P8"]

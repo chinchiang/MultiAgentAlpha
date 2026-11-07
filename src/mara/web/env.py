@@ -35,6 +35,7 @@ from ..policy import check_config_file
 from ..tools import pins, trivy_db
 from ..tools.csp_eval import node_exe
 from ..tools.runner import TOOL_DIMENSIONS, installed_manifest_entry, tool_path, tools_dir
+from ..workspace import Workspace
 from . import jobs, panel
 from .configs import config_files
 
@@ -161,7 +162,7 @@ def configs(workspace: Path) -> list[dict[str, Any]]:
     out = []
     for path in config_files(workspace):
         rel = path.relative_to(workspace).as_posix()
-        check = check_config_file(path)  # the check `mara check-config` renders too
+        check = check_config_file(path, Workspace(workspace))  # the check `mara check-config` renders too
         entry: dict[str, Any] = {"path": rel, "name": path.stem, "structure_ok": check.structure_ok, "loadable": check.passed,
                                  "error": " ".join(check.error.split())[:600], "provider_mode": None,
                                  "models": [], "roles": {}, "policies": [], "dimensions": [], "rollout_phase": None}

@@ -176,6 +176,11 @@ code that writes it, so it changes with that code:
   writes it to a file and loads it with `load_config` in a workspace of its own; one that builds a config with
   `model_validate` meets P1 to P6 only.
   `test_policy.py::test_a_config_is_built_without_reading_a_workspace_and_its_workspace_refuses_it_when_it_loads`.
+- `mara.policy.check_config_file(path, workspace)` reports the policies of a config file with P7 and P8 read from that
+  workspace; `mara.web.env.configs(workspace)` passes the workspace it lists, so a test of the environment page puts the
+  Evidence record below the `tmp_path` it lists and sets MARA_HOME elsewhere. `mara check-config` still passes none (the
+  environment's). `test_policy.py::test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment`,
+  `test_panel.py::test_the_environment_page_lists_policies_as_the_workspace_it_is_given_holds_evidence_for_them`.
 
 ## The Evidence record (`src/mara/evidence.py`)
 

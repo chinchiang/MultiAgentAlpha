@@ -398,12 +398,13 @@ class ConfigCheck:
         return self.config is not None and all(r.passed for r in self.policies)
 
 
-def check_config_file(path: str | Path) -> ConfigCheck:
-    """The structure of the config file `path` and every policy result, whether or not a policy fails. A file that
-    cannot be read, is not YAML or fails validation (config.INVALID_FILE_ERRORS) is an invalid structure with nothing to
-    evaluate; any other exception is a bug and propagates."""
+def check_config_file(path: str | Path, workspace: Workspace | None = None) -> ConfigCheck:
+    """The structure of the config file `path` and every policy result, whether or not a policy fails, P7 and P8 read
+    from `workspace` (the environment's workspace when not given). A file that cannot be read, is not YAML or fails
+    validation (config.INVALID_FILE_ERRORS) is an invalid structure with nothing to evaluate; any other exception is a bug
+    and propagates."""
     try:
         cfg = load_config(path, enforce_policies=False)
     except INVALID_FILE_ERRORS as e:
         return ConfigCheck(None, str(e), ())
-    return ConfigCheck(cfg, "", tuple(evaluate_policies(cfg)))
+    return ConfigCheck(cfg, "", tuple(evaluate_policies(cfg, workspace)))

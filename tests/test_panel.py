@@ -203,3 +203,28 @@ def test_characterization_a_run_record_and_the_environment_page_describe_a_model
         for shown in fields["models"]:
             assert {k: shown[k] for k in CORE} == {k: page[path][shown["name"]][k] for k in CORE}, (path, shown["name"])
         assert fields["roles"] == page_roles[path]
+
+
+def test_the_environment_page_lists_policies_as_the_workspace_it_is_given_holds_evidence_for_them(tmp_path, monkeypatch):
+    """P8 of a listed config reads the Evidence record of the workspace the page lists, not of MARA_HOME."""
+    import datetime as dt
+    import json
+
+    import yaml
+
+    from mara.policy import AAT_METHOD
+
+    allow = dict(yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8")), gate=dict(unsupervised_reject_allowed=True))
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "allow.yaml").write_text(yaml.safe_dump(allow), encoding="utf-8")
+    (tmp_path / "calib").mkdir()
+    record = {"date": dt.date.today().isoformat(), "mode": "live", "aat": {
+        "method": AAT_METHOD, "passed": True, "n": 12, "agreement": 1.0, "chance_agreement": 0.5, "p_value": 0.0002,
+        "rejection": {"n": 59, "misses": 0, "miss_rate_upper": 0.0495, "passed": True}}}
+    (tmp_path / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.setenv("MARA_HOME", str(elsewhere))
+
+    (entry,) = env.configs(tmp_path)
+    assert entry["structure_ok"] and entry["loadable"], [p for p in entry["policies"] if not p["passed"]]
