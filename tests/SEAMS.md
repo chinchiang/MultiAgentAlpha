@@ -69,8 +69,9 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   git repository for a target, one with a merge base for that ref, and `--calibration-sample` a target below the
   workspace's `calib/samples/`.
   `test_governance_leftovers.py`, `test_security_regressions.py`, `test_invocation_checks.py`.
-- `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]`. `cli._review` builds
-  `Pipeline(cfg, out_dir=..., ...)`, the config positional and the rest keywords. `test_security_regressions.py`.
+- `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]` and `kw["workspace"]`.
+  `cli._review` builds `Pipeline(cfg, out_dir=..., workspace=..., ...)`, the config positional and the rest keywords, the
+  workspace the invocation was admitted against. `test_security_regressions.py`.
 - `invocation.load_config`: patched as a module name. `review` calls `admit(...)`, which `cli` imports by name from
   `mara.invocation` (a patch of `admit` itself goes in `cli.admit`); `admit` calls `load(...)` and `load` calls
   `load_config(...)`, both in `mara.invocation`, so the one patch reaches the command line and the workbench alike.
@@ -175,10 +176,12 @@ code that writes it, so it changes with that code:
 
 - `Workspace(root, tools_dir=None, trivy_cache=None)`: the tool directory is `<root>/.mara-tools` and the trivy cache
   `<tool directory>/trivy-cache` when not given, and building one reads no environment variable, whatever MARA_HOME,
-  MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR say. `Workspace.from_env(root=None)` reads them (a reader given no workspace still does too): the root
-  is `root`, else MARA_HOME, else the working directory; MARA_TOOLS_DIR (a relative one below the root) and
-  MARA_TRIVY_CACHE_DIR win over what the root derives. A test starts by removing the three from the environment.
-  `test_workspace.py`.
+  MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR say. `Workspace.from_env(root=None)` reads them (a reader given no workspace
+  still does too): the root is `root`, else MARA_HOME, else the working directory; MARA_TOOLS_DIR and
+  MARA_TRIVY_CACHE_DIR win over what the root derives, and a relative one of either is below the root, wherever the
+  process runs (a relative cache was below the working directory until v0.13.73). A test starts by removing the three from
+  the environment, and for a relative cache puts the working directory somewhere else than the root.
+  `test_workspace.py`, `test_trivy_db.py::test_without_a_workspace_the_trivy_cache_follows_the_rule_of_the_environments_workspace`.
 - `Workspace(root)`: tests pass `Workspace(tmp_path)` to `mara.config.load_config` (`load_config(path, workspace,
   today=...)`), `mara.policy.evaluate_policies` and `mara.policy.workspace_policies`. Policy P7 (`mara.policy.p7_ml_bom`)
   reads the ML-BOM and its signature bundle, P8 (`mara.policy.p8_unsupervised_reject`) `calib/latest.json`, below that
@@ -191,8 +194,8 @@ code that writes it, so it changes with that code:
   `test_policy.py::test_a_config_is_built_without_reading_a_workspace_and_its_workspace_refuses_it_when_it_loads`.
 - `mara.policy.check_config_file(path, workspace)` reports the policies of a config file with P7 and P8 read from that
   workspace; `mara.web.env.configs(workspace)` passes the workspace it lists, so a test of the environment page puts the
-  Evidence record below the `tmp_path` it lists and sets MARA_HOME elsewhere. `mara check-config` still passes none (the
-  environment's). `test_policy.py::test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment`,
+  Evidence record below the `tmp_path` it lists and sets MARA_HOME elsewhere. `mara check-config` passes the workspace it
+  read from the environment once, which is the environment's. `test_policy.py::test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment`,
   `test_panel.py::test_the_environment_page_lists_policies_as_the_workspace_it_is_given_holds_evidence_for_them`.
 - `mara.workspace.check_outside(target, extra, workspace=...)` judges the root, the tool directory and the trivy cache of
   the `Workspace` it is given (`Workspace.from_env()` when none), so a test puts them inside or outside `target` through
@@ -209,6 +212,21 @@ code that writes it, so it changes with that code:
   and `mara.web.env.environment` take the tool directory MARA_TOOLS_DIR names, else the one below that workspace, so a
   test installs a tool below the workspace it lists and unsets MARA_TOOLS_DIR; `mara.web.env.trivy(cache, workspace=...)`
   takes an explicit `cache` before the workspace's trivy cache. `test_panel.py`.
+- `AdmittedInvocation.workspace` is the root `invocation.admit(inv, workspace)` was given, not the environment's: a test
+  sets MARA_HOME and the working directory elsewhere and reads it from what `admit` returns
+  (`test_invocation_admit.py::test_an_admitted_invocation_remembers_the_workspace_it_was_admitted_against`); `cli._review`
+  hands it to `Pipeline(workspace=...)`, which a test reads through the `cli.Pipeline.__init__` seam (above,
+  `test_security_regressions.py::test_the_command_line_hands_the_pipeline_the_workspace_it_admitted_the_invocation_against`).
+- Who reads the environment. `review`, `export-summary`, `check-config` and `serve` of `mara.cli` each read it once, with
+  `Workspace.from_env()`, and hand that value down (`review` through `admit` and `AdmittedInvocation.workspace`). Four
+  places are given a root and take from the environment only what a root does not say, the tool directory and the trivy
+  cache MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR name, with `Workspace.from_env(root=...)`: `Pipeline` (the workspace it was
+  given, else the environment's root, for its default tool runner), `mara.web.env` (`tools`, `trivy`, `environment`),
+  `mara.invocation.check_paths` and `mara.web.procs.child_env` (which writes the three anchors, absolute, into the
+  environment of a child). A test of any of them installs a tool or a cache below the workspace it passes and unsets
+  MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR (`tests/conftest.py` sets the first for every test). Every other reader that takes
+  `workspace=` or `root=` and is given none reads the environment's, and the scripts do: they take the workspace in the
+  later changes of C1.
 
 ## The Evidence record (`src/mara/evidence.py`)
 

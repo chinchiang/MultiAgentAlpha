@@ -35,12 +35,13 @@ class Workspace:
     @classmethod
     def from_env(cls, root: Path | None = None) -> Workspace:
         """The workspace the environment names: `root` when given, else MARA_HOME or the working directory; the tool
-        directory MARA_TOOLS_DIR (a relative one below the root) and the trivy cache MARA_TRIVY_CACHE_DIR, each
-        derived from the root when its variable is not set. The one place that reads these three variables."""
+        directory MARA_TOOLS_DIR and the trivy cache MARA_TRIVY_CACHE_DIR (a relative one of either below the root), each
+        derived from the root when its variable is not set. It reads these three variables; so does a reader of the tool
+        directory or the trivy cache that is given no workspace."""
         base = Path(root).resolve() if root is not None else Path(os.environ.get("MARA_HOME") or ".").resolve()
         tools = (base / (os.environ.get("MARA_TOOLS_DIR") or ".mara-tools")).resolve()
         cache = os.environ.get("MARA_TRIVY_CACHE_DIR")
-        return cls(base, tools, Path(cache).resolve() if cache else None)
+        return cls(base, tools, (base / cache).resolve() if cache else None)
 
 
 class WorkspaceInsideTarget(ValueError):

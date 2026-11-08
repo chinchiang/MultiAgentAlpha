@@ -421,3 +421,38 @@ def test_a_launch_writes_the_record_before_it_starts_the_child(tmp_path):
     children, seen = _launching([], start=start), []
     child_id, _ = _launch(children, tmp_path, seen)
     assert on_disk == [{"id": child_id, "status": "running", "exit_code": None}]
+
+
+# ---------------------------------------------------------------- the workspace a child is given
+
+def test_a_child_is_given_the_three_anchors_of_the_servers_workspace_as_absolute_paths_over_what_it_inherits(tmp_path, monkeypatch):
+    """The server's tool directory and trivy cache, resolved once below its workspace, so a child, whose working directory
+    is that workspace, cannot read a relative one another way. Everything else of the environment stays."""
+    root = tmp_path / "ws"
+    root.mkdir()
+    monkeypatch.setenv("MARA_HOME", str(tmp_path / "inherited-home"))
+    monkeypatch.setenv("MARA_TOOLS_DIR", "relative-tools")
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", "relative-cache")
+    monkeypatch.setenv("A_PROVIDER_KEY_THE_CHILD_NEEDS", "kept")
+    env = procs.child_env(root)
+    assert env["MARA_HOME"] == str(root)
+    assert env["MARA_TOOLS_DIR"] == str(root / "relative-tools")
+    assert env["MARA_TRIVY_CACHE_DIR"] == str(root / "relative-cache")
+    assert env["A_PROVIDER_KEY_THE_CHILD_NEEDS"] == "kept"
+
+    absolute = tmp_path / "elsewhere"
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(absolute / "tools"))
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(absolute / "cache"))
+    env = procs.child_env(root)
+    assert (env["MARA_TOOLS_DIR"], env["MARA_TRIVY_CACHE_DIR"]) == (str(absolute / "tools"), str(absolute / "cache"))
+
+
+def test_a_child_is_given_the_anchors_the_workspace_derives_when_the_server_has_no_variable_for_them(tmp_path, monkeypatch):
+    root = tmp_path / "ws"
+    root.mkdir()
+    for name in ("MARA_HOME", "MARA_TOOLS_DIR", "MARA_TRIVY_CACHE_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    env = procs.child_env(root)
+    assert env["MARA_HOME"] == str(root)
+    assert env["MARA_TOOLS_DIR"] == str(root / ".mara-tools")
+    assert env["MARA_TRIVY_CACHE_DIR"] == str(root / ".mara-tools" / "trivy-cache")

@@ -14,14 +14,9 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-import os
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from .runner import tools_dir
-
-if TYPE_CHECKING:
-    from ..workspace import Workspace
+from ..workspace import Workspace
 
 RECORD_NAME = "mara-trivy-db.json"
 DEFAULT_MAX_AGE_HOURS = 48.0  # tools/trivy-db.yaml max_age_hours when the workspace has none
@@ -31,11 +26,9 @@ OFFLINE_FLAGS = ["--skip-db-update", "--skip-java-db-update", "--skip-check-upda
 
 
 def cache_dir(*, workspace: Workspace | None = None) -> Path:
-    """The trivy cache of `workspace` when one is given. Otherwise MARA_TRIVY_CACHE_DIR, or trivy-cache in the tool
-    directory."""
-    if workspace is not None:
-        return workspace.trivy_cache.resolve()
-    return Path(os.environ.get("MARA_TRIVY_CACHE_DIR") or (tools_dir() / "trivy-cache")).resolve()
+    """The trivy cache of `workspace` when one is given, else that of the environment's workspace (Workspace.from_env):
+    MARA_TRIVY_CACHE_DIR, or trivy-cache in the tool directory, a relative path below the root."""
+    return (workspace if workspace is not None else Workspace.from_env()).trivy_cache.resolve()
 
 
 def db_path(cache: Path) -> Path:

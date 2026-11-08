@@ -74,12 +74,13 @@ def review(
                                               help="Write the review's live progress (stages, log lines) to this JSON file; `mara serve` reads it"),
 ):
     """Run the six-layer review and write out/report.sarif, out/report.md, out/report.json."""
-    from .workspace import resolve, root
+    from .workspace import Workspace
 
     # The defaults are MARA's own files, so they resolve against the workspace (MARA_HOME, else the working
     # directory) like every other trust anchor: with MARA_HOME set and the job running inside the target,
     # a relative default would let the reviewed repository supply the config (models, endpoints, gate).
-    out = out if out is not None else resolve("out")
+    workspace = Workspace.from_env()  # the one place this command reads the environment; the rest is handed this value
+    out = out if out is not None else workspace.root / "out"
     inv = ReviewInvocation(target=target, config=config, provider=provider, out=out, sarif_dir=sarif_dir, mock_fixtures=mock_fixtures,
                            fail_on_gate=fail_on_gate, notify_psirt=notify_psirt, psirt_event=psirt_event, psirt_resend=psirt_resend,
                            base=base, calibration_sample=calibration_sample, progress_file=progress_file)
@@ -88,7 +89,7 @@ def review(
         # pre-recorded SARIF is tool evidence, mock fixtures are the models' answers and a PSIRT event
         # starts legal clocks: from inside the target, the reviewed repository would supply its own verdict
         # the progress file is an output: inside the target it would be bundled into the next review
-        admitted = admit(inv, root())
+        admitted = admit(inv, workspace.root)
     progress = admitted.progress  # a no-op without --progress-file; admit leaves it failed on a usage error of its own
     try:
         report, psirt_failed = _review(admitted)
@@ -122,7 +123,8 @@ def _review(admitted: AdmittedInvocation) -> tuple[ReviewReport, bool]:
 
     inv, cfg, progress = admitted.invocation, admitted.config, admitted.progress
     target, out, psirt_event, base = inv.target, inv.out, inv.psirt_event, inv.base
-    pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress)
+    pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress,
+                    workspace=admitted.workspace)
     event = None
     if psirt_event:
         # read before the review, and handed to it: the notifications are built once, and the report's psirt holds these
@@ -151,7 +153,7 @@ def _review(admitted: AdmittedInvocation) -> tuple[ReviewReport, bool]:
 
         write_psirt(report.psirt, out / "psirt-notifications.json")
         if inv.notify_psirt and report.psirt:
-            for s in send_psirt(report.psirt, cfg, ledger_path=resolve(cfg.psirt.ledger_file), resend=inv.psirt_resend):
+            for s in send_psirt(report.psirt, cfg, ledger_path=resolve(cfg.psirt.ledger_file, admitted.workspace), resend=inv.psirt_resend):
                 if s.get("skipped"):
                     console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: skipped, {s['reason']} (ledger {cfg.psirt.ledger_file})")
                 else:
@@ -185,9 +187,9 @@ def export_summary(
     """Write the score summary of a review report: dimension scores and overall score, no finding detail (CN-3).
     The target and revision cross only as pseudonyms keyed by MARA_SUMMARY_KEY, which stays in the country."""
     from .report.summary_out import SummaryRefused, build_summary, check_destination, load_report, write_summary
-    from .workspace import resolve
+    from .workspace import Workspace
 
-    out = out if out is not None else resolve("out/score-summary.json")
+    out = out if out is not None else Workspace.from_env().root / "out" / "score-summary.json"
     try:
         source = report.read_bytes()
     except OSError as e:
@@ -225,9 +227,10 @@ def check_config(
     from rich.markup import escape
 
     from .policy import check_config_file
-    from .workspace import resolve
+    from .workspace import Workspace
 
-    config = config if config is not None else resolve("config/mara.yaml")
+    workspace = Workspace.from_env()
+    config = config if config is not None else workspace.root / "config" / "mara.yaml"
     if not config.is_file():
         raise typer.BadParameter(f"config file not found: {config} (run from the MARA workspace, set MARA_HOME or pass the path)",
                                  param_hint="CONFIG")
@@ -235,7 +238,7 @@ def check_config(
     # structure in full (fields, cross-field checks, unknown keys; a file that is not YAML is an invalid structure) so
     # check-config can never report "policies pass" for a file load_config would refuse, and the policies separately
     # instead of failing the whole validation. The error holds square brackets, which the console must not read as markup.
-    check = check_config_file(config)
+    check = check_config_file(config, workspace)
     cfg, results = check.config, check.policies
     if cfg is None:
         console.print(f"[red]invalid config structure:[/red] {escape(check.error)}")
@@ -271,7 +274,7 @@ def serve(
     Loopback only; the printed URL carries this server's session token (docs/adr/0006-local-web-workbench.md)."""
     from .web.server import LOOPBACK_HOSTS
     from .web.server import serve as run_server
-    from .workspace import resolve, root
+    from .workspace import Workspace
 
     if host not in LOOPBACK_HOSTS:
         # finding detail must stay where the review ran (CN-3); reach a remote workbench through an SSH tunnel instead
@@ -279,8 +282,9 @@ def serve(
                                  "use an SSH tunnel (ssh -L 8765:127.0.0.1:8765 host) to open it from another machine",
                                  param_hint="--host")
     try:
-        run_server(host=host, port=port, workspace=root(), out_dir=out if out is not None else resolve("out"), open_browser=not no_browser,
-                   echo=console.print)
+        workspace = Workspace.from_env()
+        run_server(host=host, port=port, workspace=workspace.root, out_dir=out if out is not None else workspace.root / "out",
+                   open_browser=not no_browser, echo=console.print)
     except OSError as e:
         console.print(f"[red]cannot listen on {host}:{port}:[/red] {e}")
         raise typer.Exit(code=1) from e
