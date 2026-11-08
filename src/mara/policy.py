@@ -4,7 +4,8 @@ Every policy is evaluated on its own, so `mara check-config` and the workbench's
 violations at once (evaluate_policies, or check_config_file for a config file). A policy is a function of the parsed
 configuration and never reaches the network. P1 to P6 read nothing else (config_policies), and `MaraConfig` refuses to
 build a config one of them fails. P7 reads the ML-BOM and its signature bundle of the workspace it is given, P8 that
-workspace's calib/latest.json at the `today` it is given (workspace_policies; the clock when not given), and `load_config` refuses a config one of them fails. check_config_file reads the config file it is given.
+workspace's calib/latest.json at the `today` it is given (workspace_policies; the clock when not given), and `load_config`
+refuses a config one of them fails. check_config_file reads the config file it is given.
 """
 
 from __future__ import annotations
