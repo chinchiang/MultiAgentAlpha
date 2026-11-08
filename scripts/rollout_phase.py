@@ -49,7 +49,7 @@ def cmd_baseline(a: argparse.Namespace) -> int:
         print("ERROR: no report.json under the given directories", file=sys.stderr)
         return 2
     cfg = load_config(a.config, a.workspace)
-    metrics = govdocs.baseline_metrics(paths, a.decisions, TrainingRequirement.from_config_file(a.config))
+    metrics = govdocs.baseline_metrics(paths, a.decisions, TrainingRequirement.from_config_file(a.config, a.workspace.root))
     out = a.out or ROOT / "docs" / f"rollout-baseline-{a.today}.md"
     out.write_text(govdocs.render_baseline(metrics, date=a.today, phase_started=cfg.rollout.started_on,
                                           sources=[str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p) for p in paths]), encoding="utf-8")

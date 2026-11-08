@@ -164,9 +164,9 @@ class TrainingRequirement:
     problem: str = ""
 
     @classmethod
-    def from_config_file(cls, path: Path | str) -> TrainingRequirement:
-        """From a MARA config's `training` block; the register resolves against the workspace. A config
-        that cannot be read keeps training required."""
+    def from_config_file(cls, path: Path | str, workspace: Path) -> TrainingRequirement:
+        """From a MARA config's `training` block; the register resolves against `workspace`, the root of the MARA workspace.
+        A config that cannot be read keeps training required."""
         import yaml
 
         from .config import TrainingConfig
@@ -182,7 +182,7 @@ class TrainingRequirement:
             why = ""
         if not cfg.require_trained_adjudicator:
             return cls(required=False)
-        register_path = resolve(cfg.register_file)
+        register_path = resolve(cfg.register_file, workspace)
         try:
             return cls(required=True, register=load_register(register_path), problem=why)
         except (OSError, ValueError, KeyError, TypeError) as e:
