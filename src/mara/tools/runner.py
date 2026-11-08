@@ -60,7 +60,7 @@ def tool_env(*extra: str, **set_vars: str) -> dict[str, str]:
 
 
 def tools_dir(*, workspace: Workspace) -> Path:
-    """The tool directory of `workspace`, whatever MARA_TOOLS_DIR says now (Workspace.from_env read it)."""
+    """The tool directory `workspace` holds, resolved."""
     return workspace.tools_dir.resolve()
 
 

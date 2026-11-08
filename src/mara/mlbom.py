@@ -559,7 +559,7 @@ def verify_signature(cfg: MaraConfig, root: Path | str, runner=None) -> tuple[bo
     if not mb.bundle.strip() or not bundle.is_file():
         return False, f"signature bundle {mb.bundle or '(none)'} not found"
     try:
-        cmd = cosign_verify_blob_cmd(bom, bundle, mb.certificate_identity, mb.certificate_oidc_issuer, Workspace.from_env(root=base).tools_dir)
+        cmd = cosign_verify_blob_cmd(bom, bundle, mb.certificate_identity, mb.certificate_oidc_issuer, Workspace.from_env().tools_dir)
     except (FileNotFoundError, ValueError) as e:
         return False, str(e)
     run = runner or subprocess.run

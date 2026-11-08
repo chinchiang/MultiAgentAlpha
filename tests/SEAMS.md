@@ -212,7 +212,7 @@ code that writes it, so it changes with that code:
   `installed_rule_paths` and `default_configs`, `mara.web.env.trivy`; `mara.mlbom.tools_bin`, `cosign_verify_blob_cmd` and
   `cosign_sign_blob_cmd` take the tool directory itself. A test that sets MARA_TOOLS_DIR to drive the entry passes
   `Workspace.from_env()`; one that calls the reader directly passes `Workspace(root, tools_dir=...)`. A test that replaces
-  `runner.tool_path` or `semgrep_rules.installed_rule_paths` with a fake gives it `workspace=None` too, since `run_all`
+  `runner.tool_path` or `semgrep_rules.installed_rule_paths` with a fake gives it a `workspace` parameter too, since `run_all`
   calls them with the keyword (the `every_tool` fixture of `test_tool_env.py`); so does a fake of `tool_path` or
   `installed_version` in `scripts/osv_ci.py` (`test_security_regressions.py`). `test_tool_env.py`, `test_trivy_db.py`.
 - The environment page lists the tools and the trivy database of the workspace it lists: `mara.web.env.tools(workspace)`
