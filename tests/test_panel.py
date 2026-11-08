@@ -267,7 +267,8 @@ def test_the_trivy_cache_the_page_lists_is_that_of_the_workspace_given_and_an_ex
     ws = Workspace(tmp_path / "ws", trivy_cache=tmp_path / "workspace-cache")
     assert env.trivy(workspace=ws)["cache_dir"] == str(tmp_path / "workspace-cache")
     assert env.trivy(cache=tmp_path / "explicit", workspace=ws)["cache_dir"] == str(tmp_path / "explicit")
-    assert env.trivy()["cache_dir"] == str(tmp_path / "environment-cache")  # given neither, as before
+    with pytest.raises(TypeError):
+        env.trivy()  # the workspace is named, not the environment's
 
 
 def test_the_environment_page_takes_its_tool_directory_and_trivy_cache_from_the_workspace_it_lists(tmp_path, monkeypatch):

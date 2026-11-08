@@ -103,9 +103,8 @@ def tools(workspace: Path) -> dict[str, Any]:
     }
 
 
-def trivy(cache: Path | None = None, *, workspace: Workspace | None = None) -> dict[str, Any]:
-    """The state of the offline database in `cache`, else in the trivy cache of `workspace` (the environment's when
-    neither is given)."""
+def trivy(cache: Path | None = None, *, workspace: Workspace) -> dict[str, Any]:
+    """The state of the offline database in `cache`, else in the trivy cache of `workspace`."""
     cache = cache or trivy_db.cache_dir(workspace=workspace)
     db = trivy_db.db_path(cache)
     limit = trivy_db.max_age_hours()

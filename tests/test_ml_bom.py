@@ -170,10 +170,10 @@ def test_cli_round_trip_and_cosign_commands(tmp_path, monkeypatch):
         fake.write_text("#!/bin/sh\necho \"$@\" > \"$(dirname \"$0\")/args.txt\"\nexit 0\n", encoding="utf-8")
         fake.chmod(0o755)
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tools))
-    cmd = mlbom.cosign_verify_blob_cmd(tmp_path / "bom.json", tmp_path / "b.sigstore.json", "p@example.internal", "https://issuer.example")
+    cmd = mlbom.cosign_verify_blob_cmd(tmp_path / "bom.json", tmp_path / "b.sigstore.json", "p@example.internal", "https://issuer.example", tools)
     assert cmd[0] == str(fake) and cmd[1] == "verify-blob" and "--certificate-identity" in cmd and cmd[-1].endswith("bom.json")
     with pytest.raises(ValueError):
-        mlbom.cosign_verify_blob_cmd(tmp_path / "bom.json", tmp_path / "b", "", "")
+        mlbom.cosign_verify_blob_cmd(tmp_path / "bom.json", tmp_path / "b", "", "", tools)
     env = {**os.environ, "MARA_TOOLS_DIR": str(tools)}
     r = subprocess.run([sys.executable, str(SCRIPT), "verify-signature", "--bom", str(tmp_path / "bom.json"), "--bundle", str(tmp_path / "b.sigstore.json"),
                         "--certificate-identity", "p@example.internal", "--certificate-oidc-issuer", "https://issuer.example"],

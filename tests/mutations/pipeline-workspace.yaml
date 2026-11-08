@@ -7,11 +7,11 @@ mutations:
   - name: the ticket backlog read from MARA_HOME
     file: src/mara/pipeline.py
     old: '        self.tightening = tightening(cfg, read_backlog(cfg, self.workspace))'
-    new: '        self.tightening = tightening(cfg, read_backlog(cfg))'
+    new: '        self.tightening = tightening(cfg, read_backlog(cfg, workspace_root()))'
   - name: the ML-BOM read from MARA_HOME
     file: src/mara/pipeline.py
     old: '        self.ml_bom_status = status_for_config(cfg, self.workspace)'
-    new: '        self.ml_bom_status = status_for_config(cfg)'
+    new: '        self.ml_bom_status = status_for_config(cfg, workspace_root())'
   - name: the decision files read from MARA_HOME when the review scores
     file: src/mara/pipeline.py
     old: '        loaded = load_decisions(self.workspace / "calib" / "decisions")'
@@ -23,27 +23,23 @@ mutations:
   - name: the workspace checked against the target is MARA_HOME's
     file: src/mara/pipeline.py
     old: '        check_outside(target, workspace=Workspace.from_env(root=self.workspace))'
-    new: '        check_outside(target)'
+    new: '        check_outside(target, workspace=Workspace.from_env())'
   - name: the calibration samples looked up in MARA_HOME
     file: src/mara/pipeline.py
     old: '        answer_key = calibration_answer_key(target, self.workspace) if calibration_sample else None'
-    new: '        answer_key = calibration_answer_key(target) if calibration_sample else None'
+    new: '        answer_key = calibration_answer_key(target, Workspace.from_env().root) if calibration_sample else None'
   - name: the ML-BOM signature bundle looked up in MARA_HOME
     file: src/mara/pipeline.py
     old: '            signed, why = verify_signature(self.cfg, self.workspace)'
-    new: '            signed, why = verify_signature(self.cfg)'
+    new: '            signed, why = verify_signature(self.cfg, Workspace.from_env().root)'
   - name: the model evaluations read from MARA_HOME
     file: src/mara/pipeline.py
     old: 'family_eval_status(self.workspace, evaluated).items()}'
     new: 'family_eval_status(workspace_root(), evaluated).items()}'
   - name: check_outside ignores the workspace it is given
     file: src/mara/workspace.py
-    old: '    ws = workspace if workspace is not None else Workspace.from_env()'
-    new: '    ws = Workspace.from_env()'
-  - name: the default tool runner is not given the pipeline's workspace
-    file: src/mara/pipeline.py
-    old: "        self._run_tools = run_tools if run_tools is not None else functools.partial(\n            run_all, workspace=Workspace.from_env(root=self.workspace))"
-    new: "        self._run_tools = run_tools if run_tools is not None else run_all"
+    old: '    anchors = {"the MARA workspace": workspace.root, "the tool directory": workspace.tools_dir,'
+    new: '    anchors = {"the MARA workspace": Workspace.from_env().root, "the tool directory": workspace.tools_dir,'
   - name: the default tool runner is given the environment's workspace
     file: src/mara/pipeline.py
     old: "            run_all, workspace=Workspace.from_env(root=self.workspace))"

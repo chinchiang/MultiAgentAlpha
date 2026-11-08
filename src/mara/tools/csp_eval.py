@@ -139,13 +139,13 @@ def extract_policies(root: Path, skipped: list[str] | None = None) -> tuple[list
     return policies, truncated
 
 
-def driver_path(*, workspace: Workspace | None = None) -> Path | None:
-    """The pinned evaluator's driver in the tool directory of `workspace` (the environment's when not given), or None."""
+def driver_path(*, workspace: Workspace) -> Path | None:
+    """The pinned evaluator's driver in the tool directory of `workspace`, or None."""
     p = tools_dir(workspace=workspace) / PACKAGE_DIR / DRIVER_NAME
     return p if p.is_file() else None
 
 
-def tools_dir(*, workspace: Workspace | None = None) -> Path:
+def tools_dir(*, workspace: Workspace) -> Path:
     from .runner import tools_dir as _t
     return _t(workspace=workspace)
 
@@ -239,11 +239,10 @@ def build_sarif(policies: list[CspPolicy], results: list[ToolResult], *, version
 
 
 def run_csp_eval(target: Path, sarif_path: Path, *, version: str | None = None,
-                 node: str | None = None, workspace: Workspace | None = None) -> subprocess.CompletedProcess:
-    """Extract the CSPs in `target`, evaluate them with the driver in the tool directory of `workspace` (the
-    environment's when not given), write `sarif_path`. Returns a synthetic
-    CompletedProcess so the runner's shared exit-code/SARIF handling applies unchanged:
-    0 ok (SARIF written), 66 package missing, 127 no node interpreter, 1 evaluation failed."""
+                 node: str | None = None, workspace: Workspace) -> subprocess.CompletedProcess:
+    """Extract the CSPs in `target`, evaluate them with the driver in the tool directory of `workspace`, write `sarif_path`.
+    Returns a synthetic CompletedProcess so the runner's shared exit-code/SARIF handling applies unchanged: 0 ok (SARIF
+    written), 66 package missing, 127 no node interpreter, 1 evaluation failed."""
     driver = driver_path(workspace=workspace)
     if driver is None:
         return subprocess.CompletedProcess([], 66, "", f"{PACKAGE_DIR}/{DRIVER_NAME} missing under {tools_dir(workspace=workspace)}")

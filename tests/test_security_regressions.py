@@ -466,7 +466,7 @@ def test_trust_anchors_never_come_from_the_review_target(tmp_path, monkeypatch):
     monkeypatch.delenv("MARA_TOOLS_DIR", raising=False)
     monkeypatch.delenv("MARA_HOME", raising=False)
     with pytest.raises(workspace.WorkspaceInsideTarget, match="MARA workspace"):
-        workspace.check_outside(target)
+        workspace.check_outside(target, workspace=Workspace.from_env())
     res = CliRunner().invoke(app, ["review", ".", "--provider", "mock", "--config", str(ROOT / "config" / "mara.mock.yaml"),
                                    "--out", str(tmp_path / "out")])
     assert res.exit_code == 2 and isinstance(res.exception, SystemExit) and not (tmp_path / "out" / "report.json").exists()
@@ -474,23 +474,23 @@ def test_trust_anchors_never_come_from_the_review_target(tmp_path, monkeypatch):
     home = tmp_path / "mara-home"
     home.mkdir()
     monkeypatch.setenv("MARA_HOME", str(home))
-    workspace.check_outside(target)
-    assert workspace.resolve("calib/latest.json") == home / "calib" / "latest.json"
+    workspace.check_outside(target, workspace=Workspace.from_env())
+    assert workspace.resolve("calib/latest.json", workspace.root()) == home / "calib" / "latest.json"
     from mara.tools.runner import tools_dir
-    assert tools_dir() == (home / ".mara-tools").resolve()
+    assert tools_dir(workspace=Workspace.from_env()) == (home / ".mara-tools").resolve()
     # ...but not a tool directory or trivy database pointed into it
     monkeypatch.setenv("MARA_TOOLS_DIR", str(target / ".mara-tools"))
     with pytest.raises(workspace.WorkspaceInsideTarget, match="tool directory"):
-        workspace.check_outside(target)
+        workspace.check_outside(target, workspace=Workspace.from_env())
     monkeypatch.setenv("MARA_TOOLS_DIR", str(home / ".mara-tools"))
     monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(target / "cache"))
     with pytest.raises(workspace.WorkspaceInsideTarget, match="trivy"):
-        workspace.check_outside(target)
+        workspace.check_outside(target, workspace=Workspace.from_env())
     # the ordinary layout: the workspace is a parent of the target (mara review fixtures/vuln-sample)
     monkeypatch.delenv("MARA_TRIVY_CACHE_DIR")
     monkeypatch.setenv("MARA_HOME", str(tmp_path))
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / ".mara-tools"))
-    workspace.check_outside(target)
+    workspace.check_outside(target, workspace=Workspace.from_env())
 
 
 def test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_in_the_target(tmp_path, monkeypatch):

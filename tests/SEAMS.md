@@ -181,7 +181,7 @@ code that writes it, so it changes with that code:
   MARA_TRIVY_CACHE_DIR win over what the root derives, and a relative one of either is below the root, wherever the
   process runs (a relative cache was below the working directory until v0.13.73). A test starts by removing the three from
   the environment, and for a relative cache puts the working directory somewhere else than the root.
-  `test_workspace.py`, `test_trivy_db.py::test_without_a_workspace_the_trivy_cache_follows_the_rule_of_the_environments_workspace`.
+  `test_workspace.py`, `test_trivy_db.py::test_the_trivy_cache_the_environment_names_follows_one_rule_wherever_the_process_runs`.
 - `Workspace(root)`: tests pass `Workspace(tmp_path)` to `mara.config.load_config` (`load_config(path, workspace,
   today=...)`), `mara.policy.evaluate_policies` and `mara.policy.workspace_policies`. Policy P7 (`mara.policy.p7_ml_bom`)
   reads the ML-BOM and its signature bundle, P8 (`mara.policy.p8_unsupervised_reject`) `calib/latest.json`, below that
@@ -202,14 +202,17 @@ code that writes it, so it changes with that code:
   read from the environment once, which is the environment's. `test_policy.py::test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment`,
   `test_panel.py::test_the_environment_page_lists_policies_as_the_workspace_it_is_given_holds_evidence_for_them`.
 - `mara.workspace.check_outside(target, extra, workspace=...)` judges the root, the tool directory and the trivy cache of
-  the `Workspace` it is given (`Workspace.from_env()` when none), so a test puts them inside or outside `target` through
-  that workspace and sets the environment's elsewhere. `test_workspace_anchors.py`.
-- The tool runner reads the tool directory of a workspace passed as the keyword `workspace=` (when it is left out, the
-  environment's): `mara.tools.runner.tools_dir`, `tool_path`, `installed_manifest_entry`, `installed_version` and
-  `run_all`; `mara.tools.trivy_db.cache_dir`, `mara.tools.csp_eval.driver_path` and `run_csp_eval`,
-  `mara.tools.semgrep_rules.rules_dir`, `installed_rule_paths` and `default_configs`. `tools_dir`'s first parameter is
-  `root`, below which a relative MARA_TOOLS_DIR lies, and `workspace` wins when both are given. A test that replaces
-  `runner.tool_path` or `semgrep_rules.installed_rule_paths` with a fake gives it `workspace=None` too, since `run_all`
+  the `Workspace` it is given, so a test puts them inside or outside `target` through that workspace and sets the
+  environment's elsewhere; the workspace is required, and so is the `base` of `mara.workspace.resolve(path, base)`, the root
+  a relative path lies below. `test_workspace_anchors.py`, `test_workspace.py`.
+- The tool runner reads the tool directory of a workspace passed as the required keyword `workspace=`, and a call that
+  leaves it out raises TypeError (`test_tool_env.py`): `mara.tools.runner.tools_dir`, `tool_path`,
+  `installed_manifest_entry`, `installed_version` and `run_all`; `mara.tools.trivy_db.cache_dir`,
+  `mara.tools.csp_eval.driver_path`, `tools_dir` and `run_csp_eval`, `mara.tools.semgrep_rules.rules_dir`,
+  `installed_rule_paths` and `default_configs`, `mara.web.env.trivy`; `mara.mlbom.tools_bin`, `cosign_verify_blob_cmd` and
+  `cosign_sign_blob_cmd` take the tool directory itself. A test that sets MARA_TOOLS_DIR to drive the entry passes
+  `Workspace.from_env()`; one that calls the reader directly passes `Workspace(root, tools_dir=...)`. A test that replaces
+  `runner.tool_path` or `semgrep_rules.installed_rule_paths` with a fake gives it a `workspace` parameter too, since `run_all`
   calls them with the keyword (the `every_tool` fixture of `test_tool_env.py`); so does a fake of `tool_path` or
   `installed_version` in `scripts/osv_ci.py` (`test_security_regressions.py`). `test_tool_env.py`, `test_trivy_db.py`.
 - The environment page lists the tools and the trivy database of the workspace it lists: `mara.web.env.tools(workspace)`
@@ -229,7 +232,9 @@ code that writes it, so it changes with that code:
   `mara.invocation.check_paths` and `mara.web.procs.child_env` (which writes the three anchors, absolute, into the
   environment of a child). A test of any of them installs a tool or a cache below the workspace it passes and unsets
   MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR (`tests/conftest.py` sets the first for every test). Every other reader of
-  `src/` that takes `workspace=` or `root=` and is given none reads the environment's; the scripts are the next bullet.
+  `src/` takes the workspace or root with no default. Four readers that have none to take read the environment's root
+  with `mara.workspace.root()`: `Pipeline` (given none), the trusted CA bundle of `mara.providers.openai_compatible` and of
+  `mara.model_eval`, and `trivy_db.max_age_hours`; the scripts are the next bullet.
 - The scripts read the environment once, in their `main`, with `Workspace.from_env()`, and hand the value to every reader
   that takes one; the workspace of `--root` is not derived. `trivy_db`, `ml_bom`, `model_swap_drill`, `psirt_ops`,
   `rollout_phase` and `model_eval` put it on the parsed arguments, as their `workspace` attribute, so a subcommand's

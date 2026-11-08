@@ -30,14 +30,14 @@ _PREFIX_RE = re.compile(r"^.*?\b" + re.escape(RULES_DIR_NAME) + r"\.")
 _TEXT_PREFIX_RE = re.compile(r"'[^'\s]*\b" + re.escape(RULES_DIR_NAME) + r"\.")
 
 
-def rules_dir(*, workspace: Workspace | None = None) -> Path:
-    """The rules checkout in the tool directory of `workspace` (the environment's when not given)."""
+def rules_dir(*, workspace: Workspace) -> Path:
+    """The rules checkout in the tool directory of `workspace`."""
     return tools_dir(workspace=workspace) / RULES_DIR_NAME
 
 
-def installed_rule_paths(*, workspace: Workspace | None = None) -> list[Path]:
-    """The pinned rule directories the installer recorded in the manifest of the tool directory of `workspace` (the
-    environment's when not given), if they exist on disk."""
+def installed_rule_paths(*, workspace: Workspace) -> list[Path]:
+    """The pinned rule directories the installer recorded in the manifest of the tool directory of `workspace`, if they
+    exist on disk."""
     entry = installed_manifest_entry(RULES_DIR_NAME, workspace=workspace) or {}
     base = rules_dir(workspace=workspace)
     return [base / p for p in entry.get("paths", []) if (base / p).is_dir()]
@@ -63,7 +63,7 @@ def unpinned_note(configs: list[str]) -> str:
     return note
 
 
-def default_configs(*, workspace: Workspace | None = None) -> list[str]:
+def default_configs(*, workspace: Workspace) -> list[str]:
     """MARA_SEMGREP_CONFIG (comma-separated) wins; otherwise the installed pinned rule directories;
     otherwise none. There is no silent fallback to the registry ruleset p/default: it fetches rules
     from semgrep.dev, which the pinned-rules setup exists to avoid (data-residency policy P5), and it

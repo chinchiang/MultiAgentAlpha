@@ -115,7 +115,7 @@ def cmd_verify(a: argparse.Namespace) -> int:
 
 
 def cmd_verify_signature(a: argparse.Namespace) -> int:
-    cmd = mlbom.cosign_verify_blob_cmd(a.bom, a.bundle, a.certificate_identity, a.certificate_oidc_issuer)
+    cmd = mlbom.cosign_verify_blob_cmd(a.bom, a.bundle, a.certificate_identity, a.certificate_oidc_issuer, a.workspace.tools_dir)
     print("+ " + " ".join(cmd))
     r = subprocess.run(cmd, check=False)
     print("signature: " + ("verified" if r.returncode == 0 else f"FAILED (cosign exit {r.returncode})"))
@@ -124,7 +124,7 @@ def cmd_verify_signature(a: argparse.Namespace) -> int:
 
 def cmd_sign_command(a: argparse.Namespace) -> int:
     bundle = a.bundle or Path(str(a.bom) + ".sigstore.json")
-    print(" ".join(mlbom.cosign_sign_blob_cmd(a.bom, bundle)))
+    print(" ".join(mlbom.cosign_sign_blob_cmd(a.bom, bundle, a.workspace.tools_dir)))
     print("# keyless signing opens a browser for the OIDC flow; commit the bundle next to the BOM and set "
           "ml_bom.require_signature / bundle / certificate_identity / certificate_oidc_issuer in the config", file=sys.stderr)
     return 0

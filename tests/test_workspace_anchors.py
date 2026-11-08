@@ -52,7 +52,7 @@ def test_calibration_writes_where_policy_p8_reads(home):
     from mara.workspace import Workspace, resolve
 
     paths = calibrate.anchor_paths(Workspace.from_env())
-    assert paths["latest"] == home / "calib" / "latest.json" == resolve(AAT_EVIDENCE)
+    assert paths["latest"] == home / "calib" / "latest.json" == resolve(AAT_EVIDENCE, paths['latest'].parents[1])
     assert paths["history"].parent == paths["decisions"].parent == home / "calib"
 
 

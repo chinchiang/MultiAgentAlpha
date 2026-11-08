@@ -505,14 +505,12 @@ def validate_schema(bom: dict) -> list[str]:
 
 # ---------------------------------------------------------------- cosign
 
-def tools_bin(tools_dir: Path | str | None = None) -> Path:
-    from .tools.runner import tools_dir as _td
-
-    return (Path(tools_dir) if tools_dir else _td()) / "bin"
+def tools_bin(tools_dir: Path | str) -> Path:
+    return Path(tools_dir) / "bin"
 
 
 def cosign_verify_blob_cmd(bom_path: Path | str, bundle: Path | str, identity: str, issuer: str,
-                           tools_dir: Path | str | None = None) -> list[str]:
+                           tools_dir: Path | str) -> list[str]:
     """Command line for the locked cosign (tools/versions.lock) to verify the BOM's keyless signature."""
     base = tools_bin(tools_dir) / "cosign"
     candidates = [base.with_suffix(".exe"), base.with_suffix(".cmd"), base.with_suffix(".bat"), base] if sys.platform == "win32" else [base]
@@ -552,6 +550,7 @@ def verify_signature(cfg: MaraConfig, root: Path | str, runner=None) -> tuple[bo
     import subprocess
 
     from .tools.runner import tool_env
+    from .workspace import Workspace
 
     mb = cfg.ml_bom
     base = Path(root)
@@ -560,7 +559,7 @@ def verify_signature(cfg: MaraConfig, root: Path | str, runner=None) -> tuple[bo
     if not mb.bundle.strip() or not bundle.is_file():
         return False, f"signature bundle {mb.bundle or '(none)'} not found"
     try:
-        cmd = cosign_verify_blob_cmd(bom, bundle, mb.certificate_identity, mb.certificate_oidc_issuer)
+        cmd = cosign_verify_blob_cmd(bom, bundle, mb.certificate_identity, mb.certificate_oidc_issuer, Workspace.from_env().tools_dir)
     except (FileNotFoundError, ValueError) as e:
         return False, str(e)
     run = runner or subprocess.run
@@ -574,7 +573,7 @@ def verify_signature(cfg: MaraConfig, root: Path | str, runner=None) -> tuple[bo
     return True, f"verified by cosign: {mb.certificate_identity} ({mb.certificate_oidc_issuer})"
 
 
-def cosign_sign_blob_cmd(bom_path: Path | str, bundle: Path | str, tools_dir: Path | str | None = None) -> list[str]:
+def cosign_sign_blob_cmd(bom_path: Path | str, bundle: Path | str, tools_dir: Path | str) -> list[str]:
     exe = tools_bin(tools_dir) / "cosign"
     return [str(exe), "sign-blob", "--bundle", str(bundle), str(bom_path)]
 

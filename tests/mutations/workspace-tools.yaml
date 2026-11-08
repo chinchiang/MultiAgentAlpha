@@ -32,46 +32,46 @@ mutations:
   new: '        object.__setattr__(self, "trivy_cache", trivy_cache if trivy_cache is not None else root / "trivy-cache")'
 - name: check_outside judges the environment's tool directory
   file: src/mara/workspace.py
-  old: '"the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": ws.tools_dir,'
-  new: '"the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": Workspace.from_env().tools_dir,'
+  old: '"the tool directory": workspace.tools_dir,'
+  new: '"the tool directory": Workspace.from_env().tools_dir,'
 - name: check_outside judges the environment's trivy cache
   file: src/mara/workspace.py
-  old: '"the trivy database (MARA_TRIVY_CACHE_DIR)": ws.trivy_cache, **(extra or {})}'
-  new: '"the trivy database (MARA_TRIVY_CACHE_DIR)": Workspace.from_env().trivy_cache, **(extra or {})}'
+  old: '"the trivy database": workspace.trivy_cache, **(extra or {})}'
+  new: '"the trivy database": Workspace.from_env().trivy_cache, **(extra or {})}'
 - name: tools_dir ignores the workspace it is given
   file: src/mara/tools/runner.py
-  old: "    if workspace is not None:\n        return workspace.tools_dir.resolve()\n"
-  new: ''
+  old: "    return workspace.tools_dir.resolve()\n"
+  new: "    return __import__(\"mara.workspace\", fromlist=[\"Workspace\"]).Workspace.from_env().tools_dir.resolve()\n"
 - name: tool_path looks in the environment's tool directory
   file: src/mara/tools/runner.py
   old: '    base = tools_dir(workspace=workspace) / "bin" / tool'
-  new: '    base = tools_dir() / "bin" / tool'
+  new: '    base = tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / "bin" / tool'
 - name: the manifest is read from the environment's tool directory
   file: src/mara/tools/runner.py
   old: '    manifest = tools_dir(workspace=workspace) / "manifest.json"'
-  new: '    manifest = tools_dir() / "manifest.json"'
+  new: '    manifest = tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / "manifest.json"'
 - name: run_all finds the tool in the environment's tool directory
   file: src/mara/tools/runner.py
   old: '        exe_path = tool_path(tool, workspace=workspace)'
-  new: '        exe_path = tool_path(tool)'
+  new: '        exe_path = tool_path(tool, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())'
 - name: run_all reads the installed version from the environment's manifest
   file: src/mara/tools/runner.py
   old: '        version = installed_version(tool, workspace=workspace)'
-  new: '        version = installed_version(tool)'
+  new: '        version = installed_version(tool, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())'
 - name: run_all names the environment's directory for a tool not installed
   file: src/mara/tools/runner.py
   old: NOT_INSTALLED.format(bin_dir=tools_dir(workspace=workspace) / "bin")
-  new: NOT_INSTALLED.format(bin_dir=tools_dir() / "bin")
+  new: NOT_INSTALLED.format(bin_dir=tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / "bin")
 - name: run_all reads the version lock of the environment's root
   file: src/mara/tools/runner.py
-  old: workspace.root / pins.LOCK if workspace is not None else resolve(pins.LOCK)
-  new: resolve(pins.LOCK)
+  old: workspace.root / pins.LOCK
+  new: __import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env().root / pins.LOCK
 - name: run_all scans with trivy against the environment's cache
   file: src/mara/tools/runner.py
   old: '                cache = tdb.cache_dir(workspace=workspace)
 
     '
-  new: '                cache = tdb.cache_dir()
+  new: '                cache = tdb.cache_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())
 
     '
 - name: run_all scans with semgrep against the environment's rules
@@ -79,7 +79,7 @@ mutations:
   old: '                configs = default_configs(workspace=workspace)
 
     '
-  new: '                configs = default_configs()
+  new: '                configs = default_configs(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())
 
     '
 - name: run_all grades CSPs with the environment's driver
@@ -87,29 +87,29 @@ mutations:
   old: '                cp = run_csp_eval(target, sarif, version=version, workspace=workspace)
 
     '
-  new: '                cp = run_csp_eval(target, sarif, version=version)
+  new: '                cp = run_csp_eval(target, sarif, version=version, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())
 
     '
 - name: cache_dir ignores the workspace it is given
   file: src/mara/tools/trivy_db.py
-  old: "    return (workspace if workspace is not None else Workspace.from_env()).trivy_cache.resolve()"
+  old: "    return workspace.trivy_cache.resolve()"
   new: "    return Workspace.from_env().trivy_cache.resolve()"
 - name: the CSP driver is looked for in the environment's tool directory
   file: src/mara/tools/csp_eval.py
   old: '    p = tools_dir(workspace=workspace) / PACKAGE_DIR / DRIVER_NAME'
-  new: '    p = tools_dir() / PACKAGE_DIR / DRIVER_NAME'
+  new: '    p = tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / PACKAGE_DIR / DRIVER_NAME'
 - name: a missing CSP driver is reported under the environment's tool directory
   file: src/mara/tools/csp_eval.py
   old: missing under {tools_dir(workspace=workspace)}"
-  new: missing under {tools_dir()}"
+  new: missing under {tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())}"
 - name: the rules directory is below the environment's tool directory
   file: src/mara/tools/semgrep_rules.py
   old: '    return tools_dir(workspace=workspace) / RULES_DIR_NAME'
-  new: '    return tools_dir() / RULES_DIR_NAME'
+  new: '    return tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / RULES_DIR_NAME'
 - name: the installed rules are read from the environment's manifest
   file: src/mara/tools/semgrep_rules.py
   old: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=workspace) or {}'
-  new: '    entry = installed_manifest_entry(RULES_DIR_NAME) or {}'
+  new: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) or {}'
 - name: the page lists the tools of the environment's root, not of the workspace it lists
   file: src/mara/web/env.py
   old: '    ws = Workspace.from_env(root=workspace)  #'
@@ -117,11 +117,11 @@ mutations:
 - name: the page reads an explicit cache or the environment's, never the workspace's
   file: src/mara/web/env.py
   old: '    cache = cache or trivy_db.cache_dir(workspace=workspace)'
-  new: '    cache = cache or trivy_db.cache_dir()'
+  new: '    cache = cache or trivy_db.cache_dir(workspace=Workspace.from_env())'
 - name: the environment page shows the environment's trivy cache
   file: src/mara/web/env.py
   old: '        "trivy_db": trivy(workspace=Workspace.from_env(root=workspace)),'
-  new: '        "trivy_db": trivy(),'
+  new: '        "trivy_db": trivy(workspace=Workspace.from_env()),'
 - name: check_paths judges the environment's workspace
   file: src/mara/invocation.py
   old: '                      workspace=Workspace.from_env(root=root))'
@@ -130,10 +130,10 @@ mutations:
   file: src/mara/workspace.py
   old: (base / cache).resolve() if cache else None
   new: Path(cache).resolve() if cache else None
-- name: cache_dir without a workspace reads no variable and sits in the working directory
+- name: cache_dir sits in the working directory, reading no variable
   file: src/mara/tools/trivy_db.py
-  old: '    return (workspace if workspace is not None else Workspace.from_env()).trivy_cache.resolve()'
-  new: '    return (workspace.trivy_cache if workspace is not None else Path("trivy-cache")).resolve()'
+  old: '    return workspace.trivy_cache.resolve()'
+  new: '    return Path("trivy-cache").resolve()'
 - name: a child keeps the MARA_HOME it inherits
   file: src/mara/web/procs.py
   old: '"MARA_HOME": str(ws.root), '
