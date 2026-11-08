@@ -2,11 +2,11 @@ focused: [tests/test_policy.py, tests/test_ml_bom.py, tests/test_invocation_admi
 mutations:
   - name: P7 reads the ML-BOM and bundle of the environment's workspace
     file: src/mara/policy.py
-    old: "    base = workspace.root if workspace else None\n"
-    new: "    base = None\n"
+    old: "    base = workspace.root\n"
+    new: "    base = resolve(Path(\".\"))\n"
   - name: P8 reads the Evidence record of the environment's workspace
     file: src/mara/policy.py
-    old: "resolve(AAT_EVIDENCE, workspace.root if workspace else None)"
+    old: "resolve(AAT_EVIDENCE, workspace.root)"
     new: "resolve(AAT_EVIDENCE)"
   - name: P8 judges the record at today's date whatever date it is given
     file: src/mara/policy.py
@@ -19,16 +19,16 @@ mutations:
   - name: load_config runs P7 and P8 against the environment's workspace
     file: src/mara/config.py
     old: "        _refuse_violations(workspace_policies(cfg, workspace, today))\n"
-    new: "        _refuse_violations(workspace_policies(cfg, None, today))\n"
+    new: "        from .workspace import Workspace\n\n        _refuse_violations(workspace_policies(cfg, Workspace.from_env(), today))\n"
   - name: admit loads the config against the environment's workspace
     file: src/mara/invocation.py
     old: "        config = load(config_path, inv.provider, Workspace(workspace))\n"
-    new: "        config = load(config_path, inv.provider)\n"
+    new: "        config = load(config_path, inv.provider, Workspace.from_env())\n"
   - name: check_config_file reports P7 and P8 of the environment's workspace
     file: src/mara/policy.py
     old: "tuple(evaluate_policies(cfg, workspace))"
-    new: "tuple(evaluate_policies(cfg))"
+    new: "tuple(evaluate_policies(cfg, Workspace.from_env()))"
   - name: the environment page lists the policies of the environment's workspace
     file: src/mara/web/env.py
     old: "check_config_file(path, Workspace(workspace))"
-    new: "check_config_file(path)"
+    new: "check_config_file(path, Workspace.from_env())"

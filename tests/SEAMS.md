@@ -185,8 +185,12 @@ code that writes it, so it changes with that code:
 - `Workspace(root)`: tests pass `Workspace(tmp_path)` to `mara.config.load_config` (`load_config(path, workspace,
   today=...)`), `mara.policy.evaluate_policies` and `mara.policy.workspace_policies`. Policy P7 (`mara.policy.p7_ml_bom`)
   reads the ML-BOM and its signature bundle, P8 (`mara.policy.p8_unsupervised_reject`) `calib/latest.json`, below that
-  root and never below MARA_HOME or the working directory; when no workspace is given they read the environment's
-  (`mara.workspace.root`). `test_policy.py`, `test_ml_bom.py`.
+  root and never below MARA_HOME or the working directory. The workspace is required: `load_config`,
+  `evaluate_policies`, `workspace_policies`, `check_config_file`, `p7_ml_bom`, `p8_unsupervised_reject` (workspace, then
+  `today`), `mara.mlbom.status_for_config` and `verify_signature` (their `root`), `mara.decisions.read_backlog` (its `root`),
+  `mara.invocation.load`, `calibration_answer_key` and `check_calibration_sample` take it with no default, and so does
+  `TrainingRequirement.from_config_file` (a root). A test that left it out passes `Workspace(ROOT)`, the repository, which
+  is what the working directory was. `test_policy.py`, `test_ml_bom.py`.
 - `MaraConfig` reads no workspace when it is built: its validator runs P1 to P6 only (`mara.policy.config_policies`),
   and `mara.config.load_config` runs P7 and P8 once the config is built. A test that needs P7 or P8 to refuse a config
   writes it to a file and loads it with `load_config` in a workspace of its own; one that builds a config with
