@@ -14,6 +14,7 @@ from mara import policy
 from mara.cli import app
 from mara.config import MaraConfig, load_config
 from mara.policy import evaluate_policies
+from mara.workspace import Workspace  # noqa: E402
 from tests import cli_output
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,7 +38,7 @@ def _base(**over):
 
 def test_baseline_passes_all_policies():
     cfg = MaraConfig.model_validate(_base())
-    assert all(r.passed for r in evaluate_policies(cfg))
+    assert all(r.passed for r in evaluate_policies(cfg, Workspace(ROOT)))
 
 
 def test_p1_covered_model_requires_authorization():
@@ -112,8 +113,8 @@ def _panel(**gemini_over):
 
 def test_the_bedrock_gemini_glm_panel_passes_with_a_recorded_retention_approval():
     cfg = MaraConfig.model_validate(_panel())
-    p5 = [r for r in evaluate_policies(cfg) if r.id == "P5"][0]
-    assert all(r.passed for r in evaluate_policies(cfg)) and "approval SEC-2026-117" in p5.reason
+    p5 = [r for r in evaluate_policies(cfg, Workspace(ROOT)) if r.id == "P5"][0]
+    assert all(r.passed for r in evaluate_policies(cfg, Workspace(ROOT))) and "approval SEC-2026-117" in p5.reason
 
 
 def test_p5_admits_a_retained_model_only_with_an_approval_and_only_that_model():
@@ -335,9 +336,9 @@ def test_p5_data_residency():
 
 
 def test_shipped_configs_load(root):
-    assert load_config(root / "config" / "mara.yaml")
-    assert load_config(root / "config" / "mara.mock.yaml")
-    assert load_config(root / "config" / "examples" / "prc-site.yaml").reduced_panel_reason
+    assert load_config(root / "config" / "mara.yaml", Workspace(ROOT))
+    assert load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT))
+    assert load_config(root / "config" / "examples" / "prc-site.yaml", Workspace(ROOT)).reduced_panel_reason
 
 
 def test_check_config_lists_every_violation(root):
@@ -532,21 +533,31 @@ def test_a_config_is_built_without_reading_a_workspace_and_its_workspace_refuses
         load_config(config, Workspace(tmp_path), today=dt.date(2025, 3, 1))
 
 
+@pytest.mark.parametrize("kwargs", [{}, {"enforce_policies": False}], ids=["policies enforced", "policies reported"])
+def test_a_config_is_not_loaded_without_the_workspace_its_policies_read(tmp_path, kwargs):
+    """P7 and P8 read the files of a workspace, so a caller names it, a caller that reports the policies instead of
+    refusing them included: it still builds a config that stands for those files."""
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(_base()), encoding="utf-8")
+    with pytest.raises(TypeError):
+        load_config(config, **kwargs)
+
+
 # ---------------------------------------------------------------- one check of a config file
 
 
 @pytest.mark.parametrize("path", CONFIGS, ids=lambda p: p.relative_to(ROOT).as_posix())
 def test_a_config_file_passes_the_check_exactly_when_load_config_accepts_it(path):
     try:
-        load_config(path)
+        load_config(path, Workspace(ROOT))
         accepted = True
     except ValueError:
         accepted = False
-    assert policy.check_config_file(path).passed is accepted
+    assert policy.check_config_file(path, Workspace(ROOT)).passed is accepted
 
 
 def test_a_config_that_violates_policies_has_a_valid_structure_and_says_which_policies_fail():
-    check = policy.check_config_file(ROOT / "config" / "examples" / "violating.yaml")
+    check = policy.check_config_file(ROOT / "config" / "examples" / "violating.yaml", Workspace(ROOT))
     assert check.structure_ok and check.config is not None and check.error == "" and not check.passed
     assert len(check.policies) == 8 and {r.id for r in check.policies if not r.passed} >= {"P1", "P2", "P3"}
 
@@ -556,7 +567,7 @@ def test_a_structure_error_is_kept_whole_and_there_is_nothing_to_evaluate(tmp_pa
     raw["models"].append(dict(raw["models"][0]))
     path = tmp_path / "dup.yaml"
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
-    check = policy.check_config_file(path)
+    check = policy.check_config_file(path, Workspace(ROOT))
     assert not check.structure_ok and not check.passed and check.config is None and check.policies == ()
     assert "model names must be unique" in check.error and "[type=value_error" in check.error
 
@@ -564,14 +575,14 @@ def test_a_structure_error_is_kept_whole_and_there_is_nothing_to_evaluate(tmp_pa
 def test_a_yaml_syntax_error_names_the_file(tmp_path):
     path = tmp_path / "broken.yaml"
     path.write_text("models: [\n  - name: x\n", encoding="utf-8")
-    check = policy.check_config_file(path)
+    check = policy.check_config_file(path, Workspace(ROOT))
     assert not check.structure_ok and "broken.yaml" in check.error
 
 
 def test_an_empty_file_names_the_fields_it_lacks(tmp_path):
     path = tmp_path / "empty.yaml"
     path.write_text("", encoding="utf-8")
-    check = policy.check_config_file(path)
+    check = policy.check_config_file(path, Workspace(ROOT))
     assert not check.structure_ok and "models" in check.error and "Field required" in check.error
 
 
@@ -579,13 +590,13 @@ def test_load_config_names_the_fields_an_empty_file_lacks(tmp_path):
     path = tmp_path / "empty.yaml"
     path.write_text("", encoding="utf-8")
     with pytest.raises(ValueError, match="models"):
-        load_config(path)
+        load_config(path, Workspace(ROOT))
 
 
 @pytest.mark.parametrize("name", ["missing.yaml", "a-directory"])
 def test_a_path_that_cannot_be_read_is_an_invalid_file_not_an_exception(tmp_path, name):
     (tmp_path / "a-directory").mkdir()
-    check = policy.check_config_file(tmp_path / name)
+    check = policy.check_config_file(tmp_path / name, Workspace(ROOT))
     assert not check.structure_ok and check.error
 
 
@@ -596,7 +607,7 @@ def test_an_exception_that_is_not_about_the_file_is_not_reported_as_one(tmp_path
 
     monkeypatch.setattr(policy, "load_config", boom)
     with pytest.raises(RuntimeError, match="a bug"):
-        policy.check_config_file(tmp_path / "any.yaml")
+        policy.check_config_file(tmp_path / "any.yaml", Workspace(ROOT))
 
 
 def test_check_config_prints_a_structure_error_whole(tmp_path):

@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from mara.config import load_config  # noqa: E402
 from mara.schemas import ConsensusResult, EvidenceTier  # noqa: E402
 from mara.scoring.outcome import OutcomePolicy, OutcomeSignals, decide  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 from tests import scored_rows  # noqa: E402
 
 POLICY = OutcomePolicy(accept_threshold=0.6, alpha_threshold=0.4, exclude_tier_c=False, tier_c_min_severity="High",
@@ -110,7 +111,7 @@ def test_a_tier_c_finding_of_unknown_severity_goes_to_a_human_even_under_the_hig
 
 
 def test_the_policy_is_the_config_in_force_with_the_alpha_threshold_and_tier_c_exclusion_after_tightening():
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     cfg = cfg.model_copy(update={
         "gate": cfg.gate.model_copy(update={"accept_threshold": 0.7, "human_threshold_alpha": 0.3, "unsupervised_reject_allowed": True}),
         "human_queue": cfg.human_queue.model_copy(update={"queue_tier_c_min_severity": "Critical"}),

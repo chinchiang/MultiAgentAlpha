@@ -10,6 +10,7 @@ import pytest
 from mara.config import load_config
 from mara.pipeline import Pipeline
 from mara.reviewed_content import ReviewedContent
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTER = ("curriculum_version: '2026-09'\nvalidity_days: 365\npass_mark: 0.8\nrecords:\n"
@@ -30,7 +31,7 @@ def home(tmp_path, monkeypatch):
 
 
 def review(home, name="out", cfg=None):
-    cfg = cfg or load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = cfg or load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=home / name)
     return pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
 

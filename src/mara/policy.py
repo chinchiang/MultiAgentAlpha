@@ -4,8 +4,8 @@ Every policy is evaluated on its own, so `mara check-config` and the workbench's
 violations at once (evaluate_policies, or check_config_file for a config file). A policy is a function of the parsed
 configuration and never reaches the network. P1 to P6 read nothing else (config_policies), and `MaraConfig` refuses to
 build a config one of them fails. P7 reads the ML-BOM and its signature bundle of the workspace it is given, P8 that
-workspace's calib/latest.json at the `today` it is given (workspace_policies; the environment's workspace and the clock
-when not given), and `load_config` refuses a config one of them fails. check_config_file reads the config file it is given.
+workspace's calib/latest.json at the `today` it is given (workspace_policies; the clock when not given), and `load_config`
+refuses a config one of them fails. check_config_file reads the config file it is given.
 """
 
 from __future__ import annotations
@@ -253,7 +253,7 @@ def p6_psirt_scope(cfg: MaraConfig) -> PolicyResult:
                         f"token from ${ps.token_env}, {ps.early_warning_hours} h early warning")
 
 
-def p7_ml_bom(cfg: MaraConfig, workspace: Workspace | None = None) -> PolicyResult:
+def p7_ml_bom(cfg: MaraConfig, workspace: Workspace) -> PolicyResult:
     """G-7: every self-hosted (openai_compatible) model must be a complete machine-learning-model
     component in the CycloneDX ML-BOM (safetensors-only per-file SHA-256, licence, source, signature
     method), and the BOM must be signed when require_signature is set. Reads the BOM file, never
@@ -262,7 +262,7 @@ def p7_ml_bom(cfg: MaraConfig, workspace: Workspace | None = None) -> PolicyResu
     from .mlbom import STATUS_COMPLETE, status_for_config
 
     mb = cfg.ml_bom
-    base = workspace.root if workspace else None
+    base = workspace.root
     statuses = status_for_config(cfg, base)
     if not statuses:
         return PolicyResult("P7", "ml-bom", True, "no self-hosted model configured; nothing to list in an ML-BOM")
@@ -293,7 +293,7 @@ def p7_ml_bom(cfg: MaraConfig, workspace: Workspace | None = None) -> PolicyResu
     return PolicyResult("P7", "ml-bom", True, f"{len(complete)}/{len(statuses)} self-hosted models complete in {mb.path}{sig}: {summary}")
 
 
-def p8_unsupervised_reject(cfg: MaraConfig, today: dt.date | None = None, workspace: Workspace | None = None) -> PolicyResult:
+def p8_unsupervised_reject(cfg: MaraConfig, workspace: Workspace, today: dt.date | None = None) -> PolicyResult:
     """Assessment #60: unsupervised rejection needs a passing Alternative Annotator Test.
 
     `gate.unsupervised_reject_allowed: true` is only valid while the Evidence record `calib/latest.json` (written by
@@ -307,7 +307,7 @@ def p8_unsupervised_reject(cfg: MaraConfig, today: dt.date | None = None, worksp
             "unsupervised_reject_allowed is false: every rejected non-D finding goes to the human queue",
         )
     try:
-        latest = json.loads(resolve(AAT_EVIDENCE, workspace.root if workspace else None).read_text(encoding="utf-8"))
+        latest = json.loads(resolve(AAT_EVIDENCE, workspace.root).read_text(encoding="utf-8"))
         if not isinstance(latest, dict):
             raise ValueError("not a JSON object")
     except (OSError, ValueError):
@@ -368,13 +368,12 @@ def config_policies(cfg: MaraConfig) -> list[PolicyResult]:
     return [p(cfg) for p in CONFIG_POLICIES]
 
 
-def workspace_policies(cfg: MaraConfig, workspace: Workspace | None = None, today: dt.date | None = None) -> list[PolicyResult]:
-    """P7 and P8, which read the files of `workspace` (the environment's workspace when not given), P8 at `today`;
-    load_config runs them once the config is built."""
-    return [p7_ml_bom(cfg, workspace), p8_unsupervised_reject(cfg, today, workspace)]
+def workspace_policies(cfg: MaraConfig, workspace: Workspace, today: dt.date | None = None) -> list[PolicyResult]:
+    """P7 and P8, which read the files of `workspace`, P8 at `today`; load_config runs them once the config is built."""
+    return [p7_ml_bom(cfg, workspace), p8_unsupervised_reject(cfg, workspace, today)]
 
 
-def evaluate_policies(cfg: MaraConfig, workspace: Workspace | None = None, today: dt.date | None = None) -> list[PolicyResult]:
+def evaluate_policies(cfg: MaraConfig, workspace: Workspace, today: dt.date | None = None) -> list[PolicyResult]:
     """Every policy result, P1 to P8 in order."""
     return config_policies(cfg) + workspace_policies(cfg, workspace, today)
 
@@ -398,13 +397,12 @@ class ConfigCheck:
         return self.config is not None and all(r.passed for r in self.policies)
 
 
-def check_config_file(path: str | Path, workspace: Workspace | None = None) -> ConfigCheck:
+def check_config_file(path: str | Path, workspace: Workspace) -> ConfigCheck:
     """The structure of the config file `path` and every policy result, whether or not a policy fails, P7 and P8 read
-    from `workspace` (the environment's workspace when not given). A file that cannot be read, is not YAML or fails
-    validation (config.INVALID_FILE_ERRORS) is an invalid structure with nothing to evaluate; any other exception is a bug
-    and propagates."""
+    from `workspace`. A file that cannot be read, is not YAML or fails validation (config.INVALID_FILE_ERRORS) is an invalid
+    structure with nothing to evaluate; any other exception is a bug and propagates."""
     try:
-        cfg = load_config(path, enforce_policies=False)
+        cfg = load_config(path, workspace, enforce_policies=False)
     except INVALID_FILE_ERRORS as e:
         return ConfigCheck(None, str(e), ())
     return ConfigCheck(cfg, "", tuple(evaluate_policies(cfg, workspace)))

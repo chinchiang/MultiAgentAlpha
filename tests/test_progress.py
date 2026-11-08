@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 
 from mara import progress as prog
 from mara.cli import app
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -137,7 +138,7 @@ def test_the_mock_pipeline_reports_all_nine_stages_in_order(root, tmp_path):
     from mara.pipeline import Pipeline
 
     path = tmp_path / "progress.json"
-    cfg = load_config(root / "config" / "mara.mock.yaml")
+    cfg = load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT))
     pipe = Pipeline(cfg, mock_fixtures=str(root / "fixtures" / "mock-responses"), out_dir=tmp_path / "out", progress=prog.Progress(path))
     pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     d = prog.read(path)

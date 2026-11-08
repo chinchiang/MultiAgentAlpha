@@ -21,6 +21,7 @@ from mara.config import MaraConfig, load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
 from mara.policy import p7_ml_bom  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 SCRIPT = ROOT / "scripts" / "ml_bom.py"
 
@@ -200,11 +201,11 @@ def test_policy_p7_three_states(tmp_path):
     complete.write_text(json.dumps(mlbom.build_bom([_entry(mlbom.hash_dir(d))])), encoding="utf-8")
     pending = tmp_path / "pending.cdx.json"
     pending.write_text(json.dumps(mlbom.build_bom([_entry([])], allow_pending=True)), encoding="utf-8")
-    r = p7_ml_bom(_cfg_with(tmp_path, complete, "example/model-7b", required=True))
+    r = p7_ml_bom(_cfg_with(tmp_path, complete, "example/model-7b", required=True), Workspace(ROOT))
     assert r.passed and "1/1" in r.reason
     with pytest.raises(ValueError, match="pending"):  # required + pending refuses the whole config at load
         _cfg_with(tmp_path, pending, "example/model-7b", required=True)
-    r = p7_ml_bom(_cfg_with(tmp_path, pending, "example/model-7b", required=False))
+    r = p7_ml_bom(_cfg_with(tmp_path, pending, "example/model-7b", required=False), Workspace(ROOT))
     assert r.passed and "not required" in r.reason and "0/1" in r.reason
     with pytest.raises(ValueError, match="no machine-learning-model component"):
         _cfg_with(tmp_path, complete, "someone/else", required=True)
@@ -217,7 +218,7 @@ def test_policy_p7_three_states(tmp_path):
     digest = base64.b64encode(hashlib.sha256(complete.read_bytes()).digest()).decode()
     bundle.write_text(json.dumps({"messageSignature": {"messageDigest": {"algorithm": "SHA2_256", "digest": digest}, "signature": "x"}}),
                       encoding="utf-8")
-    r = p7_ml_bom(_cfg_with(tmp_path, complete, "example/model-7b", required=True, require_signature=True, bundle=str(bundle)))
+    r = p7_ml_bom(_cfg_with(tmp_path, complete, "example/model-7b", required=True, require_signature=True, bundle=str(bundle)), Workspace(ROOT))
     assert r.passed and "signature bundle" in r.reason
     # a bundle made for another file, or not a message-signature bundle, fails offline (the signature itself is
     # cosign's job when a review runs: mlbom.verify_signature)
@@ -228,8 +229,10 @@ def test_policy_p7_three_states(tmp_path):
         with pytest.raises(ValueError, match=why):
             _cfg_with(tmp_path, complete, "example/model-7b", required=True, require_signature=True, bundle=str(bundle))
     # the repository configs
-    assert [x.passed for x in __import__("mara.policy", fromlist=["evaluate_policies"]).evaluate_policies(load_config(ROOT / "config" / "mara.yaml"))].count(False) == 0
-    assert load_config(ROOT / "config" / "examples" / "ml-bom-required.yaml").ml_bom.required
+    from mara.policy import evaluate_policies
+
+    assert [x.passed for x in evaluate_policies(load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT)), Workspace(ROOT))].count(False) == 0
+    assert load_config(ROOT / "config" / "examples" / "ml-bom-required.yaml", Workspace(ROOT)).ml_bom.required
 
 
 def _signed_bom_in(workspace: Path, weights: Path) -> None:
@@ -288,7 +291,7 @@ def test_policy_p7_reads_a_bom_of_the_wrong_shape_as_listing_nothing(tmp_path, b
     # an exception other than ValueError would go through pydantic unwrapped, and out of invocation.load as a crash
     path = tmp_path / "bom.cdx.json"
     path.write_text(json.dumps(bom), encoding="utf-8")
-    r = p7_ml_bom(_cfg_with(tmp_path, path, "example/model-7b", required=False))
+    r = p7_ml_bom(_cfg_with(tmp_path, path, "example/model-7b", required=False), Workspace(ROOT))
     assert r.passed and "not required" in r.reason and "0/1" in r.reason
     with pytest.raises(ValueError, match=f"P7 ml-bom: .*{why}"):
         _cfg_with(tmp_path, path, "example/model-7b", required=True)
@@ -322,12 +325,12 @@ def test_repository_bom_is_pending_but_valid_and_governance_g7_says_why(tmp_path
 
 
 def test_pipeline_records_ml_bom_status_in_the_report(tmp_path):
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
-    assert mlbom.status_for_config(cfg) == {}  # mock providers are not self-hosted weights
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
+    assert mlbom.status_for_config(cfg, ROOT) == {}  # mock providers are not self-hosted weights
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     assert report.ml_bom == {} and "## Model provenance" in render_markdown(report)
-    live = load_config(ROOT / "config" / "mara.yaml")
+    live = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     st = mlbom.status_for_config(live, ROOT)
     assert {s.status for s in st.values()} == {"pending"} and set(st) == {"glm-reviewer"}
 
@@ -336,9 +339,9 @@ def test_pipeline_logs_ml_bom_status_when_self_hosted_models_are_configured(tmp_
     # Regression: with a non-empty ML-BOM status the pipeline used to call `self.log(...)` (a list)
     # and die with TypeError just before returning the report, so the documented live topology could
     # never complete a review. Run the mock panel with the live config's BOM status injected.
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)
-    pipe.ml_bom_status = mlbom.status_for_config(load_config(ROOT / "config" / "mara.yaml"), ROOT)
+    pipe.ml_bom_status = mlbom.status_for_config(load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT)), ROOT)
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     assert set(report.ml_bom) == {"glm-reviewer"}
     assert any(line.startswith("L0: ML-BOM: ") and "pending" in line for line in pipe.log)

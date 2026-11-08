@@ -104,18 +104,17 @@ def check_base(target: Path, base: str) -> None:
         raise InvocationError(str(e), param="--base", kind="bad_base_ref") from e
 
 
-def calibration_answer_key(target: Path, workspace: Path | None = None) -> list[dict]:
+def calibration_answer_key(target: Path, workspace: Path) -> list[dict]:
     """The seeded-secret labels (CWE-798) of a calibration sample, for the secret-preflight exemption.
 
     Only an operator flag (`mara review --calibration-sample`) asks for it, and only a directory below
     the MARA workspace's calib/samples/ with a MARA answer key qualifies: a reviewed repository cannot
     exempt its own secrets by shipping a labels.json, since its location is the operator's choice and
-    the exemption is off for every ordinary review. The workspace is `workspace`, the MARA workspace by default.
+    the exemption is off for every ordinary review. The workspace is `workspace`, the root of the MARA workspace.
     InvocationError bad_calibration_sample on --calibration-sample for any other target."""
     from .context.repo_map import is_calibration_answer_key
-    from .workspace import root as workspace_root
 
-    samples = ((workspace if workspace is not None else workspace_root()) / "calib" / "samples").resolve()
+    samples = (workspace / "calib" / "samples").resolve()
     target = Path(target).resolve()
     if samples not in target.parents:
         raise InvocationError(f"needs a target below {samples}, got {target}", param="--calibration-sample", kind="bad_calibration_sample")
@@ -126,16 +125,16 @@ def calibration_answer_key(target: Path, workspace: Path | None = None) -> list[
     return [lab for lab in json.loads(text)["labels"] if str(lab.get("cwe", "")).upper() == "CWE-798"]
 
 
-def check_calibration_sample(target: Path, workspace: Path | None = None) -> None:
+def check_calibration_sample(target: Path, workspace: Path) -> None:
     """Nothing when `target` is a calibration sample of the workspace (calibration_answer_key); InvocationError
     bad_calibration_sample on --calibration-sample otherwise."""
     calibration_answer_key(target, workspace)
 
 
-def load(config: Path, provider_mode: ProviderMode, workspace: Workspace | None = None) -> MaraConfig:
-    """The config file `config`, validated (structure and policies, P7 and P8 against the files of `workspace`, the
-    environment's when not given), whose models' providers classify as `provider_mode`. InvocationError config_invalid
-    on --config for a file load_config refuses, else check_provider_mode's provider_mismatch."""
+def load(config: Path, provider_mode: ProviderMode, workspace: Workspace) -> MaraConfig:
+    """The config file `config`, validated (structure and policies, P7 and P8 against the files of `workspace`), whose models'
+    providers classify as `provider_mode`. InvocationError config_invalid on --config for a file load_config refuses, else
+    check_provider_mode's provider_mismatch."""
     try:
         cfg = load_config(config, workspace)
     except INVALID_FILE_ERRORS as e:  # unreadable, not YAML, or refused

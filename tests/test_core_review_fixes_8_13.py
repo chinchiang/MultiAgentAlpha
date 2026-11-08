@@ -17,6 +17,7 @@ from mara.config import load_config
 from mara.context.repo_map import RepoContext, fence_safe, import_neighbours
 from mara.pipeline import Pipeline
 from mara.schemas import Finding, ModelFamily, Provenance
+from mara.workspace import Workspace  # noqa: E402
 from tests.cli_output import plain
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,7 +97,7 @@ def test_model_eval_status_is_read_from_the_workspace_not_the_working_directory(
     monkeypatch.chdir(cwd)
     seen = []
     monkeypatch.setattr(model_eval, "family_eval_status", lambda root, fams: (seen.append(Path(root).resolve()), {})[1])
-    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
+    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path / "out")
     pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     assert seen == [ws.resolve()]

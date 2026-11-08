@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara import training  # noqa: E402
 from mara.config import load_config  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 from tests.source_names import defines  # noqa: E402
 
 SCRIPT = ROOT / "scripts" / "training_register.py"
@@ -151,6 +152,6 @@ def test_governance_g13_fails_here_and_passes_with_a_trained_person_per_role(tmp
 
 
 def test_config_training_block():
-    cfg = load_config(ROOT / "config" / "mara.yaml")
+    cfg = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     assert cfg.training.register_file == "training/records.yaml" and cfg.training.require_trained_adjudicator
     assert cfg.training.required_roles == ["developer", "security", "adjudicator"]

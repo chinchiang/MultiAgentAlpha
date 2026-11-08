@@ -14,6 +14,7 @@ from mara.decisions import Decision
 from mara.human_queue import queue_key
 from mara.pipeline import Pipeline
 from mara.reviewed_content import ReviewedContent
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT = {"target_id": "t" * 64, "revision": "r1", "coverage": {"content_hash": "h1"}}
@@ -59,7 +60,7 @@ def test_a_reviews_report_and_every_queue_item_name_one_reviewed_content(tmp_pat
     """What the report records, what each human queue item carries and the key it is queued under come from one value:
     a decision synced from the item binds to the report's reviewed content."""
     monkeypatch.setenv("MARA_HOME", str(tmp_path / "home"))
-    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
+    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path / "out")
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     content = ReviewedContent.of_report(json.loads(report.model_dump_json()))

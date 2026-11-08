@@ -235,12 +235,13 @@ def _declared_standby_for(path: Path) -> str:
 def _standby_family_of(prod: list[str], cfg_path: Path, replaced: str) -> tuple[str, str]:
     """(standby family, problem) after loading the standby config through the policies."""
     from .config import load_config
+    from .workspace import Workspace
 
     declared = _declared_standby_for(cfg_path)
     if declared != replaced:
         return "", f"declares standby_for: {declared!r}, not {replaced!r}"
     try:
-        sb = load_config(cfg_path)
+        sb = load_config(cfg_path, Workspace.from_env())  # the environment's: no caller passes a workspace down to here
     except Exception as e:  # policy or structure failure
         return "", f"does not load: {str(e).splitlines()[0][:160]}"
     fams = production_families(sb)

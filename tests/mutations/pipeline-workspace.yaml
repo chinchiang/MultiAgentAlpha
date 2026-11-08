@@ -19,7 +19,7 @@ mutations:
   - name: the training register read from MARA_HOME
     file: src/mara/pipeline.py
     old: '        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, self.workspace))'
-    new: '        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training))'
+    new: '        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, Workspace.from_env().root))'
   - name: the workspace checked against the target is MARA_HOME's
     file: src/mara/pipeline.py
     old: '        check_outside(target, workspace=Workspace.from_env(root=self.workspace))'

@@ -10,6 +10,7 @@ from mara import exchange
 from mara.config import load_config
 from mara.pipeline import Pipeline
 from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = {"type": "object", "properties": {"note": {"type": "string", "maxLength": 5}}}
@@ -80,7 +81,7 @@ class _BallotReply(Provider):
 
 
 def _run(tmp_path, role, raw):
-    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
+    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml", Workspace(ROOT)), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path / "out")
     pipe.providers = {n: _BallotReply(p, role, raw) for n, p in pipe.providers.items()}
     return pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")

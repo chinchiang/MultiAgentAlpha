@@ -132,12 +132,12 @@ def test_cosign_verifies_the_signature_and_a_failure_blocks_the_review(tmp_path,
             return subprocess.CompletedProcess(cmd, rc, "", "" if rc == 0 else "error: none of the expected identities matched")
         return run
 
-    ok, why = mlbom.verify_signature(cfg, runner=cosign(0))
+    ok, why = mlbom.verify_signature(cfg, ROOT, runner=cosign(0))
     assert ok and seen[-1][1:3] == ["verify-blob", "--bundle"] and "--certificate-identity" in seen[-1]
-    ok, why = mlbom.verify_signature(cfg, runner=cosign(1))
+    ok, why = mlbom.verify_signature(cfg, ROOT, runner=cosign(1))
     assert not ok and "none of the expected identities" in why
     exe.unlink()
-    assert not mlbom.verify_signature(cfg, runner=cosign(0))[0], "no cosign is a failure, never a pass"
+    assert not mlbom.verify_signature(cfg, ROOT, runner=cosign(0))[0], "no cosign is a failure, never a pass"
 
     # the pipeline: an unverified signature makes the review incomplete
     from mara.pipeline import Pipeline

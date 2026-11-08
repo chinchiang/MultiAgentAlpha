@@ -22,6 +22,7 @@ from mara.cli import app  # noqa: E402
 from mara.config import MaraConfig, load_config  # noqa: E402
 from mara.policy import evaluate_policies  # noqa: E402
 from mara.schemas import ModelFamily  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 TODAY = dt.date(2026, 9, 12)
 POLICY = ROOT / "docs" / "policy" / "mara-review-policy.md"
@@ -90,7 +91,7 @@ def test_an_empty_statement_never_counts_as_present(tmp_path):
 # ---------------------------------------------------------------- G-4
 
 def test_standby_configs_swap_exactly_one_family_and_pass_policies():
-    prod = load_config(ROOT / "config" / "mara.yaml")
+    prod = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     fams = govdocs.production_families(prod)
     assert fams == ["anthropic", "gemini", "glm"]
     standbys = govdocs.standby_configs(ROOT)
@@ -100,8 +101,8 @@ def test_standby_configs_swap_exactly_one_family_and_pass_policies():
         assert not problem, (path.name, problem)
         if path == standbys[fam][0]:  # the primary standby of every family is the on-prem DeepSeek
             assert path.name == f"standby-for-{fam}.yaml" and sb_fam == "deepseek", path.name
-        cfg = load_config(path)
-        assert all(r.passed for r in evaluate_policies(cfg))
+        cfg = load_config(path, Workspace(ROOT))
+        assert all(r.passed for r in evaluate_policies(cfg, Workspace(ROOT)))
         assert yaml.safe_load(path.read_text(encoding="utf-8"))["standby_for"] == fam
         # "nothing else changes": every section equals production, and every seat either equals it or
         # moved from the replaced family's model to the standby model (the L1 context seat included)
@@ -134,7 +135,7 @@ def test_a_family_may_have_more_than_one_standby_and_each_one_must_hold(tmp_path
     for p in (ROOT / "config" / "examples").glob("standby-for-*.yaml"):
         shutil.copy(p, examples / p.name)
     (examples / "standby-for-glm.lmstudio.yaml").write_text(yaml.safe_dump(_second_standby(), sort_keys=False), encoding="utf-8")
-    prod = load_config(ROOT / "config" / "mara.yaml")
+    prod = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     assert [p.name for p in govdocs.standby_configs(tmp_path)["glm"]] == ["standby-for-glm.yaml", "standby-for-glm.lmstudio.yaml"]
     glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY)}["glm"]
     assert glm.config_ok and [(x.standby_family, x.ok) for x in glm.standbys] == [("deepseek", True), ("llama", True)]
@@ -171,7 +172,7 @@ def test_p2_holds_qwen_to_private_endpoints():
 def test_drills_register_and_status(tmp_path):
     drills = tmp_path / "drills.yaml"
     shutil.copy(ROOT / "ops" / "model-swap-drills.yaml", drills)
-    prod = load_config(ROOT / "config" / "mara.yaml")
+    prod = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     st = {s.family: s for s in govdocs.drill_status(prod, ROOT, TODAY, drills)}
     assert all(s.config_ok and not s.drill_ok and s.drill_problem == "no live drill recorded" for s in st.values())
     govdocs.append_drill(drills, govdocs.Drill(TODAY, "rehearsal", "glm", "deepseek", "config/examples/standby-for-glm.yaml", 0.01, "pass", "x", "mock"))

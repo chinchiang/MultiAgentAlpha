@@ -139,11 +139,9 @@ def load(directory: Path | str) -> Loaded:
     return out
 
 
-def read_backlog(cfg: MaraConfig, root: Path | None = None) -> int | None:
+def read_backlog(cfg: MaraConfig, root: Path) -> int | None:
     """Open ticket count as last written by scripts/human_queue_issues.py, or None if unknown."""
-    from .workspace import root as workspace_root
-
-    path = (root or workspace_root()) / cfg.human_queue.backlog_file
+    path = root / cfg.human_queue.backlog_file
     if not path.is_file():
         return None
     try:
@@ -164,9 +162,9 @@ class TrainingRequirement:
     problem: str = ""
 
     @classmethod
-    def from_config_file(cls, path: Path | str) -> TrainingRequirement:
-        """From a MARA config's `training` block; the register resolves against the workspace. A config
-        that cannot be read keeps training required."""
+    def from_config_file(cls, path: Path | str, workspace: Path) -> TrainingRequirement:
+        """From a MARA config's `training` block; the register resolves against `workspace`, the root of the MARA workspace.
+        A config that cannot be read keeps training required."""
         import yaml
 
         from .config import TrainingConfig
@@ -182,16 +180,16 @@ class TrainingRequirement:
             why = ""
         if not cfg.require_trained_adjudicator:
             return cls(required=False)
-        register_path = resolve(cfg.register_file)
+        register_path = resolve(cfg.register_file, workspace)
         try:
             return cls(required=True, register=load_register(register_path), problem=why)
         except (OSError, ValueError, KeyError, TypeError) as e:
             return cls(required=True, problem=f"{why}; " * bool(why) + f"training register {cfg.register_file} unavailable ({e})")
 
     @classmethod
-    def from_config(cls, cfg: TrainingConfig, workspace: Path | None = None) -> TrainingRequirement:
-        """From an already loaded `training` block; the register resolves against `workspace`, the MARA workspace by
-        default."""
+    def from_config(cls, cfg: TrainingConfig, workspace: Path) -> TrainingRequirement:
+        """From an already loaded `training` block; the register resolves against `workspace`, the root of the MARA
+        workspace."""
         from .training import load_register
         from .workspace import resolve
 

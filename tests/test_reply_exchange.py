@@ -16,6 +16,7 @@ from mara.context.repo_map import build_context
 from mara.exchange import OK
 from mara.pipeline import Pipeline
 from mara.providers.base import STOP_END, Provider, RawReply
+from mara.workspace import Workspace  # noqa: E402
 from tests.fake_panel import Panel
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +27,7 @@ def _echoing(answer):
 
     class Echoing(Provider):
         def __init__(self):
-            super().__init__(load_config(ROOT / "config" / "mara.mock.yaml").models[0])
+            super().__init__(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
 
         def complete(self, *, user, **kwargs):
             return RawReply(STOP_END, answer_text=answer(user.split("Reply with the token ")[1].split()[0]))
@@ -51,7 +52,7 @@ def test_a_canary_echo_voids_a_reply_before_its_shape_is_read_whatever_the_extra
 def test_every_exchange_plants_a_canary_of_its_own(tmp_path):
     """One token shared by a run's reviewer calls is one a model may meet again; a token of its own per exchange keeps
     each echo about that exchange alone. The judge sees no bundle, so it is asked with no canary."""
-    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
+    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path / "out")
     panel = Panel.seated_in(pipe)
     pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
@@ -68,7 +69,7 @@ def test_a_judge_vote_on_a_finding_its_own_family_found_says_so():
 
     class Judging(Provider):
         def __init__(self):
-            super().__init__(load_config(ROOT / "config" / "mara.mock.yaml").models[0])
+            super().__init__(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
 
         def complete(self, **kwargs):
             items = [{"finding_id": fid, "verdict": "true_positive", "severity_band": "High", "reason": "r"} for fid in ("F-1", "F-2")]

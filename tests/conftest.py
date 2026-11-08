@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from mara.workspace import Workspace  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -52,7 +54,7 @@ def mock_report(root, tmp_path_factory):
     from mara.config import load_config
     from mara.pipeline import Pipeline
 
-    cfg = load_config(root / "config" / "mara.mock.yaml")
+    cfg = load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT))
     out = tmp_path_factory.mktemp("out")
     pipe = Pipeline(cfg, mock_fixtures=str(root / "fixtures" / "mock-responses"), out_dir=out)
     report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", provider_mode="mock")

@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from mara.config import MaraConfig
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -80,7 +81,7 @@ def test_a_damaged_backlog_is_unknown_not_a_crash(home, content):
     path = home / cfg.human_queue.backlog_file
     path.parent.mkdir(parents=True)
     path.write_text(content, encoding="utf-8")
-    assert read_backlog(cfg) is None
+    assert read_backlog(cfg, ROOT) is None
     assert Pipeline(cfg).backlog is None
 
 
@@ -90,7 +91,7 @@ def test_damaged_calibration_evidence_fails_policy_p8_instead_of_crashing(home, 
 
     (home / "calib").mkdir()
     (home / "calib" / "latest.json").write_text(content, encoding="utf-8")
-    result = p8_unsupervised_reject(_mock_cfg(gate={"unsupervised_reject_allowed": True}))
+    result = p8_unsupervised_reject(_mock_cfg(gate={"unsupervised_reject_allowed": True}), Workspace(home))
     assert not result.passed and "missing or unreadable" in result.reason
 
 
@@ -102,10 +103,10 @@ def test_the_ml_bom_signature_bundle_is_found_in_the_workspace(home):
     raw["ml_bom"] = {**raw.get("ml_bom", {}), "require_signature": True, "bundle": "sbom/bom.sigstore.json",
                      "certificate_identity": "ci@example", "certificate_oidc_issuer": "https://token.actions.githubusercontent.com"}
     cfg = MaraConfig.model_validate(raw, context={"skip_policies": True})
-    assert "signature bundle sbom/bom.sigstore.json not found" in p7_ml_bom(cfg).reason
+    assert "signature bundle sbom/bom.sigstore.json not found" in p7_ml_bom(cfg, Workspace(home)).reason
     (home / "sbom").mkdir()
     (home / "sbom" / "bom.sigstore.json").write_text(json.dumps({}), encoding="utf-8")
-    assert "sbom/bom.sigstore.json not found" not in p7_ml_bom(cfg).reason
+    assert "sbom/bom.sigstore.json not found" not in p7_ml_bom(cfg, Workspace(home)).reason
 
 
 # ---------------------------------------------------------------- G-8 model-eval summaries
@@ -196,11 +197,11 @@ def test_check_outside_accepts_a_target_when_the_anchors_of_the_workspace_it_is_
 # ---------------------------------------------------------------- a script hands its workspace to the readers that take one
 
 # The functions of src/ that read the environment again when they are given no workspace, and how each takes one: the
-# `workspace=` keyword, or for the four of _NEEDS_SECOND_ARGUMENT the second argument named there.
+# `workspace=` keyword, or for those of _NEEDS_SECOND_ARGUMENT the second argument named there.
 _NEEDS_WORKSPACE_KEYWORD = frozenset({"tools_dir", "cache_dir", "tool_path", "installed_version", "installed_manifest_entry",
                                       "rules_dir", "installed_rule_paths", "driver_path", "run_csp_eval"})
 _NEEDS_SECOND_ARGUMENT = {"load_config": "workspace", "evaluate_policies": "workspace", "status_for_config": "root",
-                          "resolve": "base"}
+                          "resolve": "base", "from_config_file": "workspace"}
 
 
 def _mara_names(tree) -> set[str]:
@@ -255,6 +256,10 @@ def _anchor_violations(source: str) -> list[str]:
     ("from mara.tools import trivy_db as tdb\ntdb.cache_dir(workspace=ws)", 0),
     ("from mara import mlbom\nmlbom.status_for_config(cfg)", 1),
     ("from mara import mlbom\nmlbom.status_for_config(cfg, ws.root)", 0),
+    ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p)", 1),
+    ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p, ws)", 0),
+    ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p, workspace=ws)", 0),
+    ("class Thing:\n    def from_config_file(self, p):\n        pass\nThing().from_config_file(p)", 0),  # not a mara reader
     ("from mara.workspace import resolve\nresolve('config/mara.yaml')", 1),
     ("from mara.workspace import resolve\nresolve('config/mara.yaml', ws.root)", 0),
     ("from mara.workspace import resolve\nresolve('config/mara.yaml', base=ws.root)", 0),

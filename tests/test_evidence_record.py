@@ -18,6 +18,7 @@ from mara.config import MaraConfig
 from mara.evidence import MAX_AGE_DAYS, Future, Header, MissingFamilies, NoDate, NotLive, Stale, standing
 from mara.govdocs import read_front_matter
 from mara.policy import p8_unsupervised_reject
+from mara.workspace import Workspace  # noqa: E402
 from tests.aat_records import (
     aat_decision,
     aat_finding,
@@ -254,20 +255,19 @@ def test_the_latest_json_of_a_calibration_puts_the_header_first():
     assert record == {"date": "2026-09-05", "mode": "live", "families": ["anthropic", "glm"], "aat": {"passed": True}, "global_alpha": 0.61}
 
 
-def test_a_latest_json_the_calibration_writes_is_one_policy_p8_accepts(tmp_path, monkeypatch):
+def test_a_latest_json_the_calibration_writes_is_one_policy_p8_accepts(tmp_path):
     import calibrate
 
     record = calibrate.latest_record("2026-09-05", "live", ["anthropic", "deepseek"], _passing_aat(), 0.61)
-    monkeypatch.chdir(tmp_path)
     (tmp_path / "calib").mkdir()
     (tmp_path / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
     cfg = MaraConfig.model_validate({**yaml.safe_load(EXAMPLE.read_text(encoding="utf-8")), "gate": {"unsupervised_reject_allowed": True}},
                                     context={"skip_policies": True})
-    result = p8_unsupervised_reject(cfg, today=A_WEEK_LATER)
+    result = p8_unsupervised_reject(cfg, Workspace(tmp_path), today=A_WEEK_LATER)
     assert result.passed, result.reason
     record["aat"]["passed"] = False  # the writer's key for the result is the one the reader reads
     (tmp_path / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
-    assert "did not pass" in p8_unsupervised_reject(cfg, today=A_WEEK_LATER).reason
+    assert "did not pass" in p8_unsupervised_reject(cfg, Workspace(tmp_path), today=A_WEEK_LATER).reason
 
 
 def test_a_live_calibration_leaves_a_latest_json_and_a_report_that_say_what_it_covered(tmp_path, monkeypatch):

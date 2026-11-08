@@ -21,6 +21,7 @@ from mara import model_eval as me  # noqa: E402
 from mara.config import load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 FIX = ROOT / "fixtures" / "model-eval"
 FIXTURE_PANEL = ROOT / "config" / "examples" / "psirt-enabled.yaml"
@@ -29,7 +30,7 @@ SCRIPT = ROOT / "scripts" / "model_eval.py"
 
 
 def test_targets_and_commands_never_carry_keys(monkeypatch, tmp_path):
-    cfg = load_config(ROOT / "config" / "mara.yaml")
+    cfg = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     targets = me.targets_from_config(cfg)
     assert [t.family for t in targets] == ["anthropic", "gemini", "glm"]
     monkeypatch.setenv("GLM_LOCAL_KEY", "sk-secret-glm")
@@ -205,7 +206,7 @@ def test_calibration_penalty_front_matter_and_live_guard(tmp_path, monkeypatch):
     out = tmp_path / "calib-out" / "s1-fastapi-inventory"
     no_sarif = tmp_path / "no-sarif"
     no_sarif.mkdir()
-    report = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), out_dir=out).run(
+    report = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), out_dir=out).run(
         ROOT / "calib" / "samples" / "s1-fastapi-inventory", sarif_dir=no_sarif, provider_mode="mock")
     out.joinpath("report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "calibrate.py"), "--mode", "live", "--out-dir", str(tmp_path / "calib-out"),
@@ -266,7 +267,7 @@ def test_governance_g8_g9_fail_here_and_pass_on_live_reports(tmp_path):
 
 
 def test_pipeline_records_model_eval_status(tmp_path, monkeypatch):
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
     assert report.model_eval == {} and "## Model red-team evaluation" in render_markdown(report)

@@ -21,6 +21,7 @@ from mara.report.markdown_out import render_markdown  # noqa: E402
 from mara.reviewed_content import ReviewedContent  # noqa: E402
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance, ReviewReport, SkepticVerdict  # noqa: E402
 from mara.scoring.outcome import OutcomePolicy  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 from tests import scored_rows  # noqa: E402
 from tests.scored_rows import row  # noqa: E402
 
@@ -42,7 +43,7 @@ def _vote(fid, fam, pass_id, verdict):
 
 @pytest.fixture
 def cfg():
-    return load_config(ROOT / "config" / "mara.mock.yaml")
+    return load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
 
 
 def test_selection_reasons_and_full_context(cfg):

@@ -79,7 +79,7 @@ def apply_decisions(usable: list[Decision], labels: list[dict]) -> tuple[list[di
 
 def training_requirement(workspace: Workspace, config: Path | None = None) -> TrainingRequirement:
     """G-13 from the MARA config (`training`), the register resolved against the workspace."""
-    req = TrainingRequirement.from_config_file(config or resolve("config/mara.yaml", workspace.root))
+    req = TrainingRequirement.from_config_file(config or resolve("config/mara.yaml", workspace.root), workspace.root)
     if req.problem:
         print(f"G-13: {req.problem}; no decision counts as trained", file=sys.stderr)
     return req

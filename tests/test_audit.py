@@ -10,6 +10,7 @@ from mara.audit import INCOMPLETE_COUNTERS, ROLES, Audit, ReplyRecord, by_family
 from mara.config import load_config
 from mara.pipeline import Pipeline
 from mara.providers.base import Provider
+from mara.workspace import Workspace  # noqa: E402
 from tests.reply_records import ballot, extraction
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,7 +123,7 @@ class _FailRole(Provider):
 def test_a_ballot_provider_failure_is_counted_as_an_error_and_blocks(tmp_path, role, exc):
     """Ballot provider failures used to be counted as the model's invalid items, and an unexpected exception
     (provider_call_failed:<type>) was retried."""
-    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
+    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml", Workspace(ROOT)), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path / "out")
     pipe.providers = {n: _FailRole(p, role, exc) for n, p in pipe.providers.items()}
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
