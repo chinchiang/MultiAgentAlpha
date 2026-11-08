@@ -31,6 +31,7 @@ import ignore_expiry  # noqa: E402
 from trivy_db import PinError, load_config, pinned_trivy  # noqa: E402
 
 from mara.tools import trivy_db as tdb  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 # result.message.text: "Package: requests Installed Version: 2.19.0 Vulnerability CVE-2018-18074 Severity: HIGH ..."
 # misconfig:            "Artifact: Dockerfile Type: dockerfile Vulnerability DS-0001 Severity: MEDIUM Message: ..."
@@ -68,12 +69,13 @@ def main() -> int:
     ap.add_argument("--max-age-hours", type=float)
     a = ap.parse_args()
 
+    ws = Workspace.from_env()
     try:
-        exe = pinned_trivy()
+        exe = pinned_trivy(ws)
     except PinError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
-    cache = tdb.cache_dir()
+    cache = tdb.cache_dir(workspace=ws)
     ok, lines = tdb.check(cache, a.max_age_hours if a.max_age_hours is not None else load_config()["max_age_hours"])
     for line in lines:
         print(("  db: " if ok else "ERROR: ") + line)
