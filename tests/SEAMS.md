@@ -206,8 +206,8 @@ code that writes it, so it changes with that code:
   `mara.tools.semgrep_rules.rules_dir`, `installed_rule_paths` and `default_configs`. `tools_dir`'s first parameter is
   `root`, below which a relative MARA_TOOLS_DIR lies, and `workspace` wins when both are given. A test that replaces
   `runner.tool_path` or `semgrep_rules.installed_rule_paths` with a fake gives it `workspace=None` too, since `run_all`
-  calls them with the keyword (the `every_tool` fixture of `test_tool_env.py`). The scripts still read the
-  environment's. `test_tool_env.py`, `test_trivy_db.py`.
+  calls them with the keyword (the `every_tool` fixture of `test_tool_env.py`); so does a fake of `tool_path` or
+  `installed_version` in `scripts/osv_ci.py` (`test_security_regressions.py`). `test_tool_env.py`, `test_trivy_db.py`.
 - The environment page lists the tools and the trivy database of the workspace it lists: `mara.web.env.tools(workspace)`
   and `mara.web.env.environment` take the tool directory MARA_TOOLS_DIR names, else the one below that workspace, so a
   test installs a tool below the workspace it lists and unsets MARA_TOOLS_DIR; `mara.web.env.trivy(cache, workspace=...)`
@@ -224,9 +224,37 @@ code that writes it, so it changes with that code:
   given, else the environment's root, for its default tool runner), `mara.web.env` (`tools`, `trivy`, `environment`),
   `mara.invocation.check_paths` and `mara.web.procs.child_env` (which writes the three anchors, absolute, into the
   environment of a child). A test of any of them installs a tool or a cache below the workspace it passes and unsets
-  MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR (`tests/conftest.py` sets the first for every test). Every other reader that takes
-  `workspace=` or `root=` and is given none reads the environment's, and the scripts do: they take the workspace in the
-  later changes of C1.
+  MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR (`tests/conftest.py` sets the first for every test). Every other reader of
+  `src/` that takes `workspace=` or `root=` and is given none reads the environment's; the scripts are the next bullet.
+- The scripts read the environment once, in their `main`, with `Workspace.from_env()`, and hand the value to every reader
+  that takes one; the workspace of `--root` is not derived. `trivy_db`, `ml_bom`, `model_swap_drill`, `psirt_ops`,
+  `rollout_phase` and `model_eval` put it on the parsed arguments, as their `workspace` attribute, so a subcommand's
+  function reads it from there and its signature stays `(a)`; the others (`csp_ci`, `gitleaks_ci`, `osv_ci`,
+  `scorecard_ci`, `semgrep_ci`, `zizmor_ci`, `trivy_ci`, `live_smoke`, `calibration_run`, `calibrate`,
+  `human_queue_issues`, `training_register`, `governance_check`) hold it in `main` and pass it down; `compare_reviews`
+  builds it where it loads the one config, in its `tightened` scenario. A function a script's tests call takes it as a
+  parameter: `check_pins(workspace)` of `scripts/semgrep_ci.py` and of `scripts/csp_ci.py`, `pinned_trivy(workspace)` of
+  `scripts/trivy_db.py`, `anchor_paths(workspace)`, `load_model_eval(workspace)` and `training_requirement(workspace,
+  config=None)` of `scripts/calibrate.py`, `_ledger_path(cfg, workspace)` of `scripts/psirt_ops.py`, and
+  `load_runs(out_dir, samples_dir, decisions_dir, training)` of `scripts/calibrate.py`, which no longer looks up the last
+  two. A test that runs a script's `main` (a subprocess, or `main()` called with the argument vector patched) keeps
+  setting MARA_HOME and MARA_TOOLS_DIR; a test of a function that takes the workspace passes one, `Workspace.from_env()`
+  where the fixture has set MARA_HOME. A fake of `tool_path`, `installed_version` or `check_pins` accepts what the script
+  now passes (`workspace=`). `test_workspace_anchors.py` holds the guard: one test per `scripts/*.py` reads the file's
+  syntax tree and lists a call of a reader given no workspace (`tools_dir`, `cache_dir`, `tool_path`, `installed_version`,
+  `installed_manifest_entry`, `rules_dir`, `installed_rule_paths`, `driver_path` and `run_csp_eval` without `workspace=`;
+  `load_config`, `evaluate_policies`, `status_for_config` and `mara.workspace.resolve` without their second argument) and
+  the import of `mara.workspace.root`, and a test of the scan itself says what it sees and what it leaves alone (a
+  script's own `load_config`, one imported from another script).
+- `governance_check` is the exception among the scripts. `check_g2`, `check_g3`, `check_g4`, `check_g7`, `check_g8`,
+  `check_g9`, `check_g10` and `_production_families` take `workspace` as an optional keyword and read the environment's
+  when it is left out, because their tests call them directly with a root and a config path only (about 45 calls in eight
+  files); `run_all` builds the workspace once and hands it to the seven, and `main` hands `run_all` its own. `check_g5`
+  reads the tool directory of `Workspace.from_env(root=root)`, as `tools_dir(root)` did. `_live_calibration` of
+  `scripts/rollout_phase.py` calls `check_g9(root, today, config)` with no workspace, so `scripts/rollout_phase.py
+  advance` judges the config against the environment's workspace there, which is the one its parsed arguments hold; the
+  guard does not see it, since it names no `check_g9`. A test of the checks sets MARA_HOME and puts the files below the
+  root it passes, and gives `workspace=` only when the workspace differs from the environment's.
 
 ## The Evidence record (`src/mara/evidence.py`)
 
