@@ -3,9 +3,10 @@ one way to start, stop and read a run or an environment job, and to launch one w
 closed table and the admission checked, the child's directory and record written, the child started and its pid recorded,
 in one step under the table's lock.
 
-Every child is an argv list started without a shell, from the MARA workspace, with MARA_HOME pointing at it and
-the `mara` package the server itself runs on first on PYTHONPATH, so the child runs the `mara` the server was started
-from. Nothing a browser sends reaches the environment; values reach argv only after the caller validated them.
+Every child is an argv list started without a shell, from the MARA workspace, with MARA_HOME, MARA_TOOLS_DIR and
+MARA_TRIVY_CACHE_DIR pointing at its root, tool directory and trivy cache, and the `mara` package the server itself
+runs on first on PYTHONPATH, so the child runs the `mara` the server was started from. Nothing a browser sends reaches
+the environment; values reach argv only after the caller validated them.
 Output goes to a log file, never through a pipe the server would have to drain.
 
 Not pure: it starts and stops children and waits for them on threads of its own, copies the server's environment into
@@ -30,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from ..workspace import Workspace
 from . import admission
 from .admission import LaunchError
 
@@ -76,9 +78,12 @@ def package_root() -> Path:
 
 def child_env(workspace: Path) -> dict[str, str]:
     """The server's environment (provider keys and AWS credentials included: a live review needs them) plus the
-    workspace, the package path and plain, unbuffered UTF-8 output for the log file."""
+    workspace as three absolute paths over what the server inherited (MARA_HOME, MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR,
+    as Workspace.from_env(root=workspace) reads them, a relative one below the workspace), the package path and plain,
+    unbuffered UTF-8 output for the log file."""
     env = dict(os.environ)
-    env["MARA_HOME"] = str(workspace)
+    ws = Workspace.from_env(root=workspace)
+    env.update({"MARA_HOME": str(ws.root), "MARA_TOOLS_DIR": str(ws.tools_dir), "MARA_TRIVY_CACHE_DIR": str(ws.trivy_cache)})
     pkg = str(package_root())
     env["PYTHONPATH"] = pkg + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     env.update({"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "160", "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})

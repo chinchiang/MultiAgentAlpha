@@ -144,3 +144,12 @@ def test_a_base_git_cannot_diff_against_is_refused_last(tmp_path):
         invocation.admit(inv, ROOT)
     assert (e.value.kind, e.value.param) == ("bad_base_ref", "--base")
     assert progress.read(record)["error"] == "bad_base_ref"
+
+
+def test_an_admitted_invocation_remembers_the_workspace_it_was_admitted_against(tmp_path, monkeypatch):
+    """Not the environment's: MARA_HOME names another directory, and the working directory a third."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("MARA_HOME", str(elsewhere))
+    assert invocation.admit(_inv(tmp_path / "out"), ROOT).workspace == ROOT

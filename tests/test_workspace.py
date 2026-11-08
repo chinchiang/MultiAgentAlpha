@@ -80,3 +80,19 @@ def test_a_workspace_from_the_environment_at_a_given_root_ignores_MARA_HOME_and_
     assert Workspace.from_env(root=given).tools_dir == tools
     _environment(monkeypatch, MARA_HOME=home, MARA_TOOLS_DIR="relative")
     assert Workspace.from_env(root=given).tools_dir == given / "relative"
+
+
+def test_a_relative_MARA_TRIVY_CACHE_DIR_is_below_the_root_not_the_working_directory(tmp_path, monkeypatch):
+    """Like a relative MARA_TOOLS_DIR and every other relative path of MARA's own: below the root, wherever the process
+    runs. An absolute one is taken as it is."""
+    home, given, cwd = tmp_path / "home", tmp_path / "given", tmp_path / "cwd"
+    for d in (home, given, cwd):
+        d.mkdir()
+    monkeypatch.chdir(cwd)
+    _environment(monkeypatch, MARA_HOME=home, MARA_TRIVY_CACHE_DIR="db-cache")
+    assert Workspace.from_env().trivy_cache == home / "db-cache"
+    assert Workspace.from_env(root=given).trivy_cache == given / "db-cache"
+
+    absolute = tmp_path / "absolute-cache"
+    _environment(monkeypatch, MARA_HOME=home, MARA_TRIVY_CACHE_DIR=absolute)
+    assert Workspace.from_env().trivy_cache == absolute

@@ -567,6 +567,35 @@ def test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_i
     assert words(str(home / "config" / "mara.yaml")) in words(res.output), res.output
 
 
+def test_the_command_line_hands_the_pipeline_the_workspace_it_admitted_the_invocation_against(tmp_path, monkeypatch):
+    """MARA_HOME names the workspace and the working directory is elsewhere: `mara review` gives Pipeline the first
+    (`workspace=`) rather than leaving it to find one in the environment again."""
+    from typer.testing import CliRunner
+
+    from mara import cli
+
+    class Stop(Exception):
+        pass
+
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("MARA_HOME", str(ROOT))
+    seen: dict = {}
+    real_init = cli.Pipeline.__init__
+
+    def init(self, cfg, **kw):
+        seen.update(kw)
+        real_init(self, cfg, **kw)
+
+    monkeypatch.setattr(cli.Pipeline, "__init__", init)
+    monkeypatch.setattr(cli.Pipeline, "run", lambda self, *a, **k: (_ for _ in ()).throw(Stop()))
+    res = CliRunner().invoke(cli.app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock",
+                                       "--out", str(tmp_path / "out")])
+    assert isinstance(res.exception, Stop), res.output
+    assert Path(seen["workspace"]) == ROOT
+
+
 def test_the_calibration_secret_exemption_is_narrow(tmp_path, monkeypatch):
     """Calibration samples seed hard-coded credentials on purpose (CWE-798 labels), and the live secret
     preflight blocked egress for three of the five. The exemption: only on the operator's flag, only for

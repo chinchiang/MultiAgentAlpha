@@ -122,7 +122,8 @@ def _review(admitted: AdmittedInvocation) -> tuple[ReviewReport, bool]:
 
     inv, cfg, progress = admitted.invocation, admitted.config, admitted.progress
     target, out, psirt_event, base = inv.target, inv.out, inv.psirt_event, inv.base
-    pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress)
+    pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress,
+                    workspace=admitted.workspace)
     event = None
     if psirt_event:
         # read before the review, and handed to it: the notifications are built once, and the report's psirt holds these

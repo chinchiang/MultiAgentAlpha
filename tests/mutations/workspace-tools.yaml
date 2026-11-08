@@ -89,8 +89,8 @@ mutations:
     '
 - name: cache_dir ignores the workspace it is given
   file: src/mara/tools/trivy_db.py
-  old: "    if workspace is not None:\n        return workspace.trivy_cache.resolve()\n"
-  new: ''
+  old: "    return (workspace if workspace is not None else Workspace.from_env()).trivy_cache.resolve()"
+  new: "    return Workspace.from_env().trivy_cache.resolve()"
 - name: the CSP driver is looked for in the environment's tool directory
   file: src/mara/tools/csp_eval.py
   old: '    p = tools_dir(workspace=workspace) / PACKAGE_DIR / DRIVER_NAME'

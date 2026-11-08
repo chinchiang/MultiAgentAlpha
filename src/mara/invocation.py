@@ -202,13 +202,14 @@ class ReviewInvocation:
 
 @dataclass(frozen=True)
 class AdmittedInvocation:
-    """A review invocation that passed every check, in order (admit): its config file, that config, loaded, and its
-    progress record, started (a no-op one without --progress-file)."""
+    """A review invocation that passed every check, in order (admit): its config file, that config, loaded, its
+    progress record, started (a no-op one without --progress-file), and the workspace it was admitted against."""
 
     invocation: ReviewInvocation
     config_path: Path
     config: MaraConfig
     progress: Progress
+    workspace: Path
 
 
 def admit(inv: ReviewInvocation, workspace: Path) -> AdmittedInvocation:
@@ -226,7 +227,7 @@ def admit(inv: ReviewInvocation, workspace: Path) -> AdmittedInvocation:
     except BaseException as e:  # whatever ends the review before it starts, the record must not read as running
         record.finish(ok=False, error=e.kind if isinstance(e, InvocationError) else type(e).__name__)
         raise
-    return AdmittedInvocation(invocation=inv, config_path=config_path, config=config, progress=record)
+    return AdmittedInvocation(invocation=inv, config_path=config_path, config=config, progress=record, workspace=workspace)
 
 
 # the options naming a file or directory other than the config and the output directory: evidence inputs, which the
