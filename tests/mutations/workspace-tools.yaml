@@ -32,12 +32,12 @@ mutations:
   new: '        object.__setattr__(self, "trivy_cache", trivy_cache if trivy_cache is not None else root / "trivy-cache")'
 - name: check_outside judges the environment's tool directory
   file: src/mara/workspace.py
-  old: '"the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": workspace.tools_dir,'
-  new: '"the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": Workspace.from_env().tools_dir,'
+  old: '"the tool directory": workspace.tools_dir,'
+  new: '"the tool directory": Workspace.from_env().tools_dir,'
 - name: check_outside judges the environment's trivy cache
   file: src/mara/workspace.py
-  old: '"the trivy database (MARA_TRIVY_CACHE_DIR)": workspace.trivy_cache, **(extra or {})}'
-  new: '"the trivy database (MARA_TRIVY_CACHE_DIR)": Workspace.from_env().trivy_cache, **(extra or {})}'
+  old: '"the trivy database": workspace.trivy_cache, **(extra or {})}'
+  new: '"the trivy database": Workspace.from_env().trivy_cache, **(extra or {})}'
 - name: tools_dir ignores the workspace it is given
   file: src/mara/tools/runner.py
   old: "    return workspace.tools_dir.resolve()\n"

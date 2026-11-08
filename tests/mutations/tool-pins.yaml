@@ -28,10 +28,6 @@ mutations:
     file: src/mara/tools/pins.py
     old: "    if mismatch(\"\", locked, None if have is None else str(have)) is not None:\n        return \"version_mismatch\"\n"
     new: ""
-  - name: the tool directory is the environment's, not the workspace given
-    file: src/mara/tools/runner.py
-    old: '    return workspace.tools_dir.resolve()'
-    new: '    return __import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env().tools_dir.resolve()'
   - name: G-5 reads the manifest from the default tool directory
     file: scripts/governance_check.py
     old: |1-

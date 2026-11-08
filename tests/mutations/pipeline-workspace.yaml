@@ -38,8 +38,8 @@ mutations:
     new: 'family_eval_status(workspace_root(), evaluated).items()}'
   - name: check_outside ignores the workspace it is given
     file: src/mara/workspace.py
-    old: '    anchors = {"the MARA workspace (MARA_HOME or the working directory)": workspace.root,'
-    new: '    anchors = {"the MARA workspace (MARA_HOME or the working directory)": Workspace.from_env().root,'
+    old: '    anchors = {"the MARA workspace": workspace.root, "the tool directory": workspace.tools_dir,'
+    new: '    anchors = {"the MARA workspace": Workspace.from_env().root, "the tool directory": workspace.tools_dir,'
   - name: the default tool runner is given the environment's workspace
     file: src/mara/pipeline.py
     old: "            run_all, workspace=Workspace.from_env(root=self.workspace))"
