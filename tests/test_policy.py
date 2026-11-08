@@ -532,6 +532,16 @@ def test_a_config_is_built_without_reading_a_workspace_and_its_workspace_refuses
         load_config(config, Workspace(tmp_path), today=dt.date(2025, 3, 1))
 
 
+@pytest.mark.parametrize("kwargs", [{}, {"enforce_policies": False}], ids=["policies enforced", "policies reported"])
+def test_a_config_is_not_loaded_without_the_workspace_its_policies_read(tmp_path, kwargs):
+    """P7 and P8 read the files of a workspace, so a caller names it, a caller that reports the policies instead of
+    refusing them included: it still builds a config that stands for those files."""
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(_base()), encoding="utf-8")
+    with pytest.raises(TypeError):
+        load_config(config, **kwargs)
+
+
 # ---------------------------------------------------------------- one check of a config file
 
 
