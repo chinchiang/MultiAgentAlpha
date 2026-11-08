@@ -133,20 +133,46 @@ def test_an_untrained_ruling_does_not_contradict_a_trained_one(register):
     assert [d.decision for d in sel.usable] == ["true_positive"] and sel.by_reason() == {"untrained": 1}
 
 
-def test_training_requirement_from_the_config_file(tmp_path, monkeypatch):
-    monkeypatch.setenv("MARA_HOME", str(tmp_path))
+def test_training_requirement_from_the_config_file(tmp_path):
     cfg = tmp_path / "mara.yaml"
     cfg.write_text("training: {require_trained_adjudicator: false}\n", encoding="utf-8")
-    assert dec.TrainingRequirement.from_config_file(cfg).required is False
+    assert dec.TrainingRequirement.from_config_file(cfg, tmp_path).required is False
     cfg.write_text("models: []\n", encoding="utf-8")
-    req = dec.TrainingRequirement.from_config_file(cfg)
+    req = dec.TrainingRequirement.from_config_file(cfg, tmp_path)
     assert req.required and req.register is None and "training/records.yaml" in req.problem
     (tmp_path / "training").mkdir()
     (tmp_path / "training" / "records.yaml").write_text("curriculum_version: '2026-09'\nrecords: []\n", encoding="utf-8")
-    req = dec.TrainingRequirement.from_config_file(cfg)
+    req = dec.TrainingRequirement.from_config_file(cfg, tmp_path)
     assert req.register is not None and req.problem == ""
-    missing = dec.TrainingRequirement.from_config_file(tmp_path / "absent.yaml")
+    missing = dec.TrainingRequirement.from_config_file(tmp_path / "absent.yaml", tmp_path)
     assert missing.required, "no config: training stays required (fail closed)"
+
+
+def test_a_training_requirement_from_a_config_file_is_not_made_without_the_workspace_of_its_register(tmp_path):
+    cfg = tmp_path / "mara.yaml"
+    cfg.write_text("models: []\n", encoding="utf-8")
+    with pytest.raises(TypeError):
+        dec.TrainingRequirement.from_config_file(cfg)
+
+
+def test_the_register_is_read_from_the_workspace_given_not_the_environments(tmp_path, monkeypatch):
+    """MARA_HOME and the working directory each name another directory with a register of its own, a third curriculum."""
+    environment, given, bare, cwd = (tmp_path / d for d in ("environment", "given", "bare", "cwd"))
+    for d in (environment, given, bare, cwd):
+        (d / "training").mkdir(parents=True)
+    (environment / "training" / "records.yaml").write_text("curriculum_version: '2026-01'\nrecords: []\n", encoding="utf-8")
+    (given / "training" / "records.yaml").write_text("curriculum_version: '2026-09'\nrecords: []\n", encoding="utf-8")
+    (cwd / "training" / "records.yaml").write_text("curriculum_version: '2026-05'\nrecords: []\n", encoding="utf-8")
+    (bare / "training").rmdir()
+    monkeypatch.setenv("MARA_HOME", str(environment))
+    monkeypatch.chdir(cwd)
+    cfg = tmp_path / "mara.yaml"
+    cfg.write_text("models: []\n", encoding="utf-8")
+    req = dec.TrainingRequirement.from_config_file(cfg, given)
+    assert req.register is not None and req.register.curriculum_version == "2026-09" and req.problem == ""
+    refused = dec.TrainingRequirement.from_config_file(cfg, bare)
+    assert refused.required and refused.register is None and "training/records.yaml" in refused.problem, \
+        "a workspace with no register is refused although the environment's has one"
 
 
 # ---------------------------------------------------------------- calibration
