@@ -31,9 +31,15 @@ from actions_inventory import inventory_workflow  # noqa: E402
 from mara.evidence import LIVE, MAX_AGE_DAYS, Future, Header, MissingFamilies, NotLive, Stale, standing  # noqa: E402
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import tools_dir  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 PASS, FAIL, MANUAL = "PASS", "FAIL", "MANUAL"
 STATUS_ZH = {PASS: "通過", FAIL: "失敗", MANUAL: "需人工"}
+
+
+def _workspace(workspace: Workspace | None) -> Workspace:
+    """The workspace a check judges the config against: the one `run_all` was given, else the environment's."""
+    return Workspace.from_env() if workspace is None else workspace
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 COVERED_MARKERS = ("fable", "mythos")
 ALLOWED_RESIDENCY = {"on_prem", "vendor_api_zdr"}
@@ -217,13 +223,14 @@ def _shown(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()
 
 
-def check_g2(root: Path, config_path: Path) -> CheckResult:
+def check_g2(root: Path, config_path: Path, workspace: Workspace | None = None) -> CheckResult:
     from mara.bias.blinding import blind_finding
     from mara.config import MaraConfig, load_config
     from mara.policy import evaluate_policies
 
     problems, evidence = [], []
-    cfg = load_config(config_path)
+    ws = _workspace(workspace)
+    cfg = load_config(config_path, ws)
     rev = {cfg.model_by_name(n).family.value for n in cfg.roles.reviewers}
     jud = {cfg.model_by_name(n).family.value for n in cfg.roles.judges}
     evidence.append(f"`{_shown(config_path, root)}`：reviewer 家族 {sorted(rev)}，judge 家族 {sorted(jud)}")
@@ -254,7 +261,7 @@ def check_g2(root: Path, config_path: Path) -> CheckResult:
         problems.append(f"judge 視圖洩漏欄位 {leaked}")
     else:
         evidence.append(f"`bias/blinding.py::blind_finding` 輸出鍵 {sorted(view)}，不含身分、信心、CVSS")
-    pol = {r.id: r for r in evaluate_policies(cfg)}
+    pol = {r.id: r for r in evaluate_policies(cfg, ws)}
     for pid in ("P3", "P4"):
         if pid in pol:
             evidence.append(f"政策 {pid} {pol[pid].name}：{'PASS' if pol[pid].passed else 'FAIL'}（{pol[pid].reason}）")
@@ -263,10 +270,10 @@ def check_g2(root: Path, config_path: Path) -> CheckResult:
     return CheckResult("G-2", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + "；".join(evidence))
 
 
-def check_g3(root: Path, config_path: Path) -> CheckResult:
+def check_g3(root: Path, config_path: Path, workspace: Workspace | None = None) -> CheckResult:
     from mara.config import load_config
 
-    cfg = load_config(config_path)
+    cfg = load_config(config_path, _workspace(workspace))
     problems, rows, approvals = [], [], []
     for m in cfg.models:
         res = getattr(m, "data_residency", None)
@@ -288,12 +295,12 @@ def check_g3(root: Path, config_path: Path) -> CheckResult:
     return CheckResult("G-3", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + ev)
 
 
-def check_g4(root: Path, config_path: Path | None = None, today: dt.date | None = None) -> CheckResult:
+def check_g4(root: Path, config_path: Path | None = None, today: dt.date | None = None, workspace: Workspace | None = None) -> CheckResult:
     from mara.config import load_config
     from mara.govdocs import DRILL_MAX_HOURS, drill_status
 
     today = today or dt.date.today()
-    cfg = load_config(config_path or root / "config" / "mara.yaml")
+    cfg = load_config(config_path or root / "config" / "mara.yaml", _workspace(workspace))
     statuses = drill_status(cfg, root, today)
     if not statuses:
         return CheckResult("G-4", PASS, "設定中沒有非 mock 的模型家族")
@@ -339,7 +346,7 @@ def check_g5(root: Path) -> CheckResult:
             problems.append(f"{name} 無 verify.method")
         else:
             ev.append(f"{name} {t.get('version')} sha256 {sha[:12]}… {method}")
-    manifest = tools_dir(root) / "manifest.json"  # MARA_TOOLS_DIR moves it, as it moves the runner's tools
+    manifest = tools_dir(workspace=Workspace.from_env(root=root)) / "manifest.json"  # MARA_TOOLS_DIR moves it, as it moves the runner's tools
     if manifest.is_file():
         m = json.loads(manifest.read_text(encoding="utf-8")).get("tools", {})
         ev.append("manifest：" + ", ".join(f"{k}={'signed' if v.get('signature_verified') else 'hash-only'}" for k, v in m.items()))
@@ -394,13 +401,13 @@ def check_g6(root: Path, workflows_dir: Path | None = None) -> CheckResult:
     return CheckResult("G-6", FAIL if problems else PASS, ("；".join(problems) + "。" if problems else "") + "；".join(ev))
 
 
-def check_g7(root: Path, config_path: Path) -> CheckResult:
+def check_g7(root: Path, config_path: Path, workspace: Workspace | None = None) -> CheckResult:
     """The ML-BOM the config names (ml_bom.path, below `root` when relative), the one a review reads: every self-hosted
     model (mara.mlbom.self_hosted_models) listed in it with a complete component."""
     from mara.config import load_config
     from mara.mlbom import component_problems, load_bom, ml_components, props, self_hosted_models
 
-    cfg = load_config(config_path, enforce_policies=False)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it
+    cfg = load_config(config_path, _workspace(workspace), enforce_policies=False)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it
     ml = cfg.ml_bom
     self_hosted = [(m.name, m.model) for m in self_hosted_models(cfg)]
     bom = Path(ml.path) if Path(ml.path).is_absolute() else root / ml.path
@@ -442,14 +449,14 @@ def check_g7(root: Path, config_path: Path) -> CheckResult:
     return CheckResult("G-7", PASS, "；".join(ev))
 
 
-def _production_families(config_path: Path) -> list[str]:
+def _production_families(config_path: Path, workspace: Workspace | None = None) -> list[str]:
     """The families a live report must cover: the validated config's production families (mara.govdocs), as a review
     and `scripts/model_eval.py run` read them. A config the review refuses is refused here too."""
     from mara.config import load_config
     from mara.govdocs import production_families
 
     # G-8 and G-9 report the evaluation and calibration reports, not the policies, which G-2 and G-3 report
-    return sorted(production_families(load_config(config_path, enforce_policies=False)))
+    return sorted(production_families(load_config(config_path, _workspace(workspace), enforce_policies=False)))
 
 
 def _date_problem(date: dt.date, today: dt.date):
@@ -490,8 +497,8 @@ def _fresh_live_report(root: Path, pattern: str, today: dt.date, families: list[
     return ev, ([] if ev else problems)
 
 
-def check_g8(root: Path, today: dt.date, config_path: Path | None = None) -> CheckResult:
-    families = _production_families(config_path) if config_path else []
+def check_g8(root: Path, today: dt.date, config_path: Path | None = None, workspace: Workspace | None = None) -> CheckResult:
+    families = _production_families(config_path, workspace) if config_path else []
     ev_g, pr_g = _fresh_live_report(root, "garak-*.md", today, families)
     ev_c, pr_c = _fresh_live_report(root, "cyberseceval-*.md", today, families)
     need = (f"需要：{MAX_AGE_DAYS} 天內用 `scripts/model_eval.py run` 對 {families or '三個家族'} 執行 garak 與 CyberSecEval 4"
@@ -510,10 +517,10 @@ def check_g8(root: Path, today: dt.date, config_path: Path | None = None) -> Che
     return CheckResult("G-8", FAIL, "；".join(pr_g + pr_c) + "。" + need)
 
 
-def check_g9(root: Path, today: dt.date, config_path: Path | None = None) -> CheckResult:
+def check_g9(root: Path, today: dt.date, config_path: Path | None = None, workspace: Workspace | None = None) -> CheckResult:
     from mara.govdocs import read_front_matter
 
-    families = _production_families(config_path) if config_path else []
+    families = _production_families(config_path, workspace) if config_path else []
     files = _dated_files(root / "docs", ["calibration-*.md"], today)
     fresh, rejected = [], []
     for p, d, age in files:
@@ -543,12 +550,12 @@ def check_g9(root: Path, today: dt.date, config_path: Path | None = None) -> Che
                        "報告 front matter 的 mode 為 live 且 families 涵蓋設定中的家族")
 
 
-def check_g10(root: Path, config_path: Path, today: dt.date | None = None) -> CheckResult:
+def check_g10(root: Path, config_path: Path, today: dt.date | None = None, workspace: Workspace | None = None) -> CheckResult:
     from mara.config import load_config
     from mara.govdocs import rollout_status
 
     today = today or dt.date.today()
-    cfg = load_config(config_path)
+    cfg = load_config(config_path, _workspace(workspace))
     st = rollout_status(cfg, root, today)
     ev = [f"`rollout.phase: {st.phase}`"]
     if st.days_in_phase is not None:
@@ -695,11 +702,13 @@ def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> Ch
     return CheckResult("G-13", PASS, "；".join(ev))
 
 
-def run_all(root: Path, config_path: Path, today: dt.date | None = None) -> list[CheckResult]:
+def run_all(root: Path, config_path: Path, today: dt.date | None = None, workspace: Workspace | None = None) -> list[CheckResult]:
     today = today or dt.date.today()
+    ws = _workspace(workspace)
     return [
-        check_g1(root, today), check_g2(root, config_path), check_g3(root, config_path), check_g4(root, config_path, today), check_g5(root), check_g6(root),
-        check_g7(root, config_path), check_g8(root, today, config_path), check_g9(root, today, config_path), check_g10(root, config_path, today),
+        check_g1(root, today), check_g2(root, config_path, ws), check_g3(root, config_path, ws), check_g4(root, config_path, today, ws),
+        check_g5(root), check_g6(root), check_g7(root, config_path, ws), check_g8(root, today, config_path, ws),
+        check_g9(root, today, config_path, ws), check_g10(root, config_path, today, ws),
         check_g11(root, config_path), check_g12(root, config_path), check_g13(root, today, config_path),
     ]
 
@@ -732,7 +741,7 @@ def main() -> int:
     args = ap.parse_args()
     root = args.root.resolve()
     config_path = (args.config or root / "config" / "mara.yaml").resolve()
-    results = run_all(root, config_path, dt.date.fromisoformat(args.date))
+    results = run_all(root, config_path, dt.date.fromisoformat(args.date), Workspace.from_env())
     if args.json:
         text = json.dumps([{"id": r.id, "title": r.title, "status": r.status, "evidence": r.evidence, "standards": r.standards} for r in results],
                           ensure_ascii=False, indent=1)
