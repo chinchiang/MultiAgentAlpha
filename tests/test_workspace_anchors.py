@@ -187,3 +187,86 @@ def test_check_outside_accepts_a_target_when_the_anchors_of_the_workspace_it_is_
     monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(target / "cache"))
     safe = tmp_path / "safe"
     workspace.check_outside(target, workspace=Workspace(safe, safe / "tools", safe / "cache"))
+
+
+# ---------------------------------------------------------------- a script reads the environment once, in its entry point
+
+# What a script must hand a workspace to (C1, 3b): a function of src/ that, given none, reads the environment again. The
+# "how" per name: a `workspace=` keyword, or for these two the positional the function already takes.
+_NEEDS_WORKSPACE_KEYWORD = frozenset({"tools_dir", "cache_dir", "tool_path", "installed_version", "installed_manifest_entry",
+                                      "rules_dir", "installed_rule_paths", "driver_path", "run_csp_eval"})
+_NEEDS_SECOND_ARGUMENT = {"load_config": "workspace", "evaluate_policies": "workspace", "status_for_config": "root",
+                          "resolve": "base"}
+
+
+def _mara_names(tree) -> set[str]:
+    """The names a script imports from the `mara` package (a script's own `load_config`, as trivy_db.py's, is not one)."""
+    import ast
+
+    return {a.asname or a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] == "mara"
+            for a in n.names}
+
+
+def _anchor_violations(source: str) -> list[str]:
+    """The calls in `source` that leave the workspace to the environment, and the imports of `mara.workspace.root`."""
+    import ast
+
+    tree = ast.parse(source)
+    mara = _mara_names(tree)
+    aliases = {a.asname or a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
+               and (n.module or "").split(".")[0] == "mara" for a in n.names} | {"tdb", "mlbom"}
+    found = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and n.module == "mara.workspace" and any(a.name == "root" for a in n.names):
+            found.append(f"{n.lineno}: imports mara.workspace.root, which goes when every caller passes its workspace")
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        if isinstance(f, ast.Name) and f.id in mara:
+            name = f.id
+        elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id in aliases:
+            name = f.attr
+        else:
+            continue
+        kws = {k.arg for k in n.keywords}
+        if name in _NEEDS_WORKSPACE_KEYWORD and "workspace" not in kws:
+            found.append(f"{n.lineno}: {name}() without workspace=")
+        elif name in _NEEDS_SECOND_ARGUMENT and len(n.args) < 2 and _NEEDS_SECOND_ARGUMENT[name] not in kws:
+            found.append(f"{n.lineno}: {name}() without its {_NEEDS_SECOND_ARGUMENT[name]}")
+    return sorted(found)
+
+
+@pytest.mark.parametrize("source, count", [
+    ("from mara.config import load_config\nload_config(p)", 1),
+    ("from mara.config import load_config\nload_config(p, ws)", 0),
+    ("from mara.config import load_config\nload_config(p, workspace=ws, enforce_policies=False)", 0),
+    ("from mara.policy import evaluate_policies\nevaluate_policies(cfg)", 1),
+    ("from mara.policy import evaluate_policies\nevaluate_policies(cfg, ws)", 0),
+    ("from mara.tools.runner import tools_dir\ntools_dir()", 1),
+    ("from mara.tools.runner import tools_dir\ntools_dir(root)", 1),
+    ("from mara.tools.runner import tools_dir\ntools_dir(workspace=ws)", 0),
+    ("from mara.tools.runner import tool_path, installed_version\ntool_path('a'); installed_version('a')", 2),
+    ("from mara.tools.runner import tool_path\ntool_path('a', workspace=ws)", 0),
+    ("from mara.tools import trivy_db as tdb\ntdb.cache_dir()", 1),
+    ("from mara.tools import trivy_db as tdb\ntdb.cache_dir(workspace=ws)", 0),
+    ("from mara import mlbom\nmlbom.status_for_config(cfg)", 1),
+    ("from mara import mlbom\nmlbom.status_for_config(cfg, ws.root)", 0),
+    ("from mara.workspace import resolve\nresolve('config/mara.yaml')", 1),
+    ("from mara.workspace import resolve\nresolve('config/mara.yaml', ws.root)", 0),
+    ("from mara.workspace import resolve\nresolve('config/mara.yaml', base=ws.root)", 0),
+    ("from mara.workspace import root\nroot()", 1),
+    ("from mara.workspace import root as workspace_root\nworkspace_root()", 1),
+    ("from mara.workspace import Workspace\nWorkspace.from_env()", 0),
+    ("def load_config(path):\n    pass\nload_config(p)", 0),  # a script's own function of the name
+    ("from trivy_db import load_config\nload_config()", 0),  # another script's, not mara's
+    ("resolver.resolve(repo, ref)", 0),  # not mara.workspace.resolve
+])
+def test_the_scan_for_calls_that_leave_the_workspace_to_the_environment_sees_what_it_should(source, count):
+    assert len(_anchor_violations(source)) == count, _anchor_violations(source)
+
+
+@pytest.mark.parametrize("script", sorted((ROOT / "scripts").glob("*.py")), ids=lambda p: p.name)
+def test_no_script_leaves_the_workspace_to_the_environment_outside_its_entry_point(script):
+    """A script takes the workspace once, with Workspace.from_env(), and hands it to every reader that has a keyword or
+    a parameter for it. A reader given none reads the environment again, and loses its default in 3c (C1)."""
+    assert _anchor_violations(script.read_text(encoding="utf-8")) == []
