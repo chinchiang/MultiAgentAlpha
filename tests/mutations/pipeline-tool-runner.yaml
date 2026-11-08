@@ -3,11 +3,11 @@ mutations:
   - name: the main run calls run_all, not the runner given
     file: src/mara/pipeline.py
     old: 'tool_runs = self._run_tools(target, self.out_dir / "tools")'
-    new: 'tool_runs = run_all(target, self.out_dir / "tools")'
+    new: 'tool_runs = run_all(target, self.out_dir / "tools", workspace=Workspace.from_env())'
   - name: the secret preflight calls run_all, not the runner given
     file: src/mara/pipeline.py
     old: 'preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])'
-    new: 'preflight = run_all(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])'
+    new: 'preflight = run_all(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"], workspace=Workspace.from_env())'
   - name: the secret preflight runs every tool
     file: src/mara/pipeline.py
     old: 'preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])'
