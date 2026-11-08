@@ -52,8 +52,9 @@ def _workspace(path: Path, scenario: str) -> Path:
     if scenario == "tightened":
         sys.path.insert(0, str(ROOT / "src"))
         from mara.config import load_config
+        from mara.workspace import Workspace
 
-        limit = load_config(CONFIG).human_queue.backlog_limit
+        limit = load_config(CONFIG, Workspace.from_env()).human_queue.backlog_limit
         (path / "calib" / "decisions" / "backlog.json").write_text(json.dumps({"open": limit + 1}), encoding="utf-8")
     return path
 

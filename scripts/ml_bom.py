@@ -35,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from mara import mlbom  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 
 def cmd_registry_hashes(a: argparse.Namespace) -> int:
@@ -133,15 +134,15 @@ def cmd_check(a: argparse.Namespace) -> int:
     from mara.config import load_config
     from mara.policy import p7_ml_bom
 
-    cfg = load_config(a.config)
-    for name, st in mlbom.status_for_config(cfg).items():
+    cfg = load_config(a.config, a.workspace)
+    for name, st in mlbom.status_for_config(cfg, a.workspace.root).items():
         line = f"{name} ({st.model_id}): {st.status}"
         if st.status == mlbom.STATUS_COMPLETE:
             line += f" {st.component_name}@{st.component_version} sha256 {st.digest[:12]}"
         elif st.problems:
             line += " — " + "; ".join(st.problems)
         print(line)
-    r = p7_ml_bom(cfg)
+    r = p7_ml_bom(cfg, a.workspace)
     print(f"P7 ml-bom: {'PASS' if r.passed else 'FAIL'} — {r.reason}")
     return 0 if r.passed else 1
 
@@ -180,6 +181,7 @@ def main() -> int:
     s = sub.add_parser("check")
     s.add_argument("--config", type=Path, default=ROOT / "config" / "mara.yaml")
     a = ap.parse_args()
+    a.workspace = Workspace.from_env()
     try:
         return {"hash-dir": cmd_hash_dir, "registry-hashes": cmd_registry_hashes, "build": cmd_build, "validate": cmd_validate, "verify": cmd_verify,
                 "verify-signature": cmd_verify_signature, "sign-command": cmd_sign_command, "check": cmd_check}[a.cmd](a)
