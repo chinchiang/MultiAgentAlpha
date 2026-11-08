@@ -259,7 +259,10 @@ code that writes it, so it changes with that code:
   `check_g9`, `check_g10` and `_production_families` take `workspace` as an optional keyword and read the environment's
   when it is left out, because their tests call them directly with a root and a config path only (about 45 calls in eight
   files); `run_all` builds the workspace once and hands it to the seven, and `main` hands `run_all` its own. `check_g5`
-  reads the tool directory of `Workspace.from_env(root=root)`, as `tools_dir(root)` did. `_live_calibration` of
+  reads the tool directory of `Workspace.from_env(root=root)`, as `tools_dir(root)` did. `check_g4` hands the workspace it
+  judges against to `govdocs.drill_status(..., workspace=...)`, which loads each standby config in it (policies P7 and P8
+  read its files), as `scripts/model_swap_drill.py` does with the workspace on its parsed arguments; both are required there
+  (`test_governance_templates.py`). `_live_calibration` of
   `scripts/rollout_phase.py` calls `check_g9(root, today, config)` with no workspace, so `scripts/rollout_phase.py
   advance` judges the config against the environment's workspace there, which is the one its parsed arguments hold; the
   guard does not see it, since it names no `check_g9`. A test of the checks sets MARA_HOME and puts the files below the

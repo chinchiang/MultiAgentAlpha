@@ -1,0 +1,14 @@
+focused: [tests/test_governance_templates.py, tests/test_workspace_anchors.py]
+mutations:
+  - name: a standby config is loaded under the policies of the environment's workspace
+    file: src/mara/govdocs.py
+    old: "        sb = load_config(cfg_path, workspace)\n"
+    new: "        sb = load_config(cfg_path, __import__(\"mara.workspace\", fromlist=[\"Workspace\"]).Workspace.from_env())\n"
+  - name: the drill status hands the standby the environment's workspace, not the one it was given
+    file: src/mara/govdocs.py
+    old: "_standby_family_of(prod, sb, fam, workspace)"
+    new: "_standby_family_of(prod, sb, fam, __import__(\"mara.workspace\", fromlist=[\"Workspace\"]).Workspace.from_env())"
+  - name: G-4 asks for the drill status of the environment's workspace, not the one it judges against
+    file: scripts/governance_check.py
+    old: "drill_status(cfg, root, today, workspace=ws)"
+    new: "drill_status(cfg, root, today, workspace=Workspace.from_env())"
