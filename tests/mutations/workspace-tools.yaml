@@ -6,6 +6,9 @@ focused:
 - tests/test_panel.py
 - tests/test_pipeline_workspace.py
 - tests/test_invocation_checks.py
+- tests/test_web_procs.py
+- tests/test_invocation_admit.py
+- tests/test_security_regressions.py
 mutations:
 - name: from_env ignores MARA_TOOLS_DIR
   file: src/mara/workspace.py
@@ -123,3 +126,39 @@ mutations:
   file: src/mara/invocation.py
   old: '                      workspace=Workspace.from_env(root=root))'
   new: '                      )'
+- name: from_env puts a relative MARA_TRIVY_CACHE_DIR below the working directory
+  file: src/mara/workspace.py
+  old: (base / cache).resolve() if cache else None
+  new: Path(cache).resolve() if cache else None
+- name: cache_dir without a workspace reads no variable and sits in the working directory
+  file: src/mara/tools/trivy_db.py
+  old: '    return (workspace if workspace is not None else Workspace.from_env()).trivy_cache.resolve()'
+  new: '    return (workspace.trivy_cache if workspace is not None else Path("trivy-cache")).resolve()'
+- name: a child keeps the MARA_HOME it inherits
+  file: src/mara/web/procs.py
+  old: '"MARA_HOME": str(ws.root), '
+  new: ''
+- name: a child keeps the MARA_TOOLS_DIR it inherits
+  file: src/mara/web/procs.py
+  old: '"MARA_TOOLS_DIR": str(ws.tools_dir), '
+  new: ''
+- name: a child keeps the MARA_TRIVY_CACHE_DIR it inherits
+  file: src/mara/web/procs.py
+  old: ', "MARA_TRIVY_CACHE_DIR": str(ws.trivy_cache)})'
+  new: '})'
+- name: a child is given the anchors of the environment's workspace, not of the server's
+  file: src/mara/web/procs.py
+  old: ws = Workspace.from_env(root=workspace)
+  new: ws = Workspace.from_env()
+- name: an admitted invocation remembers the working directory, not the workspace it was admitted against
+  file: src/mara/invocation.py
+  old: progress=record, workspace=workspace)
+  new: progress=record, workspace=Path.cwd())
+- name: the command line admits the invocation against the working directory
+  file: src/mara/cli.py
+  old: '        admitted = admit(inv, workspace.root)'
+  new: '        admitted = admit(inv, Path.cwd())'
+- name: the command line does not hand the pipeline the workspace it admitted the invocation against
+  file: src/mara/cli.py
+  old: '                    workspace=admitted.workspace)'
+  new: '                    )'
