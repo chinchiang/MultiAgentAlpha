@@ -44,7 +44,7 @@ from mara.human_queue import queue_key  # noqa: E402
 from mara.report.escaping import code, literal  # noqa: E402
 from mara.reviewed_content import ReviewedContent  # noqa: E402
 from mara.training import is_trained, load_register  # noqa: E402
-from mara.workspace import resolve  # noqa: E402
+from mara.workspace import Workspace, resolve  # noqa: E402
 
 MARKER = "<!-- mara-hq:{key} -->"
 MARKER_RE = re.compile(r"<!-- mara-hq:(v2-[0-9a-f]{24}|[0-9a-f]{12}) -->")
@@ -351,17 +351,18 @@ def queue_settings(config: Path):
 
 
 def main() -> int:
+    ws = Workspace.from_env()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--queue", type=Path, help="out/human_queue.json from a review; omit with --sync-decisions only")
     ap.add_argument("--repo", required=True, help="owner/repo")
-    ap.add_argument("--config", type=Path, default=resolve("config/mara.yaml"),
+    ap.add_argument("--config", type=Path, default=resolve("config/mara.yaml", ws.root),
                     help="human_queue.ticketing, .label and .backlog_file come from here (default: <workspace>/config/mara.yaml)")
     ap.add_argument("--label", default=None, help="default: human_queue.label")
     # MARA's own state, in the workspace the pipeline reads it from (MARA_HOME, else the working directory)
-    ap.add_argument("--decisions-dir", type=Path, default=resolve("calib/decisions"))
+    ap.add_argument("--decisions-dir", type=Path, default=resolve("calib/decisions", ws.root))
     ap.add_argument("--backlog-file", type=Path, default=None, help="default: <workspace>/<human_queue.backlog_file>")
     ap.add_argument("--sync-decisions", action="store_true")
-    ap.add_argument("--register", type=Path, default=resolve("training/records.yaml"),
+    ap.add_argument("--register", type=Path, default=resolve("training/records.yaml", ws.root),
                     help="AI-literacy register (G-13); decisions by people without a valid adjudicator record are flagged")
     ap.add_argument("--dry-run", action="store_true", help="print the gh commands instead of running the mutating ones")
     args = ap.parse_args()
@@ -372,7 +373,7 @@ def main() -> int:
     args.label = args.label or hq.label
     # the pipeline reads the backlog at <workspace>/<human_queue.backlog_file>; written anywhere else, G-11's
     # tightening never triggered
-    args.backlog_file = args.backlog_file or resolve(hq.backlog_file)
+    args.backlog_file = args.backlog_file or resolve(hq.backlog_file, ws.root)
     status = 0
     try:
         if args.queue:

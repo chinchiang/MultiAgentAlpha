@@ -48,9 +48,9 @@ def test_calibration_writes_where_policy_p8_reads(home):
     import calibrate
 
     from mara.policy import AAT_EVIDENCE
-    from mara.workspace import resolve
+    from mara.workspace import Workspace, resolve
 
-    paths = calibrate.anchor_paths()
+    paths = calibrate.anchor_paths(Workspace.from_env())
     assert paths["latest"] == home / "calib" / "latest.json" == resolve(AAT_EVIDENCE)
     assert paths["history"].parent == paths["decisions"].parent == home / "calib"
 
@@ -123,8 +123,10 @@ def test_calibration_reads_the_model_eval_summary_the_pipeline_reads(home):
     bias audit (family_eval_status) reads the workspace: with MARA_HOME set the suggested weights ignored G-8."""
     import calibrate
 
+    from mara.workspace import Workspace
+
     _eval_summary(home)
-    assert (calibrate.load_model_eval() or {}).get("date") == "2026-09-12"
+    assert (calibrate.load_model_eval(Workspace.from_env()) or {}).get("date") == "2026-09-12"
 
 
 def test_model_eval_report_and_check_use_the_workspace(home, monkeypatch, capsys):

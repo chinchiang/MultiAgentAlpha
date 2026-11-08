@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from mara import training  # noqa: E402
-from mara.workspace import resolve  # noqa: E402
+from mara.workspace import Workspace, resolve  # noqa: E402
 
 REGISTER = "training/records.yaml"  # below the MARA workspace (mara.workspace.resolve), like the readers
 QUIZ = ROOT / "training" / "quiz.yaml"
@@ -92,8 +92,9 @@ def cmd_status(a: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    ws = Workspace.from_env()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--register", type=Path, default=resolve(REGISTER))
+    ap.add_argument("--register", type=Path, default=resolve(REGISTER, ws.root))
     ap.add_argument("--quiz", type=Path, default=QUIZ)
     ap.add_argument("--today", help="YYYY-MM-DD (default: today)")
     sub = ap.add_subparsers(dest="cmd", required=True)

@@ -38,14 +38,16 @@ from mara.evidence import header_fields  # noqa: E402
 from mara.identity import NEAR_LINES, norm_path, same_place  # noqa: E402
 from mara.reviewed_content import ReviewedContent  # noqa: E402
 from mara.schemas import ConsensusResult  # noqa: E402
-from mara.workspace import resolve  # noqa: E402
+from mara.workspace import Workspace, resolve  # noqa: E402
 
 
-def anchor_paths() -> dict[str, Path]:
+def anchor_paths(workspace: Workspace) -> dict[str, Path]:
     """Where this script reads and writes MARA's own state: the workspace (MARA_HOME, else the working directory),
     the same place policy P8 and the pipeline read it. ROOT, the checkout this script lives in, used to be written
     instead, so with MARA_HOME set P8 never saw the Evidence record written for it."""
-    return {"decisions": resolve("calib/decisions"), "history": resolve("calib/history.json"), "latest": resolve("calib/latest.json")}
+    root = workspace.root
+    return {"decisions": resolve("calib/decisions", root), "history": resolve("calib/history.json", root),
+            "latest": resolve("calib/latest.json", root)}
 
 VERDICT_IDX = {"true_positive": 0, "false_positive": 1, "needs_human": 2}
 TOOL_LABEL_TOOLS = ("semgrep", "osv-scanner", "gitleaks")
@@ -75,19 +77,17 @@ def apply_decisions(usable: list[Decision], labels: list[dict]) -> tuple[list[di
     return labels, applied
 
 
-def training_requirement(config: Path | None = None) -> TrainingRequirement:
+def training_requirement(workspace: Workspace, config: Path | None = None) -> TrainingRequirement:
     """G-13 from the MARA config (`training`), the register resolved against the workspace."""
-    req = TrainingRequirement.from_config_file(config or resolve("config/mara.yaml"))
+    req = TrainingRequirement.from_config_file(config or resolve("config/mara.yaml", workspace.root))
     if req.problem:
         print(f"G-13: {req.problem}; no decision counts as trained", file=sys.stderr)
     return req
 
 
-def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path | None = None,
-              training: TrainingRequirement | None = None) -> list[tuple[str, dict, list[dict]]]:
+def load_runs(out_dir: Path, samples_dir: Path, decisions_dir: Path, training: TrainingRequirement) -> list[tuple[str, dict, list[dict]]]:
     runs = []
-    decisions = load_decisions(decisions_dir or anchor_paths()["decisions"])
-    training = training or training_requirement()
+    decisions = load_decisions(decisions_dir)
     untrained: list[str] = []
     for rep in sorted(out_dir.glob("*/report.json")):
         sample = rep.parent.name
@@ -490,13 +490,12 @@ def tool_recall(runs, tool_labels):
     return rows
 
 
-def load_model_eval() -> dict | None:
+def load_model_eval(workspace: Workspace) -> dict | None:
     """G-8: latest calib/model-eval-<date>.json (garak / CyberSecEval verdicts per family), in the workspace
     where scripts/model_eval.py writes it and the pipeline reads it into the report's model_eval."""
     from mara.model_eval import latest_summary
-    from mara.workspace import root as workspace_root
 
-    return latest_summary(workspace_root())
+    return latest_summary(workspace.root)
 
 
 def _penalty() -> float:
@@ -736,8 +735,10 @@ def main() -> int:
     date = when.isoformat()
     out_dir = Path(args.out_dir) if Path(args.out_dir).is_absolute() else ROOT / args.out_dir
     samples_dir = Path(args.samples_dir) if Path(args.samples_dir).is_absolute() else ROOT / args.samples_dir
-    training = training_requirement(Path(args.config) if args.config else None)
-    runs = load_runs(out_dir, samples_dir, training=training)
+    ws = Workspace.from_env()
+    anchors = anchor_paths(ws)
+    training = training_requirement(ws, Path(args.config) if args.config else None)
+    runs = load_runs(out_dir, samples_dir, anchors["decisions"], training)
     if not runs:
         raise SystemExit("no calib-out/*/report.json found; run `mara review` on the samples first")
     modes = sorted({rep.get("provider_mode", "?") for _, rep, _ in runs})
@@ -760,9 +761,8 @@ def main() -> int:
     refuted = refutation_rates(runs, families)
     pair, alpha = judge_agreement(runs)
     rel, n_items, post = dawid_skene(runs)
-    model_eval = load_model_eval()
+    model_eval = load_model_eval(ws)
     weights = suggest_weights(stats, rel, families, model_eval, rates=rates, refuted_rates=refuted)
-    anchors = anchor_paths()
     aat = alternative_annotator_test(runs, load_decisions(anchors["decisions"]), post, training)
     tool_labels = load_tool_labels(out_dir)
     recall_rows = tool_recall(runs, tool_labels)
