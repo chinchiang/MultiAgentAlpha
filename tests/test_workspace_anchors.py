@@ -196,11 +196,11 @@ def test_check_outside_accepts_a_target_when_the_anchors_of_the_workspace_it_is_
 # ---------------------------------------------------------------- a script hands its workspace to the readers that take one
 
 # The functions of src/ that read the environment again when they are given no workspace, and how each takes one: the
-# `workspace=` keyword, or for the four of _NEEDS_SECOND_ARGUMENT the second argument named there.
+# `workspace=` keyword, or for those of _NEEDS_SECOND_ARGUMENT the second argument named there.
 _NEEDS_WORKSPACE_KEYWORD = frozenset({"tools_dir", "cache_dir", "tool_path", "installed_version", "installed_manifest_entry",
                                       "rules_dir", "installed_rule_paths", "driver_path", "run_csp_eval"})
 _NEEDS_SECOND_ARGUMENT = {"load_config": "workspace", "evaluate_policies": "workspace", "status_for_config": "root",
-                          "resolve": "base"}
+                          "resolve": "base", "from_config_file": "workspace"}
 
 
 def _mara_names(tree) -> set[str]:
@@ -255,6 +255,10 @@ def _anchor_violations(source: str) -> list[str]:
     ("from mara.tools import trivy_db as tdb\ntdb.cache_dir(workspace=ws)", 0),
     ("from mara import mlbom\nmlbom.status_for_config(cfg)", 1),
     ("from mara import mlbom\nmlbom.status_for_config(cfg, ws.root)", 0),
+    ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p)", 1),
+    ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p, ws)", 0),
+    ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p, workspace=ws)", 0),
+    ("class Thing:\n    def from_config_file(self, p):\n        pass\nThing().from_config_file(p)", 0),  # not a mara reader
     ("from mara.workspace import resolve\nresolve('config/mara.yaml')", 1),
     ("from mara.workspace import resolve\nresolve('config/mara.yaml', ws.root)", 0),
     ("from mara.workspace import resolve\nresolve('config/mara.yaml', base=ws.root)", 0),
