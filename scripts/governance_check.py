@@ -35,11 +35,6 @@ from mara.workspace import Workspace  # noqa: E402
 
 PASS, FAIL, MANUAL = "PASS", "FAIL", "MANUAL"
 STATUS_ZH = {PASS: "通過", FAIL: "失敗", MANUAL: "需人工"}
-
-
-def _workspace(workspace: Workspace | None) -> Workspace:
-    """The workspace a check judges the config against: the one `run_all` was given, else the environment's."""
-    return Workspace.from_env() if workspace is None else workspace
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 COVERED_MARKERS = ("fable", "mythos")
 ALLOWED_RESIDENCY = {"on_prem", "vendor_api_zdr"}
@@ -92,6 +87,11 @@ class CheckResult:
 
 
 # ----------------------------------------------------------------------------- helpers
+
+
+def _workspace(workspace: Workspace | None) -> Workspace:
+    """The workspace a check judges the config against: the one `run_all` was given, else the environment's."""
+    return Workspace.from_env() if workspace is None else workspace
 
 
 def _dated_files(directory: Path, patterns: list[str], today: dt.date) -> list[tuple[Path, dt.date, int]]:

@@ -193,10 +193,10 @@ def test_check_outside_accepts_a_target_when_the_anchors_of_the_workspace_it_is_
     workspace.check_outside(target, workspace=Workspace(safe, safe / "tools", safe / "cache"))
 
 
-# ---------------------------------------------------------------- a script reads the environment once, in its entry point
+# ---------------------------------------------------------------- a script hands its workspace to the readers that take one
 
-# What a script must hand a workspace to (C1, 3b): a function of src/ that, given none, reads the environment again. The
-# "how" per name: a `workspace=` keyword, or for these two the positional the function already takes.
+# The functions of src/ that read the environment again when they are given no workspace, and how each takes one: the
+# `workspace=` keyword, or for the four of _NEEDS_SECOND_ARGUMENT the second argument named there.
 _NEEDS_WORKSPACE_KEYWORD = frozenset({"tools_dir", "cache_dir", "tool_path", "installed_version", "installed_manifest_entry",
                                       "rules_dir", "installed_rule_paths", "driver_path", "run_csp_eval"})
 _NEEDS_SECOND_ARGUMENT = {"load_config": "workspace", "evaluate_policies": "workspace", "status_for_config": "root",
@@ -270,7 +270,8 @@ def test_the_scan_for_calls_that_leave_the_workspace_to_the_environment_sees_wha
 
 
 @pytest.mark.parametrize("script", sorted((ROOT / "scripts").glob("*.py")), ids=lambda p: p.name)
-def test_no_script_leaves_the_workspace_to_the_environment_outside_its_entry_point(script):
-    """A script takes the workspace once, with Workspace.from_env(), and hands it to every reader that has a keyword or
-    a parameter for it. A reader given none reads the environment again, and loses its default in 3c (C1)."""
+def test_no_script_calls_a_reader_without_the_workspace(script):
+    """Each call in a script of a reader named above gives it a workspace; a reader given none reads the environment
+    again. The scan reads calls only: it does not count how often a script builds a workspace, and it does not see a
+    reader it does not name."""
     assert _anchor_violations(script.read_text(encoding="utf-8")) == []
