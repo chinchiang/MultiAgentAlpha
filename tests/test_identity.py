@@ -10,6 +10,7 @@ from mara.agents import base
 from mara.context.repo_map import RepoContext
 from mara.identity import norm_path, same_place
 from mara.schemas import Provenance
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,7 +59,7 @@ def mock_report(tmp_path_factory):
     from mara.config import load_config
     from mara.pipeline import Pipeline
 
-    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
+    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                     out_dir=tmp_path_factory.mktemp("out"))
     return pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
 

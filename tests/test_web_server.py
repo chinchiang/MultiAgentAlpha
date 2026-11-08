@@ -830,7 +830,7 @@ def test_a_bug_of_the_validator_is_an_internal_error_of_the_whole_configs_page_n
     naming the exception's type and nothing of its text, and the server keeps serving."""
     from mara import policy
 
-    def broken(path, **kwargs):
+    def broken(path, workspace, **kwargs):
         raise RuntimeError(f"validator bug {SENTINEL}")
 
     monkeypatch.setattr(policy, "load_config", broken)

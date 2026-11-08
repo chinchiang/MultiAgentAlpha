@@ -15,9 +15,10 @@ from mara.schemas import ConsensusResult, Finding, JudgeVote, ModelFamily, Prove
 from mara.scoring import jury
 from mara.scoring.outcome import OutcomePolicy
 from mara.tools.sarif import ToolResult
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-MOCK = load_config(ROOT / "config" / "mara.mock.yaml")
+MOCK = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
 
 VECTORS = {"Medium": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",  # CVSS 6.9
            "High": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",  # CVSS 8.7

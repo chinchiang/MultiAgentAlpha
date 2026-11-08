@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -16,6 +17,9 @@ from mara.config import ModelSpec
 from mara.providers import make_provider
 from mara.providers.bedrock_provider import BedrockProvider
 from mara.providers.gemini_provider import GeminiProvider
+from mara.workspace import Workspace  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
 
 SCHEMA = {"type": "object", "properties": {"findings": {"type": "array"}}, "required": ["findings"]}
 GOOD = {"findings": [{"title": "x"}]}
@@ -239,10 +243,10 @@ def test_the_gateway_models_use_its_current_names_and_one_endpoint():
     from mara.config import load_config
 
     root = Path(__file__).resolve().parents[1]
-    prod = {m.name: m for m in load_config(root / "config" / "mara.yaml").models}
+    prod = {m.name: m for m in load_config(root / "config" / "mara.yaml", Workspace(ROOT)).models}
     assert (prod["glm-reviewer"].model, prod["glm-reviewer"].strict_schema) == ("glm", False)
     for sb in sorted((root / "config" / "examples").glob("standby-for-*.yaml")):
-        models = {m.name: m for m in load_config(sb).models}
+        models = {m.name: m for m in load_config(sb, Workspace(ROOT)).models}
         ds = models["deepseek-reviewer"]
         assert (ds.model, ds.base_url, ds.api_key_header, ds.strict_schema) == ("deepseek", prod["glm-reviewer"].base_url, None, True), sb.name
         if "glm-reviewer" in models:
@@ -281,19 +285,19 @@ def test_model_env_replaces_the_model_before_the_policies_judge_it(monkeypatch):
 
     root = Path(__file__).resolve().parents[1]
     monkeypatch.delenv("AWS_MODEL", raising=False)
-    test_cfg = load_config(root / "config" / "mara.test.yaml")
+    test_cfg = load_config(root / "config" / "mara.test.yaml", Workspace(ROOT))
     assert (test_cfg.models[0].model, test_cfg.models[0].model_env) == (HAIKU, "AWS_MODEL"), "the test default is Haiku 4.5"
     monkeypatch.setenv("AWS_MODEL", "global.anthropic.claude-opus-5-5")
-    overridden = load_config(root / "config" / "mara.test.yaml").models[0]
+    overridden = load_config(root / "config" / "mara.test.yaml", Workspace(ROOT)).models[0]
     # replaced before validation: the policies and the provider see the model that is actually called
     assert overridden.model == "global.anthropic.claude-opus-5-5" and make_provider(overridden).model == "global.anthropic.claude-opus-5-5"
     monkeypatch.setenv("AWS_MODEL", "  ")
-    assert load_config(root / "config" / "mara.test.yaml").models[0].model == HAIKU, "a blank variable is no override"
+    assert load_config(root / "config" / "mara.test.yaml", Workspace(ROOT)).models[0].model == HAIKU, "a blank variable is no override"
     monkeypatch.delenv("AWS_MODEL")
     with pytest.raises(ValueError, match="not an environment variable name"):
         _bedrock_spec(model_env="aws-model")
     # production never reads AWS_MODEL: only the test config names it
-    assert load_config(root / "config" / "mara.yaml").models[0].model == "global.anthropic.claude-opus-5-5"
+    assert load_config(root / "config" / "mara.yaml", Workspace(ROOT)).models[0].model == "global.anthropic.claude-opus-5-5"
     # apart from Claude's seat the test config is the production one
     prod = yaml.safe_load((root / "config" / "mara.yaml").read_text(encoding="utf-8"))
     test = yaml.safe_load((root / "config" / "mara.test.yaml").read_text(encoding="utf-8"))

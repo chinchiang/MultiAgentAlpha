@@ -20,6 +20,7 @@ from mara.pipeline import Pipeline  # noqa: E402
 from mara.policy import evaluate_policies  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
 from mara.report.psirt_out import build_notifications, select_psirt_findings, send_psirt, write_psirt  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 from tests.cli_output import plain  # noqa: E402
 
 PSIRT = {"enabled": True, "webhook_url": "https://psirt.example.internal/intake", "product": "IPC-7000 web console", "shipped": True}
@@ -137,14 +138,15 @@ def test_write_and_cli_file_output(shipped_report, tmp_path):
 
 
 def test_policy_p6_keeps_the_trigger_narrow():
-    assert all(r.passed for r in evaluate_policies(_mock_cfg()))
-    assert all(r.passed for r in evaluate_policies(load_config(ROOT / "config" / "examples" / "psirt-enabled.yaml")))
+    assert all(r.passed for r in evaluate_policies(_mock_cfg(), Workspace(ROOT)))
+    enabled = load_config(ROOT / "config" / "examples" / "psirt-enabled.yaml", Workspace(ROOT))
+    assert all(r.passed for r in evaluate_policies(enabled, Workspace(ROOT)))
     for bad in ({"webhook_url": "http://psirt.example.internal/intake"}, {"product": ""}, {"trigger_tiers": ["A", "C"]},
                 {"trigger_severities": ["Critical", "Medium"]}, {"token_env": ""}):
         with pytest.raises(ValueError, match="P6 psirt-scope"):
             _mock_cfg(**bad)
     disabled = _mock_cfg(enabled=False, webhook_url="http://insecure")
-    assert next(r for r in evaluate_policies(disabled) if r.id == "P6").passed
+    assert next(r for r in evaluate_policies(disabled, Workspace(ROOT)) if r.id == "P6").passed
 
 
 # ---------------------------------------------------------------- ledger, stage clock, handshake (scripts/psirt_ops.py)
@@ -364,7 +366,7 @@ def _review_with_a_failed_hand_off(monkeypatch, tmp_path, *flags: str):
     (home / "training").mkdir(parents=True)
     (home / "training" / "records.yaml").write_text(REGISTER, encoding="utf-8")
     monkeypatch.setenv("MARA_HOME", str(home))
-    first = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
+    first = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"),
                      out_dir=home / "first").run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif",
                                                  provider_mode="mock")
     decide(home, next(i for i in first.human_queue if i.finding_id == "F-0002"), "true_positive")

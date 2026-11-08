@@ -22,6 +22,7 @@ from mara.progress import Progress
 from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply
 from mara.providers.mock import MockProvider
 from mara.schemas import Finding, ModelFamily, PassId
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,7 +88,7 @@ class Panel:
     default), with the audit and log the ballot round writes to."""
 
     def __init__(self, cfg: MaraConfig | None = None, providers: Mapping[str, Provider] | None = None):
-        self.cfg = cfg or load_config(ROOT / "config" / "mara.mock.yaml")
+        self.cfg = cfg or load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
         inner = providers or {m.name: MockProvider(m) for m in self.cfg.models}
         self.providers: dict[str, Provider] = {n: _Seat(p, self) for n, p in inner.items()}
         self.audit = Audit()

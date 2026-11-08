@@ -11,6 +11,7 @@ import mara.context.repo_map as mod
 from mara.agents.base import verify_quote
 from mara.cli import app
 from mara.context.repo_map import build_context, restrict_to_increment, source_lines
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -132,7 +133,7 @@ def _mock_review(root, out, **kwargs):
     from mara.config import load_config
     from mara.pipeline import Pipeline
 
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=out)
     return pipe.run(root, sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock", **kwargs)
 

@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from mara.workspace import Workspace  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "src" / "mara" / "web" / "static"
 JS = (STATIC / "app.js").read_text(encoding="utf-8")
@@ -69,7 +71,7 @@ def _enumerations() -> dict[str, set[str]]:
         "provider.": set(get_args(ModelSpec.model_fields["provider"].annotation)),
         "residency.": set(get_args(ModelSpec.model_fields["data_residency"].annotation)),
         "rollout.": set(get_args(RolloutConfig.model_fields["phase"].annotation)),
-        "policy.": {r.id for r in evaluate_policies(load_config(ROOT / "config" / "mara.mock.yaml"))},
+        "policy.": {r.id for r in evaluate_policies(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), Workspace(ROOT))},
         "job.": set(get_args(JobKind)),
         "severity.": {"Critical", "High", "Medium", "Low", "None"},
         "tier.desc.": {"A", "B", "C", "D"},

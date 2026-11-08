@@ -12,7 +12,10 @@ import pytest
 
 from mara.config import load_config
 from mara.pipeline import Pipeline
-from mara.workspace import WorkspaceInsideTarget
+from mara.workspace import (
+    Workspace,  # noqa: E402
+    WorkspaceInsideTarget,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET, SARIF = ROOT / "fixtures" / "vuln-sample", ROOT / "fixtures" / "vuln-sample-sarif"
@@ -33,7 +36,7 @@ def _decided(workspace: Path, tmp_path: Path, monkeypatch) -> int:
     there, as the ticket sync writes it; the number of decisions."""
     with monkeypatch.context() as m:
         m.setenv("MARA_HOME", str(workspace))
-        first = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=FIXTURES,
+        first = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=FIXTURES,
                          out_dir=tmp_path / "first").run(TARGET, sarif_dir=SARIF, provider_mode="mock")
     d = workspace / "calib" / "decisions"
     d.mkdir(parents=True, exist_ok=True)
@@ -51,7 +54,7 @@ def test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_h
     elsewhere.mkdir()
     monkeypatch.setenv("MARA_HOME", str(elsewhere))
     monkeypatch.chdir(elsewhere)
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     decided = _decided(given, tmp_path, monkeypatch)
     # when it is built: the ticket backlog, over its limit only in the given workspace
     (given / cfg.human_queue.backlog_file).write_text(json.dumps({"open": cfg.human_queue.backlog_limit + 1}), encoding="utf-8")
@@ -73,7 +76,7 @@ def test_a_pipeline_keeps_the_workspace_mara_home_named_when_it_was_built(tmp_pa
     monkeypatch.chdir(later)
     decided = _decided(built, tmp_path, monkeypatch)
     monkeypatch.setenv("MARA_HOME", str(built))
-    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=FIXTURES, out_dir=tmp_path / "second")
+    pipe = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=FIXTURES, out_dir=tmp_path / "second")
     monkeypatch.setenv("MARA_HOME", str(later))  # a workspace with no decisions and no register
     report = pipe.run(TARGET, sarif_dir=SARIF, provider_mode="mock")
     assert report.bias_audit["human_decisions_applied"] == decided
@@ -83,7 +86,7 @@ def _with_a_self_hosted_model(cfg):
     """`cfg` with one self-hosted model beside its mock panel (in no role, so no exchange reaches it) and the ML-BOM
     signature required: the ML-BOM, its signature bundle and the model evaluations are then read for it. Its endpoint
     is a local address nothing listens on, and the pipeline's provider for it is replaced by a mock one."""
-    live = load_config(ROOT / "config" / "mara.yaml")
+    live = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     # no CA bundle: the live config's names a file on the operator's host, absent elsewhere (CI), and a loopback
     # http:// endpoint needs none
     spec = next(m for m in live.models if m.provider == "openai_compatible").model_copy(
@@ -99,7 +102,7 @@ def test_a_pipeline_reads_a_self_hosted_models_evidence_from_the_workspace_it_is
     elsewhere.mkdir()
     monkeypatch.setenv("MARA_HOME", str(elsewhere))
     monkeypatch.chdir(elsewhere)
-    cfg, spec = _with_a_self_hosted_model(load_config(ROOT / "config" / "mara.mock.yaml"))
+    cfg, spec = _with_a_self_hosted_model(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)))
     (given / "sbom").mkdir(parents=True)
     (given / cfg.ml_bom.path).write_text((ROOT / "sbom" / "ml-bom.cdx.json").read_text(encoding="utf-8"), encoding="utf-8")
     (given / cfg.ml_bom.bundle).write_text("{}", encoding="utf-8")  # present; cosign then decides, never "not found"
@@ -125,7 +128,7 @@ def test_a_pipeline_looks_its_calibration_samples_up_in_the_workspace_it_is_give
     shutil.copytree(TARGET, sample)
     (sample / "labels.json").write_text(json.dumps({"sample": "s1", "labels": [
         {"dimension": "secrets", "cwe": "CWE-798", "file": "app.py", "line": 3, "quote": "q", "title": "seeded"}]}), encoding="utf-8")
-    report = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml"), mock_fixtures=FIXTURES, out_dir=tmp_path / "out",
+    report = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=FIXTURES, out_dir=tmp_path / "out",
                       workspace=given).run(sample, sarif_dir=SARIF, provider_mode="mock", calibration_sample=True)
     assert report.target == str(sample.resolve())
 
@@ -161,6 +164,6 @@ def test_a_pipeline_runs_the_tools_installed_in_the_workspace_it_is_given_not_be
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "out", workspace=given).run(TARGET, provider_mode="mock")
     assert started == [binary]

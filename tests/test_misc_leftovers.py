@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 from mara.cli import app
 from mara.config import MaraConfig, load_config
 from mara.tools import trivy_db as tdb
+from mara.workspace import Workspace  # noqa: E402
 from tests.cli_output import plain
 from tests.test_trivy_db import _fake_trivy, _now_iso
 
@@ -107,7 +108,7 @@ def test_in_the_blocking_phase_a_blocked_gate_is_enforced_and_says_so(tmp_path):
 # ------------------------------------------------------------------ in-country example
 
 def test_prc_site_example_uses_the_gateway_aliases_and_passes_the_policies():
-    cfg = load_config(ROOT / "config" / "examples" / "prc-site.yaml")
+    cfg = load_config(ROOT / "config" / "examples" / "prc-site.yaml", Workspace(ROOT))
     ds, glm = cfg.model_by_name("deepseek-local"), cfg.model_by_name("glm-local")
     assert ds.model == "deepseek" and glm.model == "glm" and not glm.strict_schema
     assert all(m.data_residency == "on_prem" and m.base_url.startswith("https://10.") for m in (ds, glm))

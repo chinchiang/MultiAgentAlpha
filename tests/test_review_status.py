@@ -10,6 +10,7 @@ from mara.review_status import INCOMPLETE_REASONS, GatePolicy, ReviewFacts, asse
 from mara.schemas import ConsensusResult
 from mara.tools.runner import ToolRun
 from mara.tools.sarif import ToolResult
+from mara.workspace import Workspace  # noqa: E402
 from tests.review_facts import FACTS, GATE, OUTCOME, dim, row
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +42,7 @@ def test_a_seeded_secret_the_calibration_answer_key_declares_is_exempted_and_not
 
 
 def test_the_gate_policy_is_the_gate_config():
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     cfg = cfg.model_copy(update={"gate": cfg.gate.model_copy(update={
         "block_on_tiers": ["A"], "block_on_severity": ["Critical"], "min_dimension_score": 70.0})})
     assert GatePolicy.from_config(cfg) == GatePolicy(block_on_tiers=frozenset({"A"}), block_on_severity=frozenset({"Critical"}),
@@ -234,7 +235,7 @@ def test_the_report_records_why_its_gate_blocked_and_which_findings_blocked_it(m
 def test_fail_on_gate_given_to_the_review_is_recorded_as_an_enforced_gate(root, tmp_path):
     from mara.pipeline import Pipeline
 
-    pipe = Pipeline(load_config(root / "config" / "mara.mock.yaml"), mock_fixtures=str(root / "fixtures" / "mock-responses"),
+    pipe = Pipeline(load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=str(root / "fixtures" / "mock-responses"),
                     out_dir=tmp_path)
     report = pipe.run(root / "fixtures" / "vuln-sample", sarif_dir=root / "fixtures" / "vuln-sample-sarif", provider_mode="mock",
                       fail_on_gate=True)
@@ -285,7 +286,7 @@ def test_the_pipeline_writes_the_tier_c_blocks_assess_counts_into_the_audit(root
     from mara.config import load_config
     from mara.pipeline import Pipeline
 
-    cfg = load_config(root / "config" / "mara.mock.yaml")
+    cfg = load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT))
     cfg = cfg.model_copy(update={"human_queue": cfg.human_queue.model_copy(update={"queue_tier_c_min_severity": "Low"})})
     monkeypatch.setenv("MARA_HOME", str(tmp_path))
     backlog = tmp_path / cfg.human_queue.backlog_file

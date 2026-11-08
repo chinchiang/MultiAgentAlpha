@@ -14,6 +14,7 @@ from mara.agents import redteam
 from mara.config import load_config
 from mara.context.repo_map import RepoContext
 from mara.providers.base import STOP_END, Provider, RawReply
+from mara.workspace import Workspace  # noqa: E402
 
 
 def test_fenced_blocks_and_shell_one_liners_are_stripped():
@@ -72,7 +73,7 @@ class _Items(Provider):
     """A red team whose reply holds `items`, classified and screened by mara.exchange like any other reply."""
 
     def __init__(self, items: list[dict]):
-        super().__init__(load_config(ROOT / "config" / "mara.mock.yaml").models[0])
+        super().__init__(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
         self.items = items
 
     def complete(self, **kwargs):
@@ -134,7 +135,7 @@ def test_pipeline_counts_stripping_and_marks_the_run_incomplete(tmp_path):
         def complete(self, **kwargs):
             return RawReply(STOP_END, answer_text=jsonlib.dumps(review_data))
 
-    pipe = Pipeline(load_config(root / "config" / "mara.mock.yaml"), out_dir=tmp_path / "out",
+    pipe = Pipeline(load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT)), out_dir=tmp_path / "out",
                     run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     (tmp_path / "app.py").write_text("unsafe()\n")
     pipe.providers = {n: Reply(p.spec) for n, p in pipe.providers.items()}

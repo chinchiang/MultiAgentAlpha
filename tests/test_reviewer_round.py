@@ -17,6 +17,7 @@ from mara.context.repo_map import RepoContext
 from mara.progress import Progress
 from mara.providers.base import STOP_END, Provider, RawReply
 from mara.schemas import Finding, ModelFamily, Provenance
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 VECTOR = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
@@ -41,7 +42,7 @@ def _answering(spec, data: dict) -> Provider:
 def test_ids_follow_the_findings_place_not_the_order_the_reviewers_answered_in(tmp_path):
     """The first reviewer asked reports the last places in the file order, b.py before a.py; the ids still run a.py:1,
     a.py:9, b.py:9 (three places, none merged)."""
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     cfg = cfg.model_copy(update={"dimensions": ["vulnerabilities"]})
     first, second, third = cfg.roles.reviewers
     answers = {first: _reply(("b.py", 9, "eval(user_input)"), ("a.py", 9, "exec(user_input)")),
@@ -57,7 +58,7 @@ def test_ids_follow_the_findings_place_not_the_order_the_reviewers_answered_in(t
 
 
 def test_no_reviewer_is_asked_when_the_secret_preflight_blocked_source_egress(tmp_path):
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
 
     asked: list[str] = []
 

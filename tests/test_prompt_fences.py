@@ -18,6 +18,7 @@ from mara.config import load_config
 from mara.context.repo_map import build_context
 from mara.providers.base import STOP_END, Provider, RawReply
 from mara.schemas import Finding, ModelFamily, Provenance
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 S = "ZQX9SENTINEL"
@@ -54,7 +55,7 @@ def _finding(ctx) -> Finding:
 
 class _Capture(Provider):
     def __init__(self):
-        super().__init__(load_config(ROOT / "config" / "mara.mock.yaml").models[0])
+        super().__init__(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
         self.prompts: list[str] = []
 
     def complete(self, *, user, **kwargs):

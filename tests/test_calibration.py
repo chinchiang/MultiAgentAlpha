@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara.config import load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 from tests.aat_records import (  # noqa: E402
     aat_decision,
     aat_finding,
@@ -23,7 +24,7 @@ from tests.aat_records import (  # noqa: E402
 
 
 def test_label_driven_mock_and_calibrate(root, tmp_path):
-    cfg = load_config(root / "config" / "mara.mock.yaml")
+    cfg = load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT))
     sample = root / "calib" / "samples" / "s1-fastapi-inventory"
     out = tmp_path / "calib-out" / sample.name
     pipe = Pipeline(cfg, out_dir=out)

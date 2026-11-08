@@ -546,19 +546,17 @@ def bundle_digest_matches(bom_path: Path | str, bundle_path: Path | str) -> tupl
     return True, "bundle digest matches the BOM"
 
 
-def verify_signature(cfg: MaraConfig, root: Path | str | None = None, runner=None) -> tuple[bool, str]:
+def verify_signature(cfg: MaraConfig, root: Path | str, runner=None) -> tuple[bool, str]:
     """The BOM's keyless signature verified by the locked cosign (certificate identity and OIDC issuer from the config).
     (ok, reason); a missing cosign, bundle or identity is a failure, never a pass."""
     import subprocess
 
     from .tools.runner import tool_env
-    from .workspace import resolve
-    from .workspace import root as workspace_root
 
     mb = cfg.ml_bom
-    base = Path(root) if root else workspace_root()
+    base = Path(root)
     bom = Path(mb.path) if Path(mb.path).is_absolute() else base / mb.path
-    bundle = Path(mb.bundle) if Path(mb.bundle).is_absolute() else (base / mb.bundle if root else resolve(mb.bundle))
+    bundle = Path(mb.bundle) if Path(mb.bundle).is_absolute() else base / mb.bundle
     if not mb.bundle.strip() or not bundle.is_file():
         return False, f"signature bundle {mb.bundle or '(none)'} not found"
     try:
@@ -587,11 +585,9 @@ def self_hosted_models(cfg: MaraConfig) -> list:
     return [m for m in cfg.models if m.provider == "openai_compatible"]
 
 
-def status_for_config(cfg: MaraConfig, root: Path | str | None = None) -> dict[str, ModelStatus]:
+def status_for_config(cfg: MaraConfig, root: Path | str) -> dict[str, ModelStatus]:
     """One ModelStatus per self-hosted model in the config, read from cfg.ml_bom.path."""
-    from .workspace import root as workspace_root
-
-    base = Path(root) if root else workspace_root()
+    base = Path(root)
     bom_path = Path(cfg.ml_bom.path)
     if not bom_path.is_absolute():
         bom_path = base / bom_path

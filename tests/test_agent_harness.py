@@ -71,6 +71,7 @@ def test_summary_outside_the_fence_is_defused_and_bounded(tmp_path):
 
 import json  # noqa: E402
 import re  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
 
@@ -78,6 +79,9 @@ from mara.agents import context_agent, redteam, skeptic  # noqa: E402
 from mara.config import load_config  # noqa: E402
 from mara.providers.base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply  # noqa: E402
 from mara.schemas import Finding, ModelFamily, Provenance  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
 
 VECTOR = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
 
@@ -85,7 +89,7 @@ VECTOR = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"
 def _static(root, data, refused=False):
     class Static(Provider):
         def __init__(self):
-            super().__init__(load_config(root / "config" / "mara.mock.yaml").models[0])
+            super().__init__(load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
 
         def complete(self, **kwargs):
             if refused:
@@ -100,7 +104,7 @@ def _answering_the_canary(root, answer):
 
     class Answering(Provider):
         def __init__(self):
-            super().__init__(load_config(root / "config" / "mara.mock.yaml").models[0])
+            super().__init__(load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
 
         def complete(self, *, user, **kwargs):
             return RawReply(STOP_END, answer_text=answer(user.split("Reply with the token ")[1].split()[0]))
@@ -190,7 +194,7 @@ def test_context_agent_calls_once_per_batch_and_merges_the_facts(root, tmp_path,
 
     class PerBatch(Provider):
         def __init__(self, refuse_call=None):
-            super().__init__(load_config(root / "config" / "mara.mock.yaml").models[0])
+            super().__init__(load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
             self.refuse_call = refuse_call
 
         def complete(self, *, user, **kwargs):
@@ -255,7 +259,7 @@ def _canary_report(canary):
 
 class _Fixed(Provider):
     def __init__(self, root, data, raw=None, aside=""):
-        super().__init__(load_config(root / "config" / "mara.mock.yaml").models[0])
+        super().__init__(load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
         self.data, self.raw, self.aside = data, raw, aside
 
     def complete(self, **kwargs):
@@ -320,7 +324,7 @@ def test_reviewer_receives_trusted_facts_only_for_context_dimensions(root):
 
     class Capture(Provider):
         def __init__(self):
-            super().__init__(load_config(root / "config" / "mara.mock.yaml").models[0])
+            super().__init__(load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
 
         def complete(self, *, user, **kwargs):
             seen["user"] = user
@@ -364,7 +368,7 @@ def test_a_truncated_answer_is_a_truncation_not_a_canary_echo(root):
 
     class Cut(Provider):
         def __init__(self, truncated):
-            super().__init__(load_config(root / "config" / "mara.mock.yaml").models[0])
+            super().__init__(load_config(root / "config" / "mara.mock.yaml", Workspace(ROOT)).models[0])
             self.truncated = truncated
 
         def complete(self, **kwargs):

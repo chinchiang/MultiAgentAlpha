@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from mara.config import MaraConfig
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -80,7 +81,7 @@ def test_a_damaged_backlog_is_unknown_not_a_crash(home, content):
     path = home / cfg.human_queue.backlog_file
     path.parent.mkdir(parents=True)
     path.write_text(content, encoding="utf-8")
-    assert read_backlog(cfg) is None
+    assert read_backlog(cfg, ROOT) is None
     assert Pipeline(cfg).backlog is None
 
 
@@ -90,7 +91,7 @@ def test_damaged_calibration_evidence_fails_policy_p8_instead_of_crashing(home, 
 
     (home / "calib").mkdir()
     (home / "calib" / "latest.json").write_text(content, encoding="utf-8")
-    result = p8_unsupervised_reject(_mock_cfg(gate={"unsupervised_reject_allowed": True}))
+    result = p8_unsupervised_reject(_mock_cfg(gate={"unsupervised_reject_allowed": True}), Workspace(home))
     assert not result.passed and "missing or unreadable" in result.reason
 
 
@@ -102,10 +103,10 @@ def test_the_ml_bom_signature_bundle_is_found_in_the_workspace(home):
     raw["ml_bom"] = {**raw.get("ml_bom", {}), "require_signature": True, "bundle": "sbom/bom.sigstore.json",
                      "certificate_identity": "ci@example", "certificate_oidc_issuer": "https://token.actions.githubusercontent.com"}
     cfg = MaraConfig.model_validate(raw, context={"skip_policies": True})
-    assert "signature bundle sbom/bom.sigstore.json not found" in p7_ml_bom(cfg).reason
+    assert "signature bundle sbom/bom.sigstore.json not found" in p7_ml_bom(cfg, Workspace(home)).reason
     (home / "sbom").mkdir()
     (home / "sbom" / "bom.sigstore.json").write_text(json.dumps({}), encoding="utf-8")
-    assert "sbom/bom.sigstore.json not found" not in p7_ml_bom(cfg).reason
+    assert "sbom/bom.sigstore.json not found" not in p7_ml_bom(cfg, Workspace(home)).reason
 
 
 # ---------------------------------------------------------------- G-8 model-eval summaries

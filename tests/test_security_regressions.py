@@ -24,6 +24,7 @@ from mara.reviewed_content import ReviewedContent
 from mara.schemas import EvidenceTier, Finding, JudgeVote, ModelFamily, Provenance
 from mara.tools.runner import ToolRun, run_all
 from mara.tools.sarif import ToolResult
+from mara.workspace import Workspace  # noqa: E402
 from tests.fake_panel import REFUSAL, Panel
 from tests.scored_rows import MOCK, found_by, policy, score, tool_corroborated
 
@@ -43,7 +44,7 @@ class Reply(Provider):
 
 
 def pipeline(tmp_path, run_tools=run_all):
-    return Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=run_tools)
+    return Pipeline(load_config(ROOT / "config/mara.mock.yaml", Workspace(ROOT)), out_dir=tmp_path / "out", run_tools=run_tools)
 
 
 def finding():
@@ -219,7 +220,7 @@ def _voided_skeptic(data, n=3, *, refused=False, error=""):
 
     ctx = RepoContext(root=Path("."), content={"app.py": "unsafe()\n"})
     fs = [finding().model_copy(update={"id": f"F-{i}"}) for i in range(1, n + 1)]
-    verdicts, rec = skeptic.run_skeptic(One(load_config(ROOT / "config/mara.mock.yaml").models[0]), ctx, fs)
+    verdicts, rec = skeptic.run_skeptic(One(load_config(ROOT / "config/mara.mock.yaml", Workspace(ROOT)).models[0]), ctx, fs)
     assert verdicts == [] and rec.voided
     audit = Audit()
     audit.record(rec)
@@ -268,7 +269,7 @@ class _OverrideRole(Provider):
 
 @pytest.mark.parametrize("role,counter", [("skeptic", "skeptic_invalid_items"), ("redteam", "redteam_invalid_items")])
 def test_an_empty_ballot_never_passes_silently(tmp_path, role, counter):
-    cfg = load_config(ROOT / "config/mara.mock.yaml")
+    cfg = load_config(ROOT / "config/mara.mock.yaml", Workspace(ROOT))
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
     pipe.providers = {n: _OverrideRole(p, role, {"items": []}) for n, p in pipe.providers.items()}
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
@@ -303,7 +304,7 @@ class _EchoRole(_OverrideRole):
 def test_l3_agents_carry_a_canary_and_an_echo_voids_their_verdicts(tmp_path, role):
     """The skeptic and the red team read raw repository files and can clear or downgrade a finding, but
     only reviewers and the context agent carried a canary: an injection steering refutations was invisible."""
-    cfg = load_config(ROOT / "config/mara.mock.yaml")
+    cfg = load_config(ROOT / "config/mara.mock.yaml", Workspace(ROOT))
     pipe = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
     pipe.providers = {n: _EchoRole(p, role, {"items": []}) for n, p in pipe.providers.items()}
     report = pipe.run(ROOT / "fixtures" / "vuln-sample", sarif_dir=ROOT / "fixtures" / "vuln-sample-sarif", provider_mode="mock")
@@ -596,7 +597,7 @@ def test_the_command_line_hands_the_pipeline_the_workspace_it_admitted_the_invoc
     assert Path(seen["workspace"]) == ROOT
 
 
-def test_the_calibration_secret_exemption_is_narrow(tmp_path, monkeypatch):
+def test_the_calibration_secret_exemption_is_narrow(tmp_path):
     """Calibration samples seed hard-coded credentials on purpose (CWE-798 labels), and the live secret
     preflight blocked egress for three of the five. The exemption: only on the operator's flag, only for
     a target below <workspace>/calib/samples/ with an answer key, only for findings at a declared
@@ -609,8 +610,7 @@ def test_the_calibration_secret_exemption_is_narrow(tmp_path, monkeypatch):
         {"dimension": "secrets", "cwe": "CWE-798", "file": "app.py", "line": 3, "quote": "TOKEN = \"x\"", "title": "seeded"},
         {"dimension": "xss", "cwe": "CWE-79", "file": "app.py", "line": 9, "quote": "q", "title": "xss"}]}
     (sample / "labels.json").write_text(json.dumps(labels), encoding="utf-8")
-    monkeypatch.setenv("MARA_HOME", str(tmp_path))
-    key = pl.calibration_answer_key(sample)
+    key = pl.calibration_answer_key(sample, tmp_path)
     assert [(lab["file"], lab["line"]) for lab in key] == [("app.py", 3)]
     from mara.review_status import secret_preflight
     from mara.tools.runner import ToolRun
@@ -626,10 +626,10 @@ def test_the_calibration_secret_exemption_is_narrow(tmp_path, monkeypatch):
     elsewhere.mkdir()
     (elsewhere / "labels.json").write_text(json.dumps(labels), encoding="utf-8")
     with pytest.raises(ValueError, match="needs a target below"):
-        pl.calibration_answer_key(elsewhere)
+        pl.calibration_answer_key(elsewhere, tmp_path)
     (sample / "labels.json").write_text("[]", encoding="utf-8")
     with pytest.raises(ValueError, match="not a calibration answer key"):
-        pl.calibration_answer_key(sample)
+        pl.calibration_answer_key(sample, tmp_path)
 
 
 def test_live_egress_with_the_exemption_passes_only_declared_secrets(tmp_path, monkeypatch):
@@ -662,7 +662,7 @@ def test_live_egress_with_the_exemption_passes_only_declared_secrets(tmp_path, m
     assert mod.Pipeline.run.__kwdefaults__["calibration_sample"] is False, "off unless the operator asks"
 
 
-def test_p8_reads_its_evidence_from_the_workspace(tmp_path, monkeypatch):
+def test_p8_reads_its_evidence_from_the_workspace(tmp_path):
     import datetime as dt
 
     from mara.config import MaraConfig
@@ -675,11 +675,9 @@ def test_p8_reads_its_evidence_from_the_workspace(tmp_path, monkeypatch):
     (home / "calib").mkdir(parents=True)
     (home / "calib" / "latest.json").write_text(json.dumps({"date": dt.date.today().isoformat(), "mode": "live", "aat": {
         "method": AAT_METHOD, "passed": True, "n": 12, "rejection": {"n": 59, "passed": True, "miss_rate_upper": 0.0495}}}), encoding="utf-8")
-    monkeypatch.chdir(tmp_path)  # no calib/ here
-    p8 = lambda: [r for r in evaluate_policies(cfg) if r.id == "P8"][0]  # noqa: E731
-    assert not p8().passed
-    monkeypatch.setenv("MARA_HOME", str(home))
-    assert p8().passed
+    p8 = lambda ws: [r for r in evaluate_policies(cfg, ws) if r.id == "P8"][0]  # noqa: E731
+    assert not p8(Workspace(tmp_path)).passed  # no calib/ here
+    assert p8(Workspace(home)).passed
 
 
 def test_one_verified_quote_cannot_launder_an_invalid_primary_location():

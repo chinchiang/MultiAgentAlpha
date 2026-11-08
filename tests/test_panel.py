@@ -19,6 +19,7 @@ import pytest
 from mara.config import ModelSpec, RolesConfig, load_config
 from mara.schemas import ModelFamily, ReviewReport
 from mara.web import env, runs, views
+from mara.workspace import Workspace  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ("name", "family", "provider", "model", "data_residency", "region", "endpoint_host")
@@ -96,7 +97,7 @@ def test_the_providers_manifest_a_review_writes_reads_back_as_the_models_of_its_
     from mara.pipeline import Pipeline
     from mara.web import panel
 
-    cfg = load_config(ROOT / "config" / "mara.mock.yaml")
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     manifest = Pipeline(cfg, mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path)._provider_manifest()
     assert manifest
     for entry in manifest:
@@ -146,7 +147,8 @@ def test_a_report_without_a_run_record_lists_a_model_only_under_the_roles_the_au
 
 def _loaded_configs():
     """Every config the workbench lists that loads: path -> the config as the validator reads it."""
-    return {entry["path"]: load_config(ROOT / entry["path"], enforce_policies=False) for entry in env.configs(ROOT) if entry["structure_ok"]}
+    return {entry["path"]: load_config(ROOT / entry["path"], Workspace(ROOT), enforce_policies=False)
+            for entry in env.configs(ROOT) if entry["structure_ok"]}
 
 
 def test_characterization_the_environment_page_shows_each_model_with_its_host_and_never_its_url():
@@ -154,7 +156,7 @@ def test_characterization_the_environment_page_shows_each_model_with_its_host_an
     for entry in env.configs(ROOT):
         if not entry["structure_ok"]:
             continue
-        cfg = load_config(ROOT / entry["path"], enforce_policies=False)
+        cfg = load_config(ROOT / entry["path"], Workspace(ROOT), enforce_policies=False)
         assert [m["name"] for m in entry["models"]] == [m.name for m in cfg.models]
         for shown, spec in zip(entry["models"], cfg.models, strict=True):
             assert set(shown) == {*CORE, "weight", "credential"}, entry["path"]

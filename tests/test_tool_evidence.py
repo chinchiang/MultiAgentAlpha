@@ -11,6 +11,7 @@ from mara.schemas import Provenance
 from mara.tools.evidence import ToolEvidence, corroborates, is_alert, required_tools, scans
 from mara.tools.runner import TOOL_DIMENSIONS, ToolRun
 from mara.tools.sarif import ToolResult
+from mara.workspace import Workspace  # noqa: E402
 from tests.scored_rows import finding
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -116,7 +117,7 @@ def test_a_review_takes_its_tool_runs_from_the_runner_it_is_given(tmp_path, sari
         calls.append((target, out_dir, enabled))
         return [ToolRun("semgrep", True, [], "from the runner")]
 
-    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=runner)
+    pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml", Workspace(ROOT)), out_dir=tmp_path / "out", run_tools=runner)
     report = pipe.run(tmp_path, provider_mode="mock", sarif_dir=sarif_dir)
     if sarif_dir is None:
         assert calls == [(tmp_path.resolve(), tmp_path / "out" / "tools", None)]
@@ -130,7 +131,7 @@ def test_a_review_reads_its_required_tools_and_each_dimension_s_tool_from_the_ev
     (tmp_path / "app.py").write_text("print(1)\n")
 
     def review(runs):
-        pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml"), out_dir=tmp_path / "out", run_tools=lambda *_a, **_k: runs)
+        pipe = Pipeline(load_config(ROOT / "config/mara.mock.yaml", Workspace(ROOT)), out_dir=tmp_path / "out", run_tools=lambda *_a, **_k: runs)
         return pipe.run(tmp_path, provider_mode="mock")
 
     every = [ToolRun(t, True) for t in TOOL_DIMENSIONS]
