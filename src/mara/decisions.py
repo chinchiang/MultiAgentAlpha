@@ -187,9 +187,9 @@ class TrainingRequirement:
             return cls(required=True, problem=f"{why}; " * bool(why) + f"training register {cfg.register_file} unavailable ({e})")
 
     @classmethod
-    def from_config(cls, cfg: TrainingConfig, workspace: Path | None = None) -> TrainingRequirement:
-        """From an already loaded `training` block; the register resolves against `workspace`, the MARA workspace by
-        default."""
+    def from_config(cls, cfg: TrainingConfig, workspace: Path) -> TrainingRequirement:
+        """From an already loaded `training` block; the register resolves against `workspace`, the root of the MARA
+        workspace."""
         from .training import load_register
         from .workspace import resolve
 
