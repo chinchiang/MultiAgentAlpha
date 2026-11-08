@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 ZERO_SHA = re.compile(r"^0{7,40}$")
 
@@ -84,11 +85,13 @@ def main() -> int:
     ap.add_argument("--source", type=Path, default=Path("."))
     a = ap.parse_args()
 
-    exe = tool_path("gitleaks")
+    ws = Workspace.from_env()
+    exe = tool_path("gitleaks", workspace=ws)
     if exe is None:
-        print(f"ERROR: gitleaks is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)", file=sys.stderr)
+        print(f"ERROR: gitleaks is not installed under {tools_dir(workspace=ws) / 'bin'}; run scripts/install_tools.py (PATH is never used)",
+              file=sys.stderr)
         return 2
-    want, have = locked_version(), installed_version("gitleaks")
+    want, have = locked_version(), installed_version("gitleaks", workspace=ws)
     not_pinned = pins.mismatch("gitleaks", want, have)
     if not_pinned:
         print(f"ERROR: {not_pinned}", file=sys.stderr)

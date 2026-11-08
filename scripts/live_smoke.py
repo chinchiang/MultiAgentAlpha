@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from mara.config import load_config  # noqa: E402
 from mara.exchange import classify  # noqa: E402
 from mara.providers import make_provider  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 SCHEMA = {"type": "object", "additionalProperties": False, "required": ["answer", "note"],
           "properties": {"answer": {"type": "integer"}, "note": {"type": "string", "maxLength": 40}}}
@@ -49,7 +50,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--config", type=Path, default=ROOT / "config" / "mara.test.yaml")
     a = ap.parse_args()
-    cfg = load_config(a.config)
+    cfg = load_config(a.config, Workspace.from_env())
     failed = 0
     for spec in cfg.models:
         ok, outcome = smoke(spec)

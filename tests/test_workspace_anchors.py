@@ -48,9 +48,9 @@ def test_calibration_writes_where_policy_p8_reads(home):
     import calibrate
 
     from mara.policy import AAT_EVIDENCE
-    from mara.workspace import resolve
+    from mara.workspace import Workspace, resolve
 
-    paths = calibrate.anchor_paths()
+    paths = calibrate.anchor_paths(Workspace.from_env())
     assert paths["latest"] == home / "calib" / "latest.json" == resolve(AAT_EVIDENCE)
     assert paths["history"].parent == paths["decisions"].parent == home / "calib"
 
@@ -58,8 +58,10 @@ def test_calibration_writes_where_policy_p8_reads(home):
 def test_the_psirt_ledger_and_handshake_are_where_the_review_writes_them(home):
     import psirt_ops
 
+    from mara.workspace import Workspace
+
     cfg = _mock_cfg()
-    assert psirt_ops._ledger_path(cfg) == home / cfg.psirt.ledger_file
+    assert psirt_ops._ledger_path(cfg, Workspace.from_env()) == home / cfg.psirt.ledger_file
 
 
 def test_the_default_review_output_is_in_the_workspace(home):
@@ -121,8 +123,10 @@ def test_calibration_reads_the_model_eval_summary_the_pipeline_reads(home):
     bias audit (family_eval_status) reads the workspace: with MARA_HOME set the suggested weights ignored G-8."""
     import calibrate
 
+    from mara.workspace import Workspace
+
     _eval_summary(home)
-    assert (calibrate.load_model_eval() or {}).get("date") == "2026-09-12"
+    assert (calibrate.load_model_eval(Workspace.from_env()) or {}).get("date") == "2026-09-12"
 
 
 def test_model_eval_report_and_check_use_the_workspace(home, monkeypatch, capsys):
@@ -187,3 +191,87 @@ def test_check_outside_accepts_a_target_when_the_anchors_of_the_workspace_it_is_
     monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(target / "cache"))
     safe = tmp_path / "safe"
     workspace.check_outside(target, workspace=Workspace(safe, safe / "tools", safe / "cache"))
+
+
+# ---------------------------------------------------------------- a script hands its workspace to the readers that take one
+
+# The functions of src/ that read the environment again when they are given no workspace, and how each takes one: the
+# `workspace=` keyword, or for the four of _NEEDS_SECOND_ARGUMENT the second argument named there.
+_NEEDS_WORKSPACE_KEYWORD = frozenset({"tools_dir", "cache_dir", "tool_path", "installed_version", "installed_manifest_entry",
+                                      "rules_dir", "installed_rule_paths", "driver_path", "run_csp_eval"})
+_NEEDS_SECOND_ARGUMENT = {"load_config": "workspace", "evaluate_policies": "workspace", "status_for_config": "root",
+                          "resolve": "base"}
+
+
+def _mara_names(tree) -> set[str]:
+    """The names a script imports from the `mara` package (a script's own `load_config`, as trivy_db.py's, is not one)."""
+    import ast
+
+    return {a.asname or a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] == "mara"
+            for a in n.names}
+
+
+def _anchor_violations(source: str) -> list[str]:
+    """The calls in `source` that leave the workspace to the environment, and the imports of `mara.workspace.root`."""
+    import ast
+
+    tree = ast.parse(source)
+    mara = _mara_names(tree)
+    aliases = {a.asname or a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
+               and (n.module or "").split(".")[0] == "mara" for a in n.names} | {"tdb", "mlbom"}
+    found = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and n.module == "mara.workspace" and any(a.name == "root" for a in n.names):
+            found.append(f"{n.lineno}: imports mara.workspace.root, which goes when every caller passes its workspace")
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        if isinstance(f, ast.Name) and f.id in mara:
+            name = f.id
+        elif isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id in aliases:
+            name = f.attr
+        else:
+            continue
+        kws = {k.arg for k in n.keywords}
+        if name in _NEEDS_WORKSPACE_KEYWORD and "workspace" not in kws:
+            found.append(f"{n.lineno}: {name}() without workspace=")
+        elif name in _NEEDS_SECOND_ARGUMENT and len(n.args) < 2 and _NEEDS_SECOND_ARGUMENT[name] not in kws:
+            found.append(f"{n.lineno}: {name}() without its {_NEEDS_SECOND_ARGUMENT[name]}")
+    return sorted(found)
+
+
+@pytest.mark.parametrize("source, count", [
+    ("from mara.config import load_config\nload_config(p)", 1),
+    ("from mara.config import load_config\nload_config(p, ws)", 0),
+    ("from mara.config import load_config\nload_config(p, workspace=ws, enforce_policies=False)", 0),
+    ("from mara.policy import evaluate_policies\nevaluate_policies(cfg)", 1),
+    ("from mara.policy import evaluate_policies\nevaluate_policies(cfg, ws)", 0),
+    ("from mara.tools.runner import tools_dir\ntools_dir()", 1),
+    ("from mara.tools.runner import tools_dir\ntools_dir(root)", 1),
+    ("from mara.tools.runner import tools_dir\ntools_dir(workspace=ws)", 0),
+    ("from mara.tools.runner import tool_path, installed_version\ntool_path('a'); installed_version('a')", 2),
+    ("from mara.tools.runner import tool_path\ntool_path('a', workspace=ws)", 0),
+    ("from mara.tools import trivy_db as tdb\ntdb.cache_dir()", 1),
+    ("from mara.tools import trivy_db as tdb\ntdb.cache_dir(workspace=ws)", 0),
+    ("from mara import mlbom\nmlbom.status_for_config(cfg)", 1),
+    ("from mara import mlbom\nmlbom.status_for_config(cfg, ws.root)", 0),
+    ("from mara.workspace import resolve\nresolve('config/mara.yaml')", 1),
+    ("from mara.workspace import resolve\nresolve('config/mara.yaml', ws.root)", 0),
+    ("from mara.workspace import resolve\nresolve('config/mara.yaml', base=ws.root)", 0),
+    ("from mara.workspace import root\nroot()", 1),
+    ("from mara.workspace import root as workspace_root\nworkspace_root()", 1),
+    ("from mara.workspace import Workspace\nWorkspace.from_env()", 0),
+    ("def load_config(path):\n    pass\nload_config(p)", 0),  # a script's own function of the name
+    ("from trivy_db import load_config\nload_config()", 0),  # another script's, not mara's
+    ("resolver.resolve(repo, ref)", 0),  # not mara.workspace.resolve
+])
+def test_the_scan_for_calls_that_leave_the_workspace_to_the_environment_sees_what_it_should(source, count):
+    assert len(_anchor_violations(source)) == count, _anchor_violations(source)
+
+
+@pytest.mark.parametrize("script", sorted((ROOT / "scripts").glob("*.py")), ids=lambda p: p.name)
+def test_no_script_calls_a_reader_without_the_workspace(script):
+    """Each call in a script of a reader named above gives it a workspace; a reader given none reads the environment
+    again. The scan reads calls only: it does not count how often a script builds a workspace, and it does not see a
+    reader it does not name."""
+    assert _anchor_violations(script.read_text(encoding="utf-8")) == []

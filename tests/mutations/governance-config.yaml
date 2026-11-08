@@ -10,8 +10,9 @@ mutations:
     new: '    self_hosted = [(m.name, m.model) for m in cfg.models if m.provider != "mock"]'
   - name: G-7 refuses a config that violates P7 instead of reporting it
     file: scripts/governance_check.py
-    old: '    cfg = load_config(config_path, enforce_policies=False)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it'
-    new: '    cfg = load_config(config_path)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it'
+    old: |1-
+         cfg = load_config(config_path, _workspace(workspace), enforce_policies=False)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it
+    new: '    cfg = load_config(config_path, _workspace(workspace))  # G-7 reports the ML-BOM, P7 among it, rather than refusing it'
   - name: G-7 does not look for the signature bundle
     file: scripts/governance_check.py
     old: '        if ml.require_signature and not (ml.bundle.strip() and bundle.exists()):'
@@ -42,21 +43,21 @@ mutations:
     new: '    tr = TrainingConfig()'
   - name: G-8 and G-9 read the families from the raw YAML again
     file: scripts/governance_check.py
-    old: '    return sorted(production_families(load_config(config_path, enforce_policies=False)))'
+    old: '    return sorted(production_families(load_config(config_path, _workspace(workspace), enforce_policies=False)))'
     new: '    return sorted({m.get("family", "?") for m in _raw_config(config_path).get("models", []) if m.get("provider") != "mock"})'
   - name: G-8 and G-9 refuse a config that violates a policy instead of reporting the reports
     file: scripts/governance_check.py
-    old: '    return sorted(production_families(load_config(config_path, enforce_policies=False)))'
-    new: '    return sorted(production_families(load_config(config_path)))'
+    old: '    return sorted(production_families(load_config(config_path, _workspace(workspace), enforce_policies=False)))'
+    new: '    return sorted(production_families(load_config(config_path, _workspace(workspace))))'
   - name: the production families count the mock models
     file: src/mara/govdocs.py
     old: '        if m.provider != "mock" and f not in fams:'
     new: '        if f not in fams:'
   - name: G-8 asks the reports to cover no family
     file: scripts/governance_check.py
-    old: "    families = _production_families(config_path) if config_path else []\n    ev_g, pr_g"
+    old: "    families = _production_families(config_path, workspace) if config_path else []\n    ev_g, pr_g"
     new: "    families = []\n    ev_g, pr_g"
   - name: G-9 asks the calibration report to cover no family
     file: scripts/governance_check.py
-    old: "    families = _production_families(config_path) if config_path else []\n    files = _dated_files"
+    old: "    families = _production_families(config_path, workspace) if config_path else []\n    files = _dated_files"
     new: "    families = []\n    files = _dated_files"

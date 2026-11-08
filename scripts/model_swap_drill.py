@@ -24,12 +24,13 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara import govdocs  # noqa: E402
 from mara.config import MaraConfig, load_config  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 DRILLS = ROOT / "ops" / "model-swap-drills.yaml"
 
 
 def cmd_check(a: argparse.Namespace) -> int:
-    cfg = load_config(a.config)
+    cfg = load_config(a.config, a.workspace)
     ok = True
     for st in govdocs.drill_status(cfg, ROOT, a.today, a.drills):
         cfg_line = ("standby " + ", ".join(f"{x.config} → {x.standby_family}" for x in st.standbys) if st.config_ok
@@ -59,7 +60,7 @@ def _mockify(cfg_path: Path) -> Path:
 def cmd_rehearse(a: argparse.Namespace) -> int:
     from mara.pipeline import Pipeline
 
-    prod = load_config(a.config)
+    prod = load_config(a.config, a.workspace)
     prod_fams = govdocs.production_families(prod)
     replaced = str(a.replaced or govdocs._declared_standby_for(a.standby))
     if replaced not in prod_fams:
@@ -104,7 +105,7 @@ def cmd_record(a: argparse.Namespace) -> int:
         print("ERROR: completed must be after started", file=sys.stderr)
         return 2
     hours = round((completed - started).total_seconds() / 3600, 2)
-    prod = load_config(a.config)
+    prod = load_config(a.config, a.workspace)
     sb_fam, problem = govdocs._standby_family_of(govdocs.production_families(prod), a.standby_config, a.replaced)
     if problem:
         print(f"ERROR: {a.standby_config}: {problem}", file=sys.stderr)
@@ -137,6 +138,7 @@ def main() -> int:
     s.add_argument("--performed-by", required=True)
     s.add_argument("--evidence", required=True)
     a = ap.parse_args()
+    a.workspace = Workspace.from_env()
     try:
         return {"check": cmd_check, "rehearse": cmd_rehearse, "record": cmd_record}[a.cmd](a)
     except (OSError, ValueError) as e:

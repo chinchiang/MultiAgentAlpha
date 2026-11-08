@@ -34,7 +34,8 @@ mutations:
     new: '    return resolve(d).resolve()'
   - name: G-5 reads the manifest from the default tool directory
     file: scripts/governance_check.py
-    old: '    manifest = tools_dir(root) / "manifest.json"  # MARA_TOOLS_DIR moves it, as it moves the runner''s tools'
+    old: |1-
+         manifest = tools_dir(workspace=Workspace.from_env(root=root)) / "manifest.json"  # MARA_TOOLS_DIR moves it, as it moves the runner's tools
     new: '    manifest = root / ".mara-tools" / "manifest.json"'
   - name: G-5 passes a lock it cannot read
     file: scripts/governance_check.py

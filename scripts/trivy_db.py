@@ -44,6 +44,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from mara.tools import pins  # noqa: E402
 from mara.tools import trivy_db as tdb  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 CONFIG = ROOT / "tools" / "trivy-db.yaml"
 BUNDLE_MEMBERS = ("db/trivy.db", "db/metadata.json", tdb.RECORD_NAME)
@@ -66,11 +67,11 @@ class PinError(RuntimeError):
     """trivy is missing from the tools directory or its version is not the locked one."""
 
 
-def pinned_trivy() -> Path:
-    exe = tool_path("trivy")
+def pinned_trivy(workspace: Workspace) -> Path:
+    exe = tool_path("trivy", workspace=workspace)
     if exe is None:
-        raise PinError(f"trivy is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)")
-    want, have = locked_version(), installed_version("trivy")
+        raise PinError(f"trivy is not installed under {tools_dir(workspace=workspace) / 'bin'}; run scripts/install_tools.py (PATH is never used)")
+    want, have = locked_version(), installed_version("trivy", workspace=workspace)
     not_pinned = pins.mismatch("trivy", want, have)
     if not_pinned:
         raise PinError(not_pinned)
@@ -112,7 +113,7 @@ def head_manifest(ref: str, timeout: int = 20) -> dict:
 
 def cmd_download(a: argparse.Namespace) -> int:
     cfg = load_config()
-    exe = pinned_trivy()
+    exe = pinned_trivy(a.workspace)
     cache = a.cache_dir.resolve()
     cache.mkdir(parents=True, exist_ok=True)
     repos = [a.repository] if a.repository else cfg["repositories"]
@@ -152,7 +153,8 @@ def cmd_download(a: argparse.Namespace) -> int:
         if r.returncode == 0 and tdb.db_path(cache).is_file():
             meta = tdb.read_metadata(cache) or {}
             ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True).stdout
-            trivy_version = next((line.split()[-1] for line in ver.splitlines() if line.startswith("Version:")), installed_version("trivy"))
+            trivy_version = next((line.split()[-1] for line in ver.splitlines() if line.startswith("Version:")),
+                                 installed_version("trivy", workspace=a.workspace))
             rec = {"repository": ref, "downloaded_ref": fetch_ref, "provenance": "digest" if digest.startswith("sha256:") else "unverified",
                    **({"pinned_digest": pin} if pin else {}),
                    "manifest_digest": info["manifest_digest"], "layer_digest": info["layer_digest"], "created": info["created"],
@@ -251,8 +253,9 @@ def cmd_import(a: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    ws = Workspace.from_env()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--cache-dir", type=Path, default=tdb.cache_dir(), help="default MARA_TRIVY_CACHE_DIR or MARA_TOOLS_DIR/trivy-cache")
+    ap.add_argument("--cache-dir", type=Path, default=tdb.cache_dir(workspace=ws), help="default MARA_TRIVY_CACHE_DIR or MARA_TOOLS_DIR/trivy-cache")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("download")
     s.add_argument("--repository", help="OCI reference to use instead of tools/trivy-db.yaml")
@@ -271,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--trust-bundle", action="store_true",
                    help="import without --bundle-sha256, relying only on the bundle's own record (never in CI)")
     a = ap.parse_args(argv)
+    a.workspace = ws
     try:
         return {"download": cmd_download, "status": cmd_status, "export": cmd_export, "import": cmd_import}[a.cmd](a)
     except PinError as e:

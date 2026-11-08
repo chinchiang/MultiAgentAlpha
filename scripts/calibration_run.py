@@ -26,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from mara.config import load_config  # noqa: E402
-from mara.workspace import resolve  # noqa: E402
+from mara.workspace import Workspace, resolve  # noqa: E402
 
 
 def main() -> int:
@@ -38,9 +38,10 @@ def main() -> int:
     ap.add_argument("--date", type=dt.date.fromisoformat, default=dt.date.today())
     ap.add_argument("--report", type=Path, default=None, help="default: docs/calibration-<date>.md")
     a = ap.parse_args()
-    a.samples_dir = a.samples_dir or resolve("calib/samples")
+    ws = Workspace.from_env()
+    a.samples_dir = a.samples_dir or resolve("calib/samples", ws.root)
     config = a.config or (ROOT / "config" / ("mara.mock.yaml" if a.mode == "mock" else "mara.yaml"))
-    cfg = load_config(config)
+    cfg = load_config(config, ws)
     mock_models = [m.name for m in cfg.models if m.provider == "mock"]
     if a.mode == "live" and mock_models:
         print(f"ERROR: --mode live but {config} has mock providers: {mock_models}", file=sys.stderr)
@@ -69,7 +70,7 @@ def main() -> int:
         (out / "report.json").unlink(missing_ok=True)
         # --calibration-sample: the seeded secrets the sample's answer key declares must not block live egress.
         # Only for the labelled samples under calib/samples/; anything else (calib/corpora/...) keeps the strict preflight.
-        seeded = resolve("calib/samples").resolve() in s.resolve().parents
+        seeded = resolve("calib/samples", ws.root).resolve() in s.resolve().parents
         cmd = [*base, "review", str(s), "--config", str(config), "--provider", a.mode, "--out", str(out)] + (["--calibration-sample"] if seeded else [])
         print(f"+ {' '.join(cmd)}")
         r = subprocess.run(cmd, **io)
@@ -100,11 +101,11 @@ def main() -> int:
         # the docstring's commit policy, enforced as a reminder: policy P8 later verifies
         # calib/latest.json from the repository, and an uncommitted run wastes its AAT evidence
         # with a confusing check-config failure long after the run itself.
-        evidence = [p for p in (resolve("calib/history.json"), resolve("calib/latest.json"), report) if p.is_file()]
+        evidence = [p for p in (resolve("calib/history.json", ws.root), resolve("calib/latest.json", ws.root), report) if p.is_file()]
         print("\nLIVE RUN COMMIT POLICY: commit together with the report:")
         for p in evidence:
             print(f"  git add {p.relative_to(ROOT) if p.resolve().is_relative_to(ROOT) else p}")
-        if not resolve("calib/latest.json").is_file():
+        if not resolve("calib/latest.json", ws.root).is_file():
             print("  WARNING: calib/latest.json was not written; policy P8 will refuse unsupervised_reject_allowed until a live run records it")
     return r.returncode
 

@@ -44,6 +44,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 TOKEN_ENV = "GITHUB_AUTH_TOKEN"
 PATH_LINE_RE = re.compile(r"(?<![\w/.-])((?:[\w.-]+/)*[\w.-]+\.[A-Za-z0-9]+):(\d+)\b")
@@ -176,11 +177,13 @@ def main() -> int:
     ap.add_argument("--source", type=Path, default=Path("."), help="checkout used to resolve detail paths for SARIF locations")
     a = ap.parse_args()
 
-    exe = tool_path("scorecard")
+    ws = Workspace.from_env()
+    exe = tool_path("scorecard", workspace=ws)
     if exe is None:
-        print(f"ERROR: scorecard is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py --only slsa-verifier scorecard (PATH is never used)", file=sys.stderr)
+        print(f"ERROR: scorecard is not installed under {tools_dir(workspace=ws) / 'bin'}; "
+              "run scripts/install_tools.py --only slsa-verifier scorecard (PATH is never used)", file=sys.stderr)
         return 2
-    want, have = locked_version(), installed_version("scorecard")
+    want, have = locked_version(), installed_version("scorecard", workspace=ws)
     not_pinned = pins.mismatch("scorecard", want, have)
     if not_pinned:
         print(f"ERROR: {not_pinned}", file=sys.stderr)

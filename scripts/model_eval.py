@@ -29,8 +29,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara import model_eval as me  # noqa: E402
 from mara.config import load_config  # noqa: E402
-from mara.workspace import resolve  # noqa: E402
-from mara.workspace import root as workspace_root  # noqa: E402
+from mara.workspace import Workspace, resolve  # noqa: E402
 
 
 def _thresholds(cfg) -> me.Thresholds:
@@ -69,7 +68,7 @@ def _tls_env(t: me.EvalTarget, out_dir: Path) -> dict[str, str]:
 
 
 def cmd_plan(a: argparse.Namespace) -> int:
-    cfg = load_config(a.config)
+    cfg = load_config(a.config, a.workspace)
     judge = f"${cfg.model_eval.judge_llm_env}"
     garak_cmds, cse_cmds, envs = _plan(cfg, a.out, a.datasets, judge)
     print(f"# garak {cfg.model_eval.garak_version}, probes {cfg.model_eval.garak_probes}; CyberSecEval {cfg.model_eval.cyberseceval_ref}")
@@ -89,7 +88,7 @@ def cmd_plan(a: argparse.Namespace) -> int:
 
 
 def cmd_run(a: argparse.Namespace) -> int:
-    cfg = load_config(a.config)
+    cfg = load_config(a.config, a.workspace)
     a.out.mkdir(parents=True, exist_ok=True)
     targets, rc = [], 0
     for t in me.targets_from_config(cfg):
@@ -173,7 +172,7 @@ def _collect(run_dir: Path, targets: list[me.EvalTarget], th: me.Thresholds) -> 
 
 
 def cmd_report(a: argparse.Namespace) -> int:
-    cfg = load_config(a.config)
+    cfg = load_config(a.config, a.workspace)
     th = _thresholds(cfg)
     targets = me.targets_from_config(cfg)
     results = _collect(a.run_dir, targets, th)
@@ -202,7 +201,7 @@ def cmd_report(a: argparse.Namespace) -> int:
 
 
 def cmd_check(a: argparse.Namespace) -> int:
-    summary = json.loads(a.summary.read_text(encoding="utf-8")) if a.summary else me.latest_summary(workspace_root())
+    summary = json.loads(a.summary.read_text(encoding="utf-8")) if a.summary else me.latest_summary(a.workspace.root)
     if not summary:
         print("no calib/model-eval-*.json summary found; G-8 has never been run")
         return 1
@@ -219,8 +218,9 @@ def cmd_check(a: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    ws = Workspace.from_env()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--config", type=Path, default=resolve("config/mara.yaml"))
+    ap.add_argument("--config", type=Path, default=resolve("config/mara.yaml", ws.root))
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("plan")
     s.add_argument("--out", type=Path, default=ROOT / "ops" / "model-eval" / dt.date.today().isoformat())
@@ -234,12 +234,13 @@ def main() -> int:
     s.add_argument("--date", type=dt.date.fromisoformat, default=dt.date.today())
     s.add_argument("--mode", choices=["live", "dry-run"], default="dry-run")
     s.add_argument("--docs-dir", type=Path, default=ROOT / "docs")
-    s.add_argument("--summary-root", type=Path, default=workspace_root(),
+    s.add_argument("--summary-root", type=Path, default=ws.root,
                    help="where calib/model-eval-<date>.json goes (default: the MARA workspace, where the pipeline reads it)")
     s.add_argument("--datasets", default="$DATASETS")
     s = sub.add_parser("check")
     s.add_argument("--summary", type=Path)
     a = ap.parse_args()
+    a.workspace = ws
     try:
         return {"plan": cmd_plan, "run": cmd_run, "report": cmd_report, "check": cmd_check}[a.cmd](a)
     except (OSError, ValueError, RuntimeError) as e:

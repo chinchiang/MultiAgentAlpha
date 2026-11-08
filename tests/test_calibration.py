@@ -109,7 +109,10 @@ def test_runs_without_their_own_labels_are_skipped_not_scored_against_nothing(tm
     (tmp_path / "out" / "unlabelled-corpus").mkdir(parents=True)
     (tmp_path / "out" / "unlabelled-corpus" / "report.json").write_text(json.dumps({"findings": []}), encoding="utf-8")
     (tmp_path / "samples").mkdir()
-    assert calibrate.load_runs(tmp_path / "out", tmp_path / "samples", decisions_dir=tmp_path / "none") == []
+    from mara.workspace import Workspace
+
+    training = calibrate.training_requirement(Workspace(tmp_path))
+    assert calibrate.load_runs(tmp_path / "out", tmp_path / "samples", tmp_path / "none", training) == []
     assert "unlabelled-corpus: SKIPPED" in capsys.readouterr().err
 
 
