@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 PERSONAS = ("regular", "auditor", "pedantic")
 
@@ -52,11 +53,13 @@ def main() -> int:
     ap.add_argument("--offline", action="store_true", help="skip zizmor's online audits (no GitHub API calls)")
     a = ap.parse_args()
 
-    exe = tool_path("zizmor")
+    ws = Workspace.from_env()
+    exe = tool_path("zizmor", workspace=ws)
     if exe is None:
-        print(f"ERROR: zizmor is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)", file=sys.stderr)
+        print(f"ERROR: zizmor is not installed under {tools_dir(workspace=ws) / 'bin'}; run scripts/install_tools.py (PATH is never used)",
+              file=sys.stderr)
         return 2
-    want, have = locked_version(), installed_version("zizmor")
+    want, have = locked_version(), installed_version("zizmor", workspace=ws)
     not_pinned = pins.mismatch("zizmor", want, have)
     if not_pinned:
         print(f"ERROR: {not_pinned}", file=sys.stderr)

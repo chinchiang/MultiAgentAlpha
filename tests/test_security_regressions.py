@@ -905,7 +905,7 @@ def test_semgrep_error_with_sarif_cannot_pass(tmp_path, monkeypatch):
     report = tmp_path / "semgrep.sarif"
     triage = tmp_path / "triage.yaml"
     triage.write_text("accepted: []")
-    monkeypatch.setattr(semgrep_ci, "check_pins", lambda: (Path("/fake/semgrep"), []))
+    monkeypatch.setattr(semgrep_ci, "check_pins", lambda workspace: (Path("/fake/semgrep"), []))
     monkeypatch.setattr(semgrep_ci, "locked", lambda: ("1", "abc", []))
     monkeypatch.setattr(sys, "argv", ["semgrep_ci", "--triage", str(triage), "--report", str(report), "--target", str(tmp_path)])
     def fake_run(argv, **kwargs):
@@ -921,9 +921,9 @@ def test_osv_partial_scan_with_only_suppressions_cannot_pass(tmp_path, monkeypat
     import osv_ci
     report, lock = tmp_path / "osv.sarif", tmp_path / "requirements.txt"
     lock.write_text("example==1")
-    monkeypatch.setattr(osv_ci, "tool_path", lambda _: Path("/fake/osv"))
+    monkeypatch.setattr(osv_ci, "tool_path", lambda _, workspace=None: Path("/fake/osv"))
     monkeypatch.setattr(osv_ci, "locked_version", lambda: "1")
-    monkeypatch.setattr(osv_ci, "installed_version", lambda _: "1")
+    monkeypatch.setattr(osv_ci, "installed_version", lambda _, workspace=None: "1")
     monkeypatch.setattr(sys, "argv", ["osv_ci", "--lockfile", str(lock), "--report", str(report)])
     def fake_run(argv, **kwargs):
         if "--version" in argv:

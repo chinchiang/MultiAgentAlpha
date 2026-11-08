@@ -32,6 +32,7 @@ import ignore_expiry  # noqa: E402
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
 from mara.tools.sarif import scan_complete  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 # osv-scanner exit codes (cmd/osv-scanner): 1 vulnerabilities found, 127 no package sources found, 128 general error,
 # 129 scanning finished with errors on some paths, 130 vulnerabilities found and errors on some paths
@@ -99,11 +100,13 @@ def main() -> int:
         print("ERROR: give exactly one of --target or --lockfile", file=sys.stderr)
         return 2
 
-    exe = tool_path("osv-scanner")
+    ws = Workspace.from_env()
+    exe = tool_path("osv-scanner", workspace=ws)
     if exe is None:
-        print(f"ERROR: osv-scanner is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)", file=sys.stderr)
+        print(f"ERROR: osv-scanner is not installed under {tools_dir(workspace=ws) / 'bin'}; run scripts/install_tools.py (PATH is never used)",
+              file=sys.stderr)
         return 2
-    want, have = locked_version(), installed_version("osv-scanner")
+    want, have = locked_version(), installed_version("osv-scanner", workspace=ws)
     not_pinned = pins.mismatch("osv-scanner", want, have)
     if not_pinned:
         print(f"ERROR: {not_pinned}", file=sys.stderr)

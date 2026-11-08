@@ -34,17 +34,18 @@ from mara.tools.csp_eval import node_exe, run_csp_eval  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
 from mara.tools.sarif import scan_complete  # noqa: E402
 from mara.tools.semgrep_rules import result_keys  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 
 def locked_version(lock: Path = ROOT / pins.LOCK) -> str:
     return pins.locked_version("csp-evaluator", lock)
 
 
-def check_pins() -> str | tuple[str, str]:
+def check_pins(workspace: Workspace) -> str | tuple[str, str]:
     """(version, node executable) or an error string when the package, lock version or node is off."""
-    want, have = locked_version(), installed_version("csp-evaluator")
-    if tool_path("csp-evaluator") is None:
-        return f"csp-evaluator is not installed under {tools_dir() / 'bin'}; run scripts/install_tools.py (PATH is never used)"
+    want, have = locked_version(), installed_version("csp-evaluator", workspace=workspace)
+    if tool_path("csp-evaluator", workspace=workspace) is None:
+        return f"csp-evaluator is not installed under {tools_dir(workspace=workspace) / 'bin'}; run scripts/install_tools.py (PATH is never used)"
     not_pinned = pins.mismatch("csp-evaluator", want, have)
     if not_pinned:
         return not_pinned
@@ -107,17 +108,19 @@ def main() -> int:
         print("ERROR: give exactly one of --triage or --expect", file=sys.stderr)
         return 2
 
-    pins = check_pins()
+    ws = Workspace.from_env()
+    pins = check_pins(ws)
     if isinstance(pins, str):
         print(f"ERROR: {pins}", file=sys.stderr)
         return 2
     have, node = pins
-    print(f"csp-evaluator {have} from {tools_dir() / 'csp-evaluator'} (lock {locked_version()}); node {node}")
+    print(f"csp-evaluator {have} from {tools_dir(workspace=ws) / 'csp-evaluator'} (lock {locked_version()}); node {node}")
 
     target, report = a.target.resolve(), a.report.resolve()
     report.unlink(missing_ok=True)
-    print(f"+ node {tools_dir() / 'csp-evaluator' / 'mara_driver.js'} scan of {target} (CSPs extracted from the source tree, graded by the pinned package)")
-    r = run_csp_eval(target, report, version=have, node=node)
+    print(f"+ node {tools_dir(workspace=ws) / 'csp-evaluator' / 'mara_driver.js'} scan of {target} "
+          "(CSPs extracted from the source tree, graded by the pinned package)")
+    r = run_csp_eval(target, report, version=have, node=node, workspace=ws)
     if r.returncode != 0:
         print(f"ERROR: csp-evaluator exited {r.returncode}: {r.stderr.strip()}", file=sys.stderr)
         return 1
