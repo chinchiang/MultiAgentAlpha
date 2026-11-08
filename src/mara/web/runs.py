@@ -77,10 +77,12 @@ def clean_title(text: str) -> str:
 
 def resolve_path(workspace: Path, value: str) -> Path:
     """`value` resolved, relative to `workspace` unless absolute; LaunchError bad_path when it is not a usable path."""
+    if "\x00" in value:  # Path.resolve refuses a NUL byte on POSIX but lets it pass on Windows: the same answer on both
+        raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path (a NUL byte)")
     try:
         p = Path(value.strip()).expanduser()
         return (p if p.is_absolute() else workspace / p).resolve()
-    except (ValueError, RuntimeError, OSError) as e:  # a NUL byte, a symlink loop, an unknown ~user
+    except (ValueError, RuntimeError, OSError) as e:  # a symlink loop, an unknown ~user
         raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path ({type(e).__name__})") from e
 
 

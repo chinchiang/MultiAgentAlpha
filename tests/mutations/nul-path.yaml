@@ -1,0 +1,14 @@
+focused: [tests/test_web_server.py]
+mutations:
+  - name: a NUL byte is left to the host's resolve
+    file: src/mara/web/runs.py
+    old: "    if \"\\x00\" in value:  # Path.resolve refuses a NUL byte on POSIX but lets it pass on Windows: the same answer on both\n        raise LaunchError(\"bad_path\", f\"{value[:200]!r}: not a usable path (a NUL byte)\")\n"
+    new: ""
+  - name: only a NUL byte at the start of the path is refused
+    file: src/mara/web/runs.py
+    old: "    if \"\\x00\" in value:  #"
+    new: "    if \"\\x00\" in value[:1]:  #"
+  - name: a NUL byte is refused with another code
+    file: src/mara/web/runs.py
+    old: "        raise LaunchError(\"bad_path\", f\"{value[:200]!r}: not a usable path (a NUL byte)\")"
+    new: "        raise LaunchError(\"target_not_dir\", f\"{value[:200]!r}: not a usable path (a NUL byte)\")"
