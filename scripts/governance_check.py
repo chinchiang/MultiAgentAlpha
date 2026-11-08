@@ -300,8 +300,9 @@ def check_g4(root: Path, config_path: Path | None = None, today: dt.date | None 
     from mara.govdocs import DRILL_MAX_HOURS, drill_status
 
     today = today or dt.date.today()
-    cfg = load_config(config_path or root / "config" / "mara.yaml", _workspace(workspace))
-    statuses = drill_status(cfg, root, today)
+    ws = _workspace(workspace)
+    cfg = load_config(config_path or root / "config" / "mara.yaml", ws)
+    statuses = drill_status(cfg, root, today, workspace=ws)
     if not statuses:
         return CheckResult("G-4", PASS, "設定中沒有非 mock 的模型家族")
     ev, problems = [], []

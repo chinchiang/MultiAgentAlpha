@@ -38,6 +38,7 @@ JURY_OUTCOME_LABELS: dict[str, str] = {"accepted": "accepted", "rejected": "reje
 
 if TYPE_CHECKING:
     from .config import MaraConfig
+    from .workspace import Workspace
 
 POLICY_STATEMENTS = {
     "S1": "自動審查是 ISO/IEC 27001 A.8.29 安全測試的一部分",
@@ -232,16 +233,16 @@ def _declared_standby_for(path: Path) -> str:
     return str((yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("standby_for", ""))
 
 
-def _standby_family_of(prod: list[str], cfg_path: Path, replaced: str) -> tuple[str, str]:
-    """(standby family, problem) after loading the standby config through the policies."""
+def _standby_family_of(prod: list[str], cfg_path: Path, replaced: str, workspace: Workspace) -> tuple[str, str]:
+    """(standby family, problem) after loading the standby config through the policies, P7 and P8 against the files of
+    `workspace`."""
     from .config import load_config
-    from .workspace import Workspace
 
     declared = _declared_standby_for(cfg_path)
     if declared != replaced:
         return "", f"declares standby_for: {declared!r}, not {replaced!r}"
     try:
-        sb = load_config(cfg_path, Workspace.from_env())  # the environment's: no caller passes a workspace down to here
+        sb = load_config(cfg_path, workspace)
     except Exception as e:  # policy or structure failure
         return "", f"does not load: {str(e).splitlines()[0][:160]}"
     fams = production_families(sb)
@@ -256,7 +257,8 @@ def _standby_family_of(prod: list[str], cfg_path: Path, replaced: str) -> tuple[
     return new[0], ""
 
 
-def drill_status(cfg: MaraConfig, root: Path | str, today: dt.date, drills_path: Path | str | None = None) -> list[FamilyDrillStatus]:
+def drill_status(cfg: MaraConfig, root: Path | str, today: dt.date, drills_path: Path | str | None = None, *,
+                 workspace: Workspace) -> list[FamilyDrillStatus]:
     root = Path(root)
     prod = production_families(cfg)
     standbys = standby_configs(root)
@@ -269,7 +271,7 @@ def drill_status(cfg: MaraConfig, root: Path | str, today: dt.date, drills_path:
             continue
         statuses = []
         for sb in paths:
-            sb_fam, why = _standby_family_of(prod, sb, fam)
+            sb_fam, why = _standby_family_of(prod, sb, fam, workspace)
             statuses.append(StandbyConfigStatus(str(sb.relative_to(root)), sb_fam, not why, why))
         # a broken second standby is a failure too: it would only be found out in the outage it exists for
         problem = "; ".join(f"{Path(x.config).name}: {x.problem}" for x in statuses if not x.ok)
