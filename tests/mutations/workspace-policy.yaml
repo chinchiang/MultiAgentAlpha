@@ -3,7 +3,7 @@ mutations:
   - name: P7 reads the ML-BOM and bundle of the environment's workspace
     file: src/mara/policy.py
     old: "    base = workspace.root\n"
-    new: "    base = resolve(Path(\".\"))\n"
+    new: "    base = Workspace.from_env().root\n"
   - name: P8 reads the Evidence record of the environment's workspace
     file: src/mara/policy.py
     old: "resolve(AAT_EVIDENCE, workspace.root)"

@@ -4,8 +4,7 @@ Every policy is evaluated on its own, so `mara check-config` and the workbench's
 violations at once (evaluate_policies, or check_config_file for a config file). A policy is a function of the parsed
 configuration and never reaches the network. P1 to P6 read nothing else (config_policies), and `MaraConfig` refuses to
 build a config one of them fails. P7 reads the ML-BOM and its signature bundle of the workspace it is given, P8 that
-workspace's calib/latest.json at the `today` it is given (workspace_policies; the environment's workspace and the clock
-when not given), and `load_config` refuses a config one of them fails. check_config_file reads the config file it is given.
+workspace's calib/latest.json at the `today` it is given (workspace_policies; the clock when not given), and `load_config` refuses a config one of them fails. check_config_file reads the config file it is given.
 """
 
 from __future__ import annotations
@@ -369,8 +368,7 @@ def config_policies(cfg: MaraConfig) -> list[PolicyResult]:
 
 
 def workspace_policies(cfg: MaraConfig, workspace: Workspace, today: dt.date | None = None) -> list[PolicyResult]:
-    """P7 and P8, which read the files of `workspace`, P8 at `today`;
-    load_config runs them once the config is built."""
+    """P7 and P8, which read the files of `workspace`, P8 at `today`; load_config runs them once the config is built."""
     return [p7_ml_bom(cfg, workspace), p8_unsupervised_reject(cfg, workspace, today)]
 
 
@@ -400,9 +398,8 @@ class ConfigCheck:
 
 def check_config_file(path: str | Path, workspace: Workspace) -> ConfigCheck:
     """The structure of the config file `path` and every policy result, whether or not a policy fails, P7 and P8 read
-    from `workspace`. A file that cannot be read, is not YAML or fails
-    validation (config.INVALID_FILE_ERRORS) is an invalid structure with nothing to evaluate; any other exception is a bug
-    and propagates."""
+    from `workspace`. A file that cannot be read, is not YAML or fails validation (config.INVALID_FILE_ERRORS) is an invalid
+    structure with nothing to evaluate; any other exception is a bug and propagates."""
     try:
         cfg = load_config(path, workspace, enforce_policies=False)
     except INVALID_FILE_ERRORS as e:

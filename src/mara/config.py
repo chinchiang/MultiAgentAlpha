@@ -333,8 +333,8 @@ def load_config(path: str | Path, workspace: Workspace, *, enforce_policies: boo
     """The config at `path`, validated and with its defaults. A file violating a policy is refused unless
     `enforce_policies` is false, for a caller that reports the policies itself (policy.check_config_file,
     scripts/governance_check.py): P1 to P6 when the config is built, then P7 and P8 against the files of `workspace`, P8 at
-    `today` (the clock when not given). An empty file is a config with no keys and is
-    refused for the fields it lacks. What can be wrong with the file is INVALID_FILE_ERRORS; any other exception is a bug."""
+    `today` (the clock when not given). An empty file is a config with no keys and is refused for the fields it lacks. What can be
+    wrong with the file is INVALID_FILE_ERRORS; any other exception is a bug."""
     with open(path, encoding="utf-8") as fh:
         cfg = MaraConfig.model_validate(yaml.safe_load(fh) or {}, context=None if enforce_policies else {"skip_policies": True})
     if enforce_policies:
