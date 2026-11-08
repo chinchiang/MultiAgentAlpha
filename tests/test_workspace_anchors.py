@@ -58,8 +58,10 @@ def test_calibration_writes_where_policy_p8_reads(home):
 def test_the_psirt_ledger_and_handshake_are_where_the_review_writes_them(home):
     import psirt_ops
 
+    from mara.workspace import Workspace
+
     cfg = _mock_cfg()
-    assert psirt_ops._ledger_path(cfg) == home / cfg.psirt.ledger_file
+    assert psirt_ops._ledger_path(cfg, Workspace.from_env()) == home / cfg.psirt.ledger_file
 
 
 def test_the_default_review_output_is_in_the_workspace(home):

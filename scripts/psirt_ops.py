@@ -29,11 +29,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from mara import psirt_ledger as pl  # noqa: E402
 from mara.config import load_config  # noqa: E402
-from mara.workspace import resolve  # noqa: E402
+from mara.workspace import Workspace, resolve  # noqa: E402
 
 
 def cmd_handshake(a: argparse.Namespace) -> int:
-    cfg = load_config(a.config)
+    cfg = load_config(a.config, a.workspace)
     ps = cfg.psirt
     if not ps.enabled:
         print("ERROR: psirt.enabled is false; enable the block (webhook_url, product, token_env) first", file=sys.stderr)
@@ -43,23 +43,23 @@ def cmd_handshake(a: argparse.Namespace) -> int:
         print(f"# dry run: would POST to {ps.webhook_url} with the token from ${ps.token_env}; nothing sent, nothing recorded", file=sys.stderr)
         return 0
     rec = pl.run_handshake(cfg)
-    path = resolve(ps.handshake_file)
+    path = resolve(ps.handshake_file, a.workspace.root)
     pl.write_handshake(rec, path)
     print(f"handshake to {rec['webhook_url']}: HTTP {rec['status_code']} {'ok' if rec['ok'] else 'FAILED'}; recorded in {path}")
     return 0 if rec["ok"] else 1
 
 
-def _ledger_path(cfg) -> Path:
-    return resolve(cfg.psirt.ledger_file)  # the workspace, where `mara review --notify-psirt` writes it
+def _ledger_path(cfg, workspace: Workspace) -> Path:
+    return resolve(cfg.psirt.ledger_file, workspace.root)  # the workspace, where `mara review --notify-psirt` writes it
 
 
 def cmd_status(a: argparse.Namespace) -> int:
-    cfg = load_config(a.config)
+    cfg = load_config(a.config, a.workspace)
     now = pl.parse_iso(a.now) if a.now else pl.now_utc()
-    ledger = pl.load_ledger(_ledger_path(cfg))
+    ledger = pl.load_ledger(_ledger_path(cfg, a.workspace))
     rows = pl.status_rows(ledger, now)
     if not rows:
-        print(f"ledger {_ledger_path(cfg)}: no items (no internal hand-off has been attempted)")
+        print(f"ledger {_ledger_path(cfg, a.workspace)}: no items (no internal hand-off has been attempted)")
         return 0
     for r in rows:
         f = r["finding"]
@@ -76,28 +76,28 @@ def cmd_status(a: argparse.Namespace) -> int:
 
 
 def cmd_record(a: argparse.Namespace) -> int:
-    cfg = load_config(a.config)
-    ledger = pl.load_ledger(_ledger_path(cfg))
+    cfg = load_config(a.config, a.workspace)
+    ledger = pl.load_ledger(_ledger_path(cfg, a.workspace))
     item = pl.record_stage(ledger, a.key, a.stage, a.reference)
-    pl.save_ledger(ledger, _ledger_path(cfg))
+    pl.save_ledger(ledger, _ledger_path(cfg, a.workspace))
     print(f"{a.key}: {a.stage} recorded ({a.reference}) at {item['stages'][a.stage]['recorded_at']}")
     return 0
 
 
 def cmd_confirm_event(a: argparse.Namespace) -> int:
-    cfg = load_config(a.config)
-    ledger = pl.load_ledger(_ledger_path(cfg))
+    cfg = load_config(a.config, a.workspace)
+    ledger = pl.load_ledger(_ledger_path(cfg, a.workspace))
     item = pl.confirm_event(ledger, a.key, json.loads(a.event.read_text(encoding="utf-8")), a.reference)
-    pl.save_ledger(ledger, _ledger_path(cfg))
+    pl.save_ledger(ledger, _ledger_path(cfg, a.workspace))
     print(f"{a.key}: confirmed PSIRT event {a.reference}; deadlines {json.dumps(item['deadlines'])}")
     return 0
 
 
 def cmd_close(a: argparse.Namespace) -> int:
-    cfg = load_config(a.config)
-    ledger = pl.load_ledger(_ledger_path(cfg))
+    cfg = load_config(a.config, a.workspace)
+    ledger = pl.load_ledger(_ledger_path(cfg, a.workspace))
     item = pl.close_item(ledger, a.key, a.reason)
-    pl.save_ledger(ledger, _ledger_path(cfg))
+    pl.save_ledger(ledger, _ledger_path(cfg, a.workspace))
     print(f"{a.key}: closed at {item['closed']['at']}: {item['closed']['reason']}")
     return 0
 
@@ -122,6 +122,7 @@ def main() -> int:
     s.add_argument("--key", required=True)
     s.add_argument("--reason", required=True)
     a = ap.parse_args()
+    a.workspace = Workspace.from_env()
     try:
         return {"handshake": cmd_handshake, "status": cmd_status, "record": cmd_record,
                 "confirm-event": cmd_confirm_event, "close": cmd_close}[a.cmd](a)
