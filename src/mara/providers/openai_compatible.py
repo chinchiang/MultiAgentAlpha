@@ -60,9 +60,9 @@ def _trust(ca_bundle: str | None) -> ssl.SSLContext | bool:
     organisation's CA chain when the endpoint is signed by an internal CA (ModelSpec.ca_bundle)."""
     if not ca_bundle:
         return True
-    from ..workspace import resolve
+    from ..workspace import resolve, root
 
-    path = resolve(os.path.expanduser(ca_bundle))
+    path = resolve(os.path.expanduser(ca_bundle), root())
     ctx = ssl.create_default_context(cafile=os.environ.get("SSL_CERT_FILE") or certifi.where())
     ctx.load_verify_locations(cafile=str(path))
     return ctx

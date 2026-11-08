@@ -25,10 +25,10 @@ MAX_CLOCK_SKEW_HOURS = 1.0  # an UpdatedAt further in the future than this is no
 OFFLINE_FLAGS = ["--skip-db-update", "--skip-java-db-update", "--skip-check-update", "--offline-scan"]
 
 
-def cache_dir(*, workspace: Workspace | None = None) -> Path:
-    """The trivy cache of `workspace` when one is given, else that of the environment's workspace (Workspace.from_env):
-    MARA_TRIVY_CACHE_DIR, or trivy-cache in the tool directory, a relative path below the root."""
-    return (workspace if workspace is not None else Workspace.from_env()).trivy_cache.resolve()
+def cache_dir(*, workspace: Workspace) -> Path:
+    """The trivy cache of `workspace`: MARA_TRIVY_CACHE_DIR, or trivy-cache in the tool directory, as Workspace.from_env
+    read them."""
+    return workspace.trivy_cache.resolve()
 
 
 def db_path(cache: Path) -> Path:
@@ -94,9 +94,9 @@ def max_age_hours() -> float:
     """The freshness bound from the workspace's tools/trivy-db.yaml (the one scripts/trivy_db.py status uses)."""
     import yaml
 
-    from ..workspace import resolve
+    from ..workspace import resolve, root
 
-    path = resolve(CONFIG_FILE)
+    path = resolve(CONFIG_FILE, root())
     try:
         value = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("max_age_hours", DEFAULT_MAX_AGE_HOURS)
         return float(value)

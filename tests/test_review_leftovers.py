@@ -21,6 +21,7 @@ from mara.config import MaraConfig
 from mara.context.repo_map import RepoContext
 from mara.schemas import Finding, ModelFamily, Provenance
 from mara.tools import runner
+from mara.workspace import Workspace
 from tests.fake_panel import REFUSAL, TRUNCATION, Panel, items
 from tests.scored_rows import found_by
 
@@ -145,7 +146,7 @@ def test_install_tools_default_directory_is_the_runners(tmp_path, monkeypatch, e
     for key, value in env.items():
         monkeypatch.setenv(key, str(tmp_path / value) if value in ("ws", "abs") else value)
     lock = install_tools.load_lock(ROOT / "tools" / "versions.lock")
-    assert install_tools.default_install_dir(lock).resolve() == runner.tools_dir()
+    assert install_tools.default_install_dir(lock).resolve() == runner.tools_dir(workspace=Workspace.from_env())
 
 
 # ------------------------------------------------------------------ mock fixtures stay generated

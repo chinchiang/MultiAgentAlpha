@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from mara.tools import runner
+from mara.workspace import Workspace  # noqa: E402
 from tests import tool_installs
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +51,7 @@ def test_every_tool_is_handed_neutral_config_instead_of_the_targets(tmp_path, mo
                        "osv-scanner.toml": "[[PackageOverrides]]\nname = \"requests\"\nignore = true\n"}.items():
         (target / name).write_text(text, encoding="utf-8")
     out = tmp_path / "out"
-    runner.run_all(target, out, enabled=["semgrep", "osv-scanner", "zizmor", "trivy"])
+    runner.run_all(target, out, enabled=["semgrep", "osv-scanner", "zizmor", "trivy"], workspace=Workspace.from_env())
 
     assert "--x-ignore-semgrepignore-files" in seen["semgrep"]
     osv_config = Path(_argv_after(seen["osv-scanner"], "--config"))
@@ -73,7 +74,7 @@ def test_semgrep_without_pinned_rules_does_not_fall_back_to_the_registry(tmp_pat
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     monkeypatch.setattr(runner, "_run", lambda *a, **k: pytest.fail("semgrep must not be invoked without its pinned rules"))
     (tmp_path / "target").mkdir()
-    [run] = runner.run_all(tmp_path / "target", tmp_path / "out", enabled=["semgrep"])
+    [run] = runner.run_all(tmp_path / "target", tmp_path / "out", enabled=["semgrep"], workspace=Workspace.from_env())
     assert not run.ran and "no registry fallback" in run.note
 
 
@@ -90,7 +91,7 @@ def test_real_semgrep_scans_what_the_targets_semgrepignore_hides(tmp_path, monke
     (target / "app.py").write_text(code, encoding="utf-8")
     (target / "hidden.py").write_text(code, encoding="utf-8")
     (target / ".semgrepignore").write_text("hidden.py\n", encoding="utf-8")
-    [run] = runner.run_all(target, tmp_path / "out", enabled=["semgrep"])
+    [run] = runner.run_all(target, tmp_path / "out", enabled=["semgrep"], workspace=Workspace.from_env())
     assert run.ran, run.note
     assert {r.file for r in run.results} == {"app.py", "hidden.py"}
 
@@ -115,18 +116,18 @@ def test_zizmor_with_nothing_to_audit_is_a_complete_run_only_when_the_target_rea
     target = tmp_path / "plain"
     target.mkdir()
     (target / "app.py").write_text("print(1)\n", encoding="utf-8")
-    [run] = runner.run_all(target, tmp_path / "out1", enabled=["zizmor"])
+    [run] = runner.run_all(target, tmp_path / "out1", enabled=["zizmor"], workspace=Workspace.from_env())
     assert run.ran and run.results == [] and "no GitHub Actions inputs" in run.note
     # the target's word is not taken: a workflow present with the same exit code is a failed scan
     (target / ".github" / "workflows").mkdir(parents=True)
     (target / ".github" / "workflows" / "ci.yml").write_text("on: push\n", encoding="utf-8")
-    [run] = runner.run_all(target, tmp_path / "out2", enabled=["zizmor"])
+    [run] = runner.run_all(target, tmp_path / "out2", enabled=["zizmor"], workspace=Workspace.from_env())
     assert not run.ran
     # exit 3 for any other reason is a failure as before
     _zizmor_with(monkeypatch, tmp_path, 3, "Error: something else\n")
     plain = tmp_path / "plain2"
     plain.mkdir()
-    [run] = runner.run_all(plain, tmp_path / "out3", enabled=["zizmor"])
+    [run] = runner.run_all(plain, tmp_path / "out3", enabled=["zizmor"], workspace=Workspace.from_env())
     assert not run.ran
 
 

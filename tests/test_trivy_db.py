@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from trivy_db import split_ref  # noqa: E402
 
 from mara.tools import trivy_db as tdb  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 
 
 def _fake_trivy(tools: Path, updated_at: str, version: str = "0.74.0") -> None:
@@ -180,10 +181,10 @@ def test_the_trivy_cache_is_that_of_the_workspace_given_not_of_the_environment(t
     monkeypatch.delenv("MARA_TRIVY_CACHE_DIR")
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "environment-tools"))
     assert tdb.cache_dir(workspace=ws) == ws.trivy_cache  # not <MARA_TOOLS_DIR>/trivy-cache
-    assert tdb.cache_dir() == tmp_path / "environment-tools" / "trivy-cache"  # without a workspace, as before
+    assert tdb.cache_dir(workspace=Workspace.from_env()) == tmp_path / "environment-tools" / "trivy-cache"  # the environment, named
 
 
-def test_without_a_workspace_the_trivy_cache_follows_the_rule_of_the_environments_workspace(tmp_path, monkeypatch):
+def test_the_trivy_cache_the_environment_names_follows_one_rule_wherever_the_process_runs(tmp_path, monkeypatch):
     """One rule for the cache the environment names (Workspace.from_env): a relative MARA_TRIVY_CACHE_DIR is below the
     root, MARA_HOME or the working directory, wherever the process runs; an absolute one is taken as it is."""
     home, cwd = tmp_path / "home", tmp_path / "cwd"
@@ -192,6 +193,6 @@ def test_without_a_workspace_the_trivy_cache_follows_the_rule_of_the_environment
     monkeypatch.chdir(cwd)
     monkeypatch.setenv("MARA_HOME", str(home))
     monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", "db-cache")
-    assert tdb.cache_dir() == home / "db-cache"
+    assert tdb.cache_dir(workspace=Workspace.from_env()) == home / "db-cache"
     monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(tmp_path / "absolute-cache"))
-    assert tdb.cache_dir() == tmp_path / "absolute-cache"
+    assert tdb.cache_dir(workspace=Workspace.from_env()) == tmp_path / "absolute-cache"

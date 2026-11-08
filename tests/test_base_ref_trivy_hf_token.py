@@ -16,6 +16,7 @@ from mara import mlbom
 from mara.context.repo_map import git_changed_files
 from mara.tools import runner
 from mara.tools import trivy_db as tdb
+from mara.workspace import Workspace  # noqa: E402
 from tests import tool_installs
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -117,7 +118,7 @@ def trivy_env(tmp_path, monkeypatch):
     target.mkdir()
 
     def run():
-        (trivy,) = runner.run_all(target, tmp_path / "out", enabled=["trivy"])
+        (trivy,) = runner.run_all(target, tmp_path / "out", enabled=["trivy"], workspace=Workspace.from_env())
         return trivy, calls
 
     return tmp_path / "cache", tmp_path / "ws", run

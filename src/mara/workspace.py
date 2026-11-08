@@ -52,25 +52,23 @@ def root() -> Path:
     return Path(os.environ.get("MARA_HOME") or ".").resolve()
 
 
-def resolve(path: str | Path, base: Path | None = None) -> Path:
-    """An absolute path as given; a relative one below `base`, the workspace root by default."""
+def resolve(path: str | Path, base: Path) -> Path:
+    """An absolute path as given; a relative one below `base`, the root of a workspace."""
     p = Path(path)
-    return p if p.is_absolute() else (base if base is not None else root()) / p
+    return p if p.is_absolute() else base / p
 
 
 def _inside(anchor: Path, target: Path) -> bool:
     return anchor == target or target in anchor.parents
 
 
-def check_outside(target: Path, extra: dict[str, Path] | None = None, *, workspace: Workspace | None = None) -> None:
-    """Raise WorkspaceInsideTarget when the root, the tool directory or the trivy cache of `workspace` (the
-    environment's, Workspace.from_env, when not given) lies inside `target` (or is it). `extra` names further anchors
-    to check (the CLI's config file and output directory)."""
+def check_outside(target: Path, extra: dict[str, Path] | None = None, *, workspace: Workspace) -> None:
+    """Raise WorkspaceInsideTarget when the root, the tool directory or the trivy cache of `workspace` lies inside
+    `target` (or is it). `extra` names further anchors to check (the CLI's config file and output directory)."""
     target = Path(target).resolve()
-    ws = workspace if workspace is not None else Workspace.from_env()
-    anchors = {"the MARA workspace (MARA_HOME or the working directory)": ws.root,
-               "the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": ws.tools_dir,
-               "the trivy database (MARA_TRIVY_CACHE_DIR)": ws.trivy_cache, **(extra or {})}
+    anchors = {"the MARA workspace (MARA_HOME or the working directory)": workspace.root,
+               "the tool directory (MARA_TOOLS_DIR or <workspace>/.mara-tools)": workspace.tools_dir,
+               "the trivy database (MARA_TRIVY_CACHE_DIR)": workspace.trivy_cache, **(extra or {})}
     inside = [f"{name} {path}" for name, path in anchors.items() if _inside(path.resolve(), target)]
     if inside:
         raise WorkspaceInsideTarget(

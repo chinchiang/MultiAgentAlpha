@@ -12,8 +12,10 @@ from pathlib import Path
 import pytest
 
 from mara.tools import csp_eval, runner, semgrep_rules
+from mara.workspace import Workspace
 from tests import tool_installs
 
+ROOT = Path(__file__).resolve().parents[1]
 EMPTY_SARIF = json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "x"}}, "results": []}]})
 SECRETS = {
     "ANTHROPIC_API_KEY": "sk-ant-secret", "GEMINI_API_KEY": "AIza-secret", "GLM_LOCAL_KEY": "glm-secret",
@@ -68,7 +70,6 @@ def every_tool(tmp_path, monkeypatch, parent_env):
     monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
     monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
     tool_installs.manifest(tmp_path / "tools", *runner.TOOL_DIMENSIONS)  # each at its locked version
-    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
     rules = tmp_path / "rules"
     rules.mkdir()
     monkeypatch.setattr(semgrep_rules, "installed_rule_paths", lambda workspace=None: [rules])
@@ -76,13 +77,13 @@ def every_tool(tmp_path, monkeypatch, parent_env):
     target = tmp_path / "target"
     (target / ".github" / "workflows").mkdir(parents=True)
     (target / ".github" / "workflows" / "ci.yml").write_text("on: push\n", encoding="utf-8")
-    return target, tmp_path / "out", calls
+    return target, tmp_path / "out", calls, Workspace(ROOT, tools_dir=tmp_path / "tools")
 
 
 def test_no_tool_subprocess_sees_the_reviews_secrets(every_tool, monkeypatch):
-    target, out, calls = every_tool
+    target, out, calls, ws = every_tool
     monkeypatch.delenv("MARA_ZIZMOR_ONLINE", raising=False)
-    runner.run_all(target, out, enabled=["semgrep", "gitleaks", "osv-scanner", "zizmor"])
+    runner.run_all(target, out, enabled=["semgrep", "gitleaks", "osv-scanner", "zizmor"], workspace=ws)
     assert {name for name, _ in calls} == {"semgrep", "gitleaks", "osv-scanner", "zizmor"}
     for name, env in calls:
         assert env is not None, f"{name} inherited the full parent environment"
@@ -90,9 +91,9 @@ def test_no_tool_subprocess_sees_the_reviews_secrets(every_tool, monkeypatch):
 
 
 def test_zizmor_gets_the_token_only_for_its_online_audits(every_tool, monkeypatch):
-    target, out, calls = every_tool
+    target, out, calls, ws = every_tool
     monkeypatch.setenv("MARA_ZIZMOR_ONLINE", "1")
-    runner.run_all(target, out, enabled=["zizmor", "osv-scanner"])
+    runner.run_all(target, out, enabled=["zizmor", "osv-scanner"], workspace=ws)
     envs = dict(calls)
     assert envs["zizmor"]["GH_TOKEN"] == "ghp_secret"
     _clean(envs["zizmor"], "GH_TOKEN", "GITHUB_TOKEN")
@@ -115,30 +116,30 @@ def test_csp_evaluator_driver_runs_with_the_allowlist(parent_env, tmp_path, monk
 # ------------------------------------------------------------------ MARA_SEMGREP_CONFIG is never "pinned"
 
 def test_pinned_rules_are_labelled_pinned(every_tool):
-    target, out, _ = every_tool
-    [run] = runner.run_all(target, out, enabled=["semgrep"])
+    target, out, _, ws = every_tool
+    [run] = runner.run_all(target, out, enabled=["semgrep"], workspace=ws)
     assert run.ran and run.note == f"pinned {tool_installs.locked('semgrep')}" and "UNPINNED" not in run.note
 
 
 @pytest.mark.parametrize("config, registry", [("/opt/rules/custom.yml", False), ("p/default", True), ("auto", True),
                                               ("/opt/a.yml,r/python.lang.security", True)])
 def test_override_rules_are_labelled_unpinned_with_a_warning(every_tool, monkeypatch, caplog, config, registry):
-    target, out, calls = every_tool
+    target, out, calls, ws = every_tool
     monkeypatch.setenv("MARA_SEMGREP_CONFIG", config)
     with caplog.at_level(logging.WARNING, logger="mara.tools"):
-        [run] = runner.run_all(target, out, enabled=["semgrep"])
+        [run] = runner.run_all(target, out, enabled=["semgrep"], workspace=ws)
     assert run.ran and "UNPINNED rules from MARA_SEMGREP_CONFIG" in run.note
     assert ("semgrep.dev" in run.note) == registry
     assert any("UNPINNED" in r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
     argv_configs = [c.strip() for c in config.split(",")]
-    assert semgrep_rules.default_configs() == argv_configs == semgrep_rules.override_configs()
+    assert semgrep_rules.default_configs(workspace=ws) == argv_configs == semgrep_rules.override_configs()
 
 
 def test_blank_override_falls_back_to_the_pinned_rules(every_tool, monkeypatch):
-    target, out, _ = every_tool
+    target, out, _, ws = every_tool
     monkeypatch.setenv("MARA_SEMGREP_CONFIG", " , ")
     assert semgrep_rules.override_configs() == []
-    [run] = runner.run_all(target, out, enabled=["semgrep"])
+    [run] = runner.run_all(target, out, enabled=["semgrep"], workspace=ws)
     assert run.note == f"pinned {tool_installs.locked('semgrep')}"
 
 
@@ -164,7 +165,6 @@ def test_the_tool_directory_and_a_tool_are_those_of_the_workspace_given_not_of_M
     assert runner.tool_path("gitleaks", workspace=ws) is None  # the environment's copy is not the workspace's
     in_workspace = _fake_tool(ws.tools_dir, "gitleaks")
     assert runner.tool_path("gitleaks", workspace=ws) == in_workspace != in_environment
-    assert runner.tool_path("gitleaks") == in_environment  # without a workspace, as before
 
 
 def _manifest(tools: Path, tool: str, version: str) -> None:
@@ -185,7 +185,6 @@ def test_the_manifest_entry_and_version_of_a_tool_are_those_of_the_workspace_giv
     _manifest(ws.tools_dir, "gitleaks", "2.0.0")
     assert runner.installed_manifest_entry("gitleaks", workspace=ws) == {"version": "2.0.0", "signature_verified": True}
     assert runner.installed_version("gitleaks", workspace=ws) == "2.0.0"
-    assert runner.installed_version("gitleaks") == "1.0.0"  # without a workspace, as before
 
 
 def test_the_csp_driver_is_that_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
@@ -204,7 +203,6 @@ def test_the_csp_driver_is_that_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp
     assert csp_eval.driver_path(workspace=ws) is None  # the environment's driver is not the workspace's
     in_workspace = put_driver(ws.tools_dir)
     assert csp_eval.driver_path(workspace=ws) == in_workspace != in_environment
-    assert csp_eval.driver_path() == in_environment  # without a workspace, as before
 
 
 def test_the_semgrep_rules_directory_is_below_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
@@ -214,7 +212,6 @@ def test_the_semgrep_rules_directory_is_below_the_tool_directory_of_the_workspac
     monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
     ws = Workspace(tmp_path / "ws")
     assert semgrep_rules.rules_dir(workspace=ws) == tmp_path / "ws" / ".mara-tools" / "semgrep-rules"
-    assert semgrep_rules.rules_dir() == environment / "semgrep-rules"  # without a workspace, as before
 
 
 def test_run_all_finds_a_tool_and_its_manifest_in_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
@@ -371,3 +368,38 @@ def test_run_alls_csp_evaluator_step_uses_the_driver_of_the_workspace_given_not_
     put_driver(ws.tools_dir)
     [run] = runner.run_all(target, tmp_path / "out2", enabled=["csp-evaluator"], workspace=ws)
     assert run.ran, run.note
+
+
+# ---------------------------------------------------------------- the tool runner is given a workspace
+
+@pytest.mark.parametrize("call", [
+    lambda: runner.tools_dir(),
+    lambda: runner.tool_path("gitleaks"),
+    lambda: runner.installed_manifest_entry("gitleaks"),
+    lambda: runner.installed_version("gitleaks"),
+    lambda: runner.run_all(Path("."), Path("out"), enabled=["gitleaks"]),
+], ids=["tools_dir", "tool_path", "installed_manifest_entry", "installed_version", "run_all"])
+def test_the_tool_runner_is_not_run_without_the_workspace_whose_tool_directory_it_reads(call):
+    """The tool directory is the workspace's, so a caller names the workspace: the runner no longer falls back to the
+    environment's (MARA_HOME, MARA_TOOLS_DIR)."""
+    with pytest.raises(TypeError):
+        call()
+
+
+@pytest.mark.parametrize("call", [
+    lambda: semgrep_rules.rules_dir(),
+    lambda: semgrep_rules.installed_rule_paths(),
+    lambda: semgrep_rules.default_configs(),
+    lambda: csp_eval.tools_dir(),
+    lambda: csp_eval.driver_path(),
+    lambda: csp_eval.run_csp_eval(Path("."), Path("out.sarif")),
+    lambda: __import__("mara.tools.trivy_db", fromlist=["cache_dir"]).cache_dir(),
+    lambda: __import__("mara.mlbom", fromlist=["tools_bin"]).tools_bin(),
+    lambda: __import__("mara.mlbom", fromlist=["cosign_sign_blob_cmd"]).cosign_sign_blob_cmd("bom.json", "bundle.json"),
+], ids=["rules_dir", "installed_rule_paths", "default_configs", "csp tools_dir", "driver_path", "run_csp_eval", "cache_dir",
+        "tools_bin", "cosign_sign_blob_cmd"])
+def test_the_tool_readers_beside_the_runner_are_not_run_without_a_workspace_either(call):
+    """The semgrep rules, the CSP driver, the trivy cache and the cosign binary lie below the workspace's tool directory
+    or trivy cache, so a caller names it."""
+    with pytest.raises(TypeError):
+        call()

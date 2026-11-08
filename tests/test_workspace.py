@@ -3,6 +3,8 @@ building one reads nothing from the environment."""
 
 from __future__ import annotations
 
+import pytest
+
 from mara.workspace import Workspace
 
 
@@ -96,3 +98,13 @@ def test_a_relative_MARA_TRIVY_CACHE_DIR_is_below_the_root_not_the_working_direc
     absolute = tmp_path / "absolute-cache"
     _environment(monkeypatch, MARA_HOME=home, MARA_TRIVY_CACHE_DIR=absolute)
     assert Workspace.from_env().trivy_cache == absolute
+
+
+def test_a_relative_path_is_resolved_below_a_base_that_is_named_and_a_target_is_checked_against_a_workspace_that_is_named(tmp_path):
+    """Neither `resolve` nor `check_outside` falls back to the environment's workspace: the caller says which one."""
+    from mara.workspace import check_outside, resolve
+
+    with pytest.raises(TypeError):
+        resolve("calib/latest.json")
+    with pytest.raises(TypeError):
+        check_outside(tmp_path / "target")

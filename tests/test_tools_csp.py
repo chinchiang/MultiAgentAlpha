@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara.tools import csp_eval, runner  # noqa: E402
 from mara.tools.sarif import scan_complete  # noqa: E402
+from mara.workspace import Workspace  # noqa: E402
 from tests import tool_installs  # noqa: E402
 
 DRIVER_SRC = ROOT / "src" / "mara" / "tools" / "csp_driver.js"
@@ -130,7 +131,7 @@ def test_run_csp_eval_end_to_end(tmp_path, csp_install):
     _write(tmp_path, "index.html", '<meta http-equiv="Content-Security-Policy" content="default-src \'self\'">')
     _write(tmp_path, "weird.html", '<meta http-equiv="Content-Security-Policy" content="script-src UNPARSEABLE">')
     out = tmp_path / "sarif" / "csp-evaluator.sarif"
-    cp = csp_eval.run_csp_eval(tmp_path, out, version="9.9.9")
+    cp = csp_eval.run_csp_eval(tmp_path, out, version="9.9.9", workspace=Workspace.from_env())
     assert cp.returncode == 0, cp.stderr
     doc = json.loads(out.read_text(encoding="utf-8"))
     run = doc["runs"][0]
@@ -149,7 +150,7 @@ def test_run_csp_eval_end_to_end(tmp_path, csp_install):
 def test_run_csp_eval_with_no_policies_still_reports_a_complete_scan(tmp_path, csp_install):
     _write(tmp_path, "plain.py", "print('no csp here')\n")
     out = tmp_path / "csp-evaluator.sarif"
-    cp = csp_eval.run_csp_eval(tmp_path, out)
+    cp = csp_eval.run_csp_eval(tmp_path, out, workspace=Workspace.from_env())
     assert cp.returncode == 0
     doc = json.loads(out.read_text(encoding="utf-8"))
     assert scan_complete(doc) and doc["runs"][0]["results"] == []
@@ -158,18 +159,18 @@ def test_run_csp_eval_with_no_policies_still_reports_a_complete_scan(tmp_path, c
 
 def test_run_csp_eval_refuses_missing_package_or_node(tmp_path, monkeypatch):
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "empty"))
-    assert csp_eval.run_csp_eval(tmp_path, tmp_path / "o.sarif").returncode == 66
+    assert csp_eval.run_csp_eval(tmp_path, tmp_path / "o.sarif", workspace=Workspace.from_env()).returncode == 66
     mt = tmp_path / "mt"
     (mt / "csp-evaluator").mkdir(parents=True)
     shutil.copyfile(DRIVER_SRC, mt / "csp-evaluator" / "mara_driver.js")
     monkeypatch.setenv("MARA_TOOLS_DIR", str(mt))
     monkeypatch.setattr(csp_eval, "node_exe", lambda: None)
-    assert csp_eval.run_csp_eval(tmp_path, tmp_path / "o.sarif").returncode == 127
+    assert csp_eval.run_csp_eval(tmp_path, tmp_path / "o.sarif", workspace=Workspace.from_env()).returncode == 127
 
 
 def test_runner_branch_runs_and_reports_the_tool(tmp_path, csp_install):
     _write(tmp_path, "index.html", '<meta http-equiv="Content-Security-Policy" content="default-src \'self\'">')
-    runs = {r.tool: r for r in runner.run_all(tmp_path, tmp_path / "out", enabled=["csp-evaluator"])}
+    runs = {r.tool: r for r in runner.run_all(tmp_path, tmp_path / "out", enabled=["csp-evaluator"], workspace=Workspace.from_env())}
     r = runs["csp-evaluator"]
     assert r.ran and r.note == f"pinned {tool_installs.locked('csp-evaluator')}"
     assert [x.rule_id for x in r.results] == ["SCRIPT_UNSAFE_INLINE", "FAKE_INFO"]
@@ -177,7 +178,7 @@ def test_runner_branch_runs_and_reports_the_tool(tmp_path, csp_install):
 
 def test_runner_branch_reports_a_missing_tool(tmp_path, monkeypatch):
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "empty"))
-    runs = runner.run_all(tmp_path, tmp_path / "out", enabled=["csp-evaluator"])
+    runs = runner.run_all(tmp_path, tmp_path / "out", enabled=["csp-evaluator"], workspace=Workspace.from_env())
     assert not runs[0].ran and "install_tools.py" in runs[0].note
 
 

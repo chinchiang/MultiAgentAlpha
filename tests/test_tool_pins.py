@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from mara.tools import pins, runner
+from mara.workspace import Workspace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -45,7 +46,7 @@ def test_an_installed_tool_is_the_pinned_one_only_at_the_locked_version():
 @pytest.fixture
 def workspace(tmp_path, monkeypatch):
     """A MARA workspace whose lock pins gitleaks 8.24.3 and a tool directory holding a gitleaks; subprocess.run is
-    captured and writes an empty SARIF. Returns (target, out, the tool directory's manifest, the commands run)."""
+    captured and writes an empty SARIF. Returns (target, out, the tool directory's manifest, the commands run, the workspace)."""
     home, tools = tmp_path / "home", tmp_path / "home" / ".mara-tools"
     (home / "tools").mkdir(parents=True)
     (home / "tools" / "versions.lock").write_text(LOCK_TEXT, encoding="utf-8")
@@ -65,7 +66,7 @@ def workspace(tmp_path, monkeypatch):
     monkeypatch.setattr(runner.subprocess, "run", fake_run)
     target = tmp_path / "target"
     target.mkdir()
-    return target, tmp_path / "out", tools / "manifest.json", calls
+    return target, tmp_path / "out", tools / "manifest.json", calls, Workspace(home)
 
 
 def _manifest(path: Path, version: str) -> None:
@@ -73,27 +74,27 @@ def _manifest(path: Path, version: str) -> None:
 
 
 def test_a_review_does_not_run_a_tool_installed_at_another_version_than_the_lock(workspace):
-    target, out, manifest, calls = workspace
+    target, out, manifest, calls, ws = workspace
     _manifest(manifest, "8.24.2")
-    (run,) = runner.run_all(target, out, enabled=["gitleaks"])
+    (run,) = runner.run_all(target, out, enabled=["gitleaks"], workspace=ws)
     assert not run.ran and calls == []
     assert "8.24.2" in run.note and "8.24.3" in run.note and "scripts/install_tools.py" in run.note
 
 
 def test_a_review_runs_a_tool_installed_at_its_locked_version_and_says_which(workspace):
-    target, out, manifest, calls = workspace
+    target, out, manifest, calls, ws = workspace
     _manifest(manifest, "8.24.3")
-    (run,) = runner.run_all(target, out, enabled=["gitleaks"])
+    (run,) = runner.run_all(target, out, enabled=["gitleaks"], workspace=ws)
     assert run.ran and calls == ["gitleaks"] and run.note == "pinned 8.24.3"
 
 
 def test_a_review_runs_no_tool_without_a_lock_or_a_record_of_the_install(workspace):
-    target, out, manifest, calls = workspace
-    (run,) = runner.run_all(target, out, enabled=["gitleaks"])
+    target, out, manifest, calls, ws = workspace
+    (run,) = runner.run_all(target, out, enabled=["gitleaks"], workspace=ws)
     assert not run.ran and calls == [], "no manifest: the installed version is unknown"
     _manifest(manifest, "8.24.3")
     (manifest.parents[1] / "tools" / "versions.lock").unlink()
-    (run,) = runner.run_all(target, out, enabled=["gitleaks"])
+    (run,) = runner.run_all(target, out, enabled=["gitleaks"], workspace=ws)
     assert not run.ran and calls == [], "no lock: nothing is pinned"
 
 
@@ -147,11 +148,11 @@ def test_g5_fails_on_a_lock_it_cannot_read_or_that_lists_no_tool(tmp_path, text)
 
 def test_a_relative_tool_directory_lies_below_the_workspace_it_is_asked_for(tmp_path, monkeypatch):
     monkeypatch.delenv("MARA_TOOLS_DIR", raising=False)
-    assert runner.tools_dir(tmp_path) == (tmp_path / ".mara-tools").resolve()
+    assert runner.tools_dir(workspace=Workspace.from_env(root=tmp_path)) == (tmp_path / ".mara-tools").resolve()
     monkeypatch.setenv("MARA_TOOLS_DIR", "elsewhere")
-    assert runner.tools_dir(tmp_path) == (tmp_path / "elsewhere").resolve()
+    assert runner.tools_dir(workspace=Workspace.from_env(root=tmp_path)) == (tmp_path / "elsewhere").resolve()
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "abs"))
-    assert runner.tools_dir(tmp_path / "ignored") == (tmp_path / "abs").resolve()
+    assert runner.tools_dir(workspace=Workspace.from_env(root=tmp_path / "ignored")) == (tmp_path / "abs").resolve()
 
 
 def test_the_workbench_shows_a_tool_installed_at_another_version_as_a_version_mismatch(tmp_path, monkeypatch):

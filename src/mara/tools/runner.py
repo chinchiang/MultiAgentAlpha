@@ -59,20 +59,13 @@ def tool_env(*extra: str, **set_vars: str) -> dict[str, str]:
     return env
 
 
-def tools_dir(root: Path | None = None, *, workspace: Workspace | None = None) -> Path:
-    """The tool directory of `workspace` when one is given, whatever MARA_TOOLS_DIR says. Otherwise MARA_TOOLS_DIR, or
-    .mara-tools; a relative one below `root`, the MARA workspace root by default."""
-    from ..workspace import resolve
-
-    if workspace is not None:
-        return workspace.tools_dir.resolve()
-    d = Path(os.environ.get("MARA_TOOLS_DIR") or ".mara-tools")
-    return (root / d if root is not None and not d.is_absolute() else resolve(d)).resolve()
+def tools_dir(*, workspace: Workspace) -> Path:
+    """The tool directory of `workspace`, whatever MARA_TOOLS_DIR says now (Workspace.from_env read it)."""
+    return workspace.tools_dir.resolve()
 
 
-def tool_path(tool: str, *, workspace: Workspace | None = None) -> Path | None:
-    """The pinned, verified binary for `tool` in the tool directory of `workspace` (the environment's when not given),
-    or None. Never consults PATH."""
+def tool_path(tool: str, *, workspace: Workspace) -> Path | None:
+    """The pinned, verified binary for `tool` in the tool directory of `workspace`, or None. Never consults PATH."""
     base = tools_dir(workspace=workspace) / "bin" / tool
     candidates = [base.with_suffix(".cmd"), base.with_suffix(".bat"), base.with_suffix(".exe"), base] if sys.platform == "win32" else [base]
     for p in candidates:
@@ -81,8 +74,8 @@ def tool_path(tool: str, *, workspace: Workspace | None = None) -> Path | None:
     return None
 
 
-def installed_manifest_entry(tool: str, *, workspace: Workspace | None = None) -> dict | None:
-    """The manifest entry of `tool` in the tool directory of `workspace` (the environment's when not given), or None."""
+def installed_manifest_entry(tool: str, *, workspace: Workspace) -> dict | None:
+    """The manifest entry of `tool` in the tool directory of `workspace`, or None."""
     manifest = tools_dir(workspace=workspace) / "manifest.json"
     if not manifest.is_file():
         return None
@@ -93,7 +86,7 @@ def installed_manifest_entry(tool: str, *, workspace: Workspace | None = None) -
     return entry if isinstance(entry, dict) else None
 
 
-def installed_version(tool: str, *, workspace: Workspace | None = None) -> str | None:
+def installed_version(tool: str, *, workspace: Workspace) -> str | None:
     entry = installed_manifest_entry(tool, workspace=workspace)
     return entry.get("version") if entry else None
 
@@ -177,17 +170,15 @@ def has_actions_inputs(target: Path) -> bool:
     return False
 
 
-def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, workspace: Workspace | None = None) -> list[ToolRun]:
-    """Run the deterministic tools over `target`, from the tool directory of `workspace` (the environment's when not given)."""
+def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, workspace: Workspace) -> list[ToolRun]:
+    """Run the deterministic tools over `target`, from the tool directory of `workspace`."""
     # tools run with cwd=target, so the report path must be absolute or it lands inside the target
     out_dir = out_dir.resolve()
     target = target.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     neutral = neutral_configs(out_dir)
-    from ..workspace import resolve
-
     # the workspace's lock, read once: a tool runs only at the version it pins, as the CI scripts require
-    locked = pins.locked_versions(workspace.root / pins.LOCK if workspace is not None else resolve(pins.LOCK))
+    locked = pins.locked_versions(workspace.root / pins.LOCK)
     runs: list[ToolRun] = []
     wanted = enabled or list(TOOL_DIMENSIONS)
     for tool in wanted:
