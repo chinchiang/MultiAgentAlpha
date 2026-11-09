@@ -1,4 +1,4 @@
-"""A review's MARA workspace (mara.workspace; Pipeline(cfg, workspace=...)): the ticket backlog, the check that no trust
+"""A review's MARA workspace (mara.workspace; Pipeline(cfg, root=...)): the ticket backlog, the check that no trust
 anchor lies inside the target, the decision files and the training register come from the workspace the pipeline was
 given, else from the one MARA_HOME named when it was built, and from that one alone for the whole review, whatever
 MARA_HOME says later."""
@@ -58,15 +58,15 @@ def test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_h
     decided = _decided(given, tmp_path, monkeypatch)
     # when it is built: the ticket backlog, over its limit only in the given workspace
     (given / cfg.human_queue.backlog_file).write_text(json.dumps({"open": cfg.human_queue.backlog_limit + 1}), encoding="utf-8")
-    assert Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "x", workspace=given).queue_tightened
+    assert Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "x", root=given).queue_tightened
     (given / cfg.human_queue.backlog_file).unlink()
     # when it scores: the decisions and the register that says alice is trained, both only in the given workspace
-    second = Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "second", workspace=given).run(TARGET, sarif_dir=SARIF,
+    second = Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "second", root=given).run(TARGET, sarif_dir=SARIF,
                                                                                                   provider_mode="mock")
     assert second.bias_audit["human_decisions_applied"] == decided
     # when it starts: the given workspace inside the target is refused, though MARA_HOME lies outside it
     with pytest.raises(WorkspaceInsideTarget):
-        Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "third", workspace=TARGET).run(TARGET, sarif_dir=SARIF,
+        Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "third", root=TARGET).run(TARGET, sarif_dir=SARIF,
                                                                                                  provider_mode="mock")
 
 
@@ -109,7 +109,7 @@ def test_a_pipeline_reads_a_self_hosted_models_evidence_from_the_workspace_it_is
     (given / "calib").mkdir()
     (given / "calib" / "model-eval-2026-10-01.json").write_text(json.dumps(
         {"date": "2026-10-01", "mode": "live", "families": {spec.family.value: {"verdict": {"overall": "pass"}}}}), encoding="utf-8")
-    pipe = Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "out", workspace=given)
+    pipe = Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "out", root=given)
     assert pipe.ml_bom_status["self-hosted"].status == "pending", "the given workspace's ML-BOM lists the model, pending"
     pipe.providers["self-hosted"] = make_provider(cfg.models[0], FIXTURES)
     report = pipe.run(TARGET, sarif_dir=SARIF, provider_mode="mock")
@@ -129,7 +129,7 @@ def test_a_pipeline_looks_its_calibration_samples_up_in_the_workspace_it_is_give
     (sample / "labels.json").write_text(json.dumps({"sample": "s1", "labels": [
         {"dimension": "secrets", "cwe": "CWE-798", "file": "app.py", "line": 3, "quote": "q", "title": "seeded"}]}), encoding="utf-8")
     report = Pipeline(load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT)), mock_fixtures=FIXTURES, out_dir=tmp_path / "out",
-                      workspace=given).run(sample, sarif_dir=SARIF, provider_mode="mock", calibration_sample=True)
+                      root=given).run(sample, sarif_dir=SARIF, provider_mode="mock", calibration_sample=True)
     assert report.target == str(sample.resolve())
 
 
@@ -165,5 +165,14 @@ def test_a_pipeline_runs_the_tools_installed_in_the_workspace_it_is_given_not_be
 
     monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
     cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
-    Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "out", workspace=given).run(TARGET, provider_mode="mock")
+    Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "out", root=given).run(TARGET, provider_mode="mock")
     assert started == [binary]
+
+
+def test_a_pipeline_is_given_the_root_of_its_workspace_and_keeps_it_as_its_root(tmp_path):
+    """`root` is the directory the pipeline reads MARA's own files from; the Workspace value is built from it."""
+    given = tmp_path / "given"
+    given.mkdir()
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
+    pipe = Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "out", root=given)
+    assert pipe.root == given.resolve()

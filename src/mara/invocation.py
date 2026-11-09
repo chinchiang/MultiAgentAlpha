@@ -104,17 +104,17 @@ def check_base(target: Path, base: str) -> None:
         raise InvocationError(str(e), param="--base", kind="bad_base_ref") from e
 
 
-def calibration_answer_key(target: Path, workspace: Path) -> list[dict]:
+def calibration_answer_key(target: Path, root: Path) -> list[dict]:
     """The seeded-secret labels (CWE-798) of a calibration sample, for the secret-preflight exemption.
 
     Only an operator flag (`mara review --calibration-sample`) asks for it, and only a directory below
     the MARA workspace's calib/samples/ with a MARA answer key qualifies: a reviewed repository cannot
     exempt its own secrets by shipping a labels.json, since its location is the operator's choice and
-    the exemption is off for every ordinary review. The workspace is `workspace`, the root of the MARA workspace.
+    the exemption is off for every ordinary review. `root` is the root of the MARA workspace.
     InvocationError bad_calibration_sample on --calibration-sample for any other target."""
     from .context.repo_map import is_calibration_answer_key
 
-    samples = (workspace / "calib" / "samples").resolve()
+    samples = (root / "calib" / "samples").resolve()
     target = Path(target).resolve()
     if samples not in target.parents:
         raise InvocationError(f"needs a target below {samples}, got {target}", param="--calibration-sample", kind="bad_calibration_sample")
@@ -125,10 +125,10 @@ def calibration_answer_key(target: Path, workspace: Path) -> list[dict]:
     return [lab for lab in json.loads(text)["labels"] if str(lab.get("cwe", "")).upper() == "CWE-798"]
 
 
-def check_calibration_sample(target: Path, workspace: Path) -> None:
-    """Nothing when `target` is a calibration sample of the workspace (calibration_answer_key); InvocationError
+def check_calibration_sample(target: Path, root: Path) -> None:
+    """Nothing when `target` is a calibration sample below `root` (calibration_answer_key); InvocationError
     bad_calibration_sample on --calibration-sample otherwise."""
-    calibration_answer_key(target, workspace)
+    calibration_answer_key(target, root)
 
 
 def load(config: Path, provider_mode: ProviderMode, workspace: Workspace) -> MaraConfig:
@@ -202,31 +202,31 @@ class ReviewInvocation:
 @dataclass(frozen=True)
 class AdmittedInvocation:
     """A review invocation that passed every check, in order (admit): its config file, that config, loaded, its
-    progress record, started (a no-op one without --progress-file), and the workspace it was admitted against."""
+    progress record, started (a no-op one without --progress-file), and the root of the workspace it was admitted against."""
 
     invocation: ReviewInvocation
     config_path: Path
     config: MaraConfig
     progress: Progress
-    workspace: Path
+    root: Path
 
 
-def admit(inv: ReviewInvocation, workspace: Path) -> AdmittedInvocation:
-    """`inv`, admitted against the MARA workspace `workspace`, in order: check_paths; then the progress record starts;
+def admit(inv: ReviewInvocation, root: Path) -> AdmittedInvocation:
+    """`inv`, admitted against the MARA workspace whose root is `root`, in order: check_paths; then the progress record starts;
     then load, check_calibration_sample and check_base. InvocationError otherwise. Anything raised once the record has
     started leaves it failed, its error a usage error's kind or else the exception's name."""
-    config_path = check_paths(inv, workspace)
+    config_path = check_paths(inv, root)
     record = Progress(inv.progress_file)  # only now: a progress file inside the target is refused by check_paths
     try:
-        config = load(config_path, inv.provider, Workspace(workspace))
+        config = load(config_path, inv.provider, Workspace(root))
         if inv.calibration_sample:
-            check_calibration_sample(inv.target, workspace)
+            check_calibration_sample(inv.target, root)
         if inv.base:  # an empty --base is no base
             check_base(inv.target, inv.base)
     except BaseException as e:  # whatever ends the review before it starts, the record must not read as running
         record.finish(ok=False, error=e.kind if isinstance(e, InvocationError) else type(e).__name__)
         raise
-    return AdmittedInvocation(invocation=inv, config_path=config_path, config=config, progress=record, workspace=workspace)
+    return AdmittedInvocation(invocation=inv, config_path=config_path, config=config, progress=record, root=root)
 
 
 # the options naming a file or directory other than the config and the output directory: evidence inputs, which the

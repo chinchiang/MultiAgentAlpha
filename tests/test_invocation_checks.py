@@ -161,7 +161,7 @@ def test_an_empty_base_is_no_base_as_the_pipeline_always_read_it(tmp_path, repo,
 
 
 def _pipeline(tmp_path: Path, workspace: Path) -> Pipeline:
-    return Pipeline(load_config(MOCK_CONFIG, Workspace(ROOT)), mock_fixtures=FIXTURES, out_dir=tmp_path / "out", workspace=workspace)
+    return Pipeline(load_config(MOCK_CONFIG, Workspace(ROOT)), mock_fixtures=FIXTURES, out_dir=tmp_path / "out", root=workspace)
 
 
 def test_the_pipeline_refuses_a_base_it_cannot_diff_against_before_it_makes_its_output_directory(tmp_path, repo):

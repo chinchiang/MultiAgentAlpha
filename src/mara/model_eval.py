@@ -154,9 +154,9 @@ def ca_bundle_pem(target: EvalTarget) -> str | None:
         return None
     import certifi
 
-    from .workspace import resolve, root
+    from .workspace import resolve_user_path
 
-    internal = Path(resolve(os.path.expanduser(target.ca_bundle), root())).read_text(encoding="utf-8")
+    internal = resolve_user_path(target.ca_bundle).read_text(encoding="utf-8")
     return Path(certifi.where()).read_text(encoding="utf-8").rstrip("\n") + "\n" + internal
 
 

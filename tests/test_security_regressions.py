@@ -594,7 +594,7 @@ def test_the_command_line_hands_the_pipeline_the_workspace_it_admitted_the_invoc
     res = CliRunner().invoke(cli.app, ["review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock",
                                        "--out", str(tmp_path / "out")])
     assert isinstance(res.exception, Stop), res.output
-    assert Path(seen["workspace"]) == ROOT
+    assert Path(seen["root"]) == ROOT
 
 
 def test_the_calibration_secret_exemption_is_narrow(tmp_path):

@@ -202,7 +202,7 @@ _NEEDS_WORKSPACE_KEYWORD = frozenset({"tools_dir", "cache_dir", "tool_path", "in
                                       "rules_dir", "installed_rule_paths", "driver_path", "run_csp_eval", "drill_status",
                                       "_standby_family_of"})
 _NEEDS_SECOND_ARGUMENT = {"load_config": "workspace", "evaluate_policies": "workspace", "status_for_config": "root",
-                          "resolve": "base", "from_config_file": "workspace"}
+                          "resolve": "base", "from_config_file": "root"}
 
 
 def _mara_names(tree) -> set[str]:
@@ -263,7 +263,7 @@ def _anchor_violations(source: str) -> list[str]:
     ("from mara import govdocs\ngovdocs._standby_family_of(prod, p, 'glm', workspace=ws)", 0),
     ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p)", 1),
     ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p, ws)", 0),
-    ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p, workspace=ws)", 0),
+    ("from mara.decisions import TrainingRequirement\nTrainingRequirement.from_config_file(p, root=ws)", 0),
     ("class Thing:\n    def from_config_file(self, p):\n        pass\nThing().from_config_file(p)", 0),  # not a mara reader
     ("from mara.workspace import resolve\nresolve('config/mara.yaml')", 1),
     ("from mara.workspace import resolve\nresolve('config/mara.yaml', ws.root)", 0),

@@ -124,7 +124,7 @@ def _review(admitted: AdmittedInvocation) -> tuple[ReviewReport, bool]:
     inv, cfg, progress = admitted.invocation, admitted.config, admitted.progress
     target, out, psirt_event, base = inv.target, inv.out, inv.psirt_event, inv.base
     pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress,
-                    workspace=admitted.workspace)
+                    root=admitted.root)
     event = None
     if psirt_event:
         # read before the review, and handed to it: the notifications are built once, and the report's psirt holds these
@@ -153,7 +153,7 @@ def _review(admitted: AdmittedInvocation) -> tuple[ReviewReport, bool]:
 
         write_psirt(report.psirt, out / "psirt-notifications.json")
         if inv.notify_psirt and report.psirt:
-            for s in send_psirt(report.psirt, cfg, ledger_path=resolve(cfg.psirt.ledger_file, admitted.workspace), resend=inv.psirt_resend):
+            for s in send_psirt(report.psirt, cfg, ledger_path=resolve(cfg.psirt.ledger_file, admitted.root), resend=inv.psirt_resend):
                 if s.get("skipped"):
                     console.print(f"PSIRT {s['finding_id']} [{s['dedupe_key']}]: skipped, {s['reason']} (ledger {cfg.psirt.ledger_file})")
                 else:

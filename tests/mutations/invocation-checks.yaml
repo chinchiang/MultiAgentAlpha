@@ -30,5 +30,5 @@ mutations:
     new: ""
   - name: admit does not check the calibration sample
     file: src/mara/invocation.py
-    old: "        if inv.calibration_sample:\n            check_calibration_sample(inv.target, workspace)\n"
+    old: "        if inv.calibration_sample:\n            check_calibration_sample(inv.target, root)\n"
     new: ""
