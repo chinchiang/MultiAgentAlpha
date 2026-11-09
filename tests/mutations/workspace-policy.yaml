@@ -30,5 +30,5 @@ mutations:
     new: "tuple(evaluate_policies(cfg, Workspace.from_env()))"
   - name: the environment page lists the policies of the environment's workspace
     file: src/mara/web/env.py
-    old: "check_config_file(path, Workspace(workspace))"
+    old: "check_config_file(path, Workspace(root))"
     new: "check_config_file(path, Workspace.from_env())"

@@ -112,7 +112,7 @@ mutations:
   new: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) or {}'
 - name: the page lists the tools of the environment's root, not of the workspace it lists
   file: src/mara/web/env.py
-  old: '    ws = Workspace.from_env(root=workspace)  #'
+  old: '    ws = Workspace.from_env(root=root)  #'
   new: '    ws = Workspace.from_env()  #'
 - name: the page reads an explicit cache or the environment's, never the workspace's
   file: src/mara/web/env.py
@@ -120,7 +120,7 @@ mutations:
   new: '    cache = cache or trivy_db.cache_dir(workspace=Workspace.from_env())'
 - name: the environment page shows the environment's trivy cache
   file: src/mara/web/env.py
-  old: '        "trivy_db": trivy(workspace=Workspace.from_env(root=workspace)),'
+  old: '        "trivy_db": trivy(workspace=Workspace.from_env(root=root)),'
   new: '        "trivy_db": trivy(workspace=Workspace.from_env()),'
 - name: check_paths judges the environment's workspace
   file: src/mara/invocation.py
@@ -148,7 +148,7 @@ mutations:
   new: '})'
 - name: a child is given the anchors of the environment's workspace, not of the server's
   file: src/mara/web/procs.py
-  old: ws = Workspace.from_env(root=workspace)
+  old: ws = Workspace.from_env(root=root)
   new: ws = Workspace.from_env()
 - name: an admitted invocation remembers the working directory, not the root it was admitted against
   file: src/mara/invocation.py

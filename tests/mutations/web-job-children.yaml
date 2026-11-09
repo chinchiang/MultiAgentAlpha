@@ -16,17 +16,17 @@ mutations:
     '
 - name: a job registry with a table of its own, not the server's
   file: src/mara/web/server.py
-  old: '        self.jobs = JobRegistry(self.workspace, self.out_dir, table=self.table)
+  old: '        self.jobs = JobRegistry(self.root, self.out_dir, table=self.table)
 
     '
-  new: '        self.jobs = JobRegistry(self.workspace, self.out_dir)
+  new: '        self.jobs = JobRegistry(self.root, self.out_dir)
 
     '
 - name: a run registry with a table of its own, not the server's
   file: src/mara/web/server.py
-  old: '        self.runs = RunRegistry(self.workspace, self.out_dir, table=self.table)
+  old: '        self.runs = RunRegistry(self.root, self.out_dir, table=self.table)
 
     '
-  new: '        self.runs = RunRegistry(self.workspace, self.out_dir)
+  new: '        self.runs = RunRegistry(self.root, self.out_dir)
 
     '

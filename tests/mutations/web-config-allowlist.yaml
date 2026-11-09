@@ -10,13 +10,13 @@ mutations:
     new: "        real = path.absolute()\n"
   - name: the predicate without config/examples/
     file: src/mara/web/configs.py
-    old: "    return (workspace / \"config\").resolve(), (workspace / \"config\" / \"examples\").resolve()\n"
-    new: "    return (workspace / \"config\").resolve(), (workspace / \"config\").resolve()\n"
+    old: "    return (root / \"config\").resolve(), (root / \"config\" / \"examples\").resolve()\n"
+    new: "    return (root / \"config\").resolve(), (root / \"config\").resolve()\n"
   - name: the page lists every .yaml file, not what the predicate accepts
     file: src/mara/web/configs.py
-    old: "for p in sorted(d.iterdir()) if allowed(workspace, p)]"
+    old: "for p in sorted(d.iterdir()) if allowed(root, p)]"
     new: "for p in sorted(d.glob(\"*.yaml\")) if p.is_file()]"
   - name: a launch names any file, the predicate not asked
     file: src/mara/web/runs.py
-    old: "    if not configs.allowed(workspace, cfg_path):\n"
+    old: "    if not configs.allowed(root, cfg_path):\n"
     new: "    if False:\n"

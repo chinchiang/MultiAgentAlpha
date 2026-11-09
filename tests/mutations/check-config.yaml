@@ -38,7 +38,7 @@ mutations:
     new: '"loadable": check.structure_ok'
   - name: the page skips a config whose check meets a bug of the validator
     file: src/mara/web/env.py
-    old: 'check = check_config_file(path, Workspace(workspace))  # the check `mara check-config` renders too'
+    old: 'check = check_config_file(path, Workspace(root))  # the check `mara check-config` renders too'
     new: |-
       try:
                   check = check_config_file(path, Workspace(workspace))
