@@ -436,7 +436,7 @@ def test_a_standby_config_is_loaded_under_the_policies_of_the_workspace_given_no
     assert glm.config_ok, glm.config_problem
 
 
-def test_the_drill_status_and_the_standby_family_are_not_read_without_the_workspace_the_standby_is_loaded_in(tmp_path):
+def test_the_drill_status_and_the_standby_family_require_the_workspace_the_standby_is_loaded_in(tmp_path):
     """Loading a standby config runs policies P7 and P8 against the files of a workspace, so a caller names it."""
     prod = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     with pytest.raises(TypeError):

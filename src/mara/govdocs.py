@@ -12,7 +12,8 @@
   report; `rollout_status` decides whether the declared phase is consistent with the report's
   schedule and `baseline_metrics` aggregates review outputs into that report.
 
-Nothing here reads the network; every decision is a function of files in the repository.
+Nothing here reads the network; every decision is a function of files: those of the repository and, for the standby configs
+loaded through the policies P7 and P8, those of the MARA workspace the caller names.
 """
 
 from __future__ import annotations
@@ -259,6 +260,8 @@ def _standby_family_of(prod: list[str], cfg_path: Path, replaced: str, workspace
 
 def drill_status(cfg: MaraConfig, root: Path | str, today: dt.date, drills_path: Path | str | None = None, *,
                  workspace: Workspace) -> list[FamilyDrillStatus]:
+    """Per production family of `cfg`: whether every standby config of it (read below `root`, loaded in `workspace`) swaps
+    exactly that family, and whether a live drill in the register `drills_path` finished in time at `today`."""
     root = Path(root)
     prod = production_families(cfg)
     standbys = standby_configs(root)
