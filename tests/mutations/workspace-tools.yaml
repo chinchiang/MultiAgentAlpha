@@ -110,7 +110,7 @@ mutations:
   file: src/mara/tools/semgrep_rules.py
   old: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=workspace) or {}'
   new: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) or {}'
-- name: the page lists the tools of the environment's root, not of the workspace it lists
+- name: the page lists the tools of the environment's root, not of the root it lists
   file: src/mara/web/env.py
   old: '    ws = Workspace.from_env(root=root)  #'
   new: '    ws = Workspace.from_env()  #'

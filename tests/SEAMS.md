@@ -253,8 +253,8 @@ code that writes it, so it changes with that code:
   now passes (`workspace=`). `test_workspace_anchors.py` holds the guard: one test per `scripts/*.py` reads the file's
   syntax tree and lists a call of a reader given no workspace (`tools_dir`, `cache_dir`, `tool_path`, `installed_version`,
   `installed_manifest_entry`, `rules_dir`, `installed_rule_paths`, `driver_path` and `run_csp_eval` without `workspace=`;
-  `load_config`, `evaluate_policies`, `status_for_config` and `mara.workspace.resolve` without their second argument) and
-  the import of `mara.workspace.root`, and a test of the scan itself says what it sees and what it leaves alone (a
+  `load_config`, `evaluate_policies`, `status_for_config` and `mara.workspace.resolve` without their second argument;
+  `make_server` without `root=`) and the import of `mara.workspace.root`, and a test of the scan itself says what it sees and what it leaves alone (a
   script's own `load_config`, one imported from another script).
 - `governance_check` is the exception among the scripts. `check_g2`, `check_g3`, `check_g4`, `check_g7`, `check_g8`,
   `check_g9`, `check_g10` and `_production_families` take `workspace` as an optional keyword and read the environment's

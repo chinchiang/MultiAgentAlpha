@@ -68,7 +68,7 @@ def capture(timeout: float = 900) -> dict[str, Any]:
     os.environ["MARA_HOME"] = str(ROOT)
     with tempfile.TemporaryDirectory(prefix="mara-demo-") as tmp:
         out_dir = Path(tmp).resolve()
-        httpd = make_server(port=0, workspace=ROOT, out_dir=out_dir)
+        httpd = make_server(port=0, root=ROOT, out_dir=out_dir)
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         thread.start()
         try:

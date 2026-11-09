@@ -41,6 +41,6 @@ mutations:
     old: 'check = check_config_file(path, Workspace(root))  # the check `mara check-config` renders too'
     new: |-
       try:
-                  check = check_config_file(path, Workspace(workspace))
+                  check = check_config_file(path, Workspace(root))
               except Exception:
                   continue
