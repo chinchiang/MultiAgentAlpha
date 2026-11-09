@@ -51,10 +51,14 @@ def main() -> int:
         return 2
     # this interpreter and this checkout's code, never whatever `mara` an older install left on PATH
     base = [sys.executable, "-m", "mara.cli"]
+    # this checkout's src/ first on the child's PYTHONPATH (what was there after it): the dev environment's `mara` is an editable
+    # install of one checkout, which a git worktree's child would otherwise import
+    inherited = [os.environ["PYTHONPATH"]] if os.environ.get("PYTHONPATH") else []
+    pythonpath = os.pathsep.join([str(ROOT / "src"), *inherited])
     # the CLI prints Unicode (rich tables): make the child write UTF-8 and read it back as UTF-8, or a
     # Windows console code page (cp950, cp1252) fails the decode and leaves stdout None
     io = {"capture_output": True, "text": True, "encoding": "utf-8", "errors": "replace",
-          "env": {**os.environ, "PYTHONIOENCODING": "utf-8"}}
+          "env": {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONPATH": pythonpath}}
     r = subprocess.run([*base, "check-config", str(config)], **io)
     print(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr.strip()[-200:])
     if r.returncode != 0:
