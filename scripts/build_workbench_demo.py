@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))  # this checkout's mara, not the editable install of another (a worktree's): the server's children follow it
 OUT = ROOT / "docs" / "workbench" / "index.html"
 DEMO_ID = "20261014-090000-0d3e00"
 CAPTURED_AT = dt.datetime(2026, 10, 14, 9, 0, 0, tzinfo=dt.UTC)

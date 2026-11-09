@@ -119,3 +119,19 @@ def test_gitleaks_reads_a_human_queue_key_as_no_credential():
     key = queue_key("app.py", 3, "CWE-79", ReviewedContent("t", "r", "c"))
     assert any(re.fullmatch(r, key) for r in allow if "v2-" in r)
     assert not any(re.fullmatch(r, "v2-" + "0" * 23) or re.fullmatch(r, "ghp_" + "0" * 36) for r in allow if "v2-" in r)
+
+
+def test_the_script_assembles_the_page_from_the_mara_of_its_own_checkout(tmp_path):
+    """The dev environment's `mara` is an editable install of one checkout; run from a git worktree the script (and the server
+    it starts, whose children get the PYTHONPATH of the package it imported) would read that checkout's code. A `mara` that
+    refuses to be imported stands for the other checkout: the script must not reach it."""
+    import subprocess
+
+    other = tmp_path / "other-checkout" / "mara"
+    other.mkdir(parents=True)
+    (other / "__init__.py").write_text("raise ImportError('the script imported the mara of another checkout')\n", encoding="utf-8")
+    env = {**os.environ, "PYTHONPATH": str(tmp_path / "other-checkout")}
+    cp = subprocess.run([sys.executable, str(ROOT / "scripts" / "build_workbench_demo.py"), "--check"], env=env,
+                        capture_output=True, text=True, cwd=tmp_path)
+    assert cp.returncode == 0, cp.stderr[-400:]
+    assert "is current" in cp.stdout
