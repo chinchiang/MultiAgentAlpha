@@ -22,7 +22,7 @@ mutations:
     new: "        from .workspace import Workspace\n\n        _refuse_violations(workspace_policies(cfg, Workspace.from_env(), today))\n"
   - name: admit loads the config against the environment's workspace
     file: src/mara/invocation.py
-    old: "        config = load(config_path, inv.provider, Workspace(workspace))\n"
+    old: "        config = load(config_path, inv.provider, Workspace(root))\n"
     new: "        config = load(config_path, inv.provider, Workspace.from_env())\n"
   - name: check_config_file reports P7 and P8 of the environment's workspace
     file: src/mara/policy.py

@@ -38,8 +38,8 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   `test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress`. A runner that is given is
   called as it is, with nothing added, whatever its signature; one that is not is `run_all` of the pipeline's workspace
   (the next seam).
-- `Pipeline(cfg, ..., workspace=...)`: tests pass a directory of their own as the MARA workspace. The pipeline fixes
-  it when it is built (`Pipeline.workspace`; MARA_HOME, else the working directory, when none is given) and reads
+- `Pipeline(cfg, ..., root=...)`: tests pass a directory of their own as the root of the MARA workspace. The pipeline
+  fixes it when it is built (`Pipeline.root`; MARA_HOME, else the working directory, when none is given) and reads
   the ticket backlog, the ML-BOM, the decision files and training register, the signature bundle, the model
   evaluations and the calibration samples there, so a test setting MARA_HOME before `Pipeline(cfg)` still reaches
   them and one setting it after does not. A tool runner that is not given is `run_all` with that workspace: its tool
@@ -69,7 +69,7 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   git repository for a target, one with a merge base for that ref, and `--calibration-sample` a target below the
   workspace's `calib/samples/`.
   `test_governance_leftovers.py`, `test_security_regressions.py`, `test_invocation_checks.py`.
-- `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]` and `kw["workspace"]`.
+- `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]` and `kw["root"]`.
   `cli._review` builds `Pipeline(cfg, out_dir=..., workspace=..., ...)`, the config positional and the rest keywords, the
   workspace the invocation was admitted against. `test_security_regressions.py`.
 - `invocation.load_config`: patched as a module name. `review` calls `admit(...)`, which `cli` imports by name from
@@ -188,8 +188,8 @@ code that writes it, so it changes with that code:
   root and never below MARA_HOME or the working directory. The workspace is required: `load_config`,
   `evaluate_policies`, `workspace_policies`, `check_config_file`, `p7_ml_bom`, `p8_unsupervised_reject` (workspace, then
   `today`), `mara.mlbom.status_for_config` and `verify_signature` (their `root`), `mara.decisions.read_backlog` (its `root`),
-  `mara.invocation.load`, `calibration_answer_key` and `check_calibration_sample` take it with no default, and so does
-  `TrainingRequirement.from_config_file` (a root). A test that left it out passes `Workspace(ROOT)`, the repository, which
+  `mara.invocation.load` takes it with no default, and so do `calibration_answer_key`, `check_calibration_sample`,
+  `TrainingRequirement.from_config_file` and `from_config` (their `root`). A test that left it out passes `Workspace(ROOT)`, the repository, which
   is what the working directory was. `test_policy.py`, `test_ml_bom.py`.
 - `MaraConfig` reads no workspace when it is built: its validator runs P1 to P6 only (`mara.policy.config_policies`),
   and `mara.config.load_config` runs P7 and P8 once the config is built. A test that needs P7 or P8 to refuse a config
@@ -208,8 +208,8 @@ code that writes it, so it changes with that code:
 - The tool runner reads the tool directory of a workspace passed as the required keyword `workspace=`, and a call that
   leaves it out raises TypeError (`test_tool_env.py`): `mara.tools.runner.tools_dir`, `tool_path`,
   `installed_manifest_entry`, `installed_version` and `run_all`; `mara.tools.trivy_db.cache_dir`,
-  `mara.tools.csp_eval.driver_path`, `tools_dir` and `run_csp_eval`, `mara.tools.semgrep_rules.rules_dir`,
-  `installed_rule_paths` and `default_configs`, `mara.web.env.trivy`; `mara.mlbom.tools_bin`, `cosign_verify_blob_cmd` and
+  `mara.tools.csp_eval.driver_path` and `run_csp_eval`, `mara.tools.semgrep_rules.rules_dir`,
+  `installed_rule_paths` and `default_configs`, `mara.web.env.trivy`; `mara.mlbom.cosign_verify_blob_cmd` and
   `cosign_sign_blob_cmd` take the tool directory itself. A test that sets MARA_TOOLS_DIR to drive the entry passes
   `Workspace.from_env()`; one that calls the reader directly passes `Workspace(root, tools_dir=...)`. A test that replaces
   `runner.tool_path` or `semgrep_rules.installed_rule_paths` with a fake gives it a `workspace` parameter too, since `run_all`
@@ -219,13 +219,13 @@ code that writes it, so it changes with that code:
   and `mara.web.env.environment` take the tool directory MARA_TOOLS_DIR names, else the one below that workspace, so a
   test installs a tool below the workspace it lists and unsets MARA_TOOLS_DIR; `mara.web.env.trivy(cache, workspace=...)`
   takes an explicit `cache` before the workspace's trivy cache. `test_panel.py`.
-- `AdmittedInvocation.workspace` is the root `invocation.admit(inv, workspace)` was given, not the environment's: a test
+- `AdmittedInvocation.root` is the root `invocation.admit(inv, root)` was given, not the environment's: a test
   sets MARA_HOME and the working directory elsewhere and reads it from what `admit` returns
-  (`test_invocation_admit.py::test_an_admitted_invocation_remembers_the_workspace_it_was_admitted_against`); `cli._review`
-  hands it to `Pipeline(workspace=...)`, which a test reads through the `cli.Pipeline.__init__` seam (above,
+  (`test_invocation_admit.py::test_an_admitted_invocation_remembers_the_root_it_was_admitted_against`); `cli._review`
+  hands it to `Pipeline(root=...)`, which a test reads through the `cli.Pipeline.__init__` seam (above,
   `test_security_regressions.py::test_the_command_line_hands_the_pipeline_the_workspace_it_admitted_the_invocation_against`).
 - Who reads the environment. `review`, `export-summary`, `check-config` and `serve` of `mara.cli` each read it once, with
-  `Workspace.from_env()`, and hand that value down (`review` through `admit` and `AdmittedInvocation.workspace`). Four
+  `Workspace.from_env()`, and hand that value down (`review` through `admit` and `AdmittedInvocation.root`). Four
   places are given a root and take from the environment only what a root does not say, the tool directory and the trivy
   cache MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR name, with `Workspace.from_env(root=...)`: `Pipeline` (the workspace it was
   given, else the environment's root, for its default tool runner), `mara.web.env` (`tools`, `trivy`, `environment`),
@@ -234,7 +234,8 @@ code that writes it, so it changes with that code:
   MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR (`tests/conftest.py` sets the first for every test). Every other reader of
   `src/` takes the workspace or root with no default. Four readers that have none to take read the environment's root
   with `mara.workspace.root()`: `Pipeline` (given none), the trusted CA bundle of `mara.providers.openai_compatible` and of
-  `mara.model_eval`, and `trivy_db.max_age_hours`; the scripts are the next bullet.
+  `mara.model_eval` (both through `mara.workspace.resolve_user_path`), and `trivy_db.max_age_hours`; the scripts are the
+  next bullet.
 - The scripts read the environment once, in their `main`, with `Workspace.from_env()`, and hand the value to every reader
   that takes one; the workspace of `--root` is not derived. `trivy_db`, `ml_bom`, `model_swap_drill`, `psirt_ops`,
   `rollout_phase` and `model_eval` put it on the parsed arguments, as their `workspace` attribute, so a subcommand's

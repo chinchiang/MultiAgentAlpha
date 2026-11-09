@@ -150,15 +150,15 @@ mutations:
   file: src/mara/web/procs.py
   old: ws = Workspace.from_env(root=workspace)
   new: ws = Workspace.from_env()
-- name: an admitted invocation remembers the working directory, not the workspace it was admitted against
+- name: an admitted invocation remembers the working directory, not the root it was admitted against
   file: src/mara/invocation.py
-  old: progress=record, workspace=workspace)
-  new: progress=record, workspace=Path.cwd())
+  old: progress=record, root=root)
+  new: progress=record, root=Path.cwd())
 - name: the command line admits the invocation against the working directory
   file: src/mara/cli.py
   old: '        admitted = admit(inv, workspace.root)'
   new: '        admitted = admit(inv, Path.cwd())'
-- name: the command line does not hand the pipeline the workspace it admitted the invocation against
+- name: the command line does not hand the pipeline the root it admitted the invocation against
   file: src/mara/cli.py
-  old: '                    workspace=admitted.workspace)'
+  old: '                    root=admitted.root)'
   new: '                    )'
