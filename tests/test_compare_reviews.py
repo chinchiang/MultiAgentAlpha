@@ -87,3 +87,15 @@ def test_a_key_moved_in_the_report_is_a_difference(out, capsys):
     report.write_text(json.dumps(dict(reversed(list(data.items())))), encoding="utf-8")
     assert compare_reviews.main(["--out", str(out), "compare", "before", "after"]) == 1
     assert "the top-level key order differs" in capsys.readouterr().out
+
+
+def test_the_review_it_starts_is_the_mara_of_its_own_checkout(tmp_path, monkeypatch):
+    """The dev environment's `mara` is an editable install of one checkout; from a git worktree the `mara` it starts would read
+    that checkout's code. A `mara` that refuses to be imported on the PYTHONPATH stands for the other checkout: recording a
+    scenario must not reach it."""
+    other = tmp_path / "other-checkout" / "mara"
+    other.mkdir(parents=True)
+    (other / "__init__.py").write_text("raise ImportError('the review imported the mara of another checkout')\n", encoding="utf-8")
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path / "other-checkout"))
+    compare_reviews.record("x", tmp_path / "out", ("default",))
+    assert (tmp_path / "out" / "x" / "default").is_dir()
