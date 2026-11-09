@@ -42,7 +42,7 @@ def test_hardened_workflow_has_no_critical_or_high():
     assert not inv.head_checkout_lines
     assert inv.top_permissions == "{}"
     assert set(inv.job_permissions) == {"deterministic-tools", "code-scanning", "tests-and-mock-review", "tests-py312", "tests-py313",
-                                       "human-queue"}
+                                        "human-queue"}
     assert "write" not in inv.job_permissions["deterministic-tools"] and "write" not in inv.job_permissions["tests-and-mock-review"]
     assert inv.job_permissions["tests-py312"] == "{contents: read}"
     assert inv.job_permissions["tests-py313"] == "{contents: read}"

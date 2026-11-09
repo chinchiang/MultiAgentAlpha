@@ -558,9 +558,10 @@ wheels and hashes differ; the `tests (CPython 3.12)` job installs it and runs th
 `mypy` (configured in `pyproject.toml`) from `tools/typecheck-requirements.txt`, a third closure pinned to the
 same versions for every package it shares; the workflows then add this repository's own
 code with `pip install --no-deps --no-build-isolation -e .` after installing the hashed
-`tools/build-requirements.txt` closure. `tools/dev-requirements-py313.txt` is the same closure for CPython 3.13, resolved the same
-way; the `tests (CPython 3.13)` job installs it and runs the test suite only, and is not a required check. The
-runtime CI path does not let build isolation resolve unpinned backends. The separate model-evaluation closure contains two source distributions;
+`tools/build-requirements.txt` closure. The runtime CI path does not let build isolation resolve
+unpinned backends. `tools/dev-requirements-py313.txt` is the same closure for CPython 3.13, resolved the same
+way; the `tests (CPython 3.13)` job installs it and runs the test suite only, and is not a required check.
+The separate model-evaluation closure contains two source distributions;
 the runbook also uses the hashed build closure with `--no-build-isolation`. Both sdists were
 successfully built this way; a full live evaluation still requires the deployment environment.
 
