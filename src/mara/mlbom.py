@@ -505,14 +505,10 @@ def validate_schema(bom: dict) -> list[str]:
 
 # ---------------------------------------------------------------- cosign
 
-def tools_bin(tools_dir: Path | str) -> Path:
-    return Path(tools_dir) / "bin"
-
-
 def cosign_verify_blob_cmd(bom_path: Path | str, bundle: Path | str, identity: str, issuer: str,
                            tools_dir: Path | str) -> list[str]:
     """Command line for the locked cosign (tools/versions.lock) to verify the BOM's keyless signature."""
-    base = tools_bin(tools_dir) / "cosign"
+    base = Path(tools_dir) / "bin" / "cosign"
     candidates = [base.with_suffix(".exe"), base.with_suffix(".cmd"), base.with_suffix(".bat"), base] if sys.platform == "win32" else [base]
     exe = next((c for c in candidates if c.exists()), base)
     if not exe.exists():
@@ -574,7 +570,7 @@ def verify_signature(cfg: MaraConfig, root: Path | str, runner=None) -> tuple[bo
 
 
 def cosign_sign_blob_cmd(bom_path: Path | str, bundle: Path | str, tools_dir: Path | str) -> list[str]:
-    exe = tools_bin(tools_dir) / "cosign"
+    exe = Path(tools_dir) / "bin" / "cosign"
     return [str(exe), "sign-blob", "--bundle", str(bundle), str(bom_path)]
 
 

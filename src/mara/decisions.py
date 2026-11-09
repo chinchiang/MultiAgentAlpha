@@ -162,8 +162,8 @@ class TrainingRequirement:
     problem: str = ""
 
     @classmethod
-    def from_config_file(cls, path: Path | str, workspace: Path) -> TrainingRequirement:
-        """From a MARA config's `training` block; the register resolves against `workspace`, the root of the MARA workspace.
+    def from_config_file(cls, path: Path | str, root: Path) -> TrainingRequirement:
+        """From a MARA config's `training` block; the register resolves below `root`, the root of the MARA workspace.
         A config that cannot be read keeps training required."""
         import yaml
 
@@ -180,23 +180,22 @@ class TrainingRequirement:
             why = ""
         if not cfg.require_trained_adjudicator:
             return cls(required=False)
-        register_path = resolve(cfg.register_file, workspace)
+        register_path = resolve(cfg.register_file, root)
         try:
             return cls(required=True, register=load_register(register_path), problem=why)
         except (OSError, ValueError, KeyError, TypeError) as e:
             return cls(required=True, problem=f"{why}; " * bool(why) + f"training register {cfg.register_file} unavailable ({e})")
 
     @classmethod
-    def from_config(cls, cfg: TrainingConfig, workspace: Path) -> TrainingRequirement:
-        """From an already loaded `training` block; the register resolves against `workspace`, the root of the MARA
-        workspace."""
+    def from_config(cls, cfg: TrainingConfig, root: Path) -> TrainingRequirement:
+        """From an already loaded `training` block; the register resolves below `root`, the root of the MARA workspace."""
         from .training import load_register
         from .workspace import resolve
 
         if not cfg.require_trained_adjudicator:
             return cls(required=False)
         try:
-            return cls(required=True, register=load_register(resolve(cfg.register_file, workspace)))
+            return cls(required=True, register=load_register(resolve(cfg.register_file, root)))
         except (OSError, ValueError, KeyError, TypeError) as e:
             return cls(required=True, problem=f"training register {cfg.register_file} unavailable ({e})")
 

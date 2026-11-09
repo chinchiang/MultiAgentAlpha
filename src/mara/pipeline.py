@@ -63,19 +63,19 @@ class Stages:
 class Pipeline:
     def __init__(self, cfg: MaraConfig, *, mock_fixtures: str | None = None, out_dir: Path | None = None,
                  progress: Progress | None = None, run_tools: Callable[..., list[ToolRun]] | None = None,
-                 workspace: Path | None = None):
+                 root: Path | None = None):
         self.cfg = cfg
         # the MARA workspace MARA's own evidence is read from (mara.workspace), fixed here for the whole review: the
         # ticket backlog, the ML-BOM, the decision files and training register, the signature bundle, the model
         # evaluations and the calibration samples; MARA_HOME (else the working directory) when none is given
-        self.workspace = (Path(workspace) if workspace is not None else workspace_root()).resolve()
+        self.root = (Path(root) if root is not None else workspace_root()).resolve()
         # a runner with run_all's signature (mara.tools.runner), for the main tool run and the live secret preflight; one
         # that is not given is run_all of this workspace: its root, the tool directory and trivy cache the environment names
         self._run_tools = run_tools if run_tools is not None else functools.partial(
-            run_all, workspace=Workspace.from_env(root=self.workspace))
+            run_all, workspace=Workspace.from_env(root=self.root))
         # the live view `mara serve` draws (mara.progress); a no-op unless `mara review --progress-file` is given
         self.progress = progress if progress is not None else Progress()
-        self.out_dir = out_dir or self.workspace / "out"  # the workspace, like `mara review --out`
+        self.out_dir = out_dir or self.root / "out"  # the workspace, like `mara review --out`
         self.providers: dict[str, Provider] = {m.name: make_provider(m, mock_fixtures) for m in cfg.models}
         # Counters (default 0) and the jury's statistics; becomes the report's bias_audit (GLOSSARY.md: bias audit)
         self.audit = Audit()
@@ -84,7 +84,7 @@ class Pipeline:
         from .decisions import read_backlog
         from .human_queue import tightening
 
-        self.tightening = tightening(cfg, read_backlog(cfg, self.workspace))
+        self.tightening = tightening(cfg, read_backlog(cfg, self.root))
         # read once and held only here: the jury outcome, the gate, the audit and the log see the same tightening
         # (docs/adr/0007-review-status-and-gate.md)
         self.outcome_policy = OutcomePolicy.from_config(cfg, alpha_threshold=self.tightening.alpha_threshold,
@@ -93,7 +93,7 @@ class Pipeline:
         self.jury = jury.Jury.from_config(cfg)
         from .mlbom import status_for_config
 
-        self.ml_bom_status = status_for_config(cfg, self.workspace)
+        self.ml_bom_status = status_for_config(cfg, self.root)
 
     @property
     def backlog(self) -> int | None:
@@ -136,8 +136,8 @@ class Pipeline:
         from .decisions import TrainingRequirement, select
         from .decisions import load as load_decisions
 
-        loaded = load_decisions(self.workspace / "calib" / "decisions")
-        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, self.workspace))
+        loaded = load_decisions(self.root / "calib" / "decisions")
+        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, self.root))
 
     # ------------------------------------------------------------------ run
     def run(self, target: str | Path, *, sarif_dir: Path | None = None, provider_mode: ProviderMode = ProviderMode.live,
@@ -148,8 +148,8 @@ class Pipeline:
         target = Path(target).resolve()
         # before anything runs: the tools come from, and P8/the backlog were read from, the MARA
         # workspace; none of it may be supplied by the repository under review
-        check_outside(target, workspace=Workspace.from_env(root=self.workspace))
-        answer_key = calibration_answer_key(target, self.workspace) if calibration_sample else None
+        check_outside(target, workspace=Workspace.from_env(root=self.root))
+        answer_key = calibration_answer_key(target, self.root) if calibration_sample else None
         if base_ref:  # an empty one is no base; a refused one leaves no output directory behind
             check_base(target, base_ref)
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -277,7 +277,7 @@ class Pipeline:
             # P7 checked offline that the bundle belongs to the BOM; here cosign verifies the signature and its signer
             from .mlbom import verify_signature
 
-            signed, why = verify_signature(self.cfg, self.workspace)
+            signed, why = verify_signature(self.cfg, self.root)
             signature = "verified" if signed else f"failed: {why}"
         facts = ReviewFacts(context_complete=stages.ctx.complete, egress_blocked=stages.egress.blocked,
                             required_tools_ran=tools.complete_for(self.cfg.dimensions), ml_bom_signature=signed,
@@ -308,7 +308,7 @@ class Pipeline:
                                   sha256=st.digest)
                     for n, st in self.ml_bom_status.items()},
             ml_bom_signature=signature,
-            model_eval={fam: ModelEvalStatus(**v) for fam, v in family_eval_status(self.workspace, evaluated).items()},
+            model_eval={fam: ModelEvalStatus(**v) for fam, v in family_eval_status(self.root, evaluated).items()},
         )
 
     def _provider_manifest(self) -> list[dict]:

@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .runner import tool_env
+from .runner import tool_env, tools_dir
 from .sarif import ToolResult
 
 if TYPE_CHECKING:
@@ -143,11 +143,6 @@ def driver_path(*, workspace: Workspace) -> Path | None:
     """The pinned evaluator's driver in the tool directory of `workspace`, or None."""
     p = tools_dir(workspace=workspace) / PACKAGE_DIR / DRIVER_NAME
     return p if p.is_file() else None
-
-
-def tools_dir(*, workspace: Workspace) -> Path:
-    from .runner import tools_dir as _t
-    return _t(workspace=workspace)
 
 
 def node_exe() -> str | None:

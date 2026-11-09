@@ -108,3 +108,17 @@ def test_a_relative_path_is_resolved_below_a_base_that_is_named_and_a_target_is_
         resolve("calib/latest.json")
     with pytest.raises(TypeError):
         check_outside(tmp_path / "target")
+
+
+def test_a_path_a_user_writes_is_expanded_then_resolved_below_the_root_of_the_environments_workspace(tmp_path, monkeypatch):
+    """`~` is the user's home, a relative path lies below MARA_HOME (else the working directory), an absolute one is as given:
+    the one rule of a CA bundle named in a config (providers) and in a model evaluation."""
+    from mara.workspace import resolve_user_path
+
+    home, mara_home = tmp_path / "home", tmp_path / "mara-home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("MARA_HOME", str(mara_home))
+    assert resolve_user_path("~/ca.pem") == home / "ca.pem"
+    assert resolve_user_path("certs/ca.pem") == mara_home.resolve() / "certs" / "ca.pem"
+    assert resolve_user_path(str(tmp_path / "abs.pem")) == tmp_path / "abs.pem"

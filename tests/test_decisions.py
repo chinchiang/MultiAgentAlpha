@@ -286,3 +286,19 @@ def test_g13_names_the_decisions_that_wait_for_a_trained_adjudicator(tmp_path):
     write(ddir, record(line=20, by="mallory", adjudicator_trained=True))
     r = check_g13(tmp_path, dt.date(2026, 10, 13))
     assert "#20 by mallory" in r.evidence and "#10" not in r.evidence
+
+
+def test_the_register_is_resolved_below_the_root_a_training_requirement_is_given(tmp_path):
+    """Both readers name the directory the register lies below `root`, the root of the MARA workspace (the Workspace value is
+    the other thing a workspace is)."""
+    (tmp_path / "training").mkdir()
+    (tmp_path / "training" / "records.yaml").write_text("curriculum_version: '2026-09'\nrecords: []\n", encoding="utf-8")
+    cfg = tmp_path / "mara.yaml"
+    cfg.write_text("models: []\n", encoding="utf-8")
+    from_file = dec.TrainingRequirement.from_config_file(cfg, root=tmp_path)
+    assert from_file.register is not None and from_file.register.curriculum_version == "2026-09"
+    from mara.config import load_config
+    from mara.workspace import Workspace
+
+    training = load_config("config/mara.mock.yaml", Workspace(tmp_path)).training
+    assert dec.TrainingRequirement.from_config(training, root=tmp_path).required == training.require_trained_adjudicator

@@ -390,14 +390,12 @@ def test_the_tool_runner_is_not_run_without_the_workspace_whose_tool_directory_i
     lambda: semgrep_rules.rules_dir(),
     lambda: semgrep_rules.installed_rule_paths(),
     lambda: semgrep_rules.default_configs(),
-    lambda: csp_eval.tools_dir(),
     lambda: csp_eval.driver_path(),
     lambda: csp_eval.run_csp_eval(Path("."), Path("out.sarif")),
     lambda: __import__("mara.tools.trivy_db", fromlist=["cache_dir"]).cache_dir(),
-    lambda: __import__("mara.mlbom", fromlist=["tools_bin"]).tools_bin(),
     lambda: __import__("mara.mlbom", fromlist=["cosign_sign_blob_cmd"]).cosign_sign_blob_cmd("bom.json", "bundle.json"),
-], ids=["rules_dir", "installed_rule_paths", "default_configs", "csp tools_dir", "driver_path", "run_csp_eval", "cache_dir",
-        "tools_bin", "cosign_sign_blob_cmd"])
+], ids=["rules_dir", "installed_rule_paths", "default_configs", "driver_path", "run_csp_eval", "cache_dir",
+        "cosign_sign_blob_cmd"])
 def test_the_tool_readers_beside_the_runner_are_not_run_without_a_workspace_either(call):
     """The semgrep rules, the CSP driver, the trivy cache and the cosign binary lie below the workspace's tool directory
     or trivy cache, so a caller names it."""

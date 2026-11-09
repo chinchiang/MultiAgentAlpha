@@ -146,10 +146,23 @@ def test_a_base_git_cannot_diff_against_is_refused_last(tmp_path):
     assert progress.read(record)["error"] == "bad_base_ref"
 
 
-def test_an_admitted_invocation_remembers_the_workspace_it_was_admitted_against(tmp_path, monkeypatch):
+def test_an_admitted_invocation_remembers_the_root_it_was_admitted_against(tmp_path, monkeypatch):
     """Not the environment's: MARA_HOME names another directory, and the working directory a third."""
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     monkeypatch.chdir(elsewhere)
     monkeypatch.setenv("MARA_HOME", str(elsewhere))
-    assert invocation.admit(_inv(tmp_path / "out"), ROOT).workspace == ROOT
+    assert invocation.admit(_inv(tmp_path / "out"), root=ROOT).root == ROOT
+
+
+def test_a_calibration_sample_is_looked_up_below_the_root_given_by_keyword(tmp_path):
+    """The directory the samples lie below is `root`, the root of the MARA workspace, for the answer key and for the check."""
+    sample = tmp_path / "calib" / "samples" / "s1"
+    sample.mkdir(parents=True)
+    (sample / "labels.json").write_text(json.dumps({"sample": "s1", "labels": [
+        {"dimension": "secrets", "cwe": "CWE-798", "file": "app.py", "line": 3, "quote": "x", "title": "seeded"}]}), encoding="utf-8")
+    assert [lab["line"] for lab in invocation.calibration_answer_key(sample, root=tmp_path)] == [3]
+    invocation.check_calibration_sample(sample, root=tmp_path)
+    with pytest.raises(InvocationError) as e:
+        invocation.check_calibration_sample(sample, root=tmp_path / "other")
+    assert e.value.kind == "bad_calibration_sample"
