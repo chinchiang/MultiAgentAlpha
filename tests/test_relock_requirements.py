@@ -114,12 +114,13 @@ def test_repository_lockfiles_are_complete(lock, top_level, wheels_only):
         assert f"garak=={garak}" in text, "the garak version pinned in config/mara.yaml model_eval.garak_version"
 
 
-def test_the_312_closure_pins_the_same_versions_as_the_311_one():
-    """Only wheels and hashes may differ: the 3.12 job must test the versions the 3.11 job and L0 check."""
+@pytest.mark.parametrize("minor", ["12", "13"])
+def test_the_other_closures_pin_the_same_versions_as_the_311_one(minor):
+    """Only wheels and hashes may differ: the 3.12 and 3.13 jobs must test the versions the 3.11 job and L0 check."""
     base = _parse_lock((ROOT / "tools/dev-requirements.txt").read_text(encoding="utf-8"))
-    text = (ROOT / "tools/dev-requirements-py312.txt").read_text(encoding="utf-8")
+    text = (ROOT / f"tools/dev-requirements-py3{minor}.txt").read_text(encoding="utf-8")
     assert [(n, v) for n, v, _ in _parse_lock(text)] == [(n, v) for n, v, _ in base], "relock with --same-versions-as tools/dev-requirements.txt"
-    assert "CPython 3.12" in text.splitlines()[1] and "--same-versions-as tools/dev-requirements.txt" in text.splitlines()[2]
+    assert f"CPython 3.{minor}" in text.splitlines()[1] and "--same-versions-as tools/dev-requirements.txt" in text.splitlines()[2]
 
 
 def test_the_typecheck_closure_agrees_with_the_312_closure_it_is_installed_over():
@@ -156,7 +157,8 @@ def _parse_uv_lock(text: str) -> dict[str, tuple[str, set[str]]]:
     return pins
 
 
-@pytest.mark.parametrize("lock", ["tools/dev-requirements.txt", "tools/dev-requirements-py312.txt", "tools/model-eval-requirements.txt"])
+@pytest.mark.parametrize("lock", ["tools/dev-requirements.txt", "tools/dev-requirements-py312.txt", "tools/dev-requirements-py313.txt",
+                                  "tools/model-eval-requirements.txt"])
 def test_the_closures_installed_with_the_build_closure_pin_its_shared_packages_alike(lock):
     """Installed in one environment with tools/build-requirements.txt (dev then build in the workflows' jobs, py312 in
     the type-check job, build then garak in docs/model-eval-runbook.md): the later install of a shared package with
