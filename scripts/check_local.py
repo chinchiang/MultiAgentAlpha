@@ -26,10 +26,10 @@ was there follows), so from a git worktree it imports this checkout's mara, not 
   gitleaks  scripts/gitleaks_ci.py --event pull_request over the commits since the merge base with --base
 Run only when named, as they send package names and versions to api.osv.dev (osv names the three), L0's scans of
 the hash-locked closures, each with its own config:
-  osv-runtime     scripts/osv_ci.py on the five closures this repository installs, with tools/osv-scanner.toml
+  osv-runtime     scripts/osv_ci.py on the closures this repository installs, with tools/osv-scanner.toml
   osv-model-eval  scripts/osv_ci.py on tools/model-eval-requirements.txt, with tools/osv-model-eval.toml
   osv-semgrep     scripts/osv_ci.py on tools/semgrep-requirements.txt, with tools/osv-semgrep.toml
-Not run here: the whole suite on CPython 3.12, the other repository scanners (trivy, zizmor, csp-evaluator, and
+Not run here: the whole suite on CPython 3.12 and 3.13, the other repository scanners (trivy, zizmor, csp-evaluator, and
 osv-scanner on the seeded fixture), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
 When a check that reads the branch's commits (lines, chars, gitleaks) ran and the working tree has changes git status lists,
 the summary warns that it did not see them. Exit 0 when every check passed, 1 otherwise; the warning changes neither.
@@ -88,8 +88,9 @@ Check = Callable[[argparse.Namespace], tuple[list[str], dict[str, str], Callable
 # L0's osv-scanner scans of the hash-locked closures, as .github/workflows/mara-review.yml runs them but --report
 OSV_SCANS = {
     "osv-runtime": ("--lockfile", "tools/bootstrap-requirements.txt", "--lockfile", "tools/dev-requirements.txt",
-                    "--lockfile", "tools/dev-requirements-py312.txt", "--lockfile", "tools/typecheck-requirements.txt",
-                    "--lockfile", "tools/build-requirements.txt", "--config", "tools/osv-scanner.toml"),
+                    "--lockfile", "tools/dev-requirements-py312.txt", "--lockfile", "tools/dev-requirements-py313.txt",
+                    "--lockfile", "tools/typecheck-requirements.txt", "--lockfile", "tools/build-requirements.txt",
+                    "--config", "tools/osv-scanner.toml"),
     "osv-model-eval": ("--lockfile", "tools/model-eval-requirements.txt", "--config", "tools/osv-model-eval.toml"),
     "osv-semgrep": ("--lockfile", "tools/semgrep-requirements.txt", "--config", "tools/osv-semgrep.toml"),
 }

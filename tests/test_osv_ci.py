@@ -160,7 +160,7 @@ def test_a_failing_lockfile_scan_names_the_command_that_gathers_the_facts(tmp_pa
 
 
 def test_with_several_lockfiles_each_command_names_only_the_packages_found_in_it(tmp_path):
-    """L0 scans five closures in one run; each finding's path tells which lockfile's command it belongs to."""
+    """L0 scans several closures in one run; each finding's path tells which lockfile's command it belongs to."""
     in_dev = _result("GHSA-4", "certifi", "2020.1")
     in_dev["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = "file:///w/tools/dev-requirements.txt"
     tools = _tools(tmp_path, _sarif(in_dev), exit_code=1)
