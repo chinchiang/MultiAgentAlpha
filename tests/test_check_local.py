@@ -235,6 +235,6 @@ def test_a_check_imports_the_mara_of_the_checkout_it_runs_in(tmp_path, monkeypat
         "path": lambda a: ([sys.executable, "-c", "import os; print(os.environ['PYTHONPATH'])"], {}, None),
     })
     assert check_local.main(["--only", "path", "--logs", str(tmp_path)]) == 0
-    seen = (tmp_path / "path.log").read_text(encoding="utf-8").splitlines()[1]
+    seen = (tmp_path / "path.log").read_text(encoding="utf-8").splitlines()[-1]
     src = str(check_local.ROOT / "src")
     assert seen == (src if inherited is None else src + os.pathsep + inherited)

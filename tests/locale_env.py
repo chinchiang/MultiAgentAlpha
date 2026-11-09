@@ -1,9 +1,9 @@
 """A child process whose locale encoding is not UTF-8, for the scripts that read git's output: the Windows code page
 (cp950 on the host these bugs were found on), or ASCII on Linux, with the C locale and neither PEP 538 nor PEP 540 to
 turn it into UTF-8. git writes UTF-8 whatever the locale, so a script that decodes it in the locale's encoding breaks
-there, and only there. On Linux the C locale makes the filesystem encoding ASCII too: such a child cannot open a
-non-ASCII `str` path (a Chinese directory name raises UnicodeEncodeError), which the Windows host does not show, so a test
-that gives the child one passes there and fails in CI."""
+there, and only there. On Linux the C locale, with neither PEP 538 nor PEP 540 applying, makes the filesystem encoding ASCII too: such a
+child cannot open a non-ASCII `str` path (a Chinese directory name raises UnicodeEncodeError), so a test that gives the child
+one fails in CI, where the host the bugs were found on did not show it."""
 
 from __future__ import annotations
 

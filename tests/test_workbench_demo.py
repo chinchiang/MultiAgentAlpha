@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -125,8 +126,6 @@ def test_the_script_assembles_the_page_from_the_mara_of_its_own_checkout(tmp_pat
     """The dev environment's `mara` is an editable install of one checkout; run from a git worktree the script (and the server
     it starts, whose children get the PYTHONPATH of the package it imported) would read that checkout's code. A `mara` that
     refuses to be imported stands for the other checkout: the script must not reach it."""
-    import subprocess
-
     other = tmp_path / "other-checkout" / "mara"
     other.mkdir(parents=True)
     (other / "__init__.py").write_text("raise ImportError('the script imported the mara of another checkout')\n", encoding="utf-8")
