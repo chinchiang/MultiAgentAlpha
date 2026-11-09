@@ -64,7 +64,11 @@ def _review(ws: Path, out: Path, *, progress: Path | None = None, console: Path 
     argv = [str(mara), "review", str(ROOT / "fixtures" / "vuln-sample"), "--provider", "mock", "--config", str(CONFIG),
             "--mock-fixtures", str(ROOT / "fixtures" / "mock-responses"), "--sarif-dir", str(ROOT / "fixtures" / "vuln-sample-sarif"),
             "--out", str(out)] + (["--progress-file", str(progress)] if progress else [])
-    env = {**os.environ, "MARA_HOME": str(ws), "NO_COLOR": "1", "PYTHONDONTWRITEBYTECODE": "1"}
+    # this checkout's src/ first on the child's PYTHONPATH (what was there after it): the dev environment's `mara` is an editable
+    # install of one checkout, which a git worktree's child would otherwise import
+    inherited = [os.environ["PYTHONPATH"]] if os.environ.get("PYTHONPATH") else []
+    pythonpath = os.pathsep.join([str(ROOT / "src"), *inherited])
+    env = {**os.environ, "MARA_HOME": str(ws), "NO_COLOR": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": pythonpath}
     cp = subprocess.run(argv, cwd=ROOT, env=env, capture_output=True, text=True)
     if console is not None:
         console.write_text(cp.stdout + cp.stderr, encoding="utf-8")
