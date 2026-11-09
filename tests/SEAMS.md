@@ -269,6 +269,17 @@ code that writes it, so it changes with that code:
   guard does not see it, since it names no `check_g9`. A test of the checks sets MARA_HOME and puts the files below the
   root it passes, and gives `workspace=` only when the workspace differs from the environment's.
 
+## The local checks (`scripts/check_local.py`)
+
+`test_check_local.py` replaces the table of checks the script runs with fake ones, each a function of the parsed arguments that
+returns the argument vector to run, its extra environment and what to do first; `main` then runs them, and a test reads
+what a check printed from its log, whose first line is the command and whose last is the last line the check printed. Every
+check's process gets its environment from `check_env`, which puts this checkout's src/ first on PYTHONPATH and what was
+there after it (`test_a_check_imports_the_mara_of_the_checkout_it_runs_in`), so a fake check that prints its PYTHONPATH sees
+it. The same rule for the demo script is
+`test_workbench_demo.py::test_the_script_assembles_the_page_from_the_mara_of_its_own_checkout`: it runs the script with --check
+in a child whose PYTHONPATH holds a package named mara that refuses to be imported.
+
 ## The Evidence record (`src/mara/evidence.py`)
 
 `test_evidence_record.py` reads `mara.evidence` at its interface: `Header` (made by `Header.from_json` and `Header.from_front_matter`),

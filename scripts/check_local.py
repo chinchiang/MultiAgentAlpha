@@ -8,7 +8,9 @@
 Run it with the dev environment's interpreter: ruff and pytest come from it. Each check writes its whole output to
 out/check-local/<UTC time>/<check>.log and the summary names the log of every check that failed, so a failure is
 always there to read afterwards; for a failed suite it also names the tests the log's FAILURES and ERRORS sections
-head (the short summary of -rs lists skips only). The checks, as .github/workflows/mara-review.yml runs them:
+head (the short summary of -rs lists skips only). Every check's process runs with this checkout's src/ first on its PYTHONPATH (what
+was there follows), so from a git worktree it imports this checkout's mara, not the editable install of another. The checks, as
+.github/workflows/mara-review.yml runs them:
   ruff      ruff check src tests scripts
   lines     scripts/line_width.py: the lines the commits since the merge base with --base add to Python files are
             within 150 columns (CI runs it on a pull request)
@@ -125,6 +127,16 @@ def uncommitted(root: Path) -> list[str]:
     return cp.stdout.splitlines() if cp.returncode == 0 else [f"git status failed: {cp.stderr.strip()}"]
 
 
+def check_env(extra: dict[str, str]) -> dict[str, str]:
+    """The environment of a check's process: ours and `extra`, with this checkout's src/ first on PYTHONPATH and any PYTHONPATH
+    of ours or `extra`'s after it. The dev environment's `mara` is an editable install of one checkout; run from another (a git
+    worktree), a child would otherwise import that checkout's code."""
+    env = {**os.environ, **extra}
+    inherited = [env["PYTHONPATH"]] if env.get("PYTHONPATH") else []
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), *inherited])
+    return env
+
+
 def run_check(name: str, check: Check, a: argparse.Namespace) -> int:
     """Run one check with its whole output (stdout and stderr) in <logs>/<name>.log; its exit code."""
     log = a.logs / f"{name}.log"
@@ -138,7 +150,7 @@ def run_check(name: str, check: Check, a: argparse.Namespace) -> int:
             return 1
         out.write("$ " + " ".join(argv) + "\n")
         out.flush()
-        return subprocess.run(argv, cwd=ROOT, env={**os.environ, **env}, stdout=out, stderr=subprocess.STDOUT).returncode
+        return subprocess.run(argv, cwd=ROOT, env=check_env(env), stdout=out, stderr=subprocess.STDOUT).returncode
 
 
 SECTION = re.compile(r"^={3,} (.+?) ={3,}$")
