@@ -125,6 +125,15 @@ def uncommitted(root: Path) -> list[str]:
     return cp.stdout.splitlines() if cp.returncode == 0 else [f"git status failed: {cp.stderr.strip()}"]
 
 
+def child_env(extra: dict[str, str]) -> dict[str, str]:
+    """The environment of a check's process: ours and `extra`, with this checkout's src/ first on PYTHONPATH. The dev
+    environment's `mara` is an editable install of one checkout; run from another (a git worktree), a child would otherwise
+    import that checkout's code."""
+    env = {**os.environ, **extra}
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), *([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])])
+    return env
+
+
 def run_check(name: str, check: Check, a: argparse.Namespace) -> int:
     """Run one check with its whole output (stdout and stderr) in <logs>/<name>.log; its exit code."""
     log = a.logs / f"{name}.log"
@@ -138,7 +147,7 @@ def run_check(name: str, check: Check, a: argparse.Namespace) -> int:
             return 1
         out.write("$ " + " ".join(argv) + "\n")
         out.flush()
-        return subprocess.run(argv, cwd=ROOT, env={**os.environ, **env}, stdout=out, stderr=subprocess.STDOUT).returncode
+        return subprocess.run(argv, cwd=ROOT, env=child_env(env), stdout=out, stderr=subprocess.STDOUT).returncode
 
 
 SECTION = re.compile(r"^={3,} (.+?) ={3,}$")

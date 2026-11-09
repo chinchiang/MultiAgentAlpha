@@ -4,10 +4,13 @@ before the push with every output kept."""
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -218,3 +221,20 @@ def test_only_the_headers_of_the_failures_and_errors_sections_name_tests():
            "=== short test summary info ===\n")
     assert check_local.failed_tests(log) == (["test_deep"], ["ERROR collecting tests/test_x.py"])
     assert check_local.failed_tests("....\n4 passed in 0.1s\n") == ([], [])
+
+
+@pytest.mark.parametrize("inherited", [None, "/elsewhere/src"])
+def test_a_check_imports_the_mara_of_the_checkout_it_runs_in(tmp_path, monkeypatch, inherited):
+    """The dev environment's `mara` is an editable install of one checkout. From a git worktree the child of a check would read
+    that checkout's code, so the worktree's own src/ comes first on its PYTHONPATH, what was there after it."""
+    if inherited is None:
+        monkeypatch.delenv("PYTHONPATH", raising=False)
+    else:
+        monkeypatch.setenv("PYTHONPATH", inherited)
+    monkeypatch.setattr(check_local, "CHECKS", {
+        "path": lambda a: ([sys.executable, "-c", "import os; print(os.environ['PYTHONPATH'])"], {}, None),
+    })
+    assert check_local.main(["--only", "path", "--logs", str(tmp_path)]) == 0
+    seen = (tmp_path / "path.log").read_text(encoding="utf-8").splitlines()[1]
+    src = str(check_local.ROOT / "src")
+    assert seen == (src if inherited is None else src + os.pathsep + inherited)
