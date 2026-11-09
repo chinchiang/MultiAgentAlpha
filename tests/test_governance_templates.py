@@ -97,7 +97,7 @@ def test_standby_configs_swap_exactly_one_family_and_pass_policies():
     standbys = govdocs.standby_configs(ROOT)
     assert set(standbys) == set(fams)
     for fam, path in ((f, p) for f, paths in standbys.items() for p in paths):
-        sb_fam, problem = govdocs._standby_family_of(fams, path, fam)
+        sb_fam, problem = govdocs._standby_family_of(fams, path, fam, Workspace(ROOT))
         assert not problem, (path.name, problem)
         if path == standbys[fam][0]:  # the primary standby of every family is the on-prem DeepSeek
             assert path.name == f"standby-for-{fam}.yaml" and sb_fam == "deepseek", path.name
@@ -137,7 +137,7 @@ def test_a_family_may_have_more_than_one_standby_and_each_one_must_hold(tmp_path
     (examples / "standby-for-glm.lmstudio.yaml").write_text(yaml.safe_dump(_second_standby(), sort_keys=False), encoding="utf-8")
     prod = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     assert [p.name for p in govdocs.standby_configs(tmp_path)["glm"]] == ["standby-for-glm.yaml", "standby-for-glm.lmstudio.yaml"]
-    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY)}["glm"]
+    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY, workspace=Workspace(ROOT))}["glm"]
     assert glm.config_ok and [(x.standby_family, x.ok) for x in glm.standbys] == [("deepseek", True), ("llama", True)]
     assert glm.standby_config.endswith("standby-for-glm.yaml"), "single-standby readers still see the primary"
     g4 = gc.check_g4(tmp_path, ROOT / "config" / "mara.yaml", TODAY)
@@ -146,11 +146,11 @@ def test_a_family_may_have_more_than_one_standby_and_each_one_must_hold(tmp_path
     drills = tmp_path / "ops" / "model-swap-drills.yaml"
     govdocs.append_drill(drills, govdocs.Drill(TODAY - dt.timedelta(days=3), "live", "glm", "llama",
                                                "config/examples/standby-for-glm.lmstudio.yaml", 30.0, "pass", "ops", "CHG-7"))
-    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY, drills)}["glm"]
+    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY, drills, workspace=Workspace(ROOT))}["glm"]
     assert glm.ok and glm.drill.evidence == "CHG-7"
     # every standby must hold: a broken spare fails the family, named by its file, instead of waiting for the outage
     (examples / "standby-for-glm.misfiled.yaml").write_text(yaml.safe_dump(_second_standby("anthropic"), sort_keys=False), encoding="utf-8")
-    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY, drills)}["glm"]
+    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path, TODAY, drills, workspace=Workspace(ROOT))}["glm"]
     assert not glm.config_ok and not glm.ok
     assert "standby-for-glm.misfiled.yaml: declares standby_for: 'anthropic', not 'glm'" in glm.config_problem
     assert gc.check_g4(tmp_path, ROOT / "config" / "mara.yaml", TODAY).status == gc.FAIL
@@ -173,19 +173,22 @@ def test_drills_register_and_status(tmp_path):
     drills = tmp_path / "drills.yaml"
     shutil.copy(ROOT / "ops" / "model-swap-drills.yaml", drills)
     prod = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
-    st = {s.family: s for s in govdocs.drill_status(prod, ROOT, TODAY, drills)}
+    st = {s.family: s for s in govdocs.drill_status(prod, ROOT, TODAY, drills, workspace=Workspace(ROOT))}
     assert all(s.config_ok and not s.drill_ok and s.drill_problem == "no live drill recorded" for s in st.values())
     govdocs.append_drill(drills, govdocs.Drill(TODAY, "rehearsal", "glm", "deepseek", "config/examples/standby-for-glm.yaml", 0.01, "pass", "x", "mock"))
-    assert not {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills)}["glm"].drill_ok, "a rehearsal never satisfies G-4"
+    glm = {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills, workspace=Workspace(ROOT))}["glm"]
+    assert not glm.drill_ok, "a rehearsal never satisfies G-4"
     govdocs.append_drill(drills, govdocs.Drill(TODAY - dt.timedelta(days=10), "live", "glm", "deepseek",
                                                "config/examples/standby-for-glm.yaml", 200.0, "pass", "x", "CHG-1"))
-    s = {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills)}["glm"]
+    s = {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills, workspace=Workspace(ROOT))}["glm"]
     assert not s.drill_ok and "need pass within 168 h" in s.drill_problem
     govdocs.append_drill(drills, govdocs.Drill(TODAY - dt.timedelta(days=5), "live", "glm", "deepseek",
                                                "config/examples/standby-for-glm.yaml", 54.0, "pass", "x", "CHG-2"))
-    s = {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills)}["glm"]
+    s = {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY, drills, workspace=Workspace(ROOT))}["glm"]
     assert s.drill_ok and s.drill.evidence == "CHG-2"
-    assert not {x.family: x for x in govdocs.drill_status(prod, ROOT, TODAY + dt.timedelta(days=400), drills)}["glm"].drill_ok, "older than a year"
+    later = TODAY + dt.timedelta(days=400)
+    glm = {x.family: x for x in govdocs.drill_status(prod, ROOT, later, drills, workspace=Workspace(ROOT))}["glm"]
+    assert not glm.drill_ok, "older than a year"
     text = drills.read_text(encoding="utf-8")
     assert text.startswith("# Model-swap drill register") and text.count("kind: live") == 2
 
@@ -247,7 +250,7 @@ def test_drill_cli_rehearse_says_a_standby_document_is_not_a_config_instead_of_c
 def test_a_standby_document_is_read_by_its_front_matter(tmp_path, declared, problem_starts):
     standby = tmp_path / "standby.md"
     standby.write_text(f"---\nstandby_for: {declared}\n---\n# a standby written as a document\n", encoding="utf-8")
-    family, problem = govdocs._standby_family_of(["anthropic", "gemini", "glm"], standby, "glm")
+    family, problem = govdocs._standby_family_of(["anthropic", "gemini", "glm"], standby, "glm", Workspace(ROOT))
     assert family == "" and problem.startswith(problem_starts)
 
 
@@ -396,3 +399,64 @@ def test_the_baseline_counts_each_jury_outcome_and_a_report_without_a_gate_as_bl
     assert m["findings_per_review"] == 2.5 and m["gate_would_block_rate"] == 0.5
     text = govdocs.render_baseline(m, date=dt.date(2026, 10, 14), phase_started="2026-09-01", sources=[])
     assert "| jury outcomes accepted / rejected / dropped / needing a human | 1 / 1 / 2 / 1 |" in text
+
+
+def _standby_that_needs_evidence(root: Path) -> None:
+    """A copy of the glm standby under `root`/config/examples whose gate allows unsupervised rejection, which policy P8 lets
+    through only while the Evidence record of the workspace it is loaded in stands."""
+    examples = root / "config" / "examples"
+    examples.mkdir(parents=True)
+    raw = yaml.safe_load((ROOT / "config" / "examples" / "standby-for-glm.yaml").read_text(encoding="utf-8"))
+    raw["gate"] = dict(raw.get("gate") or {}, unsupervised_reject_allowed=True)
+    (examples / "standby-for-glm.yaml").write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+
+
+def _evidence_record(workspace_root: Path) -> None:
+    from mara.policy import AAT_METHOD
+
+    (workspace_root / "calib").mkdir(parents=True)
+    (workspace_root / "calib" / "latest.json").write_text(json.dumps({"date": dt.date.today().isoformat(), "mode": "live", "aat": {
+        "method": AAT_METHOD, "passed": True, "n": 12, "rejection": {"n": 59, "passed": True, "miss_rate_upper": 0.0495}}}), encoding="utf-8")
+
+
+def test_a_standby_config_is_loaded_under_the_policies_of_the_workspace_given_not_of_the_environment(tmp_path, monkeypatch):
+    """The standby that rejects without supervision loads only where the Evidence record stands: the workspace the drill
+    status is asked about, whatever MARA_HOME names."""
+    _standby_that_needs_evidence(tmp_path / "repo")
+    bare, with_evidence = tmp_path / "bare", tmp_path / "with-evidence"
+    bare.mkdir()
+    _evidence_record(with_evidence)
+    prod = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
+
+    monkeypatch.setenv("MARA_HOME", str(with_evidence))
+    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path / "repo", TODAY, workspace=Workspace(bare))}["glm"]
+    assert not glm.config_ok and "does not load" in glm.config_problem and "P8" in glm.config_problem
+    monkeypatch.setenv("MARA_HOME", str(bare))
+    glm = {s.family: s for s in govdocs.drill_status(prod, tmp_path / "repo", TODAY, workspace=Workspace(with_evidence))}["glm"]
+    assert glm.config_ok, glm.config_problem
+
+
+def test_the_drill_status_and_the_standby_family_require_the_workspace_the_standby_is_loaded_in(tmp_path):
+    """Loading a standby config runs policies P7 and P8 against the files of a workspace, so a caller names it."""
+    prod = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
+    with pytest.raises(TypeError):
+        govdocs.drill_status(prod, ROOT, TODAY)
+    with pytest.raises(TypeError):
+        govdocs._standby_family_of(govdocs.production_families(prod), ROOT / "config" / "examples" / "standby-for-glm.yaml", "glm")
+
+
+def test_g4_loads_the_standby_under_the_policies_of_the_workspace_it_is_given_not_of_the_environment(tmp_path, monkeypatch):
+    import governance_check as gc
+
+    _standby_that_needs_evidence(tmp_path / "repo")
+    bare, with_evidence = tmp_path / "bare", tmp_path / "with-evidence"
+    bare.mkdir()
+    _evidence_record(with_evidence)
+    config = ROOT / "config" / "mara.yaml"
+
+    monkeypatch.setenv("MARA_HOME", str(with_evidence))
+    g4 = gc.check_g4(tmp_path / "repo", config, TODAY, workspace=Workspace(bare))
+    assert g4.status == gc.FAIL and "does not load" in g4.evidence and "P8" in g4.evidence
+    monkeypatch.setenv("MARA_HOME", str(bare))
+    g4 = gc.check_g4(tmp_path / "repo", config, TODAY, workspace=Workspace(with_evidence))
+    assert "glm→" in g4.evidence and "does not load" not in g4.evidence, g4.evidence

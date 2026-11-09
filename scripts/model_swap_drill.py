@@ -32,7 +32,7 @@ DRILLS = ROOT / "ops" / "model-swap-drills.yaml"
 def cmd_check(a: argparse.Namespace) -> int:
     cfg = load_config(a.config, a.workspace)
     ok = True
-    for st in govdocs.drill_status(cfg, ROOT, a.today, a.drills):
+    for st in govdocs.drill_status(cfg, ROOT, a.today, a.drills, workspace=a.workspace):
         cfg_line = ("standby " + ", ".join(f"{x.config} → {x.standby_family}" for x in st.standbys) if st.config_ok
                     else f"standby: {st.config_problem}")
         drill_line = (f"live drill {st.drill.date} {st.drill.duration_hours:g} h {st.drill.outcome}" if st.drill_ok and st.drill else st.drill_problem)
@@ -66,7 +66,7 @@ def cmd_rehearse(a: argparse.Namespace) -> int:
     if replaced not in prod_fams:
         print(f"ERROR: standby_for={replaced!r} is not a production family {prod_fams}", file=sys.stderr)
         return 2
-    sb_fam, problem = govdocs._standby_family_of(prod_fams, a.standby, replaced)
+    sb_fam, problem = govdocs._standby_family_of(prod_fams, a.standby, replaced, workspace=a.workspace)
     if problem:
         print(f"ERROR: {a.standby}: {problem}", file=sys.stderr)
         return 2
@@ -106,7 +106,7 @@ def cmd_record(a: argparse.Namespace) -> int:
         return 2
     hours = round((completed - started).total_seconds() / 3600, 2)
     prod = load_config(a.config, a.workspace)
-    sb_fam, problem = govdocs._standby_family_of(govdocs.production_families(prod), a.standby_config, a.replaced)
+    sb_fam, problem = govdocs._standby_family_of(govdocs.production_families(prod), a.standby_config, a.replaced, workspace=a.workspace)
     if problem:
         print(f"ERROR: {a.standby_config}: {problem}", file=sys.stderr)
         return 2
