@@ -70,8 +70,8 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   workspace's `calib/samples/`.
   `test_governance_leftovers.py`, `test_security_regressions.py`, `test_invocation_checks.py`.
 - `cli.Pipeline.__init__`: wrapped by `init(self, cfg, **kw)`, which reads `kw["out_dir"]` and `kw["root"]`.
-  `cli._review` builds `Pipeline(cfg, out_dir=..., workspace=..., ...)`, the config positional and the rest keywords, the
-  workspace the invocation was admitted against. `test_security_regressions.py`.
+  `cli._review` builds `Pipeline(cfg, out_dir=..., root=..., ...)`, the config positional and the rest keywords, the
+  root of the workspace the invocation was admitted against. `test_security_regressions.py`.
 - `invocation.load_config`: patched as a module name. `review` calls `admit(...)`, which `cli` imports by name from
   `mara.invocation` (a patch of `admit` itself goes in `cli.admit`); `admit` calls `load(...)` and `load` calls
   `load_config(...)`, both in `mara.invocation`, so the one patch reaches the command line and the workbench alike.
@@ -185,12 +185,12 @@ code that writes it, so it changes with that code:
 - `Workspace(root)`: tests pass `Workspace(tmp_path)` to `mara.config.load_config` (`load_config(path, workspace,
   today=...)`), `mara.policy.evaluate_policies` and `mara.policy.workspace_policies`. Policy P7 (`mara.policy.p7_ml_bom`)
   reads the ML-BOM and its signature bundle, P8 (`mara.policy.p8_unsupervised_reject`) `calib/latest.json`, below that
-  root and never below MARA_HOME or the working directory. The workspace is required: `load_config`,
+  root and never below MARA_HOME or the working directory. The workspace is required, with no default, by `load_config`,
   `evaluate_policies`, `workspace_policies`, `check_config_file`, `p7_ml_bom`, `p8_unsupervised_reject` (workspace, then
-  `today`), `mara.mlbom.status_for_config` and `verify_signature` (their `root`), `mara.decisions.read_backlog` (its `root`),
-  `mara.invocation.load` takes it with no default, and so do `calibration_answer_key`, `check_calibration_sample`,
-  `TrainingRequirement.from_config_file` and `from_config` (their `root`). A test that left it out passes `Workspace(ROOT)`, the repository, which
-  is what the working directory was. `test_policy.py`, `test_ml_bom.py`.
+  `today`) and `mara.invocation.load`. The root of the workspace is required, as `root`, by `mara.mlbom.status_for_config`
+  and `verify_signature`, `mara.decisions.read_backlog`, `TrainingRequirement.from_config_file` and `from_config`, and
+  `mara.invocation.calibration_answer_key` and `check_calibration_sample`. A test that left it out passes the repository
+  (`Workspace` of it, or its path), which is what the working directory was. `test_policy.py`, `test_ml_bom.py`.
 - `MaraConfig` reads no workspace when it is built: its validator runs P1 to P6 only (`mara.policy.config_policies`),
   and `mara.config.load_config` runs P7 and P8 once the config is built. A test that needs P7 or P8 to refuse a config
   writes it to a file and loads it with `load_config` in a workspace of its own; one that builds a config with
@@ -227,7 +227,7 @@ code that writes it, so it changes with that code:
 - Who reads the environment. `review`, `export-summary`, `check-config` and `serve` of `mara.cli` each read it once, with
   `Workspace.from_env()`, and hand that value down (`review` through `admit` and `AdmittedInvocation.root`). Four
   places are given a root and take from the environment only what a root does not say, the tool directory and the trivy
-  cache MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR name, with `Workspace.from_env(root=...)`: `Pipeline` (the workspace it was
+  cache MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR name, with `Workspace.from_env(root=...)`: `Pipeline` (the root it was
   given, else the environment's root, for its default tool runner), `mara.web.env` (`tools`, `trivy`, `environment`),
   `mara.invocation.check_paths` and `mara.web.procs.child_env` (which writes the three anchors, absolute, into the
   environment of a child). A test of any of them installs a tool or a cache below the workspace it passes and unsets

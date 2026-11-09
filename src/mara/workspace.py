@@ -59,8 +59,8 @@ def resolve(path: str | Path, base: Path) -> Path:
 
 
 def resolve_user_path(path: str | Path) -> Path:
-    """A path a user wrote in a config (a CA bundle): `~` is the user's home, a relative path lies below the root of the
-    environment's workspace (`root`), an absolute one is as given."""
+    """A path a user wrote in a config (a CA bundle): `~` is the user's home, a relative path lies below MARA_HOME (else the
+    working directory: `root()`), an absolute one is as given."""
     return resolve(os.path.expanduser(path), root())
 
 

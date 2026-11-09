@@ -126,7 +126,7 @@ def calibration_answer_key(target: Path, root: Path) -> list[dict]:
 
 
 def check_calibration_sample(target: Path, root: Path) -> None:
-    """Nothing when `target` is a calibration sample of the workspace (calibration_answer_key); InvocationError
+    """Nothing when `target` is a calibration sample below `root` (calibration_answer_key); InvocationError
     bad_calibration_sample on --calibration-sample otherwise."""
     calibration_answer_key(target, root)
 
@@ -212,7 +212,7 @@ class AdmittedInvocation:
 
 
 def admit(inv: ReviewInvocation, root: Path) -> AdmittedInvocation:
-    """`inv`, admitted against the MARA workspace of root `root`, in order: check_paths; then the progress record starts;
+    """`inv`, admitted against the MARA workspace whose root is `root`, in order: check_paths; then the progress record starts;
     then load, check_calibration_sample and check_base. InvocationError otherwise. Anything raised once the record has
     started leaves it failed, its error a usage error's kind or else the exception's name."""
     config_path = check_paths(inv, root)

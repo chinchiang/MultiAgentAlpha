@@ -75,7 +75,7 @@ class Pipeline:
             run_all, workspace=Workspace.from_env(root=self.root))
         # the live view `mara serve` draws (mara.progress); a no-op unless `mara review --progress-file` is given
         self.progress = progress if progress is not None else Progress()
-        self.out_dir = out_dir or self.root / "out"  # the workspace, like `mara review --out`
+        self.out_dir = out_dir or self.root / "out"  # below the root, like `mara review --out`
         self.providers: dict[str, Provider] = {m.name: make_provider(m, mock_fixtures) for m in cfg.models}
         # Counters (default 0) and the jury's statistics; becomes the report's bias_audit (GLOSSARY.md: bias audit)
         self.audit = Audit()
