@@ -55,7 +55,7 @@ module.exports = { CspEvaluator: CspEvaluator };
 
 
 @pytest.fixture
-def csp_install(tmp_path):
+def csp_workspace(tmp_path):
     """A MARA workspace (the repository's, with its version lock) whose tool directory holds a fake csp-evaluator install: the
     repository's real driver plus a minimal package, driven by the real node interpreter (a platform runtime, never installed by MARA)."""
     if shutil.which("node") is None:
@@ -126,11 +126,11 @@ def test_skips_oversized_and_hidden_files(tmp_path):
 # ----------------------------------------------------------------------------- driver + SARIF
 
 
-def test_run_csp_eval_end_to_end(tmp_path, csp_install):
+def test_run_csp_eval_end_to_end(tmp_path, csp_workspace):
     _write(tmp_path, "index.html", '<meta http-equiv="Content-Security-Policy" content="default-src \'self\'">')
     _write(tmp_path, "weird.html", '<meta http-equiv="Content-Security-Policy" content="script-src UNPARSEABLE">')
     out = tmp_path / "sarif" / "csp-evaluator.sarif"
-    cp = csp_eval.run_csp_eval(tmp_path, out, version="9.9.9", workspace=csp_install)
+    cp = csp_eval.run_csp_eval(tmp_path, out, version="9.9.9", workspace=csp_workspace)
     assert cp.returncode == 0, cp.stderr
     doc = json.loads(out.read_text(encoding="utf-8"))
     run = doc["runs"][0]
@@ -146,10 +146,10 @@ def test_run_csp_eval_end_to_end(tmp_path, csp_install):
     assert len(notes) == 1 and "weird.html:1" in notes[0]["message"]["text"]
 
 
-def test_run_csp_eval_with_no_policies_still_reports_a_complete_scan(tmp_path, csp_install):
+def test_run_csp_eval_with_no_policies_still_reports_a_complete_scan(tmp_path, csp_workspace):
     _write(tmp_path, "plain.py", "print('no csp here')\n")
     out = tmp_path / "csp-evaluator.sarif"
-    cp = csp_eval.run_csp_eval(tmp_path, out, workspace=csp_install)
+    cp = csp_eval.run_csp_eval(tmp_path, out, workspace=csp_workspace)
     assert cp.returncode == 0
     doc = json.loads(out.read_text(encoding="utf-8"))
     assert scan_complete(doc) and doc["runs"][0]["results"] == []
@@ -165,9 +165,9 @@ def test_run_csp_eval_refuses_missing_package_or_node(tmp_path, monkeypatch):
     assert csp_eval.run_csp_eval(tmp_path, tmp_path / "o.sarif", workspace=Workspace(ROOT, tools_dir=mt)).returncode == 127
 
 
-def test_runner_branch_runs_and_reports_the_tool(tmp_path, csp_install):
+def test_runner_branch_runs_and_reports_the_tool(tmp_path, csp_workspace):
     _write(tmp_path, "index.html", '<meta http-equiv="Content-Security-Policy" content="default-src \'self\'">')
-    runs = {r.tool: r for r in runner.run_all(tmp_path, tmp_path / "out", enabled=["csp-evaluator"], workspace=csp_install)}
+    runs = {r.tool: r for r in runner.run_all(tmp_path, tmp_path / "out", enabled=["csp-evaluator"], workspace=csp_workspace)}
     r = runs["csp-evaluator"]
     assert r.ran and r.note == f"pinned {tool_installs.locked('csp-evaluator')}"
     assert [x.rule_id for x in r.results] == ["SCRIPT_UNSAFE_INLINE", "FAKE_INFO"]

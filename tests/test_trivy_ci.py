@@ -97,6 +97,6 @@ def test_runner_scans_offline_with_the_recorded_database_and_skips_without_it(tm
     assert run.ran and run.results[0].rule_id == "CVE-2018-18074" and "db 20" in run.note, run.note
     argv = (tools / "argv.txt").read_text()
     assert all(flag in argv for flag in tdb.OFFLINE_FLAGS) and "download-db-only" not in argv, "a review never downloads the database"
-    empty = Workspace(ROOT, tools_dir=tools, trivy_cache=tmp_path / "empty")
-    (run,) = runner.run_all(target, tmp_path / "out2", enabled=["trivy"], workspace=empty)
+    no_db_workspace = Workspace(ROOT, tools_dir=tools, trivy_cache=tmp_path / "empty")
+    (run,) = runner.run_all(target, tmp_path / "out2", enabled=["trivy"], workspace=no_db_workspace)
     assert not run.ran and "no offline database" in run.note and "trivy_db.py download" in run.note

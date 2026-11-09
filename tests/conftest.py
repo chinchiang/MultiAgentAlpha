@@ -14,7 +14,8 @@ sys.path.insert(0, str(ROOT / "src"))
 def isolate_mara_tools_dir(tmp_path_factory):
     # Tests must never execute whatever happens to be installed under .mara-tools (a real scan takes seconds
     # and depends on what the developer installed). Point the runner at an empty directory; tests that need a
-    # tool create their own fake via MARA_TOOLS_DIR, or opt in to the real .mara-tools explicitly.
+    # tool create their own fake and name its directory (Workspace(root, tools_dir=...), or MARA_TOOLS_DIR for a test of the entry),
+    # or opt in to the real .mara-tools explicitly.
     tools_dir = tmp_path_factory.mktemp("mara-no-tools")
     old = os.environ.get("MARA_TOOLS_DIR")
     os.environ["MARA_TOOLS_DIR"] = str(tools_dir)
