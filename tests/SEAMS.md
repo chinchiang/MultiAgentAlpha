@@ -99,7 +99,7 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
 
 ## The workbench (`src/mara/web/`)
 
-- `RunRegistry(workspace, out_dir, start=..., table=...)`, `JobRegistry(workspace, out_dir, start=..., table=...)`: a
+- `RunRegistry(root, out_dir, start=..., table=...)`, `JobRegistry(root, out_dir, start=..., table=...)`: a
   test passes a table only to build the two over one. A test that builds a registry and starts children passes it a
   starter or patches `procs.spawn` (as the HTTP-level tests, which build the server, and
   `test_server_exit_cancels_a_running_run` do). Each registry hands its starter and its table to its `procs.Children`,
@@ -141,7 +141,7 @@ Tests: `test_agent_harness.py`, `test_prompt_fences.py`, `test_reply_exchange.py
   The two tests above, and `test_web_server.py::test_a_run_whose_child_exits_at_once_keeps_the_exit_code_its_waiter_recorded`.
 - `mara.web.server.serve`: patched as an attribute of its module; `cli.serve` imports it when it runs, so a test that
   patches it before invoking `mara` or `mara serve` reaches it, and no server listens. `cli.serve` calls it with keyword
-  arguments only (`host`, `port`, `workspace`, `out_dir`, `open_browser`, `echo`), which the double records and the
+  arguments only (`host`, `port`, `root`, `out_dir`, `open_browser`, `echo`), which the double records and the
   tests compare. `test_cli_default.py`.
 - `panel.model_row(m)`, `panel.roles_row(r)`, `panel.manifest_row(entry)`: pure, called directly. A test gives `model_row`
   a `ModelSpec` built without its validation (`model_construct`): the validator refuses an endpoint with credentials, a
@@ -197,7 +197,7 @@ code that writes it, so it changes with that code:
   `model_validate` meets P1 to P6 only.
   `test_policy.py::test_a_config_is_built_without_reading_a_workspace_and_its_workspace_refuses_it_when_it_loads`.
 - `mara.policy.check_config_file(path, workspace)` reports the policies of a config file with P7 and P8 read from that
-  workspace; `mara.web.env.configs(workspace)` passes the workspace it lists, so a test of the environment page puts the
+  workspace; `mara.web.env.configs(root)` passes the workspace it lists, so a test of the environment page puts the
   Evidence record below the `tmp_path` it lists and sets MARA_HOME elsewhere. `mara check-config` passes the workspace it
   read from the environment once, which is the environment's. `test_policy.py::test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment`,
   `test_panel.py::test_the_environment_page_lists_policies_as_the_workspace_it_is_given_holds_evidence_for_them`.
@@ -215,7 +215,7 @@ code that writes it, so it changes with that code:
   `runner.tool_path` or `semgrep_rules.installed_rule_paths` with a fake gives it a `workspace` parameter too, since `run_all`
   calls them with the keyword (the `every_tool` fixture of `test_tool_env.py`); so does a fake of `tool_path` or
   `installed_version` in `scripts/osv_ci.py` (`test_security_regressions.py`). `test_tool_env.py`, `test_trivy_db.py`.
-- The environment page lists the tools and the trivy database of the workspace it lists: `mara.web.env.tools(workspace)`
+- The environment page lists the tools and the trivy database of the workspace it lists: `mara.web.env.tools(root)`
   and `mara.web.env.environment` take the tool directory MARA_TOOLS_DIR names, else the one below that workspace, so a
   test installs a tool below the workspace it lists and unsets MARA_TOOLS_DIR; `mara.web.env.trivy(cache, workspace=...)`
   takes an explicit `cache` before the workspace's trivy cache. `test_panel.py`.
@@ -253,8 +253,8 @@ code that writes it, so it changes with that code:
   now passes (`workspace=`). `test_workspace_anchors.py` holds the guard: one test per `scripts/*.py` reads the file's
   syntax tree and lists a call of a reader given no workspace (`tools_dir`, `cache_dir`, `tool_path`, `installed_version`,
   `installed_manifest_entry`, `rules_dir`, `installed_rule_paths`, `driver_path` and `run_csp_eval` without `workspace=`;
-  `load_config`, `evaluate_policies`, `status_for_config` and `mara.workspace.resolve` without their second argument) and
-  the import of `mara.workspace.root`, and a test of the scan itself says what it sees and what it leaves alone (a
+  `load_config`, `evaluate_policies`, `status_for_config` and `mara.workspace.resolve` without their second argument;
+  `make_server` without `root=`) and the import of `mara.workspace.root`, and a test of the scan itself says what it sees and what it leaves alone (a
   script's own `load_config`, one imported from another script).
 - `governance_check` is the exception among the scripts. `check_g2`, `check_g3`, `check_g4`, `check_g7`, `check_g8`,
   `check_g9`, `check_g10` and `_production_families` take `workspace` as an optional keyword and read the environment's

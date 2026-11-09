@@ -55,10 +55,10 @@ def _sha256(path: Path) -> str | None:
         return None
 
 
-def tools(workspace: Path) -> dict[str, Any]:
-    lock_path = workspace / pins.LOCK
+def tools(root: Path) -> dict[str, Any]:
+    lock_path = root / pins.LOCK
     lock = pins.read_lock(lock_path)
-    ws = Workspace.from_env(root=workspace)  # the tool directory MARA_TOOLS_DIR names, else the one below `workspace`
+    ws = Workspace.from_env(root=root)  # the tool directory MARA_TOOLS_DIR names, else the one below `root`
     tdir = tools_dir(workspace=ws)
     rows = []
     for name, spec in pins.locked_tools(lock).items():
@@ -160,11 +160,11 @@ def credential(m: ModelSpec) -> dict[str, Any]:
     return {"kind": "env", "env": name, "present": bool(name and os.environ.get(name))}
 
 
-def configs(workspace: Path) -> list[dict[str, Any]]:
+def configs(root: Path) -> list[dict[str, Any]]:
     out = []
-    for path in config_files(workspace):
-        rel = path.relative_to(workspace).as_posix()
-        check = check_config_file(path, Workspace(workspace))  # the check `mara check-config` renders too
+    for path in config_files(root):
+        rel = path.relative_to(root).as_posix()
+        check = check_config_file(path, Workspace(root))  # the check `mara check-config` renders too
         entry: dict[str, Any] = {"path": rel, "name": path.stem, "structure_ok": check.structure_ok, "loadable": check.passed,
                                  "error": " ".join(check.error.split())[:600], "provider_mode": None,
                                  "models": [], "roles": {}, "policies": [], "dimensions": [], "rollout_phase": None}
@@ -184,16 +184,16 @@ def configs(workspace: Path) -> list[dict[str, Any]]:
     return out
 
 
-def environment(workspace: Path, out_dir: Path) -> dict[str, Any]:
+def environment(root: Path, out_dir: Path) -> dict[str, Any]:
     return {
         "version": __version__,
         "python": {"version": platform.python_version(), "executable": sys.executable},
         "platform": platform.platform(),
-        "workspace": str(workspace),
+        "workspace": str(root),
         "out_dir": str(out_dir),
         "env_vars": {name: bool(os.environ.get(name)) for name in WORKSPACE_ENV},
-        "tools": tools(workspace),
-        "trivy_db": trivy(workspace=Workspace.from_env(root=workspace)),
+        "tools": tools(root),
+        "trivy_db": trivy(workspace=Workspace.from_env(root=root)),
         "node": node(),
-        "actions": jobs.available(workspace),
+        "actions": jobs.available(root),
     }

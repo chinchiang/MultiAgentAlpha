@@ -75,33 +75,33 @@ def clean_title(text: str) -> str:
     return " ".join(kept.split())[:120]
 
 
-def resolve_path(workspace: Path, value: str) -> Path:
-    """`value` resolved, relative to `workspace` unless absolute; LaunchError bad_path when it is not a usable path."""
+def resolve_path(root: Path, value: str) -> Path:
+    """`value` resolved, relative to `root` unless absolute; LaunchError bad_path when it is not a usable path."""
     if "\x00" in value:  # Path.resolve refuses a NUL byte on POSIX but lets it pass on Windows: the same answer on both
         raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path (a NUL byte)")
     try:
         p = Path(value.strip()).expanduser()
-        return (p if p.is_absolute() else workspace / p).resolve()
+        return (p if p.is_absolute() else root / p).resolve()
     except (ValueError, RuntimeError, OSError) as e:  # a symlink loop, an unknown ~user
         raise LaunchError("bad_path", f"{value[:200]!r}: not a usable path ({type(e).__name__})") from e
 
 
-def resolve_config(workspace: Path, value: str, provider: ProviderMode) -> Path:
+def resolve_config(root: Path, value: str, provider: ProviderMode) -> Path:
     """The config file `value` names, or the provider's default when it is empty, if `configs.allowed()` accepts it;
     LaunchError config_not_found otherwise (bad_path, from resolve_path)."""
     if value:
-        cfg_path = resolve_path(workspace, value)
+        cfg_path = resolve_path(root, value)
     else:
-        cfg_path = default_config(provider, workspace).resolve()
-    if not configs.allowed(workspace, cfg_path):
+        cfg_path = default_config(provider, root).resolve()
+    if not configs.allowed(root, cfg_path):
         raise LaunchError("config_not_found", f"{value or cfg_path}: not a config file under config/ or config/examples/")
     return cfg_path
 
 
 class RunRegistry:
-    def __init__(self, workspace: Path, out_dir: Path, *, start: Callable[..., Any] | None = None,
+    def __init__(self, root: Path, out_dir: Path, *, start: Callable[..., Any] | None = None,
                  table: procs.ChildTable | None = None) -> None:
-        self.workspace = workspace.resolve()
+        self.root = root.resolve()
         self.out_dir = out_dir.resolve()
         self.runs_dir = self.out_dir / "runs"
         self.children = procs.Children("run", self._record_exit, start=start, table=table)
@@ -111,39 +111,39 @@ class RunRegistry:
 
     # ------------------------------------------------------------------ validation
     def _inside_workspace(self, p: Path) -> bool:
-        return p == self.workspace or self.workspace in p.parents
+        return p == self.root or self.root in p.parents
 
     def prepare(self, req: LaunchRequest) -> tuple[ReviewInvocation, dict[str, Any]]:
         """The review invocation (its output directory the runs directory, until create gives the run its own) and the
         manifest fields of a valid request; LaunchError otherwise."""
-        target = resolve_path(self.workspace, req.target)
+        target = resolve_path(self.root, req.target)
         if not target.is_dir():
             raise LaunchError("target_not_dir", f"{target}: not a directory")
         provider = ProviderMode(req.provider)
-        cfg_path = resolve_config(self.workspace, req.config, provider)
+        cfg_path = resolve_config(self.root, req.config, provider)
         dirs: dict[str, Path] = {}
         for field, code in (("sarif_dir", "sarif_dir_not_dir"), ("mock_fixtures", "mock_fixtures_not_dir")):  # evidence inputs
             if value := getattr(req, field):
-                p = resolve_path(self.workspace, value)
+                p = resolve_path(self.root, value)
                 if not p.is_dir():
                     raise LaunchError(code, f"{p}: not a directory")
                 if not self._inside_workspace(p):
                     raise LaunchError("path_outside_workspace",
-                                      f"{option(field)} {p}: evidence inputs must lie inside the workspace {self.workspace}")
+                                      f"{option(field)} {p}: evidence inputs must lie inside the workspace {self.root}")
                 dirs[field] = p
         base = req.base.strip()
         inv = ReviewInvocation(target=target, config=cfg_path, provider=provider, out=self.runs_dir, sarif_dir=dirs.get("sarif_dir"),
                                mock_fixtures=dirs.get("mock_fixtures"), fail_on_gate=req.fail_on_gate, base=base or None,
                                calibration_sample=req.calibration_sample)
         try:
-            cfg = admit(inv, self.workspace).config  # inv has no progress file yet: admit writes no record
+            cfg = admit(inv, self.root).config  # inv has no progress file yet: admit writes no record
         except InvocationError as e:  # the command line would refuse the same launch, on e.param
             message = {"provider_mismatch": f"{cfg_path.name}: {e}", "config_invalid": str(e)[:800]}.get(e.kind, str(e))
             raise LaunchError(e.kind, message) from e
         models = [{**panel.model_row(m), "api_key_env": m.api_key_env} for m in cfg.models]
         fields = {
             "target": str(target),
-            "config": cfg_path.relative_to(self.workspace).as_posix(),
+            "config": cfg_path.relative_to(self.root).as_posix(),
             "provider": req.provider,
             "roles": panel.roles_row(cfg.roles),
             "models": models,
@@ -177,8 +177,8 @@ class RunRegistry:
                 "pid": None,
             }
 
-        run_id, manifest = self.children.launch("run", self.runs_dir, record="run.json", log="run.log", cwd=self.workspace,
-                                                env=procs.child_env(self.workspace), prepare=record)
+        run_id, manifest = self.children.launch("run", self.runs_dir, record="run.json", log="run.log", cwd=self.root,
+                                                env=procs.child_env(self.root), prepare=record)
         return self.get(run_id) or manifest
 
     def _record_exit(self, run_id: str, code: int, stopped: bool) -> None:
@@ -207,7 +207,7 @@ class RunRegistry:
     # ------------------------------------------------------------------ reading
     def run_dir(self, run_id: str) -> Path | None:
         if run_id == IMPORTED_ID:
-            d = self.workspace / "out"
+            d = self.root / "out"
             return d if (d / "report.json").is_file() else None
         if not procs.ID_RE.match(run_id):
             return None

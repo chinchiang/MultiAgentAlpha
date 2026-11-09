@@ -201,6 +201,7 @@ def test_check_outside_accepts_a_target_when_the_anchors_of_the_workspace_it_is_
 _NEEDS_WORKSPACE_KEYWORD = frozenset({"tools_dir", "cache_dir", "tool_path", "installed_version", "installed_manifest_entry",
                                       "rules_dir", "installed_rule_paths", "driver_path", "run_csp_eval", "drill_status",
                                       "_standby_family_of"})
+_NEEDS_ROOT_KEYWORD = frozenset({"make_server"})  # takes the root of the workspace it serves, as `root=`
 _NEEDS_SECOND_ARGUMENT = {"load_config": "workspace", "evaluate_policies": "workspace", "status_for_config": "root",
                           "resolve": "base", "from_config_file": "root"}
 
@@ -237,6 +238,8 @@ def _anchor_violations(source: str) -> list[str]:
         kws = {k.arg for k in n.keywords}
         if name in _NEEDS_WORKSPACE_KEYWORD and "workspace" not in kws:
             found.append(f"{n.lineno}: {name}() without workspace=")
+        elif name in _NEEDS_ROOT_KEYWORD and "root" not in kws:
+            found.append(f"{n.lineno}: {name}() without root=")
         elif name in _NEEDS_SECOND_ARGUMENT and len(n.args) < 2 and _NEEDS_SECOND_ARGUMENT[name] not in kws:
             found.append(f"{n.lineno}: {name}() without its {_NEEDS_SECOND_ARGUMENT[name]}")
     return sorted(found)
@@ -257,6 +260,9 @@ def _anchor_violations(source: str) -> list[str]:
     ("from mara.tools import trivy_db as tdb\ntdb.cache_dir(workspace=ws)", 0),
     ("from mara import mlbom\nmlbom.status_for_config(cfg)", 1),
     ("from mara import mlbom\nmlbom.status_for_config(cfg, ws.root)", 0),
+    ("from mara.web.server import make_server\nmake_server(port=0, out_dir=o)", 1),
+    ("from mara.web.server import make_server\nmake_server(port=0, workspace=ROOT, out_dir=o)", 1),  # the old keyword
+    ("from mara.web.server import make_server\nmake_server(port=0, root=ROOT, out_dir=o)", 0),
     ("from mara import govdocs\ngovdocs.drill_status(cfg, root, today)", 1),
     ("from mara import govdocs\ngovdocs.drill_status(cfg, root, today, workspace=ws)", 0),
     ("from mara import govdocs\ngovdocs._standby_family_of(prod, p, 'glm', ws)", 1),  # by keyword, like the others

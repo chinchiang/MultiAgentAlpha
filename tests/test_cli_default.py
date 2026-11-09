@@ -33,8 +33,8 @@ def test_mara_alone_starts_the_workbench_as_mara_serve_does(tmp_path, monkeypatc
     serve = CliRunner().invoke(app, ["serve"], env={"MARA_HOME": str(tmp_path)})
     assert (alone.exit_code, serve.exit_code) == (0, 0), alone.output
     assert len(calls) == 2 and calls[0] == calls[1]
-    started = {k: calls[0][k] for k in ("host", "port", "workspace", "out_dir", "open_browser")}
-    assert started == {"host": "127.0.0.1", "port": 8765, "workspace": tmp_path.resolve(), "out_dir": tmp_path.resolve() / "out",
+    started = {k: calls[0][k] for k in ("host", "port", "root", "out_dir", "open_browser")}
+    assert started == {"host": "127.0.0.1", "port": 8765, "root": tmp_path.resolve(), "out_dir": tmp_path.resolve() / "out",
                        "open_browser": True}
 
 

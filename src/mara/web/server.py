@@ -118,17 +118,17 @@ class WorkbenchServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False  # never share the port with another listener
 
-    def __init__(self, address: tuple[str, int], *, workspace: Path, out_dir: Path, token: str | None = None) -> None:
+    def __init__(self, address: tuple[str, int], *, root: Path, out_dir: Path, token: str | None = None) -> None:
         super().__init__(address, Handler)
         self._serving = False  # serve_forever() is running, on some thread; close() then has to shut it down
-        self.workspace = workspace.resolve()
+        self.root = root.resolve()
         self.out_dir = out_dir.resolve()
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.token = token or secrets.token_urlsafe(32)
         self.started_at = procs.now()
         self.table = procs.ChildTable()  # the children of both registries, stopped together at exit
-        self.runs = RunRegistry(self.workspace, self.out_dir, table=self.table)
-        self.jobs = JobRegistry(self.workspace, self.out_dir, table=self.table)
+        self.runs = RunRegistry(self.root, self.out_dir, table=self.table)
+        self.jobs = JobRegistry(self.root, self.out_dir, table=self.table)
         self.page, self.csp = build_page()
         host = address[0]
         port = self.port
@@ -334,7 +334,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             match method, parts:
                 case "GET", ["session"]:
-                    self._json(HTTPStatus.OK, {"version": __version__, "workspace": str(app.workspace), "out_dir": str(app.out_dir),
+                    self._json(HTTPStatus.OK, {"version": __version__, "workspace": str(app.root), "out_dir": str(app.out_dir),
                                                "started_at": app.started_at, "settings": app.settings(), "python": sys.version.split()[0]})
                 case "GET", ["runs"]:
                     self._json(HTTPStatus.OK, {"runs": app.runs.list(), "busy": app.runs.busy()})
@@ -367,9 +367,9 @@ class Handler(BaseHTTPRequestHandler):
                 case "POST", ["runs", run_id, "rerun"]:
                     self._json(HTTPStatus.CREATED, {"run": app.runs.rerun(run_id)})
                 case "GET", ["env"]:
-                    self._json(HTTPStatus.OK, env.environment(app.workspace, app.out_dir))
+                    self._json(HTTPStatus.OK, env.environment(app.root, app.out_dir))
                 case "GET", ["configs"]:
-                    self._json(HTTPStatus.OK, {"configs": env.configs(app.workspace)})
+                    self._json(HTTPStatus.OK, {"configs": env.configs(app.root)})
                 case "GET", ["jobs"]:
                     self._json(HTTPStatus.OK, {"jobs": app.jobs.list()})
                 case "POST", ["jobs"]:
@@ -412,11 +412,11 @@ def _int(value: str, default: int, low: int, high: int) -> int:
         return default
 
 
-def make_server(*, host: str = "127.0.0.1", port: int = 8765, workspace: Path, out_dir: Path, token: str | None = None) -> WorkbenchServer:
+def make_server(*, host: str = "127.0.0.1", port: int = 8765, root: Path, out_dir: Path, token: str | None = None) -> WorkbenchServer:
     if host not in LOOPBACK_HOSTS:
         raise ValueError(f"{host}: the workbench listens on a loopback address only ({', '.join(LOOPBACK_HOSTS)})")
     cls = WorkbenchServer6 if host == "::1" else WorkbenchServer
-    return cls((host, port), workspace=workspace, out_dir=out_dir, token=token)
+    return cls((host, port), root=root, out_dir=out_dir, token=token)
 
 
 def open_file(out_dir: Path, url: str, port: int) -> Path:
@@ -451,13 +451,13 @@ def _stop_on_signals() -> dict[int, Any]:
     return previous
 
 
-def serve(*, host: str, port: int, workspace: Path, out_dir: Path, open_browser: bool, echo: Any = print) -> None:
+def serve(*, host: str, port: int, root: Path, out_dir: Path, open_browser: bool, echo: Any = print) -> None:
     """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); then every child still running is stopped, and each run or job
     still running gets up to `procs.WAITER_JOIN_SECONDS` to be recorded: a stopped run cancelled, a stopped job with the
     exit code the stop gave (WorkbenchServer.close)."""
-    httpd = make_server(host=host, port=port, workspace=workspace, out_dir=out_dir)
+    httpd = make_server(host=host, port=port, root=root, out_dir=out_dir)
     url = f"{httpd.url}#token={httpd.token}"
-    echo(f"MARA workbench {__version__} · workspace {httpd.workspace} · runs in {httpd.runs.runs_dir}")
+    echo(f"MARA workbench {__version__} · workspace {httpd.root} · runs in {httpd.runs.runs_dir}")
     echo(f"open: {url}")
     echo("the link is the key to this server: do not share it; Ctrl-C stops the server and any running review or job")
     previous = _stop_on_signals()
