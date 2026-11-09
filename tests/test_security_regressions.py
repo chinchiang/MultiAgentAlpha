@@ -958,6 +958,13 @@ def test_cross_target_and_legacy_decisions_never_apply():
     assert calibrate.apply_decisions(select([parsed], bound, anyone).usable, []) == ([], 0)
 
 
+def _main_osv_scan_runs(workflow: dict) -> list[str]:
+    """The run: of the osv-scanner step over the closures this repository installs (the garak and semgrep closures
+    have their own steps)."""
+    return [s["run"] for s in workflow["jobs"]["deterministic-tools"]["steps"]
+            if "osv_ci.py" in s.get("run", "") and "osv-scanner.toml" in s["run"]]
+
+
 def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():
     import yaml
     data = yaml.safe_load((ROOT / ".github/workflows/mara-review.yml").read_text(encoding="utf-8"))
@@ -973,7 +980,7 @@ def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():
     assert len(model_scan) == 1 and model_scan[0].count("--lockfile") == 1
     semgrep_scan = [s for s in runs if "osv_ci.py" in s and "osv-semgrep.toml" in s]
     assert len(semgrep_scan) == 1 and semgrep_scan[0].count("--lockfile") == 1 and "semgrep-requirements.txt" in semgrep_scan[0]
-    main_scan = [s for s in runs if "osv_ci.py" in s and "osv-scanner.toml" in s]
+    main_scan = _main_osv_scan_runs(data)
     assert len(main_scan) == 1 and "semgrep-requirements.txt" not in main_scan[0]
     assert "IgnoredVulns" not in (ROOT / "tools/osv-scanner.toml").read_text(encoding="utf-8")
 
@@ -982,8 +989,7 @@ def test_the_osv_scan_of_the_installed_closures_names_every_dev_closure_of_each_
     """A dev closure for another interpreter (tools/dev-requirements-py3NN.txt) is installed by its own CI job, so the
     advisory scan lists it too: a closure added without its --lockfile would be tested but never scanned."""
     data = yaml.safe_load((ROOT / ".github/workflows/mara-review.yml").read_text(encoding="utf-8"))
-    main_scan = [s["run"] for s in data["jobs"]["deterministic-tools"]["steps"]
-                 if "osv_ci.py" in s.get("run", "") and "osv-scanner.toml" in s["run"]]
+    main_scan = _main_osv_scan_runs(data)
     assert len(main_scan) == 1
     scanned = set(re.findall(r"--lockfile (\S+)", main_scan[0]))
     closures = {f"tools/{p.name}" for p in (ROOT / "tools").glob("dev-requirements*.txt")}

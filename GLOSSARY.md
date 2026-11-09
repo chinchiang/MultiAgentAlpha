@@ -162,6 +162,10 @@ _Avoid_: L0 results, tool findings (a finding is what a reviewer reports), SARIF
 A deterministic tool that scans at least one of the dimensions a review covers; the review is incomplete unless every required tool ran.
 _Avoid_: enabled tool (a tool can run without being required)
 
+**Required check**:
+A check of a pull request (a job of `.github/workflows/mara-review.yml`) that the repository's branch protection and ruleset name: the pull request cannot be merged until it passes. The workflow file does not say which jobs are required; `tests (CPython 3.12)` and `tests (CPython 3.13)` run and report but are not.
+_Avoid_: required tool (a tool a review needs to be complete, not a check of a pull request)
+
 **Tool alert**:
 A tool result at level error or warning: it can corroborate a finding and, until the tool's own triage suppresses it, keeps the review incomplete. A note is information, not an alert.
 _Avoid_: blocking tool result (a blocking finding is a gate rule), tool finding

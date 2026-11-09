@@ -26,7 +26,7 @@ was there follows), so from a git worktree it imports this checkout's mara, not 
   gitleaks  scripts/gitleaks_ci.py --event pull_request over the commits since the merge base with --base
 Run only when named, as they send package names and versions to api.osv.dev (osv names the three), L0's scans of
 the hash-locked closures, each with its own config:
-  osv-runtime     scripts/osv_ci.py on the six closures this repository installs, with tools/osv-scanner.toml
+  osv-runtime     scripts/osv_ci.py on the closures this repository installs, with tools/osv-scanner.toml
   osv-model-eval  scripts/osv_ci.py on tools/model-eval-requirements.txt, with tools/osv-model-eval.toml
   osv-semgrep     scripts/osv_ci.py on tools/semgrep-requirements.txt, with tools/osv-semgrep.toml
 Not run here: the whole suite on CPython 3.12 and 3.13, the other repository scanners (trivy, zizmor, csp-evaluator, and

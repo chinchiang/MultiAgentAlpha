@@ -334,11 +334,9 @@ jobs:
     needs: deterministic-tools
     permissions:
       contents: read
-    # pyproject allows >=3.11; this job keeps 3.13 working and is not a required check. tools/dev-requirements-py313.txt
-    # holds the same versions as tools/dev-requirements.txt (--same-versions-as), only the 3.13 wheels and their hashes
-    # differ. Only the test suite runs here: the L0 tool tests skip (the 3.11 job runs them against the locked binaries),
-    # and lint, mypy (3.12 job), the mock review and the ML-BOM check stay elsewhere. What 3.13 alone can show is
-    # Audit.__missing__ (tests/test_audit_names.py): a defaultdict read of a missing key behaves differently from 3.13 on.
+    # pyproject allows >=3.11; this job keeps 3.13 working. tools/dev-requirements-py313.txt holds the same versions
+    # as tools/dev-requirements.txt (--same-versions-as), only the 3.13 wheels and their hashes differ. It installs
+    # that closure and the build closure, then runs the test suite; the L0 tool tests skip here.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

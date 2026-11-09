@@ -69,19 +69,20 @@ def test_missing_hash_and_unexpected_sdist_are_refused(tmp_path):
     assert "3 distributions, 1 sdist" in r.stdout and "pyproject.toml [dev]" in (tmp_path / "x.txt").read_text()
 
 
-def test_a_closure_can_be_locked_for_cpython_313(tmp_path):
-    """CI tests on 3.13 too (tools/dev-requirements-py313.txt): the script accepts --python 3.13, and a host that is
-    not 3.13 is refused there like it is for 3.12."""
+@pytest.mark.parametrize("minor", [12, 13])
+def test_a_closure_can_be_locked_for_each_other_supported_cpython(tmp_path, minor):
+    """CI tests on 3.12 and 3.13 too (tools/dev-requirements-py312.txt, -py313.txt): the script accepts --python 3.NN,
+    and a host that is not that version is refused."""
     rep = tmp_path / "r.json"
     rep.write_text(json.dumps(REPORT), encoding="utf-8")
     out = tmp_path / "x.txt"
-    r = subprocess.run([sys.executable, str(SCRIPT), "--from-pyproject", "dev", "--python", "3.13", "--out", str(out),
+    r = subprocess.run([sys.executable, str(SCRIPT), "--from-pyproject", "dev", "--python", f"3.{minor}", "--out", str(out),
                         "--report", str(rep), "--any-platform", "--allow-sdist"], capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "--python 3.13" in out.read_text(encoding="utf-8")
-    if sys.version_info[:2] != (3, 13):
-        with pytest.raises(rl.RelockError, match="resolve on CPython 3.13"):
-            rl.check_host(False, (3, 13))
+    assert f"--python 3.{minor}" in out.read_text(encoding="utf-8")
+    if sys.version_info[:2] != (3, minor):
+        with pytest.raises(rl.RelockError, match=f"resolve on CPython 3.{minor}"):
+            rl.check_host(False, (3, minor))
 
 
 def test_pyproject_requirements_include_the_dev_extra():
