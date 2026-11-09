@@ -11,8 +11,8 @@ by the index. The output lists every distribution as `name==version --hash=sha25
 that `pip install --require-hashes -r <file>` refuses anything that differs from what was resolved
 here. The closure is specific to the interpreter and platform it was resolved on (CPython 3.11 /
 Linux x86_64, the CI and L0 hosts); the script refuses to run elsewhere unless --any-platform is
-given, and the header records what it was resolved on. --python 3.12 selects the other supported
-interpreter (the 3.12 test job). --same-versions-as <lock> constrains the resolution to exactly the
+given, and the header records what it was resolved on. --python 3.12 or 3.13 selects another supported
+interpreter (the 3.12 and 3.13 test jobs). --same-versions-as <lock> constrains the resolution to exactly the
 name==version pins of an existing closure, so a second interpreter's closure differs from it only in
 the wheel files and their hashes, never in the versions under test.
 
@@ -37,7 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_PYTHON = (3, 11)
-SUPPORTED_PYTHONS = {(3, 11), (3, 12)}
+SUPPORTED_PYTHONS = {(3, 11), (3, 12), (3, 13)}
 EXPECTED_PLATFORM_PREFIX = "linux-x86_64"
 
 
