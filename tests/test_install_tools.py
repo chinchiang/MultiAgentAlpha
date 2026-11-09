@@ -288,17 +288,16 @@ def test_runner_only_executes_pinned_tools(tmp_path, monkeypatch):
     fake.write_text("#!/bin/sh\ncat <<'EOF'\n" + sarif + "\nEOF\n")
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     tool_installs.manifest(mt, "zizmor")  # at its locked version
-    monkeypatch.setenv("MARA_TOOLS_DIR", str(mt))
+    workspace = Workspace(ROOT, tools_dir=mt)
     target = tmp_path / "target"
     target.mkdir()
-    runs = {r.tool: r for r in runner.run_all(target, tmp_path / "out", enabled=["zizmor", "gitleaks"], workspace=Workspace.from_env())}
+    runs = {r.tool: r for r in runner.run_all(target, tmp_path / "out", enabled=["zizmor", "gitleaks"], workspace=workspace)}
     assert runs["zizmor"].ran and runs["zizmor"].results[0].rule_id == "zizmor/dangerous-triggers"
     assert runs["zizmor"].note == f"pinned {tool_installs.locked('zizmor')}"
     assert not runs["gitleaks"].ran and "install_tools.py" in runs["gitleaks"].note
     # PATH is never consulted
     monkeypatch.setenv("PATH", str(mt / "bin") + os.pathsep + os.environ["PATH"])
-    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "empty"))
-    assert runner.tool_path("zizmor", workspace=Workspace.from_env()) is None
+    assert runner.tool_path("zizmor", workspace=Workspace(ROOT, tools_dir=tmp_path / "empty")) is None
 
 
 def test_verifier_verifies_its_own_release_with_the_downloaded_artifact(tmp_path):

@@ -107,18 +107,17 @@ def trivy_env(tmp_path, monkeypatch):
             Path(cmd[cmd.index("--output") + 1]).write_text(EMPTY_SARIF, encoding="utf-8")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    monkeypatch.setenv("MARA_HOME", str(tmp_path / "ws"))
+    monkeypatch.setenv("MARA_HOME", str(tmp_path / "ws"))  # trivy_db.max_age_hours reads the root of the environment's workspace
     tool_installs.lock_into(tmp_path / "ws")
     tool_installs.manifest(tmp_path / "tools", "trivy")
-    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "tools"))
-    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(tmp_path / "cache"))
+    workspace = Workspace(tmp_path / "ws", tools_dir=tmp_path / "tools", trivy_cache=tmp_path / "cache")
     monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
     monkeypatch.setattr(runner, "_run", fake_run)
     target = tmp_path / "target"
     target.mkdir()
 
     def run():
-        (trivy,) = runner.run_all(target, tmp_path / "out", enabled=["trivy"], workspace=Workspace.from_env())
+        (trivy,) = runner.run_all(target, tmp_path / "out", enabled=["trivy"], workspace=workspace)
         return trivy, calls
 
     return tmp_path / "cache", tmp_path / "ws", run
