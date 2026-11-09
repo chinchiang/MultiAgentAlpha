@@ -139,7 +139,7 @@ jobs:
       - name: osv-scanner must report the seeded fixture's known-vulnerable dependency (requests==2.19.0)
         run: python3 scripts/osv_ci.py --target fixtures/vuln-sample --report fixture-osv.sarif --expect-package requests
       - name: osv-scanner on the hash-locked closures this repository installs; any un-ignored advisory fails the job
-        run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/dev-requirements-py312.txt --lockfile tools/typecheck-requirements.txt --lockfile tools/build-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
+        run: python3 scripts/osv_ci.py --lockfile tools/bootstrap-requirements.txt --lockfile tools/dev-requirements.txt --lockfile tools/dev-requirements-py312.txt --lockfile tools/dev-requirements-py313.txt --lockfile tools/typecheck-requirements.txt --lockfile tools/build-requirements.txt --config tools/osv-scanner.toml --report osv.sarif
       - name: osv-scanner on the isolated model-evaluation closure only
         if: ${{ !cancelled() }}  # scanned even when an earlier closure's scan failed
         run: python3 scripts/osv_ci.py --lockfile tools/model-eval-requirements.txt --config tools/osv-model-eval.toml --report osv-model-eval.sarif
@@ -324,6 +324,35 @@ jobs:
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/typecheck-requirements.txt
       - name: Type check (mypy, configured in pyproject.toml)
         run: python3 -m mypy
+      - name: Unit and end-to-end tests (mock providers, no network)
+        run: pytest -q -rs
+
+  tests-py313:
+    name: tests (CPython 3.13)
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19; bump deliberately after validating there
+    timeout-minutes: 30
+    needs: deterministic-tools
+    permissions:
+      contents: read
+    # pyproject allows >=3.11; this job keeps 3.13 working and is not a required check. tools/dev-requirements-py313.txt
+    # holds the same versions as tools/dev-requirements.txt (--same-versions-as), only the 3.13 wheels and their hashes
+    # differ. Only the test suite runs here: the L0 tool tests skip (the 3.11 job runs them against the locked binaries),
+    # and lint, mypy (3.12 job), the mock review and the ML-BOM check stay elsewhere. What 3.13 alone can show is
+    # Audit.__missing__ (tests/test_audit_names.py): a defaultdict read of a missing key behaves differently from 3.13 on.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip   # wheels are re-verified by --require-hashes on every install, so a shared cache cannot substitute a pinned package
+          cache-dependency-path: tools/*.txt
+      - name: Install (hash-pinned 3.13 closure, then the package itself without dependencies)
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/dev-requirements-py313.txt
+          python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/build-requirements.txt
+          python3 -m pip install --quiet --disable-pip-version-check --no-deps --no-build-isolation -e .
       - name: Unit and end-to-end tests (mock providers, no network)
         run: pytest -q -rs
 

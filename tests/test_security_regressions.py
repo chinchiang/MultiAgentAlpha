@@ -976,3 +976,16 @@ def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():
     main_scan = [s for s in runs if "osv_ci.py" in s and "osv-scanner.toml" in s]
     assert len(main_scan) == 1 and "semgrep-requirements.txt" not in main_scan[0]
     assert "IgnoredVulns" not in (ROOT / "tools/osv-scanner.toml").read_text(encoding="utf-8")
+
+
+def test_the_osv_scan_of_the_installed_closures_names_every_dev_closure_of_each_python():
+    """A dev closure for another interpreter (tools/dev-requirements-py3NN.txt) is installed by its own CI job, so the
+    advisory scan lists it too: a closure added without its --lockfile would be tested but never scanned."""
+    data = yaml.safe_load((ROOT / ".github/workflows/mara-review.yml").read_text(encoding="utf-8"))
+    main_scan = [s["run"] for s in data["jobs"]["deterministic-tools"]["steps"]
+                 if "osv_ci.py" in s.get("run", "") and "osv-scanner.toml" in s["run"]]
+    assert len(main_scan) == 1
+    scanned = set(re.findall(r"--lockfile (\S+)", main_scan[0]))
+    closures = {f"tools/{p.name}" for p in (ROOT / "tools").glob("dev-requirements*.txt")}
+    assert {"tools/dev-requirements.txt", "tools/dev-requirements-py312.txt", "tools/dev-requirements-py313.txt"} <= closures
+    assert closures <= scanned, f"add --lockfile for {sorted(closures - scanned)} to the osv-scanner step"
