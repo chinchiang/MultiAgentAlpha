@@ -32,7 +32,7 @@ def server(tmp_path_factory):
     old = {k: os.environ.get(k) for k in ("MARA_HOME", "GEMINI_API_KEY")}
     os.environ["MARA_HOME"] = str(ROOT)
     os.environ["GEMINI_API_KEY"] = SENTINEL
-    httpd = make_server(port=0, workspace=ROOT, out_dir=tmp_path_factory.mktemp("workbench-out"))
+    httpd = make_server(port=0, root=ROOT, out_dir=tmp_path_factory.mktemp("workbench-out"))
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     yield httpd
@@ -473,7 +473,7 @@ def test_no_run_or_job_starts_once_the_server_exit_began(tmp_path, monkeypatch, 
 def test_closing_a_server_that_never_served_returns(tmp_path):
     """socketserver's shutdown() waits forever for a serve_forever() that never ran: close() asks it of a server that
     serves only."""
-    httpd = make_server(port=0, workspace=ROOT, out_dir=tmp_path / "out")
+    httpd = make_server(port=0, root=ROOT, out_dir=tmp_path / "out")
     closer = threading.Thread(target=httpd.close, daemon=True)
     closer.start()
     closer.join(5)
@@ -483,7 +483,7 @@ def test_closing_a_server_that_never_served_returns(tmp_path):
 def test_closing_a_serving_server_stops_serving_and_its_children(tmp_path, monkeypatch):
     monkeypatch.setenv("MARA_HOME", str(ROOT))
     monkeypatch.setattr(runs.procs, "spawn", _slow_review(procs.spawn))
-    httpd = make_server(port=0, workspace=ROOT, out_dir=tmp_path / "out")
+    httpd = make_server(port=0, root=ROOT, out_dir=tmp_path / "out")
     serving = threading.Thread(target=httpd.serve_forever, daemon=True)
     serving.start()
     run = httpd.runs.create(runs.LaunchRequest(target="fixtures/vuln-sample", provider="mock"))
@@ -501,7 +501,7 @@ def test_closing_a_serving_server_stops_serving_and_its_children(tmp_path, monke
 
 def test_closing_a_server_stops_serving_then_its_children_then_closes_its_socket(tmp_path, monkeypatch):
     """Serving stopped first, so that no request is accepted while the children are stopped."""
-    httpd = make_server(port=0, workspace=ROOT, out_dir=tmp_path / "out")
+    httpd = make_server(port=0, root=ROOT, out_dir=tmp_path / "out")
     steps = []
     for obj, method, step in ((httpd, "shutdown", "serving"), (httpd.table, "shutdown", "children"),
                               (httpd, "server_close", "socket")):
@@ -950,3 +950,12 @@ def test_a_family_the_audit_counts_but_the_manifest_does_not_name_is_shown_as_un
     reviewers = next(g["members"] for g in views.roles(manifest, report) if g["role"] == "reviewers")
     assert [(m["family"], m["configured"], m["calls"]) for m in reviewers] == [("anthropic", True, 1), ("glm", False, 2)]
     assert reviewers[1]["failures"]["reviewer_refusals"] == 1
+
+
+def test_the_registries_are_given_the_root_of_the_workspace_and_keep_it_as_their_root(tmp_path):
+    """The directory a run's target, config and evidence inputs must lie in, and the one its children start from."""
+    from mara.web import jobs as jobs_mod
+
+    reg = runs.RunRegistry(root=ROOT, out_dir=tmp_path / "out")
+    job_reg = jobs_mod.JobRegistry(root=ROOT, out_dir=tmp_path / "out")
+    assert reg.root == ROOT.resolve() and job_reg.root == ROOT.resolve()

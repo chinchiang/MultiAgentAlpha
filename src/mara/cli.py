@@ -283,7 +283,7 @@ def serve(
                                  param_hint="--host")
     try:
         workspace = Workspace.from_env()
-        run_server(host=host, port=port, workspace=workspace.root, out_dir=out if out is not None else workspace.root / "out",
+        run_server(host=host, port=port, root=workspace.root, out_dir=out if out is not None else workspace.root / "out",
                    open_browser=not no_browser, echo=console.print)
     except OSError as e:
         console.print(f"[red]cannot listen on {host}:{port}:[/red] {e}")

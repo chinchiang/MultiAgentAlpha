@@ -13,21 +13,21 @@ from pathlib import Path
 SUFFIXES = (".yaml", ".yml")
 
 
-def config_dirs(workspace: Path) -> tuple[Path, Path]:
-    return (workspace / "config").resolve(), (workspace / "config" / "examples").resolve()
+def config_dirs(root: Path) -> tuple[Path, Path]:
+    return (root / "config").resolve(), (root / "config" / "examples").resolve()
 
 
-def allowed(workspace: Path, path: Path) -> bool:
+def allowed(root: Path, path: Path) -> bool:
     """`path`, once its symlinks are resolved, is a file with a YAML suffix directly in config/ or config/examples/ of
-    `workspace`."""
+    `root`, the root of the workspace."""
     try:
         real = path.resolve()
     except (OSError, RuntimeError):  # a symlink loop
         return False
-    return real.parent in config_dirs(workspace) and real.suffix in SUFFIXES and real.is_file()
+    return real.parent in config_dirs(root) and real.suffix in SUFFIXES and real.is_file()
 
 
-def config_files(workspace: Path) -> list[Path]:
+def config_files(root: Path) -> list[Path]:
     """Every entry of config/ and then of config/examples/ that allowed() accepts, each directory's sorted by name."""
-    base = workspace / "config"
-    return [p for d in (base, base / "examples") if d.is_dir() for p in sorted(d.iterdir()) if allowed(workspace, p)]
+    base = root / "config"
+    return [p for d in (base, base / "examples") if d.is_dir() for p in sorted(d.iterdir()) if allowed(root, p)]

@@ -36,7 +36,7 @@ def test_a_non_loopback_host_is_refused(host, tmp_path):
     res = CliRunner().invoke(app, ["serve", "--host", host, "--no-browser", "--out", str(tmp_path)])
     assert res.exit_code == 2 and "loopback" in plain(res.output)
     with pytest.raises(ValueError, match="loopback"):
-        make_server(host=host, port=0, workspace=tmp_path, out_dir=tmp_path)
+        make_server(host=host, port=0, root=tmp_path, out_dir=tmp_path)
 
 
 def test_a_busy_port_is_an_error_not_a_traceback(tmp_path, root):
@@ -50,7 +50,7 @@ def test_a_busy_port_is_an_error_not_a_traceback(tmp_path, root):
 
 def test_the_server_binds_only_where_it_is_told(tmp_path, root):
     assert set(LOOPBACK_HOSTS) == {"127.0.0.1", "localhost", "::1"}
-    httpd = make_server(port=0, workspace=root, out_dir=tmp_path)
+    httpd = make_server(port=0, root=root, out_dir=tmp_path)
     try:
         assert httpd.server_address[0] == "127.0.0.1" and httpd.url == f"http://127.0.0.1:{httpd.port}/"
         assert len(httpd.token) >= 40 and not hasattr(httpd, "cookie_name") and httpd.RequestHandlerClass.timeout == 60
@@ -100,3 +100,12 @@ def test_sigterm_stops_the_server_like_ctrl_c(tmp_path, root):
     finally:
         if proc.poll() is None:
             proc.kill()
+
+
+def test_the_server_is_given_the_root_of_the_workspace_it_serves_and_keeps_it_as_its_root(tmp_path, root):
+    """`root` is the directory the workbench serves: its config files, its scripts and, unless `out_dir` says otherwise, its out/."""
+    httpd = make_server(port=0, root=root, out_dir=tmp_path)
+    try:
+        assert httpd.root == root.resolve()
+    finally:
+        httpd.server_close()

@@ -38,35 +38,35 @@ class JobRequest(BaseModel):
     config: str = Field(default="", max_length=512, description="check_config: config/*.yaml or config/examples/*.yaml")
 
 
-def locked_tools(workspace: Path) -> list[str]:
+def locked_tools(root: Path) -> list[str]:
     """The tools the workspace's lock names (mara.tools.pins), sorted; none when it cannot be read."""
-    return sorted(pins.locked_tools(pins.read_lock(workspace / pins.LOCK)))
+    return sorted(pins.locked_tools(pins.read_lock(root / pins.LOCK)))
 
 
-def available(workspace: Path) -> dict[str, bool]:
+def available(root: Path) -> dict[str, bool]:
     """Which jobs this workspace can run (the maintenance scripts are not part of an installed package)."""
-    return {kind: (workspace / script).is_file() for kind, script in SCRIPTS.items()} | {"check_config": True}
+    return {kind: (root / script).is_file() for kind, script in SCRIPTS.items()} | {"check_config": True}
 
 
 class JobRegistry:
-    def __init__(self, workspace: Path, out_dir: Path, *, start: Callable[..., Any] | None = None,
+    def __init__(self, root: Path, out_dir: Path, *, start: Callable[..., Any] | None = None,
                  table: procs.ChildTable | None = None) -> None:
-        self.workspace = workspace.resolve()
+        self.root = root.resolve()
         self.jobs_dir = out_dir.resolve() / "jobs"
         self.children = procs.Children("job", self._record_exit, start=start, table=table)
 
     def argv(self, req: JobRequest) -> list[str]:
-        if req.kind in SCRIPTS and not available(self.workspace)[req.kind]:
-            raise LaunchError("job_unavailable", f"{SCRIPTS[req.kind]} is not in the workspace {self.workspace}")
+        if req.kind in SCRIPTS and not available(self.root)[req.kind]:
+            raise LaunchError("job_unavailable", f"{SCRIPTS[req.kind]} is not in the workspace {self.root}")
         if req.kind == "install_tools":
-            known = set(locked_tools(self.workspace))
+            known = set(locked_tools(self.root))
             unknown = [t for t in req.only if t not in known]
             if unknown:
                 raise LaunchError("unknown_tool", f"not in tools/versions.lock: {', '.join(unknown)}")
-            return [sys.executable, str(self.workspace / SCRIPTS["install_tools"]), *(["--only", *req.only] if req.only else [])]
+            return [sys.executable, str(self.root / SCRIPTS["install_tools"]), *(["--only", *req.only] if req.only else [])]
         if req.kind in ("trivy_db_download", "trivy_db_status"):
-            return [sys.executable, str(self.workspace / SCRIPTS[req.kind]), "download" if req.kind == "trivy_db_download" else "status"]
-        cfg = resolve_config(self.workspace, req.config, ProviderMode.live)
+            return [sys.executable, str(self.root / SCRIPTS[req.kind]), "download" if req.kind == "trivy_db_download" else "status"]
+        cfg = resolve_config(self.root, req.config, ProviderMode.live)
         return [sys.executable, "-m", "mara.cli", "check-config", str(cfg)]
 
     def create(self, req: JobRequest) -> dict[str, Any]:
@@ -76,8 +76,8 @@ class JobRegistry:
             return argv, {"id": job_id, "kind": req.kind, "request": req.model_dump(), "argv": argv, "status": "running",
                           "started_at": procs.now(), "finished_at": None, "exit_code": None}
 
-        job_id, job = self.children.launch(req.kind, self.jobs_dir, record="job.json", log="job.log", cwd=self.workspace,
-                                           env=procs.child_env(self.workspace), prepare=record)
+        job_id, job = self.children.launch(req.kind, self.jobs_dir, record="job.json", log="job.log", cwd=self.root,
+                                           env=procs.child_env(self.root), prepare=record)
         return self.get(job_id) or job
 
     def _record_exit(self, job_id: str, code: int, stopped: bool) -> None:

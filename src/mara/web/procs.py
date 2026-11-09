@@ -76,13 +76,13 @@ def package_root() -> Path:
     return Path(mara.__file__).resolve().parents[1]
 
 
-def child_env(workspace: Path) -> dict[str, str]:
+def child_env(root: Path) -> dict[str, str]:
     """The server's environment (provider keys and AWS credentials included: a live review needs them) plus the
     workspace as three absolute paths over what the server inherited (MARA_HOME, MARA_TOOLS_DIR and MARA_TRIVY_CACHE_DIR,
-    as Workspace.from_env(root=workspace) reads them, a relative one below the workspace), the package path and plain,
+    as Workspace.from_env(root=root) reads them, a relative one below the workspace), the package path and plain,
     unbuffered UTF-8 output for the log file."""
     env = dict(os.environ)
-    ws = Workspace.from_env(root=workspace)
+    ws = Workspace.from_env(root=root)
     env.update({"MARA_HOME": str(ws.root), "MARA_TOOLS_DIR": str(ws.tools_dir), "MARA_TRIVY_CACHE_DIR": str(ws.trivy_cache)})
     pkg = str(package_root())
     env["PYTHONPATH"] = pkg + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
