@@ -9,14 +9,21 @@ import mara
 from mara.report.sarif_out import to_sarif
 
 ROOT = Path(__file__).resolve().parents[1]
+ROW_OPENING = re.compile(r"\| \d{4}-\d{2}-\d{2} \| v(\d+\.\d+\.\d+) \|")  # what every CHANGELOG row starts with
 
 
 def _newest_changelog_version() -> str:
     for line in (ROOT / "docs" / "CHANGELOG.md").read_text(encoding="utf-8").splitlines():
-        m = re.match(r"^\| \d{4}-\d{2}-\d{2} \| v(\d+\.\d+\.\d+) \|", line)
+        m = ROW_OPENING.match(line)
         if m:
             return m.group(1)  # rows are newest first
     raise AssertionError("no version row in docs/CHANGELOG.md")
+
+
+def _lines_holding_more_than_one_row(lines: list[str], first: int = 1) -> list[int]:
+    """Numbers (counted from `first`) of the lines with two or more `| date | vX.Y.Z |` openings: two rows glued
+    by the characters `\\n` instead of a line break. A whole-row match with `.*` takes them for one row."""
+    return [n for n, line in enumerate(lines, first) if len(ROW_OPENING.findall(line)) > 1]
 
 
 def test_the_package_version_is_the_newest_changelog_row():
@@ -28,7 +35,7 @@ def test_the_changelog_versions_decrease_down_the_rows():
     """Two PRs that took one version both pass the test above once merged; the one merged second takes the next
     (docs/CHANGELOG.md, 版本規則). The three v0.1.0 rows of 2026-09 predate the rule."""
     rows = [m.group(1) for line in (ROOT / "docs" / "CHANGELOG.md").read_text(encoding="utf-8").splitlines()
-            if (m := re.match(r"^\| \d{4}-\d{2}-\d{2} \| v(\d+\.\d+\.\d+) \|", line))]
+            if (m := ROW_OPENING.match(line))]
     versions = [tuple(int(n) for n in v.split(".")) for v in rows]
     wrong = [f"v{rows[i]} above v{rows[i + 1]}" for i in range(len(rows) - 1)
              if versions[i] <= versions[i + 1] and not rows[i] == rows[i + 1] == "0.1.0"]
@@ -39,7 +46,7 @@ def test_the_newest_changelog_row_says_whether_the_report_body_and_the_demo_chan
     """CODING_STANDARDS.md, "A CHANGELOG row records one version": the summary says whether the workbench demo was
     recaptured and ends with whether the report body changed, "報告正文未變" or "報告正文變更：" and what changed."""
     row = next(line for line in (ROOT / "docs" / "CHANGELOG.md").read_text(encoding="utf-8").splitlines()
-               if re.match(r"^\| \d{4}-\d{2}-\d{2} \| v\d+\.\d+\.\d+ \|", line))
+               if ROW_OPENING.match(line))
     summary = row.split(" | ", 2)[2].rsplit(" | ", 2)[0]
     sentences = [s.strip() for s in summary.split("。") if s.strip()]
     last = sentences[-1]
@@ -58,24 +65,17 @@ def test_every_changelog_row_is_one_line_of_printable_text():
     header = lines.index("|---|---|---|---|---|")
     table = lines[header + 1:lines.index("", header)]
     broken = [n for n, line in enumerate(table, header + 2)
-              if not re.fullmatch(r"\| \d{4}-\d{2}-\d{2} \| v\d+\.\d+\.\d+ \| .* \|", line)]
+              if not re.fullmatch(ROW_OPENING.pattern + r" .* \|", line)]
     assert not broken, f"docs/CHANGELOG.md lines that are not a whole row: {broken}"
-    glued = _lines_holding_more_than_one_row(table)
-    assert not glued, f"docs/CHANGELOG.md has rows glued into one line (table lines {glued})"
-
-
-ROW = re.compile(r"\| \d{4}-\d{2}-\d{2} \| v\d+\.\d+\.\d+ \|")
-
-
-def _lines_holding_more_than_one_row(lines: list[str]) -> list[int]:
-    """Numbers (1-based, within `lines`) of the lines with two or more `| date | vX.Y.Z |` openings: two rows glued
-    by the characters `\\n` instead of a line break. A whole-row match with `.*` takes them for one row."""
-    return [n for n, line in enumerate(lines, 1) if len(ROW.findall(line)) > 1]
+    glued = _lines_holding_more_than_one_row(table, header + 2)
+    assert not glued, f"docs/CHANGELOG.md has rows glued into one line: {glued}"
 
 
 def test_two_changelog_rows_glued_into_one_line_are_found():
     glued = r"| 2026-11-10 | v0.13.78 | 摘要一 | 變更者 | 查證 |\n| 2026-11-10 | v0.13.77 | 摘要二 | 變更者 | 查證 |"
-    assert _lines_holding_more_than_one_row(["| 2026-11-10 | v0.13.76 | 摘要 | 變更者 | 查證 |", glued]) == [2]
+    rows = ["| 2026-11-10 | v0.13.76 | 摘要 | 變更者 | 查證 |", glued]
+    assert _lines_holding_more_than_one_row(rows) == [2]
+    assert _lines_holding_more_than_one_row(rows, 40) == [41]  # numbered from where the table starts in the file
 
 
 def test_pyproject_takes_the_version_from_the_package():
