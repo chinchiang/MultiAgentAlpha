@@ -8,6 +8,8 @@
   `tools/*-requirements.txt` or `tools/osv-*.toml`, or when L0 fails on osv.
 - `tests/SEAMS.md`: what the tests patch or read in the pipeline, the agents and the workbench, and the shape each
   relies on. Read it before moving, renaming or re-signing a function there.
+- `docs/agents/pr-flow.md`: the steps from a branch to a merged pull request (red first, `check_local.py`, the mutation
+  check, self-review, the body, the merge command, what to look at after it). Read it before starting a change you will push.
 - `GLOSSARY.md`: the domain's words, and this repository's CONTEXT.md. Name things in code, docs and tests with its
   terms; a new term is added to it.
 
