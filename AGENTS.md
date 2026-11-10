@@ -1,29 +1,28 @@
 # MultiAgentAlpha
 
-- `CODING_STANDARDS.md`: the judgement calls a review checks (module docstrings, what a docstring may claim, one
-  wording per concept, ADR amendments, CHANGELOG rows, line wrapping). Read it before writing or reviewing code or docs.
-- `scripts/check_local.py`: seven of the checks a pull request's CI runs (ruff, line width, control characters, mypy,
-  semgrep, the whole suite, gitleaks), each output kept under `out/check-local/`. Run `.venv/bin/python scripts/check_local.py` before
-  every push. Run it with `--only osv` too (L0's three osv-scanner scans, over the network) when a change touches
-  `tools/*-requirements.txt` or `tools/osv-*.toml`, or when L0 fails on osv.
-- `tests/SEAMS.md`: what the tests patch or read in the pipeline, the agents and the workbench, and the shape each
-  relies on. Read it before moving, renaming or re-signing a function there.
-- `docs/agents/pr-flow.md`: the steps from a branch to a merged pull request (red first, `check_local.py`, the mutation
-  check, self-review, the body, the merge command, what to look at after it). Read it before starting a change you will push.
-- `GLOSSARY.md`: the domain's words, and this repository's CONTEXT.md. Name things in code, docs and tests with its
-  terms; a new term is added to it.
+- Before writing or reviewing code or docs: read `CODING_STANDARDS.md`, the judgement calls a review checks.
+- Before every push: run `HOME=$PWD/scratch/empty-home .venv/bin/python scripts/check_local.py` (CI has no `~/.mara`).
+  It runs seven of the checks a pull request's CI runs; the script's docstring names them. Add `--only osv` (network)
+  when a change touches `tools/*-requirements.txt` or `tools/osv-*.toml`, or when L0 fails on osv.
+- Before moving, renaming or re-signing a function in `src/mara` or `scripts/`: read `tests/SEAMS.md`, what the tests
+  patch or read and the shape each relies on.
+- Before starting a change you will push: read `docs/agents/pr-flow.md`, the steps from a branch to a merged pull request.
+- When naming anything in code, docs or tests: use the terms of `GLOSSARY.md`; a new term is added to it.
+- Commit messages, pull request bodies, handoffs and other files a later step needs go in `scratch/`, not `/tmp` (which
+  is emptied). It is excluded from git by `.git/info/exclude`; on a fresh clone add `/scratch/` there first.
 
 ## Agent skills
 
 ### Issue tracker
 
-GitHub Issues (`chinchiang/MultiAgentAlpha` via `gh` CLI). See `docs/agents/issue-tracker.md`.
+GitHub Issues (`chinchiang/MultiAgentAlpha`, via `gh`). Before creating, reading or commenting on an issue: read
+`docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Default five canonical triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`,
-`wontfix`). See `docs/agents/triage-labels.md`.
+Before labelling or triaging an issue: read `docs/agents/triage-labels.md`, which maps the five roles to this tracker's
+labels.
 
 ### Domain docs
 
-Single-context (`GLOSSARY.md` and `docs/adr/` at the repo root). See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. Before exploring an area: read `docs/agents/domain.md`.
