@@ -6,10 +6,10 @@ commit author, an issue title or a rule message beyond that code page raises Uni
 for a reason that has nothing to do with the tool having run. `errors="replace"` keeps one bad byte from failing the
 whole run.
 
-Pure: it reads the source files of `scripts/` and runs nothing. It sees a call that writes
+Pure: it reads the source files of `scripts/` and `src/mara` and runs nothing. It sees a call that writes
 `text=True` (or `universal_newlines=True`) and takes the child's output or input (`capture_output`, `stdout`,
 `stderr`, `input`) as a keyword; a call that builds its keywords with `**` or imports `run` from subprocess by name is
-not seen, and neither of those is used there today.
+not seen, and neither of those is used in either place today.
 """
 
 import ast
@@ -47,7 +47,7 @@ def _calls_reading_text_without_utf8(path: Path) -> list[str]:
     return offenders
 
 
-@pytest.mark.parametrize("where", ["scripts"])
+@pytest.mark.parametrize("where", ["scripts", "src/mara"])
 def test_every_call_that_reads_a_child_process_as_text_reads_it_as_utf8(where):
     offenders = sorted(o for f in (ROOT / where).rglob("*.py") for o in _calls_reading_text_without_utf8(f))
     assert offenders == [], 'add encoding="utf-8", errors="replace" to: ' + ", ".join(offenders)
