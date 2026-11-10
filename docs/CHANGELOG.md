@@ -175,5 +175,5 @@
 
 - 報告正文（第一到十部、附錄A、C、D、E）任何實質變更升 minor（v0.2.0）；附錄B 的缺口關閉、ground truth 查證日期、結構、腳本或 workflow 變更升 patch。
 - 附錄B 的缺口被關閉（「已於 <日期> 關閉」）時，在查證狀態欄更新關閉數；ground truth 的季度更新（prompt 2）另產生 `docs/groundtruth-diff-<日期>.md` 並在此加一列。
-- 版本號在合併時才確定。兩個 PR 取了同一個版本號時，先合併的保留；另一個 rebase 到 `main`，在它唯一的 commit 裡改用下一號（`mara.__version__`、這一列、展示頁與 commit message 一併改），再 `git push --force-with-lease`。rebase 停在衝突時，`.venv/bin/python scripts/renumber.py` 一次完成這些改動並結束 rebase（預設取 `main` 的下一號，`--to` 可指定）。`tests/test_version.py` 檢查各列版本由上往下遞減。
+- 版本號在合併時才確定。兩個 PR 取了同一個版本號時，先合併的保留；另一個 rebase 到 `main`，在放版本號的最後一個 commit 裡改用下一號（`mara.__version__`、這一列、展示頁與 commit message 一併改；版本、這一列與展示頁放在這個最後的 commit（可以只有它），因為 `scripts/renumber.py` 只在 rebase 停下時後面沒有 commit 的情況下運作），再 `git push --force-with-lease`。rebase 停在衝突時，`.venv/bin/python scripts/renumber.py` 一次完成這些改動並結束 rebase（預設取 `main` 的下一號，`--to` 可指定）。`tests/test_version.py` 檢查各列版本由上往下遞減。
 - 第一條的例外：Dependabot 對 GitHub Actions 的升版不加列、不升版。它的 PR、merge commit 與各 workflow 的 `# vX.Y.Z` 註解就是紀錄；文件不寫這些 action 的版本（`CODING_STANDARDS.md`「A doc names no version Dependabot bumps」），所以升版不會讓文件過時。

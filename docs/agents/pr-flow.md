@@ -9,7 +9,9 @@ A change that becomes a pull request goes through these steps in order. Each end
    no red stage: say so in the body, and say which assertions you proved sensitive some other way (a test that fails
    on a made-up bad input, a hand-made bad copy of the file).
 3. **Green, in commits that each pass.** Product code in its own commit; its `tests/mutations/<name>.yaml` and
-   `tests/SEAMS.md` beside the code they describe.
+   `tests/SEAMS.md` beside the code they describe. The version, its CHANGELOG row and the demo page go in **the last
+   commit** of the branch (it may hold nothing else): `scripts/renumber.py` renumbers only when the rebase stops with no
+   commit left to apply, so a version commit in the middle sends you to the hand-made fix.
 4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it, and `scripts/mutate.py
    tests/mutations/<name>.yaml --focused-only` on each file the change touches, without `AWS_PROFILE` and `GEMINI_API_KEY`. A mutation edits `src/`,
    so never run the two at once. Done when every check `AGENTS.md` lists is `ok` and every mutation is caught.
