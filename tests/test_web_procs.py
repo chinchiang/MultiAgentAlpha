@@ -456,3 +456,35 @@ def test_a_child_is_given_the_anchors_the_workspace_derives_when_the_server_has_
     assert env["MARA_HOME"] == str(root)
     assert env["MARA_TOOLS_DIR"] == str(root / ".mara-tools")
     assert env["MARA_TRIVY_CACHE_DIR"] == str(root / ".mara-tools" / "trivy-cache")
+
+
+def _refuse_replace(monkeypatch, times: int | None) -> None:
+    """os.replace refused as Windows refuses it while another writer or process holds the target: `times` times, then
+    replaced as usual; None: every time. Patched on the os module itself, the same object everywhere."""
+    real, refused = os.replace, [0]
+
+    def replace(src, dst):
+        if times is None or refused[0] < times:
+            refused[0] += 1
+            raise PermissionError(13, "Access is denied", str(dst))
+        return real(src, dst)
+
+    monkeypatch.setattr(os, "replace", replace)
+
+
+def test_a_record_another_writer_holds_for_a_moment_is_still_written(tmp_path, monkeypatch):
+    path = tmp_path / "web-settings.json"
+    _refuse_replace(monkeypatch, 2)
+    procs.write_json(path, {"language": "en"})
+    assert procs.read_json(path) == {"language": "en"}
+    assert [f.name for f in tmp_path.iterdir()] == ["web-settings.json"], "no temporary file is left behind"
+
+
+def test_a_record_held_for_good_is_given_up_on_by_raising_and_leaves_no_temporary_file(tmp_path, monkeypatch):
+    path = tmp_path / "web-settings.json"
+    _refuse_replace(monkeypatch, None)
+    started = time.monotonic()
+    with pytest.raises(PermissionError):
+        procs.write_json(path, {"language": "en"})
+    assert time.monotonic() - started < 2, "a record held for good is given up on, not waited for"
+    assert list(tmp_path.iterdir()) == []
