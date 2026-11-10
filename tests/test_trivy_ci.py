@@ -15,7 +15,7 @@ from trivy_ci import summarize  # noqa: E402
 
 from mara.tools import runner  # noqa: E402
 from mara.tools import trivy_db as tdb  # noqa: E402
-from mara.workspace import Workspace  # noqa: E402
+from tests import tool_installs  # noqa: E402
 from tests.test_trivy_db import _fake_trivy, _now_iso  # noqa: E402
 
 VULN = "Package: requests Installed Version: 2.19.0 Vulnerability CVE-2018-18074 Severity: HIGH Fixed Version: 2.20.0 Link: [CVE-2018-18074](https://x)"
@@ -89,14 +89,15 @@ def test_stale_or_missing_database_blocks_the_scan(tmp_path):
     assert r.returncode == 2 and "no database" in r.stdout
 
 
-def test_runner_scans_offline_with_the_recorded_database_and_skips_without_it(tmp_path):
+def test_runner_scans_offline_with_the_recorded_database_and_skips_without_it(tmp_path, monkeypatch):
     tools, cache = _setup(tmp_path, _sarif(_res("CVE-2018-18074", VULN, "requirements.txt", 2)))
     target = tmp_path / "target"
     target.mkdir()
-    (run,) = runner.run_all(target, tmp_path / "out", enabled=["trivy"], workspace=Workspace(ROOT, tools_dir=tools, trivy_cache=cache))
+    (run,) = runner.run_all(target, tmp_path / "out", enabled=["trivy"], workspace=tool_installs.workspace(tools, trivy_cache=cache))
     assert run.ran and run.results[0].rule_id == "CVE-2018-18074" and "db 20" in run.note, run.note
     argv = (tools / "argv.txt").read_text()
     assert all(flag in argv for flag in tdb.OFFLINE_FLAGS) and "download-db-only" not in argv, "a review never downloads the database"
-    no_db_workspace = Workspace(ROOT, tools_dir=tools, trivy_cache=tmp_path / "empty")
+    monkeypatch.setenv("MARA_TRIVY_CACHE_DIR", str(cache))   # the environment's cache holds the database; the workspace's does not
+    no_db_workspace = tool_installs.workspace(tools, trivy_cache=tmp_path / "empty")
     (run,) = runner.run_all(target, tmp_path / "out2", enabled=["trivy"], workspace=no_db_workspace)
     assert not run.ran and "no offline database" in run.note and "trivy_db.py download" in run.note

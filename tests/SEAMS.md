@@ -223,7 +223,7 @@ code that writes it, so it changes with that code:
   sets MARA_HOME and the working directory elsewhere and reads it from what `admit` returns
   (`test_invocation_admit.py::test_an_admitted_invocation_remembers_the_root_it_was_admitted_against`); `cli._review`
   hands it to `Pipeline(root=...)`, which a test reads through the `cli.Pipeline.__init__` seam (above,
-  `test_security_regressions.py::test_the_command_line_hands_the_pipeline_the_workspace_it_admitted_the_invocation_against`).
+  `test_security_regressions.py::test_the_command_line_hands_the_pipeline_the_root_it_admitted_the_invocation_against`).
 - Who reads the environment. `review`, `export-summary`, `check-config` and `serve` of `mara.cli` each read it once, with
   `Workspace.from_env()`, and hand that value down (`review` through `admit` and `AdmittedInvocation.root`). Four
   places are given a root and take from the environment only what a root does not say, the tool directory and the trivy
@@ -268,6 +268,12 @@ code that writes it, so it changes with that code:
   advance` judges the config against the environment's workspace there, which is the one its parsed arguments hold; the
   guard does not see it, since it names no `check_g9`. A test of the checks sets MARA_HOME and puts the files below the
   root it passes, and gives `workspace=` only when the workspace differs from the environment's.
+
+A test that gives the runner a tool directory builds the workspace with the `workspace` function of tests/tool_installs.py:
+the repository's root, so its version lock is the one read. A test of a tool that is not found also puts the tool in the
+environment's directory (MARA_TOOLS_DIR, and MARA_TRIVY_CACHE_DIR for the database), because conftest.py points the
+environment at an empty one: without that, a reader that ignored the workspace it was given would read the empty
+directory and the test would pass all the same. `tests/mutations/tool-workspace-honoured.yaml` is that check.
 
 ## The local checks (`scripts/check_local.py`)
 
