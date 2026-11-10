@@ -11,12 +11,16 @@ A change that becomes a pull request goes through these steps in order. Each end
 3. **Green, in commits that each pass.** Product code in its own commit; its `tests/mutations/<name>.yaml` and
    `tests/SEAMS.md` beside the code they describe. The version, its CHANGELOG row and the demo page go in **the last
    commit** of the branch (it may hold nothing else): `scripts/renumber.py` renumbers only when the rebase stops with no
-   commit left to apply, so a version commit in the middle sends you to the hand-made fix.
+   commit left to apply, so a version commit in the middle sends you to the hand-made fix. To change an earlier commit
+   without `rebase -i` or `--amend`, cut a new branch of the same name from `origin/main` and rebuild the commits one by
+   one with `git checkout <old branch> -- <files>`; compare with the old branch, and delete it once only the changes you
+   meant remain.
 4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it, and `scripts/mutate.py
    tests/mutations/<name>.yaml --focused-only` on each file the change touches, without `AWS_PROFILE` and `GEMINI_API_KEY`. A mutation edits `src/`,
    so never run the two at once. Done when every check `AGENTS.md` lists is `ok` and every mutation is caught.
 5. **Self-review.** `mattpocock-skills:code-review` against `origin/main`, the two axes reported apart. Done when every
    finding is fixed or answered in the body. A review you did not run is said so in the body.
+   A fix made after the review runs step 4 again on the last commit, and the numbers in the body are those of that run.
 6. **Write the body** to `scratch/pr-body-<name>.md` (`mattpocock-skills:pr`), in English, ending with the attribution
    line; search it for control characters. Show what the change does before and after, and what you did not run.
 7. **Push, open the pull request, watch it.** `git fetch` first: if `origin/main` moved, rebase; if the version was
@@ -31,7 +35,8 @@ A change that becomes a pull request goes through these steps in order. Each end
    A `HTTP 404: Reference does not exist` from `--delete-branch` only means the remote branch was already deleted; it
    is not a failure.
 9. **After the owner says it is merged, look at GitHub before anything else.** `gh pr view <n> --json state,mergeCommit`
-   says `MERGED`, and `origin/main` carries the new version: a command pasted too early often has not taken effect. Then
+   says `MERGED`, and `origin/main` carries the new version. When the conversation holds no `<bash-input>` record of
+   the command, it did not run: ask the owner to send it again, and look once per message, never in a loop. Then
    switch to main, fast-forward, delete the branch once `git merge-base --is-ancestor` says it is in main, and update the
    handoff.
 
