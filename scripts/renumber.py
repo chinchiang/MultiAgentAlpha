@@ -11,6 +11,9 @@ finishes the rebase and makes the first sentence's closing ", v<old>" in the com
 the old version are left for a human. git's output is read, and the message written back, as UTF-8 whatever the locale's
 encoding.
 
+The commit that holds the version is the branch's last (docs/agents/pr-flow.md, step 3): a rebase that stops on an
+earlier one still has commits to apply, and is refused.
+
 It refuses, changing nothing, outside a rebase (git leaves REBASE_HEAD behind when one ends, so the rebase's state
 directory decides), with more commits still to apply, with a conflict in any other file, without a CHANGELOG conflict,
 and when any other file would change otherwise than the branch's commit did (main already holding part of it, say).
@@ -106,7 +109,9 @@ def renumber(target: str | None) -> None:
     if not _rebasing():
         raise Refusal("no rebase in progress: run it where `git rebase origin/main` stopped")
     if left := _commits_left():
-        raise Refusal(f"the rebase has {left} more commit(s) to apply; renumber.py handles a branch of one commit")
+        raise Refusal(
+            f"the rebase has {left} more commit(s) to apply after the one it stopped on; renumber.py needs that one to be "
+            "the branch's last: abort the rebase, move the commit that holds the version to the end, and rebase again")
     conflicted = set(_git("diff", "--name-only", "--diff-filter=U").stdout.split())
     if others := sorted(conflicted - {CHANGELOG, VERSION_FILE, DEMO}):
         raise Refusal(f"conflicts outside the version's files, resolve them by hand first: {', '.join(others)}")
