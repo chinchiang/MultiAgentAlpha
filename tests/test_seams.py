@@ -7,12 +7,15 @@ import ast
 import re
 from pathlib import Path
 
+import pytest
+
 from tests.source_names import defines
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 SEAMS = ROOT / "tests" / "SEAMS.md"
 SOURCES = sorted((SRC / "mara").rglob("*.py"))
+SPAN = re.compile(r"`([^`\n]+)`")  # a code span of SEAMS.md
 DOTTED = re.compile(r"^[A-Za-z_]\w*(?:\.\w+)+$")
 CLASS = re.compile(r"^[A-Z]\w*$")
 TEST_FILE = re.compile(r"^(\w+\.py)(?:::(\w+))?$")
@@ -60,11 +63,27 @@ def problem(span: str) -> str:
     return f"{span}: " + ", ".join(str(p.relative_to(ROOT)) for p, _ in candidates) + f" defines no {candidates[0][1]}"
 
 
+HOW_TO_FIX = """A code span of tests/SEAMS.md is a pointer when it is a test file, a src/ or tests/ path ending .py or .md, or a dotted or
+capitalised name, and a pointer must name something that is there. So either:
+  - the code moved or was renamed: point at its new place;
+  - the span is not a pointer (a constant of a test, an exception, an argument): write it in plain words, without backticks;
+  - it is a method a class inherits from outside src/mara: write it bare, not after its class.
+The rule is in the first paragraphs of tests/SEAMS.md."""
+
+
+def report(text: str) -> str:
+    """What is wrong with the code spans of a SEAMS.md text: a line per span that points at nothing, with its line of the
+    file, then how to fix it (said once); empty when every span is a pointer at something or is not a pointer."""
+    lines = [f"tests/SEAMS.md:{text.count(chr(10), 0, m.start()) + 1}: {why}"
+             for m in SPAN.finditer(text) if (why := problem(m[1]))]
+    return "\n".join(lines) + "\n\n" + HOW_TO_FIX if lines else ""
+
+
 def test_every_test_file_path_and_name_seams_md_points_at_exists():
-    spans = re.findall(r"`([^`\n]+)`", SEAMS.read_text(encoding="utf-8"))
-    assert len(spans) > 40, "the code spans are read"
-    problems = [p for p in map(problem, spans) if p]
-    assert not problems, "\n".join(problems)
+    text = SEAMS.read_text(encoding="utf-8")
+    assert len(SPAN.findall(text)) > 40, "the code spans are read"
+    if message := report(text):
+        pytest.fail("\n" + message, pytrace=False)
 
 
 def test_a_pointer_at_nothing_is_found_and_one_at_something_is_not():
@@ -77,3 +96,16 @@ def test_a_pointer_at_nothing_is_found_and_one_at_something_is_not():
                  "ballot_round.gone", "pipe.run(target)", "GoneProvider", "test_gone.py", "test_seams.py::test_gone",
                  "tests/gone.py"):
         assert problem(gone), gone
+
+
+def test_a_failure_names_the_line_and_says_how_to_fix_it_once():
+    """Each span that points at nothing has its line of SEAMS.md, and the way out follows, said once."""
+    text = "# Seams\n\nOK `test_seams.py`\nA constant `ROOT` in a sentence\nfine `Pipeline.providers`\nan argument `a.workspace`\n"
+    message = report(text)
+    assert [line for line in message.splitlines() if line.startswith("tests/SEAMS.md:")] == [
+        f"tests/SEAMS.md:4: {problem('ROOT')}", f"tests/SEAMS.md:6: {problem('a.workspace')}"], "only the spans that point at nothing"
+    assert message.count(HOW_TO_FIX) == 1 and message.endswith(HOW_TO_FIX)
+
+
+def test_a_text_whose_spans_all_point_at_something_has_no_report():
+    assert report("# Seams\n\n`test_seams.py` and `Pipeline.providers` and a bare word.\n") == ""
