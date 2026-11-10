@@ -58,8 +58,19 @@ docs keep naming their versions.
 The mutations a behaviour change's tests were checked against (`scripts/mutate.py`) are committed with the change, as
 `tests/mutations/<name>.yaml`. A change that makes a committed list stale re-aligns each `old` to the code in the same
 commit, or drops a mutation that no longer means anything; `tests/test_mutation_lists.py` goes red on a list that does
-not load. A re-aligned mutation still makes the fault its name says: a review compares each re-aligned `old`/`new` with
-the list's previous version, and a mutation that now makes another fault is renamed or re-aligned again.
+not load. A re-aligned mutation still makes the fault its name says: a review compares each re-aligned `old`/`new`
+with the list's previous version, and a mutation that now makes another fault is renamed or re-aligned again.
+
+A mutation made to show that a test notices something that must not happen (a read of the environment, a refusal that
+is skipped) makes it happen only where that test looks, so the rest of the test still passes and it fails at the
+assertion the mutation is for. A mutant that breaks more, such as one that takes the other path every time, fails an
+earlier assertion of the same test and proves nothing about the line it targets:
+`tests/mutations/tool-workspace-honoured.yaml` falls back to the environment's directory only when the workspace's
+does not exist, not always.
+
+A review reads where the test that caught a new mutation fails: `results.json` of the run names the test, but the
+failure output of the focused tests is not kept (a whole-suite run's is, in `<name>.suite.log`), so the review applies
+the mutant by hand and runs that test.
 
 ## Lines are wrapped by hand
 
