@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from .. import file_replace
 from ..workspace import Workspace
 from . import admission
 from .admission import LaunchError
@@ -56,7 +57,7 @@ def write_json(path: Path, data: Any) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.{secrets.token_hex(4)}.tmp")
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-        os.replace(tmp, path)
+        file_replace.replace(tmp, path)
     finally:
         tmp.unlink(missing_ok=True)
 

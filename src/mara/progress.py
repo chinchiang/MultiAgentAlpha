@@ -18,9 +18,10 @@ import json
 import logging
 import os
 import threading
-import time
 from pathlib import Path
 from typing import Any
+
+from . import file_replace
 
 _log = logging.getLogger("mara.progress")
 
@@ -39,23 +40,6 @@ NOTE_CHARS = 300
 
 def _now() -> str:
     return dt.datetime.now(dt.UTC).isoformat(timespec="milliseconds")
-
-
-REPLACE_RETRIES = 10
-REPLACE_PAUSE = 0.02  # seconds: about 200 ms in all, longer than another process held the record in any we saw
-
-
-def _replace(tmp: Path, path: Path) -> None:
-    """os.replace(tmp, path), tried again for a moment while Windows refuses it: another process (a scanner, an
-    indexer) holding the record open refuses the replace for up to some 200 ms. Any other error, or a refusal that
-    outlasts the retries, is raised."""
-    for _ in range(REPLACE_RETRIES):
-        try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:
-            time.sleep(REPLACE_PAUSE)
-    os.replace(tmp, path)
 
 
 class Progress:
@@ -155,9 +139,9 @@ class Progress:
             try:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 tmp.write_text(text, encoding="utf-8")
-                _replace(tmp, self.path)  # a reader sees the old or the new file, never half of one
+                file_replace.replace(tmp, self.path)  # a reader sees the old or the new file, never half of one
             except OSError as e:
-                # a view of the review, never part of it: a full disk, a reader holding the file open longer than _replace waits
+                # a view of the review, never part of it: a full disk, a reader holding the file open longer than file_replace.replace waits
                 _log.warning("progress file %s not written: %s", self.path, e)
                 try:
                     tmp.unlink(missing_ok=True)
@@ -180,7 +164,7 @@ def close_abandoned(path: Path, error: str) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-        _replace(tmp, path)
+        file_replace.replace(tmp, path)
     except OSError as e:
         _log.warning("progress file %s not closed: %s", path, e)
         tmp.unlink(missing_ok=True)

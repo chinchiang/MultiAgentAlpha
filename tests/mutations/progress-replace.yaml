@@ -1,15 +1,15 @@
-focused: [tests/test_progress.py]
+focused: [tests/test_progress.py, tests/test_web_procs.py]
 mutations:
   - name: a record another process holds for a moment is not tried again
     file: src/mara/progress.py
-    old: '_replace(tmp, self.path)  # a reader sees'
+    old: 'file_replace.replace(tmp, self.path)  # a reader sees'
     new: 'os.replace(tmp, self.path)  # a reader sees'
   - name: a record left running is not tried again when it is closed
     file: src/mara/progress.py
-    old: '        _replace(tmp, path)'
+    old: '        file_replace.replace(tmp, path)'
     new: '        os.replace(tmp, path)'
   - name: a record held for good is waited for some 20 seconds
-    file: src/mara/progress.py
+    file: src/mara/file_replace.py
     old: 'REPLACE_RETRIES = 10'
     new: 'REPLACE_RETRIES = 1000'
   - name: a refusal that outlasts the retries fails the review
@@ -20,3 +20,11 @@ mutations:
     file: src/mara/progress.py
     old: '                    tmp.unlink(missing_ok=True)'
     new: '                    pass'
+  - name: a record of a run, a job or the settings that another writer holds for a moment is not tried again
+    file: src/mara/web/procs.py
+    old: '        file_replace.replace(tmp, path)'
+    new: '        os.replace(tmp, path)'
+  - name: a record is not tried again when the move is refused
+    file: src/mara/file_replace.py
+    old: '        except PermissionError:'
+    new: '        except FileNotFoundError:'
