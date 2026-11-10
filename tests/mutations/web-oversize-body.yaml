@@ -1,0 +1,21 @@
+focused: [tests/test_web_server.py]
+# an answer that closes the connection leaves a request body unread, which resets the connection: the server ends the
+# answer, then reads off what the client is still sending, up to LINGER_BYTES and while each piece comes within
+# LINGER_SECONDS. Each mutation takes one of those away.
+mutations:
+  - name: the connection is closed with the body unread
+    file: src/mara/web/server.py
+    old: '            self._read_off_the_rest()'
+    new: '            pass'
+  - name: the answer is not ended before the body is read off
+    file: src/mara/web/server.py
+    old: '            self.connection.shutdown(socket.SHUT_WR)'
+    new: '            pass'
+  - name: a client that stops sending is waited for as long as an idle one
+    file: src/mara/web/server.py
+    old: '            self.connection.settimeout(LINGER_SECONDS)'
+    new: '            pass'
+  - name: a client that keeps sending is read off for ever
+    file: src/mara/web/server.py
+    old: '            while left > 0 and (chunk := self.connection.recv(65536)):'
+    new: '            while chunk := self.connection.recv(65536):'

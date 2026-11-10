@@ -54,6 +54,8 @@ from .runs import LaunchRequest, RunRegistry
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 MAX_BODY = 64 * 1024
+LINGER_BYTES = 4 * 1024 * 1024  # how much a client may still send after an answer that closes the connection, read and dropped
+LINGER_SECONDS = 1.0  # how long the server waits for the next piece of it
 LANGUAGES = ("zh-TW", "en")
 _PLACEHOLDER = re.compile(r"__MARA_(CSS|JS|I18N|VERSION|HEAD|DEMO)__")  # plain markers, not a template language
 
@@ -185,6 +187,24 @@ class Handler(BaseHTTPRequestHandler):
 
     def version_string(self) -> str:
         return self.server_version  # no Python version in the Server header
+
+    def finish(self) -> None:
+        super().finish()
+        if self.close_connection:
+            self._read_off_the_rest()
+
+    def _read_off_the_rest(self) -> None:
+        """End the answer, then read off what the client is still sending, up to LINGER_BYTES and while each next piece
+        comes within LINGER_SECONDS, before the connection closes. A connection closed with a request body unread is
+        reset, and the client loses the answer it was reading or fails its send."""
+        try:
+            self.connection.shutdown(socket.SHUT_WR)
+            self.connection.settimeout(LINGER_SECONDS)
+            left = LINGER_BYTES
+            while left > 0 and (chunk := self.connection.recv(65536)):
+                left -= len(chunk)
+        except OSError:
+            pass  # the client has gone, or stopped sending
 
     @property
     def app(self) -> WorkbenchServer:
