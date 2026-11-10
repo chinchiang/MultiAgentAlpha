@@ -323,6 +323,15 @@ are listed in the test, not in the handler. The wait for the next piece of what 
 `mara.web.server.LINGER_SECONDS`, read where it is used: the test patches it as an attribute of that module, and a
 copy of it kept as a default argument or on the class would leave the patch unreached.
 
+## The output of a child process (`scripts/`, `src/mara`)
+
+`test_subprocess_encoding.py` walks the source files and lists every call that reads a child's output or input as
+text without `encoding="utf-8", errors="replace"`: nothing is patched, so a new call that forgets them fails there
+without a test of its own. What it does not see is a call that builds its keywords with `**`, or one that takes `run`
+from subprocess by name; none exists. The one behaviour test runs the gh wrapper of `scripts/human_queue_issues.py` in a child whose locale
+is ASCII (`not_utf8_env`) against a stand-in for gh that is an executable script on PATH, so it is skipped on Windows;
+the other calls are held by the walk alone.
+
 ## What a test must not read from the semgrep scan
 
 The number of accepted findings `scripts/semgrep_ci.py` reports is not a stable value: ten scans of the same tree gave
