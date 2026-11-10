@@ -271,3 +271,17 @@ _Avoid_: job (a job is an environment task such as installing the tools), review
 **Progress record**:
 The file `mara review --progress-file` keeps rewriting while a review runs: its nine stages, each pending, running, done, skipped or failed, and the newest pipeline log lines. A view of the review, never evidence: nothing reads it back into a report.
 _Avoid_: status file, log
+
+## Working on the repository
+
+**Seam**:
+A place where a test reaches into the code: a name it patches or a value it reads, and the shape of the code that patch or read relies on. `tests/SEAMS.md` lists them; a change that moves, renames or re-signs one breaks the tests beside it, or leaves them passing against code they no longer reach.
+_Avoid_: hook, mock point (a seam is the place, a mock is only one thing a test puts there)
+
+**Mutation list**:
+The file `tests/mutations/<name>.yaml`: the faults a behaviour change's tests were checked against, each an `old` text of the code and the `new` text that makes the fault its name says. `scripts/mutate.py` applies them one by one; the tests must fail on every one (the mutation is caught).
+_Avoid_: mutation file, fault list, mutant list (a mutant is one applied mutation)
+
+**Handoff**:
+The one living file in `scratch/` (never in git) that a session reads at its start and folds its own work into at its end: the state of the repository, the decisions, the open work, the way of working. A new session starts from it, not from the chat.
+_Avoid_: notes, summary, status file (the progress record is a review's, not a session's)
