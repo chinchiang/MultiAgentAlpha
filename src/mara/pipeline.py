@@ -38,7 +38,7 @@ from .scoring.outcome import OutcomePolicy
 from .tools.evidence import ToolEvidence
 from .tools.runner import ToolRun, load_prerecorded, run_all
 from .workspace import Workspace, check_outside
-from .workspace import root as workspace_root
+from .workspace import root as environment_root
 
 
 @dataclass(frozen=True)
@@ -68,11 +68,13 @@ class Pipeline:
         # the MARA workspace MARA's own evidence is read from (mara.workspace), fixed here for the whole review: the
         # ticket backlog, the ML-BOM, the decision files and training register, the signature bundle, the model
         # evaluations and the calibration samples; MARA_HOME (else the working directory) when none is given
-        self.root = (Path(root) if root is not None else workspace_root()).resolve()
+        self.root = (Path(root) if root is not None else environment_root()).resolve()
+        # that root as a Workspace, with the tool directory and trivy cache the environment names now: fixed here, like the
+        # root, for the tool runner below and for the check that none of them lies inside the target
+        self.workspace = Workspace.from_env(root=self.root)
         # a runner with run_all's signature (mara.tools.runner), for the main tool run and the live secret preflight; one
-        # that is not given is run_all of this workspace: its root, the tool directory and trivy cache the environment names
-        self._run_tools = run_tools if run_tools is not None else functools.partial(
-            run_all, workspace=Workspace.from_env(root=self.root))
+        # that is not given is run_all of this workspace
+        self._run_tools = run_tools if run_tools is not None else functools.partial(run_all, workspace=self.workspace)
         # the live view `mara serve` draws (mara.progress); a no-op unless `mara review --progress-file` is given
         self.progress = progress if progress is not None else Progress()
         self.out_dir = out_dir or self.root / "out"  # below the root, like `mara review --out`
@@ -148,7 +150,7 @@ class Pipeline:
         target = Path(target).resolve()
         # before anything runs: the tools come from, and P8/the backlog were read from, the MARA
         # workspace; none of it may be supplied by the repository under review
-        check_outside(target, workspace=Workspace.from_env(root=self.root))
+        check_outside(target, workspace=self.workspace)
         answer_key = calibration_answer_key(target, self.root) if calibration_sample else None
         if base_ref:  # an empty one is no base; a refused one leaves no output directory behind
             check_base(target, base_ref)
