@@ -42,8 +42,10 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   fixes it when it is built (`Pipeline.root`; MARA_HOME, else the working directory, when none is given) and reads
   the ticket backlog, the ML-BOM, the decision files and training register, the signature bundle, the model
   evaluations and the calibration samples there, so a test setting MARA_HOME before `Pipeline(cfg)` still reaches
-  them and one setting it after does not. A tool runner that is not given is `run_all` with that workspace: its tool
-  directory is MARA_TOOLS_DIR when that is set, else `.mara-tools` below the workspace, with the workspace's version lock
+  them and one setting it after does not. The tool directory and trivy cache are fixed there too, as `Pipeline.workspace`:
+  the tool runner that is not given is `run_all` with it, and the check that none of its anchors lies inside the target
+  looks at the same one, so a test setting MARA_TOOLS_DIR after `Pipeline(cfg)` changes neither. The tool directory is
+  MARA_TOOLS_DIR when that is set, else `.mara-tools` below the workspace, with the workspace's version lock
   and MARA_TRIVY_CACHE_DIR or the cache below the tool directory. `tests/conftest.py` sets MARA_TOOLS_DIR to an empty
   directory for every test, so a test that installs a tool below the workspace unsets it first.
   `test_pipeline_workspace.py`, `test_pipeline_workspace.py::test_a_pipeline_runs_the_tools_installed_in_the_workspace_it_is_given_not_below_mara_home`.

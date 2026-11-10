@@ -176,3 +176,16 @@ def test_a_pipeline_is_given_the_root_of_its_workspace_and_keeps_it_as_its_root(
     cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
     pipe = Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "out", root=given)
     assert pipe.root == given.resolve()
+
+
+def test_the_tool_directory_checked_against_the_target_is_the_one_the_runner_will_use(tmp_path, monkeypatch):
+    """The refusal of a trust anchor inside the target looks at the tool directory the pipeline runs its tools from: the
+    one the environment named when it was built, not whichever it names when the review starts."""
+    root = tmp_path / "root"
+    root.mkdir()
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(TARGET / ".mara-tools"))   # inside the target when the pipeline is built
+    pipe = Pipeline(cfg, mock_fixtures=FIXTURES, out_dir=tmp_path / "out", root=root)
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(tmp_path / "elsewhere"))   # outside it when the review starts
+    with pytest.raises(WorkspaceInsideTarget, match="tool directory"):
+        pipe.run(TARGET, sarif_dir=SARIF, provider_mode="mock")
