@@ -60,6 +60,22 @@ def test_every_changelog_row_is_one_line_of_printable_text():
     broken = [n for n, line in enumerate(table, header + 2)
               if not re.fullmatch(r"\| \d{4}-\d{2}-\d{2} \| v\d+\.\d+\.\d+ \| .* \|", line)]
     assert not broken, f"docs/CHANGELOG.md lines that are not a whole row: {broken}"
+    glued = _lines_holding_more_than_one_row(table)
+    assert not glued, f"docs/CHANGELOG.md has rows glued into one line (table lines {glued})"
+
+
+ROW = re.compile(r"\| \d{4}-\d{2}-\d{2} \| v\d+\.\d+\.\d+ \|")
+
+
+def _lines_holding_more_than_one_row(lines: list[str]) -> list[int]:
+    """Numbers (1-based, within `lines`) of the lines with two or more `| date | vX.Y.Z |` openings: two rows glued
+    by the characters `\\n` instead of a line break. A whole-row match with `.*` takes them for one row."""
+    return [n for n, line in enumerate(lines, 1) if len(ROW.findall(line)) > 1]
+
+
+def test_two_changelog_rows_glued_into_one_line_are_found():
+    glued = r"| 2026-11-10 | v0.13.78 | 摘要一 | 變更者 | 查證 |\n| 2026-11-10 | v0.13.77 | 摘要二 | 變更者 | 查證 |"
+    assert _lines_holding_more_than_one_row(["| 2026-11-10 | v0.13.76 | 摘要 | 變更者 | 查證 |", glued]) == [2]
 
 
 def test_pyproject_takes_the_version_from_the_package():
