@@ -313,6 +313,16 @@ and the tests would pass on a replace never refused. The writers, `Progress._wri
 (`test_progress.py`) and `mara.web.procs.write_json` (`test_web_procs.py`), all go through it. The patch is the `os`
 module's own attribute, the same object everywhere, and monkeypatch restores it when the test ends.
 
+## The answer that closes a connection (`src/mara/web/server.py`)
+
+`test_web_server.py` sends these requests over a raw socket (`_exchange`) and reads until the server closes, not with
+the standard HTTP client, which sends and reads in one call and would hide which of the two failed. A request refused before its
+body is read (over the size limit, chunked, a length that is no number, a foreign Host, a body on a GET) must still get
+its answer, and the connection must end without a reset; `Handler.finish` does it for every such path, so the cases
+are listed in the test, not in the handler. The wait for the next piece of what the client is still sending is
+`mara.web.server.LINGER_SECONDS`, read where it is used: the test patches it as an attribute of that module, and a
+copy of it kept as a default argument or on the class would leave the patch unreached.
+
 ## What a test must not read from the semgrep scan
 
 The number of accepted findings `scripts/semgrep_ci.py` reports is not a stable value: ten scans of the same tree gave

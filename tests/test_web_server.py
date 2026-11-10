@@ -19,6 +19,7 @@ import pytest
 from mara import progress as prog
 from mara.schemas import ReviewReport
 from mara.web import procs, runs
+from mara.web import server as workbench_server
 from mara.web.admission import LaunchError
 from mara.web.server import make_server
 from tests.held_children import LostExit, UnrecordedExit
@@ -147,6 +148,81 @@ def test_bodies_are_json_objects_of_bounded_size(server):
     assert res.status == 413 and _error(data) == "body_too_large"
     res, data, _ = c.request("PUT", "/api/settings", body={"language": "fr"})
     assert res.status == 400 and _error(data) == "bad_request"
+
+
+def _exchange(httpd, request_line, header_lines=(), body=b"", host=None):
+    """One request on a raw connection, sent whole: the server's answer, read until it closes the connection. A server
+    that closes while the client is still sending resets the connection, which a client sees as an error on the send
+    or on the read (Linux: BrokenPipeError on the send; Windows: ConnectionAbortedError on the read)."""
+    head = "\r\n".join([request_line, "Host: " + (host or f"127.0.0.1:{httpd.port}"), "X-MARA-Token: " + httpd.token,
+                        "Connection: close", *header_lines])
+    with socket.create_connection(("127.0.0.1", httpd.port), timeout=30) as s:
+        try:
+            s.sendall(head.encode() + b"\r\n\r\n" + body)
+            chunks = []
+            while chunk := s.recv(65536):
+                chunks.append(chunk)
+        except ConnectionError as e:
+            pytest.fail(f"the server closed the connection on a client still sending: {e!r}")
+    return b"".join(chunks)
+
+
+def _status(answer):
+    return int(answer.split(b" ", 2)[1])
+
+
+def test_a_body_over_the_limit_is_answered_with_413_and_the_connection_ends_cleanly(server):
+    big = 3 * 1024 * 1024   # below what the server reads off before it closes, over MAX_BODY by far
+    started = time.monotonic()
+    for _ in range(5):
+        answer = _exchange(server, "PUT /api/settings HTTP/1.1", ["Content-Type: application/json", f"Content-Length: {big}"],
+                           b"{" * big)
+        assert _status(answer) == 413 and b"body_too_large" in answer
+    assert time.monotonic() - started < 4, "the answer ends at once; the client does not wait for the server to give up on it"
+
+
+@pytest.mark.parametrize("request_line,header_lines,host,status,code", [
+    ("PUT /api/settings HTTP/1.1", ["Transfer-Encoding: chunked"], None, 411, b"length_required"),
+    ("PUT /api/settings HTTP/1.1", ["Content-Length: many"], None, 400, b"bad_request"),
+    ("PUT /api/settings HTTP/1.1", ["Content-Type: application/json", "Content-Length: {n}"], "evil.example", 421, b"bad_host"),
+    ("GET /api/health HTTP/1.1", ["Content-Length: {n}"], None, 200, b'"ok"'),
+])
+def test_a_request_refused_before_its_body_is_read_still_ends_cleanly(server, request_line, header_lines, host, status, code):
+    """Every answer that closes the connection without reading the body: the server reads off what the client is still
+    sending, so the answer is not lost to a reset."""
+    n = 3 * 1024 * 1024
+    answer = _exchange(server, request_line, [h.format(n=n) for h in header_lines], b"{" * n, host=host)
+    assert _status(answer) == status and code in answer
+
+
+def test_a_client_that_keeps_sending_is_not_read_off_for_ever(server):
+    """What the server reads off after a refusal is bounded: of 32 MiB announced and sent, the connection is closed on
+    the client part way through."""
+    n = 32 * 1024 * 1024
+    head = (f"PUT /api/settings HTTP/1.1\r\nHost: 127.0.0.1:{server.port}\r\nX-MARA-Token: {server.token}\r\n"
+            f"Content-Type: application/json\r\nContent-Length: {n}\r\n\r\n")
+    with socket.create_connection(("127.0.0.1", server.port), timeout=30) as s:
+        s.sendall(head.encode())
+        with pytest.raises(ConnectionError):
+            s.sendall(b"{" * n)
+
+
+def test_a_client_that_stops_sending_is_let_go_of_within_a_moment(server, monkeypatch):
+    """The server reads off what a refused client is still sending, but waits no longer than LINGER_SECONDS for the
+    next piece: a body of 100 MiB announced, 1 MiB sent, then nothing. After the answer has ended, the connection is
+    closed for good once that time has passed: what the client sends then is reset."""
+    monkeypatch.setattr(workbench_server, "LINGER_SECONDS", 0.3)
+    head = (f"PUT /api/settings HTTP/1.1\r\nHost: 127.0.0.1:{server.port}\r\nX-MARA-Token: {server.token}\r\n"
+            f"Content-Type: application/json\r\nContent-Length: {100 * 1024 * 1024}\r\n\r\n")
+    with socket.create_connection(("127.0.0.1", server.port), timeout=15) as s:
+        s.sendall(head.encode() + b"{" * (1024 * 1024))
+        while s.recv(65536):
+            pass   # the answer, then the end of it
+        time.sleep(1.5)
+        with pytest.raises(ConnectionError):
+            s.sendall(b"{")   # the first send to a closed connection is answered with a reset, the second one fails
+            time.sleep(0.3)
+            s.sendall(b"{")
 
 
 def test_settings_round_trip_even_when_saved_at_once(server):
