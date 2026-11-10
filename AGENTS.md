@@ -8,8 +8,9 @@
   patch or read and the shape each relies on.
 - Before starting a change you will push: read `docs/agents/pr-flow.md`, the steps from a branch to a merged pull request.
 - When naming anything in code, docs or tests: use the terms of `GLOSSARY.md`; a new term is added to it.
-- Commit messages, pull request bodies, handoffs and other files a later step needs go in `scratch/`, not `/tmp` (which
-  is emptied). It is excluded from git by `.git/info/exclude`; on a fresh clone add `/scratch/` there first.
+- Commit messages, pull request bodies, handoffs, architecture reports and other files a later step needs go in
+  `scratch/`, not `/tmp` (which is emptied). It is excluded from git by `.git/info/exclude`; on a fresh clone add
+  `/scratch/` there first.
 
 ## Agent skills
 
