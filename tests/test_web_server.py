@@ -195,6 +195,7 @@ def test_a_request_refused_before_its_body_is_read_still_ends_cleanly(server, re
     assert _status(answer) == status and code in answer
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="a send to a connection the peer closed part way is not reported there")
 def test_a_client_that_keeps_sending_is_not_read_off_for_ever(server):
     """What the server reads off after a refusal is bounded: of 32 MiB announced and sent, the connection is closed on
     the client part way through."""
