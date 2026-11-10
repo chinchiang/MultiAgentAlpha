@@ -55,7 +55,8 @@ class GhIssues:
         self.repo = repo
 
     def _gh(self, *args: str, stdin: str | None = None) -> str:
-        return subprocess.run(["gh", *args, "--repo", self.repo], input=stdin, capture_output=True, text=True, check=True).stdout
+        return subprocess.run(["gh", *args, "--repo", self.repo], input=stdin, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", check=True).stdout
 
     def open_issues(self) -> list[dict]:
         found = json.loads(self._gh("issue", "list", "--label", LABEL, "--state", "open", "--json", "number,body,comments"))

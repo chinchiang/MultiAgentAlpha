@@ -114,7 +114,7 @@ def download(url: str, dest: Path, *, retries: int = 3, timeout: int = 600) -> P
 
 def run(cmd: list[str], *, env: dict | None = None) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
+        return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False, env=env)
     except OSError as e:
         if sys.platform == "win32" and getattr(e, "winerror", None) == 193:
             sh = shutil.which("sh")
@@ -126,7 +126,7 @@ def run(cmd: list[str], *, env: dict | None = None) -> subprocess.CompletedProce
                             sh = str(cand)
                             break
             if sh:
-                return subprocess.run([sh, *cmd], capture_output=True, text=True, check=False, env=env)
+                return subprocess.run([sh, *cmd], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False, env=env)
         raise
 
 

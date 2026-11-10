@@ -53,7 +53,7 @@ def check_pins(workspace: Workspace) -> str | tuple[str, str]:
     if not node:
         return "node interpreter not found on PATH (node >= 18 required to drive the pinned csp-evaluator)"
     try:
-        vout = subprocess.run([node, "--version"], capture_output=True, text=True, check=True).stdout.strip()
+        vout = subprocess.run([node, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
         major = int(re.match(r"v?(\d+)", vout).group(1))  # type: ignore[union-attr]
     except (subprocess.SubprocessError, AttributeError, ValueError):
         return f"node at {node} did not report a usable version"

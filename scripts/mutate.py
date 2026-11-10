@@ -93,7 +93,7 @@ def _pytest(root: Path, tests: list[str]) -> tuple[int, str, str]:
     """(pytest's exit code, the first failing test, the whole output) of one pytest run that stops at a failure."""
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "GITHUB_ACTIONS": "true"}
     cp = subprocess.run([sys.executable, "-m", "pytest", "-x", "-q", "-rf", "-p", "no:cacheprovider", *tests], cwd=root, env=env,
-                        capture_output=True, text=True)
+                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     failed = [line.removeprefix("FAILED ").split(" - ")[0] for line in cp.stdout.splitlines() if line.startswith("FAILED ")]
     return cp.returncode, failed[0] if failed else "", cp.stdout + cp.stderr
 

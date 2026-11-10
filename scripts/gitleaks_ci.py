@@ -36,7 +36,7 @@ def locked_version(lock: Path = ROOT / pins.LOCK) -> str:
 
 
 def git(args: list[str], cwd: Path) -> tuple[int, str]:
-    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return r.returncode, (r.stdout or r.stderr).strip()
 
 
@@ -96,7 +96,7 @@ def main() -> int:
     if not_pinned:
         print(f"ERROR: {not_pinned}", file=sys.stderr)
         return 2
-    ver = subprocess.run([str(exe), "version"], capture_output=True, text=True)
+    ver = subprocess.run([str(exe), "version"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     print(f"gitleaks {ver.stdout.strip() or ver.stderr.strip()} from {exe} (lock {want})")
 
     source = a.source.resolve()
@@ -109,7 +109,7 @@ def main() -> int:
         argv = [str(exe), "git", "--no-banner", "--redact", "--exit-code=2", "--report-format=sarif", f"--report-path={report}",
                 f"--log-opts={log_opts}", str(source)]
     print("+ " + " ".join(argv))
-    r = subprocess.run(argv, capture_output=True, text=True)
+    r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
     tail = (r.stdout + r.stderr).strip().splitlines()[-6:]
     for line in tail:
         print("  " + line)

@@ -37,7 +37,8 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     git = ["git", "-c", "core.quotepath=false", "-C", str(a.repo)]  # paths as they are, not quoted octal escapes
     try:
-        base = subprocess.run([*git, "merge-base", a.base, a.head], capture_output=True, text=True, check=True).stdout.strip()
+        base = subprocess.run([*git, "merge-base", a.base, a.head], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", check=True).stdout.strip()
         diff = subprocess.run([*git, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/",
                                f"{base}..{a.head}"], capture_output=True, encoding="utf-8", check=True).stdout
         log = subprocess.run([*git, "log", "-z", "--format=%H%n%B", f"{base}..{a.head}"], capture_output=True, encoding="utf-8",

@@ -57,7 +57,8 @@ def check_pins(workspace: Workspace) -> tuple[Path, list[str]] | str:
     entry = installed_manifest_entry(RULES_DIR_NAME, workspace=workspace) or {}
     if not rdir.is_dir() or not entry:
         return f"{RULES_DIR_NAME} is not installed under {tools_dir(workspace=workspace)}; run scripts/install_tools.py --only {RULES_DIR_NAME}"
-    head = subprocess.run(["git", "-C", str(rdir), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    head = subprocess.run(["git", "-C", str(rdir), "rev-parse", "HEAD"], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace").stdout.strip()
     if not want_commit or head != want_commit or entry.get("commit") != want_commit:
         return f"{RULES_DIR_NAME} checkout {head[:12]} / manifest {str(entry.get('commit'))[:12]} does not match the lock {want_commit[:12]}; re-run scripts/install_tools.py"
     configs = [str(rdir / p) for p in paths]
@@ -123,7 +124,8 @@ def main() -> int:
         return 2
     exe, configs = pins
     want_ver, want_commit, _ = locked()
-    ver = subprocess.run([str(exe), "--disable-version-check", "--version"], capture_output=True, text=True, env=scan_env()).stdout.strip()
+    ver = subprocess.run([str(exe), "--disable-version-check", "--version"], capture_output=True, text=True,
+                         encoding="utf-8", errors="replace", env=scan_env()).stdout.strip()
     print(f"semgrep {ver} from {exe} (lock {want_ver}); rules {RULES_DIR_NAME}@{want_commit[:12]}, {len(configs)} pinned rulesets")
 
     entries, excludes = load_triage(a.triage) if a.triage else ([], [])
@@ -135,7 +137,7 @@ def main() -> int:
     argv.append(".")
     rules, tools = str(rules_dir(workspace=ws)), str(tools_dir(workspace=ws))
     print("+ (cd " + str(target) + " && " + " ".join(x if not x.startswith(rules) else x.replace(tools, "$MARA_TOOLS_DIR") for x in argv) + ")")
-    r = subprocess.run(argv, cwd=target, capture_output=True, text=True, env=scan_env())
+    r = subprocess.run(argv, cwd=target, capture_output=True, text=True, encoding="utf-8", errors="replace", env=scan_env())
     for line in (r.stderr or r.stdout).strip().splitlines()[-4:]:
         print("  " + line)
     if not report.is_file() or not report.read_text(encoding="utf-8").strip():
