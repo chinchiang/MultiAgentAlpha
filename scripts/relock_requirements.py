@@ -109,7 +109,7 @@ def resolve(reqs: list[str], allow_sdist: bool, workdir: Path, constraints: list
         argv += ["-c", str(con_file)]
     argv += ["-r", str(req_file)]
     print("+ " + " ".join(argv))
-    r = subprocess.run(argv, capture_output=True, text=True)
+    r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0 or not report.is_file():
         raise RelockError(f"pip could not resolve the closure (exit {r.returncode}):\n{(r.stderr or r.stdout).strip()[-2000:]}")
     return json.loads(report.read_text(encoding="utf-8"))

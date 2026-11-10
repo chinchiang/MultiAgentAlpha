@@ -98,7 +98,7 @@ def cmd_run(a: argparse.Namespace) -> int:
         else:
             targets.append(t)
     if a.tool in ("garak", "all"):
-        ver = subprocess.run([sys.executable, "-m", "garak", "--version"], capture_output=True, text=True)
+        ver = subprocess.run([sys.executable, "-m", "garak", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace")
         if ver.returncode != 0 or cfg.model_eval.garak_version not in (ver.stdout + ver.stderr):
             print(f"ERROR: garak {cfg.model_eval.garak_version} is not installed (pip install -r tools/model-eval-requirements.txt): "
                   f"{(ver.stdout + ver.stderr).strip()[:120]}", file=sys.stderr)

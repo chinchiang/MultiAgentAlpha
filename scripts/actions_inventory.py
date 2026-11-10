@@ -412,7 +412,8 @@ class Resolver:
             return self.cache[repo]
         env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
         try:
-            cp = subprocess.run(["git", "ls-remote", f"https://github.com/{repo}"], capture_output=True, text=True, timeout=60, env=env, check=False)
+            cp = subprocess.run(["git", "ls-remote", f"https://github.com/{repo}"], capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=60, env=env, check=False)
         except (subprocess.TimeoutExpired, OSError):
             self.cache[repo] = None
             return None
@@ -481,8 +482,9 @@ def run_zizmor(path: Path) -> dict | None:
     exe = shutil.which("zizmor")
     if not exe:
         return None
-    ver = subprocess.run([exe, "--version"], capture_output=True, text=True, check=False).stdout.strip()
-    cp = subprocess.run([exe, "--no-progress", "--offline", "--format", "sarif", str(path)], capture_output=True, text=True, timeout=300, check=False)
+    ver = subprocess.run([exe, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False).stdout.strip()
+    cp = subprocess.run([exe, "--no-progress", "--offline", "--format", "sarif", str(path)], capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=300, check=False)
     out: dict = {"version": ver, "exit_code": cp.returncode, "stderr": [ln for ln in cp.stderr.splitlines() if ("WARN" in ln or "fatal" in ln or "error" in ln.lower()) and not re.match(r"^\s*\d+: ", ln)][:5], "results": [], "sarif": None}
     if cp.stdout.strip():
         try:

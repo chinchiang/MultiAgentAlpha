@@ -148,11 +148,11 @@ def cmd_download(a: argparse.Namespace) -> int:
             fetch_ref = f"{host}/{path}@{digest}"
         argv = [str(exe), "--cache-dir", str(cache), "image", "--download-db-only", "--db-repository", fetch_ref]
         print("+ " + " ".join(argv))
-        r = subprocess.run(argv, capture_output=True, text=True)
+        r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
         last = "\n".join(line for line in (r.stderr + r.stdout).splitlines() if "MiB /" not in line)[-1200:]
         if r.returncode == 0 and tdb.db_path(cache).is_file():
             meta = tdb.read_metadata(cache) or {}
-            ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True).stdout
+            ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
             trivy_version = next((line.split()[-1] for line in ver.splitlines() if line.startswith("Version:")),
                                  installed_version("trivy", workspace=a.workspace))
             rec = {"repository": ref, "downloaded_ref": fetch_ref, "provenance": "digest" if digest.startswith("sha256:") else "unverified",

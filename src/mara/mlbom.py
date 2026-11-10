@@ -560,7 +560,7 @@ def verify_signature(cfg: MaraConfig, root: Path | str, runner=None) -> tuple[bo
         return False, str(e)
     run = runner or subprocess.run
     try:
-        cp = run(cmd, capture_output=True, text=True, timeout=180, check=False, env=tool_env())
+        cp = run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180, check=False, env=tool_env())
     except (OSError, subprocess.TimeoutExpired) as e:
         return False, f"cosign verify-blob failed to run ({type(e).__name__})"
     if cp.returncode != 0:

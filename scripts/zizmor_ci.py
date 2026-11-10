@@ -74,7 +74,7 @@ def main() -> int:
         argv.append("--offline")
     argv.append(str(a.target))
     print("+ " + " ".join(argv))
-    r = subprocess.run(argv, capture_output=True, text=True)
+    r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
     for line in r.stderr.strip().splitlines()[-8:]:
         print("  " + line)
     if r.returncode != 0 or not r.stdout.strip():

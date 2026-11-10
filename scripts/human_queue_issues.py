@@ -62,7 +62,7 @@ def gh(args: list[str], *, dry_run: bool = False, mutating: bool = False) -> str
     if dry_run and mutating:
         print("  [dry-run] gh " + " ".join(args))
         return ""
-    cp = subprocess.run([exe, *args], capture_output=True, text=True, check=False)
+    cp = subprocess.run([exe, *args], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     if cp.returncode != 0:
         raise GhError(f"gh {' '.join(args[:3])} failed: {cp.stderr.strip()[-500:]}")
     return cp.stdout

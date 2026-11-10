@@ -124,7 +124,7 @@ COMMIT_CHECKS = ("lines", "chars", "gitleaks")  # the checks that read the branc
 
 def uncommitted(root: Path) -> list[str]:
     """The changes `git status --porcelain` lists under `root`, tracked and untracked; why git could not tell, if so."""
-    cp = subprocess.run(["git", "-C", str(root), "status", "--porcelain"], capture_output=True, text=True)
+    cp = subprocess.run(["git", "-C", str(root), "status", "--porcelain"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     return cp.stdout.splitlines() if cp.returncode == 0 else [f"git status failed: {cp.stderr.strip()}"]
 
 

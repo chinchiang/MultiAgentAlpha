@@ -111,7 +111,7 @@ def main() -> int:
     if not_pinned:
         print(f"ERROR: {not_pinned}", file=sys.stderr)
         return 2
-    ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True)
+    ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     print(f"osv-scanner {(ver.stdout or ver.stderr).strip().splitlines()[0]} from {exe} (lock {want})")
 
     report = a.report.resolve()
@@ -131,7 +131,7 @@ def main() -> int:
     if a.target:
         argv += ["-r", str(a.target)]
     print("+ " + " ".join(argv))
-    r = subprocess.run(argv, capture_output=True, text=True)
+    r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
     for line in (r.stderr + r.stdout).strip().splitlines()[-8:]:
         print("  " + line)
     if r.returncode == EXIT_NO_PACKAGES:

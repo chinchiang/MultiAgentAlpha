@@ -69,7 +69,7 @@ def _review(ws: Path, out: Path, *, progress: Path | None = None, console: Path 
     inherited = [os.environ["PYTHONPATH"]] if os.environ.get("PYTHONPATH") else []
     pythonpath = os.pathsep.join([str(ROOT / "src"), *inherited])
     env = {**os.environ, "MARA_HOME": str(ws), "NO_COLOR": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": pythonpath}
-    cp = subprocess.run(argv, cwd=ROOT, env=env, capture_output=True, text=True)
+    cp = subprocess.run(argv, cwd=ROOT, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if console is not None:
         console.write_text(cp.stdout + cp.stderr, encoding="utf-8")
     if cp.returncode != 0:

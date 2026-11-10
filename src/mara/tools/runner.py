@@ -112,14 +112,15 @@ def _run(cmd: list[str], cwd: Path, timeout: int = 600, env: dict | None = None)
     """Run a tool; without an explicit `env`, with tool_env() - never the full parent environment."""
     env = tool_env() if env is None else env
     try:
-        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, check=False, env=env)
     except OSError as e:
         # WinError 193: not a Windows executable (a shell-script tool). Only an interpreter named explicitly by
         # MARA_WINDOWS_SH may run it - the test suite sets it for its shell-script fakes. PATH is never searched for
         # one: a `sh` earlier on PATH would otherwise run with every tool's arguments over the target.
         sh = os.environ.get("MARA_WINDOWS_SH", "")
         if sys.platform == "win32" and getattr(e, "winerror", None) == 193 and sh and Path(sh).is_file():
-            return subprocess.run([sh, *cmd], cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)
+            return subprocess.run([sh, *cmd], cwd=cwd, capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=timeout, check=False, env=env)
         raise
 
 

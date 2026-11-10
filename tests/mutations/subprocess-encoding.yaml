@@ -1,0 +1,16 @@
+focused: [tests/test_subprocess_encoding.py]
+# a child process's output is read as UTF-8 and one bad byte does not fail the read (tests/test_subprocess_encoding.py);
+# each mutation puts one half of that back in a call the tests reach.
+mutations:
+  - name: the output of gh is read in the machine's locale
+    file: scripts/human_queue_issues.py
+    old: 'capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)'
+    new: 'capture_output=True, text=True, errors="replace", check=False)'
+  - name: one byte that is no UTF-8 fails the read of the output of gh
+    file: scripts/human_queue_issues.py
+    old: 'capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)'
+    new: 'capture_output=True, text=True, encoding="utf-8", check=False)'
+  - name: the tools of a review are read in the machine's locale
+    file: src/mara/tools/runner.py
+    old: '        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, check=False, env=env)'
+    new: '        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False, env=env)'

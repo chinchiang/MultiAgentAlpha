@@ -154,7 +154,7 @@ def to_sarif(doc: dict, rows: list[dict], root: Path | None) -> dict:
 def export_tree(checkout: Path, rev: str, dest: Path) -> str:
     """The tracked files of `rev` in `checkout` extracted into dest; returns the full commit SHA."""
     sha = subprocess.run(["git", "-C", str(checkout), "rev-parse", "--verify", f"{rev}^{{commit}}"],
-                         capture_output=True, text=True, check=True).stdout.strip()
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
     tar = dest.parent / "tree.tar"
     with tar.open("wb") as out:
         subprocess.run(["git", "-C", str(checkout), "archive", "--format=tar", sha], stdout=out, check=True)
@@ -219,7 +219,7 @@ def main() -> int:
             argv.append(f"--checks={a.checks}")
         print("+ " + " ".join(argv))
         a.json.unlink(missing_ok=True)  # a crash that writes nothing must not leave an earlier run's JSON to be read
-        r = subprocess.run(argv, capture_output=True, text=True)
+        r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
     for line in (r.stdout + r.stderr).strip().splitlines()[-8:]:
         print("  " + line)
     if not a.json.is_file():

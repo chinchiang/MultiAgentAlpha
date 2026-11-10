@@ -81,7 +81,7 @@ def main() -> int:
         print(("  db: " if ok else "ERROR: ") + line)
     if not ok:
         return 2
-    ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True).stdout.strip().splitlines()
+    ver = subprocess.run([str(exe), "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip().splitlines()
     print(f"trivy {ver[0] if ver else '?'} from {exe}; offline database under {cache}")
 
     report = a.report.resolve()
@@ -101,7 +101,7 @@ def main() -> int:
             argv += ["--file-patterns", p]
     argv.append(str(a.target))
     print("+ " + " ".join(argv))
-    r = subprocess.run(argv, capture_output=True, text=True)
+    r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
     for line in (r.stderr + r.stdout).strip().splitlines()[-6:]:
         print("  " + line)
     if r.returncode != 0:

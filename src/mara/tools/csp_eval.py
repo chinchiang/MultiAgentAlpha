@@ -155,7 +155,7 @@ def evaluate(policies: list[CspPolicy], *, driver: Path, node: str,
     or (None, note) when the driver could not be run or its output was unusable."""
     request = json.dumps({"policies": [{"id": i, "policy": p.policy} for i, p in enumerate(policies)]})
     try:
-        cp = subprocess.run([node, str(driver), "-"], input=request, capture_output=True, text=True,
+        cp = subprocess.run([node, str(driver), "-"], input=request, capture_output=True, text=True, encoding="utf-8", errors="replace",
                             timeout=timeout, check=False, cwd=str(driver.parent), env=tool_env())
     except (OSError, subprocess.TimeoutExpired) as e:
         return None, f"failed: {e}"
