@@ -568,7 +568,7 @@ def test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_i
     assert words(str(home / "config" / "mara.yaml")) in words(res.output), res.output
 
 
-def test_the_command_line_hands_the_pipeline_the_workspace_it_admitted_the_invocation_against(tmp_path, monkeypatch):
+def test_the_command_line_hands_the_pipeline_the_root_it_admitted_the_invocation_against(tmp_path, monkeypatch):
     """MARA_HOME names the workspace and the working directory is elsewhere: `mara review` gives Pipeline the first
     (`workspace=`) rather than leaving it to find one in the environment again."""
     from typer.testing import CliRunner

@@ -21,7 +21,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from install_tools import InstallError, git_paths_digest, install, load_lock, python_for_pip  # noqa: E402
 
 from mara.tools import runner  # noqa: E402
-from mara.workspace import Workspace  # noqa: E402
 from tests import tool_installs  # noqa: E402
 
 
@@ -288,7 +287,7 @@ def test_runner_only_executes_pinned_tools(tmp_path, monkeypatch):
     fake.write_text("#!/bin/sh\ncat <<'EOF'\n" + sarif + "\nEOF\n")
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     tool_installs.manifest(mt, "zizmor")  # at its locked version
-    workspace = Workspace(ROOT, tools_dir=mt)
+    workspace = tool_installs.workspace(mt)
     target = tmp_path / "target"
     target.mkdir()
     runs = {r.tool: r for r in runner.run_all(target, tmp_path / "out", enabled=["zizmor", "gitleaks"], workspace=workspace)}
@@ -297,7 +296,8 @@ def test_runner_only_executes_pinned_tools(tmp_path, monkeypatch):
     assert not runs["gitleaks"].ran and "install_tools.py" in runs["gitleaks"].note
     # PATH is never consulted
     monkeypatch.setenv("PATH", str(mt / "bin") + os.pathsep + os.environ["PATH"])
-    assert runner.tool_path("zizmor", workspace=Workspace(ROOT, tools_dir=tmp_path / "empty")) is None
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(mt))   # nor the environment's tool directory, where it is installed
+    assert runner.tool_path("zizmor", workspace=tool_installs.workspace(tmp_path / "empty")) is None
 
 
 def test_verifier_verifies_its_own_release_with_the_downloaded_artifact(tmp_path):

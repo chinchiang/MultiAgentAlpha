@@ -77,7 +77,7 @@ def every_tool(tmp_path, monkeypatch, parent_env):
     target = tmp_path / "target"
     (target / ".github" / "workflows").mkdir(parents=True)
     (target / ".github" / "workflows" / "ci.yml").write_text("on: push\n", encoding="utf-8")
-    return target, tmp_path / "out", calls, Workspace(ROOT, tools_dir=tmp_path / "tools")
+    return target, tmp_path / "out", calls, tool_installs.workspace(tmp_path / "tools")
 
 
 def test_no_tool_subprocess_sees_the_reviews_secrets(every_tool, monkeypatch):
@@ -155,7 +155,6 @@ def _fake_tool(tools: Path, name: str) -> Path:
 
 
 def test_the_tool_directory_and_a_tool_are_those_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
-    from mara.workspace import Workspace
 
     environment = tmp_path / "environment-tools"
     in_environment = _fake_tool(environment, "gitleaks")
@@ -174,7 +173,6 @@ def _manifest(tools: Path, tool: str, version: str) -> None:
 
 
 def test_the_manifest_entry_and_version_of_a_tool_are_those_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
-    from mara.workspace import Workspace
 
     environment = tmp_path / "environment-tools"
     _manifest(environment, "gitleaks", "1.0.0")
@@ -188,7 +186,6 @@ def test_the_manifest_entry_and_version_of_a_tool_are_those_of_the_workspace_giv
 
 
 def test_the_csp_driver_is_that_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
-    from mara.workspace import Workspace
 
     def put_driver(tools: Path) -> Path:
         driver = tools / csp_eval.PACKAGE_DIR / csp_eval.DRIVER_NAME
@@ -206,7 +203,6 @@ def test_the_csp_driver_is_that_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp
 
 
 def test_the_semgrep_rules_directory_is_below_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
-    from mara.workspace import Workspace
 
     environment = tmp_path / "environment-tools"
     monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
@@ -215,7 +211,6 @@ def test_the_semgrep_rules_directory_is_below_the_tool_directory_of_the_workspac
 
 
 def test_run_all_finds_a_tool_and_its_manifest_in_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
-    from mara.workspace import Workspace
 
     started: list[Path] = []
 
@@ -247,7 +242,6 @@ def test_run_all_reads_the_version_lock_of_the_workspace_given_not_of_the_enviro
     """The tool is installed at 1.2.3. The lock of MARA_HOME pins it at 1.2.3 first, then at 9.9.9; the workspace's lock
     does not exist first, then pins 1.2.3: only the workspace's lock decides whether the tool runs."""
     from mara.tools import pins
-    from mara.workspace import Workspace
 
     def write_lock(root: Path, version: str) -> None:
         (root / pins.LOCK).parent.mkdir(parents=True, exist_ok=True)
@@ -280,7 +274,6 @@ def test_run_all_reads_the_version_lock_of_the_workspace_given_not_of_the_enviro
 
 
 def test_run_alls_trivy_scan_uses_the_trivy_cache_of_the_workspace_given_not_of_MARA_TRIVY_CACHE_DIR(tmp_path, monkeypatch):
-    from mara.workspace import Workspace
     from tests.test_trivy_ci import _sarif, _setup
 
     tools, cache = _setup(tmp_path, _sarif())  # a fake trivy and a recorded, fresh database
@@ -301,7 +294,6 @@ def test_run_alls_trivy_scan_uses_the_trivy_cache_of_the_workspace_given_not_of_
 
 
 def test_run_alls_semgrep_scan_uses_the_rules_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
-    from mara.workspace import Workspace
 
     def install(tools: Path, *, rules: bool, rule_dir_name: str = "python") -> Path:
         """<tools>/manifest.json records semgrep at its locked version and, with `rules`, the rules checkout below
@@ -344,7 +336,6 @@ def test_run_alls_semgrep_scan_uses_the_rules_of_the_workspace_given_not_of_MARA
 
 
 def test_run_alls_csp_evaluator_step_uses_the_driver_of_the_workspace_given_not_of_MARA_TOOLS_DIR(tmp_path, monkeypatch):
-    from mara.workspace import Workspace
 
     def put_driver(tools: Path) -> None:
         driver = tools / csp_eval.PACKAGE_DIR / csp_eval.DRIVER_NAME

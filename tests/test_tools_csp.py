@@ -17,7 +17,6 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara.tools import csp_eval, runner  # noqa: E402
 from mara.tools.sarif import scan_complete  # noqa: E402
-from mara.workspace import Workspace  # noqa: E402
 from tests import tool_installs  # noqa: E402
 
 DRIVER_SRC = ROOT / "src" / "mara" / "tools" / "csp_driver.js"
@@ -72,7 +71,7 @@ def csp_workspace(tmp_path):
     shim.chmod(shim.stat().st_mode | stat.S_IXUSR)
     (mt / "bin" / "csp-evaluator.cmd").write_text("@echo off\nnode \"%~dp0..\\csp-evaluator\\mara_driver.js\"\n", encoding="ascii")
     tool_installs.manifest(mt, "csp-evaluator")  # at its locked version
-    return Workspace(ROOT, tools_dir=mt)
+    return tool_installs.workspace(mt)
 
 
 def _write(tmp_path, rel: str, text: str) -> Path:
@@ -157,12 +156,16 @@ def test_run_csp_eval_with_no_policies_still_reports_a_complete_scan(tmp_path, c
 
 
 def test_run_csp_eval_refuses_missing_package_or_node(tmp_path, monkeypatch):
-    assert csp_eval.run_csp_eval(tmp_path, tmp_path / "o.sarif", workspace=Workspace(ROOT, tools_dir=tmp_path / "empty")).returncode == 66
+    environment = tmp_path / "environment-tools"   # the environment's tool directory has the package; the workspace's has not
+    (environment / "csp-evaluator").mkdir(parents=True)
+    shutil.copyfile(DRIVER_SRC, environment / "csp-evaluator" / "mara_driver.js")
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(environment))
+    assert csp_eval.run_csp_eval(tmp_path, tmp_path / "o.sarif", workspace=tool_installs.workspace(tmp_path / "empty")).returncode == 66
     mt = tmp_path / "mt"
     (mt / "csp-evaluator").mkdir(parents=True)
     shutil.copyfile(DRIVER_SRC, mt / "csp-evaluator" / "mara_driver.js")
     monkeypatch.setattr(csp_eval, "node_exe", lambda: None)
-    assert csp_eval.run_csp_eval(tmp_path, tmp_path / "o.sarif", workspace=Workspace(ROOT, tools_dir=mt)).returncode == 127
+    assert csp_eval.run_csp_eval(tmp_path, tmp_path / "o.sarif", workspace=tool_installs.workspace(mt)).returncode == 127
 
 
 def test_runner_branch_runs_and_reports_the_tool(tmp_path, csp_workspace):
@@ -173,8 +176,9 @@ def test_runner_branch_runs_and_reports_the_tool(tmp_path, csp_workspace):
     assert [x.rule_id for x in r.results] == ["SCRIPT_UNSAFE_INLINE", "FAKE_INFO"]
 
 
-def test_runner_branch_reports_a_missing_tool(tmp_path):
-    runs = runner.run_all(tmp_path, tmp_path / "out", enabled=["csp-evaluator"], workspace=Workspace(ROOT, tools_dir=tmp_path / "empty"))
+def test_runner_branch_reports_a_missing_tool(tmp_path, monkeypatch, csp_workspace):
+    monkeypatch.setenv("MARA_TOOLS_DIR", str(csp_workspace.tools_dir))   # installed there; the workspace given is empty
+    runs = runner.run_all(tmp_path, tmp_path / "out", enabled=["csp-evaluator"], workspace=tool_installs.workspace(tmp_path / "empty"))
     assert not runs[0].ran and "install_tools.py" in runs[0].note
 
 

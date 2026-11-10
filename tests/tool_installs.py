@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 
 from mara.tools import pins
+from mara.workspace import Workspace
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO_LOCK = ROOT / pins.LOCK
@@ -20,6 +21,11 @@ def locked(tool: str) -> str:
     version = pins.locked_version(tool, REPO_LOCK)
     assert version, f"tools/versions.lock pins no {tool}"
     return version
+
+
+def workspace(tools_dir: Path, trivy_cache: Path | None = None) -> Workspace:
+    """The repository's own root as a MARA workspace whose tool directory (and trivy cache) is the one given."""
+    return Workspace(ROOT, tools_dir=tools_dir, trivy_cache=trivy_cache)
 
 
 def lock_into(workspace: Path) -> None:

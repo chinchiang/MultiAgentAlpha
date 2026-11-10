@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from osv_ci import packages_in, summarize  # noqa: E402
 
-from mara.workspace import Workspace  # noqa: E402
+from tests import tool_installs  # noqa: E402
 
 # exactly what osv-scanner 2.5.1 writes (internal/output/sarif.go): the package sits in the result message, the
 # "Affected Packages" table in the rule's help markdown
@@ -142,10 +142,10 @@ def test_runner_does_not_count_a_failed_osv_scan_as_a_clean_one(tmp_path):
     tools = _tools(tmp_path, _sarif(), exit_code=128)  # writes an empty SARIF and exits 128, as when api.osv.dev is unreachable
     target = tmp_path / "t"
     target.mkdir()
-    (run,) = runner.run_all(target, tmp_path / "out", enabled=["osv-scanner"], workspace=Workspace(ROOT, tools_dir=tools))
+    (run,) = runner.run_all(target, tmp_path / "out", enabled=["osv-scanner"], workspace=tool_installs.workspace(tools))
     assert not run.ran and "exit 128" in run.note
     tools = _tools(tmp_path / "ok", _sarif(_result("CVE-1", "requests", "2.19.0")), exit_code=1)
-    (run,) = runner.run_all(target, tmp_path / "out2", enabled=["osv-scanner"], workspace=Workspace(ROOT, tools_dir=tools))
+    (run,) = runner.run_all(target, tmp_path / "out2", enabled=["osv-scanner"], workspace=tool_installs.workspace(tools))
     assert run.ran and run.results[0].rule_id == "CVE-1" and "scan source" in (tools / "argv.txt").read_text()
 
 
