@@ -1,0 +1,14 @@
+focused: [tests/test_tools_csp.py, tests/test_install_tools.py, tests/test_trivy_ci.py, tests/test_tool_env.py]
+# the tool directory and the trivy cache of the workspace a reader is given are the ones it reads, never the
+# environment's: a tool or a database found in the environment's directory is not found for a workspace without it
+# (conftest.py points MARA_TOOLS_DIR at an empty directory, so a test must put the tool in the environment's to see this).
+# Each mutation falls back to the environment's directory when the workspace's does not exist.
+mutations:
+  - name: a tool directory that does not exist is the environment's
+    file: src/mara/tools/runner.py
+    old: '    return workspace.tools_dir.resolve()'
+    new: '    return (workspace.tools_dir if workspace.tools_dir.exists() else __import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env().tools_dir).resolve()'
+  - name: a trivy cache that does not exist is the environment's
+    file: src/mara/tools/trivy_db.py
+    old: '    return workspace.trivy_cache.resolve()'
+    new: '    return (workspace.trivy_cache if workspace.trivy_cache.exists() else __import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env().trivy_cache).resolve()'
