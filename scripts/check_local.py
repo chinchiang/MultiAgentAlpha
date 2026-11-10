@@ -33,6 +33,8 @@ Not run here: the whole suite on CPython 3.12 and 3.13, the other repository sca
 osv-scanner on the seeded fixture), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
 When a check that reads the branch's commits (lines, chars, gitleaks) ran and the working tree has changes git status lists,
 the summary warns that it did not see them. Exit 0 when every check passed, 1 otherwise; the warning changes neither.
+Each line of the summary is flushed as it is printed: a check's result line when the check ends, the rest when the run
+ends. So a run redirected to a file can be followed while it goes on.
 """
 
 from __future__ import annotations
@@ -176,6 +178,12 @@ def _last_line(log: Path) -> str:
     return lines[-1].strip() if lines else ""
 
 
+def _say(*parts: str) -> None:
+    """print, flushed: stdout redirected to a file is block-buffered, so the lines of a run followed from outside could
+    stay in the buffer until the run ends."""
+    print(*parts, flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--only", action="extend", nargs="+", choices=[*CHECKS, *GROUPS], default=None,
@@ -191,23 +199,23 @@ def main(argv: list[str] | None = None) -> int:
     for name in a.only:
         code = run_check(name, CHECKS[name], a)
         log = a.logs / f"{name}.log"
-        print(f"{'ok  ' if code == 0 else 'FAIL'} {name:8} {_last_line(log)}")
+        _say(f"{'ok  ' if code == 0 else 'FAIL'} {name:8} {_last_line(log)}")
         if name == "pytest" and code != 0:
             tests, errors = failed_tests(log.read_text(encoding="utf-8", errors="replace"))
             named = ([f"failed tests: {', '.join(tests)}"] if tests else []) + ([f"errors: {', '.join(errors)}"] if errors else [])
             if named:
-                print("  " + "; ".join(named))
+                _say("  " + "; ".join(named))
         if code != 0:
             failed.append(log)
     for log in failed:
-        print(f"failed: {log}")
+        _say(f"failed: {log}")
     blind = [name for name in a.only if name in COMMIT_CHECKS]
     changes = uncommitted(ROOT) if blind else []
     if changes:
         reads = "it reads" if len(blind) == 1 else "they read"
-        print(f"WARNING: {len(changes)} uncommitted change(s), which {', '.join(blind)} did not see: {reads} the branch's "
-              f"commits. Commit them and run --only {' '.join(blind)} to check them.")
-    print(f"logs: {a.logs}")
+        _say(f"WARNING: {len(changes)} uncommitted change(s), which {', '.join(blind)} did not see: {reads} the branch's "
+             f"commits. Commit them and run --only {' '.join(blind)} to check them.")
+    _say(f"logs: {a.logs}")
     return 1 if failed else 0
 
 

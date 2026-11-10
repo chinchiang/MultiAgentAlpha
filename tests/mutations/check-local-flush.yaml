@@ -1,0 +1,14 @@
+focused: [tests/test_check_local.py]
+mutations:
+  - name: the helper does not flush
+    file: scripts/check_local.py
+    old: 'print(*parts, flush=True)'
+    new: 'print(*parts)'
+  - name: a check's result line bypasses the helper
+    file: scripts/check_local.py
+    old: '_say(f"{'
+    new: 'print(f"{'
+  - name: the logs line bypasses the helper
+    file: scripts/check_local.py
+    old: '_say(f"logs: '
+    new: 'print(f"logs: '

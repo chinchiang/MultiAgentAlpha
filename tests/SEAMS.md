@@ -288,6 +288,11 @@ it. The same rule for the demo script is
 `test_workbench_demo.py::test_the_script_assembles_the_page_from_the_mara_of_its_own_checkout`: it runs the script with --check
 in a child whose PYTHONPATH holds a package named mara that refuses to be imported.
 
+What `main` prints is flushed as it is printed (`_say`), since stdout redirected to a file is block-buffered and a run followed from
+outside would show nothing until it ended. A test sees that by replacing stdout with an object that remembers what was written and
+not yet flushed (`test_a_result_line_is_flushed_before_the_next_check_starts`, which reads it from inside the next check's set-up
+function, and `test_everything_main_prints_is_flushed_when_it_returns`); `capsys` cannot, for it never buffers.
+
 ## The Evidence record (`src/mara/evidence.py`)
 
 `test_evidence_record.py` reads `mara.evidence` at its interface: `Header` (made by `Header.from_json` and `Header.from_front_matter`),
