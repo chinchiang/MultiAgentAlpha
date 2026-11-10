@@ -95,6 +95,52 @@ def test_a_check_that_cannot_be_set_up_fails_with_why(tmp_path, monkeypatch, cap
     assert "FAIL broken" in capsys.readouterr().out
 
 
+class _Unflushed:
+    """A stdout that keeps what was written and not yet flushed, as a file or a pipe does until its buffer fills."""
+
+    def __init__(self):
+        self.written, self.pending = "", []
+
+    def write(self, text):
+        self.written += text
+        self.pending.append(text)
+        return len(text)
+
+    def flush(self):
+        self.pending.clear()
+
+
+def test_a_result_line_is_flushed_before_the_next_check_starts(tmp_path, monkeypatch):
+    """Redirected to a file, stdout is block-buffered: the lines of a run followed from outside came all at the end."""
+    out = _Unflushed()
+    monkeypatch.setattr(sys, "stdout", out)
+    seen = []
+
+    def second(a):
+        seen.append("".join(out.pending))
+        return [sys.executable, "-c", "pass"], {}, None
+
+    monkeypatch.setattr(check_local, "CHECKS", {"one": lambda a: ([sys.executable, "-c", "print('done')"], {}, None), "two": second})
+    assert check_local.main(["--only", "one", "two", "--logs", str(tmp_path)]) == 0
+    assert seen == [""], f"check one's result line was not yet flushed when check two started: {seen!r}"
+
+
+def test_everything_main_prints_is_flushed_when_it_returns(tmp_path, monkeypatch):
+    """The result lines, the failed tests, the failed logs, the warning and the logs line: a watcher waits for each."""
+    out = _Unflushed()
+    monkeypatch.setattr(sys, "stdout", out)
+    failing = "print('=' * 10, 'FAILURES', '=' * 10); print('_' * 5, 'test_x', '_' * 5); raise SystemExit(1)"
+    monkeypatch.setattr(check_local, "CHECKS", {
+        "pytest": lambda a: ([sys.executable, "-c", failing], {}, None),
+        "lines": lambda a: ([sys.executable, "-c", "pass"], {}, None),
+    })
+    monkeypatch.setattr(check_local, "uncommitted", lambda root: [" M x"])
+    assert check_local.main(["--only", "pytest", "lines", "--logs", str(tmp_path)]) == 1
+    for line in ("FAIL pytest", "failed tests: test_x", "ok   lines", f"failed: {tmp_path / 'pytest.log'}", "WARNING:", "logs:"):
+        assert line in out.written, line
+    assert out.pending == [], f"printed and not flushed: {''.join(out.pending)!r}"
+
+
 def _recording(monkeypatch, names):
     """CHECKS replaced by checks that pass, each recording its name when it runs; the names in the order they ran."""
     ran = []
