@@ -12,7 +12,7 @@ A change that becomes a pull request goes through these steps in order. Each end
    `tests/SEAMS.md` beside the code they describe.
 4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it, and `scripts/mutate.py
    tests/mutations/<name>.yaml --focused-only` on each file the change touches, without `AWS_PROFILE` and `GEMINI_API_KEY`. A mutation edits `src/`,
-   so never run the two at once. Done when all seven checks are `ok` and every mutation is caught.
+   so never run the two at once. Done when every check `AGENTS.md` lists is `ok` and every mutation is caught.
 5. **Self-review.** `mattpocock-skills:code-review` against `origin/main`, the two axes reported apart. Done when every
    finding is fixed or answered in the body. A review you did not run is said so in the body.
 6. **Write the body** to `scratch/pr-body-<name>.md` (`mattpocock-skills:pr`), in English, ending with the attribution
