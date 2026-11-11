@@ -28,9 +28,15 @@ A change that becomes a pull request goes through these steps in order. Each end
 4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it, and `scripts/mutate.py
    tests/mutations/<name>.yaml --focused-only` on each file the change touches, without `AWS_PROFILE` and
    `GEMINI_API_KEY`. A mutation edits `src/`, so never run the two at once. Done when every check `AGENTS.md` lists is
-   `ok` and every mutation is caught. A fix made after this step goes into the commit it belongs to (rebuild as in
-   step 3, so the version commit stays last) and this step runs again on the branch head; the numbers in the body are
-   those of that run, and a fix the sub-agents did not see is said so in the body.
+   `ok` and every mutation is caught for the reason its name says.
+   For the mutations the change adds or edits, and only those, read the log that their entry in the `results.json` of
+   their run lists under `logs` (third paragraph of "A behaviour change commits its mutation list" in
+   `CODING_STANDARDS.md`): the test that caught each fails at the assertion its name gives, not at a `TypeError`, an
+   import error or an earlier assertion. The failing lines of a log:
+   `grep -h -E '^(E +[A-Za-z]|FAILED)' out/mutations/<UTC time of that run>/<a file under logs>`
+   A fix made after this step goes into the commit it belongs to (rebuild as in step 3, so the version commit stays
+   last) and this step runs again on the branch head; the numbers in the body are those of that run, and a fix the
+   sub-agents did not see is said so in the body.
 5. **Write the body** to `scratch/pr-body-<name>.md` (`mattpocock-skills:pr`), in English, ending with the attribution
    line; search it for control characters. Show what the change does before and after, and what you did not run.
 6. **Push, open the pull request, watch it.** `git fetch` first: if `origin/main` moved, rebase; if the version was
