@@ -44,7 +44,7 @@ def _plan(cfg, out_dir: Path, datasets: str, judge: str) -> tuple[dict, dict, di
             continue
         argv, env = me.garak_command(t, cfg.model_eval.garak_probes, out_dir)
         if t.ca_bundle:
-            env = {**env, "SSL_CERT_FILE": str(out_dir / f"ca-{t.slug}.pem")}
+            env = {**env, "SSL_CERT_FILE": str(_ca_path(t, out_dir))}
         garak_cmds[t.family], envs[t.family] = argv, env
         why = me.unsupported(t, "cyberseceval")
         cse_cmds[t.family] = why if why else me.cyberseceval_commands(t, datasets, out_dir, judge)
@@ -57,12 +57,17 @@ def _this_python(argv: list[str]) -> list[str]:
     return [sys.executable, *argv[1:]] if argv and argv[0] == "python3" else argv
 
 
+def _ca_path(t: me.EvalTarget, out_dir: Path) -> Path:
+    """Where the CA bundle `run` writes for a target lies, absolute like garak's --report_prefix (`garak_command`)."""
+    return out_dir.absolute() / f"ca-{t.slug}.pem"
+
+
 def _tls_env(t: me.EvalTarget, out_dir: Path) -> dict[str, str]:
     """SSL_CERT_FILE for a target behind an internal CA (public roots + its ca_bundle), else nothing."""
     pem = me.ca_bundle_pem(t)
     if pem is None:
         return {}
-    path = out_dir / f"ca-{t.slug}.pem"
+    path = _ca_path(t, out_dir)
     path.write_text(pem, encoding="utf-8")
     return {"SSL_CERT_FILE": str(path)}
 

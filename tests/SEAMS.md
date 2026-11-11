@@ -306,6 +306,9 @@ and `latest_record`, and `mara.model_eval.render_garak_report`) and hand what th
 `load_runs` and `training_requirement` of `scripts/calibrate.py` as module names and nothing of the readers. A test that
 reads the front matter of a Markdown report reads it through `mara.evidence.read_front_matter`, which `mara.govdocs`
 imports by name.
+The CA file `scripts/model_eval.py` writes for a family behind an internal CA is read in `test_model_eval.py` through `_tls_env(target, out_dir)`
+(the returned SSL_CERT_FILE and the file at that path, with a target built by keyword and a real PEM file) and, as the printed
+environment of `plan`, through the command line.
 
 ## The key variable (`src/mara/credentials.py`)
 

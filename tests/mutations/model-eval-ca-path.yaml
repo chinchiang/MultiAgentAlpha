@@ -1,0 +1,29 @@
+# the CA bundle file `model_eval.py run` writes for a family behind an internal CA, and the SSL_CERT_FILE that names it
+# (`_ca_path`, `_tls_env` and `_plan` in scripts/model_eval.py): absolute, whatever --out is
+focused:
+- tests/test_model_eval.py
+mutations:
+- name: the CA file path stays relative to the working directory
+  file: scripts/model_eval.py
+  old: '    return out_dir.absolute() / f"ca-{t.slug}.pem"'
+  new: '    return out_dir / f"ca-{t.slug}.pem"'
+- name: the CA file path is made absolute under the home directory
+  file: scripts/model_eval.py
+  old: '    return out_dir.absolute() / f"ca-{t.slug}.pem"'
+  new: '    return Path.home() / out_dir / f"ca-{t.slug}.pem"'
+- name: the CA file path drops the family slug
+  file: scripts/model_eval.py
+  old: '    return out_dir.absolute() / f"ca-{t.slug}.pem"'
+  new: '    return out_dir.absolute() / "ca.pem"'
+- name: plan prints a relative CA file path
+  file: scripts/model_eval.py
+  old: '            env = {**env, "SSL_CERT_FILE": str(_ca_path(t, out_dir))}'
+  new: '            env = {**env, "SSL_CERT_FILE": str(out_dir / f"ca-{t.slug}.pem")}'
+- name: run names another file than the one it wrote
+  file: scripts/model_eval.py
+  old: '    return {"SSL_CERT_FILE": str(path)}'
+  new: '    return {"SSL_CERT_FILE": str(path.with_name("other.pem"))}'
+- name: run does not write the CA file
+  file: scripts/model_eval.py
+  old: '    path.write_text(pem, encoding="utf-8")'
+  new: '    pass'
