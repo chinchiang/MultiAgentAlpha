@@ -3,7 +3,7 @@
 Two governance items need a host that can reach the three model families' endpoints and hold their
 keys. This repository ships the scripts, parsers, thresholds and report templates, and commits the
 reports of the runs once they have happened: G-9 has its first live calibration (2026-10-08), G-8 has
-not run yet (section 4). Nothing below is a substitute for the run itself: a report built from fixtures, or a calibration run on mock providers, cannot be
+no live run yet (section 4). Nothing below is a substitute for the run itself: a report built from fixtures, or a calibration run on mock providers, cannot be
 labelled `live` (the scripts refuse), so the governance checks cannot be satisfied by accident.
 
 ## 1. Prerequisites (both items)
@@ -120,7 +120,7 @@ The mock loop remains reproducible locally without endpoints:
 python3 scripts/calibration_run.py --mode mock --date <date> --report /tmp/calibration-mock.md
 ```
 
-## 4. Where things stand (2026-10-12)
+## 4. Where things stand (G-9: 2026-10-12; G-8: 2026-11-11)
 
 - **G-9 is green.** The first live calibration ran on 2026-10-08 against the production panel (Claude Opus 5.5
   on Bedrock, Gemini 3.8 Flash, GLM on the IEC gateway), five samples and 51 labels, about four hours:
@@ -129,9 +129,21 @@ python3 scripts/calibration_run.py --mode mock --date <date> --report /tmp/calib
   were not written into `config/mara.yaml`. Its Alternative Annotator Test did not pass because there are no
   human decisions to compare yet (no trained adjudicator, G-13), so P8 keeps every rejected non-D finding in
   the human queue. Run section 3 again within 90 days and after any model upgrade.
-- **G-8 is still red.** garak and CyberSecEval have not been run against the endpoints: there is no
-  `docs/garak-*.md`, `docs/cyberseceval-*.md` or `calib/model-eval-<date>.json`. Even after a run,
-  CyberSecEval at the pinned ref has no Bedrock provider, so the anthropic family's two CyberSecEval metrics
-  stay missing until there is a route.
+- **G-8 is still red, but the garak half is wired and runs.** On 2026-11-11 `scripts/model_eval.py run --tool garak`
+  ran against all three families with garak 0.17.1, using a copy of the config whose `garak_probes` was only
+  `test.Test` (8 prompts, 5 generations each, 40 attempts per family, no source code sent): Claude Opus 5.5 on Bedrock,
+  Gemini 3.8 Flash, and GLM on the IEC gateway (through its internal CA bundle) all exited 0 with `always.Pass` 40/40,
+  and `report --mode dry-run` read the three garak reports back (garak pass rate 1.0 for each family). The
+  first attempt had failed before sending any prompt: garak joins a relative `--report_prefix` onto
+  `~/.local/share/garak/garak_runs/`, so `garak_command` now passes an absolute one (v0.13.84; its CHANGELOG row
+  says GLM was not run, because the key was not at hand while the fix was made: GLM ran the same day, afterwards).
+  `always.Pass` always passes, so this shows the wiring, the keys, the TLS path and the report format, and says
+  nothing about how safe a model is. What is still missing for G-8:
+  - garak with the real `garak_probes` in `config/mara.yaml` (about 36,000 calls for the full `run`, which has
+    not been made);
+  - CyberSecEval: it has not been run for any family, and at the pinned ref it has no Bedrock provider, so the
+    anthropic family's two CyberSecEval metrics stay missing until there is a route;
+  - the reports themselves: there is still no `docs/garak-*.md`, `docs/cyberseceval-*.md` or
+    `calib/model-eval-<date>.json`, and the trial output is `dry-run` at best, which G-8 does not accept.
 - `fixtures/model-eval/` holds synthetic outputs used only to test the parsers; nothing generated from them
   is, or can be, labelled `live`.
