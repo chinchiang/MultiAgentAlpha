@@ -68,9 +68,9 @@ earlier assertion of the same test and proves nothing about the line it targets:
 `tests/mutations/tool-workspace-honoured.yaml` falls back to the environment's directory only when the workspace's
 does not exist, not always.
 
-A review reads where the test that caught a new mutation fails: `results.json` of the run names the test, but the
-failure output of the focused tests is not kept (a whole-suite run's is, in `<name>.suite.log`), so the review applies
-the mutant by hand and runs that test.
+A review reads where the test that caught a new mutation fails: `results.json` of the run names the test and lists the
+logs of that mutation, `<slug>.focused.log` for the focused tests and `<slug>.suite.log` for a whole-suite run (`<slug>`
+is the mutation's name made fit for a file name), and the failure is in the log of the run that caught it.
 
 ## Lines are wrapped by hand
 

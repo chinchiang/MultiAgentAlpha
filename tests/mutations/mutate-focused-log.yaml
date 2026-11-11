@@ -1,0 +1,22 @@
+focused: [tests/test_mutate.py]
+mutations:
+  - name: the focused tests' output is not kept
+    file: scripts/mutate.py
+    old: '            (run_dir / f"{slug}.focused.log").write_text(out, encoding="utf-8")'
+    new: '            pass'
+  - name: a log is written but not listed in the results
+    file: scripts/mutate.py
+    old: '            logs.append(f"{slug}.focused.log")'
+    new: '            pass'
+  - name: a whole-suite log is written but not listed in the results
+    file: scripts/mutate.py
+    old: '            logs.append(f"{slug}.suite.log")'
+    new: '            pass'
+  - name: a log name keeps a vertical bar
+    file: scripts/mutate.py
+    old: '[\s/\\:*?"<>|]'
+    new: '[\s/\\:*?"<>]'
+  - name: a log name is not cut at 80 characters
+    file: scripts/mutate.py
+    old: '[:80]'
+    new: '[:200]'

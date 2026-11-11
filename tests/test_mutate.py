@@ -57,6 +57,37 @@ def test_a_mutation_a_test_catches_and_one_none_does_are_told_apart_and_the_sour
     assert "1 of 2 caught" in capsys.readouterr().out
 
 
+def test_the_output_of_the_focused_tests_is_kept_for_each_mutation_and_listed_in_the_results(tmp_path):
+    """Where the test that caught a mutation fails says whether it was caught for the reason the mutation's name gives; the
+    output of the focused tests with a mutation used to be dropped, and a review had to apply the mutant by hand."""
+    root = _repo(tmp_path)
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"},
+                 {"name": "another comment", "file": "src/window.py", "old": "# the window", "new": "# a window"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs")])
+    (run,) = (tmp_path / "runs").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [r["logs"] for r in results] == [["a_wider_window.focused.log"],
+                                            ["another_comment.focused.log", "another_comment.suite.log"]], "the logs it wrote"
+    caught = (run / "a_wider_window.focused.log").read_text(encoding="utf-8")
+    assert "test_limit" in caught and "4 == 3" in caught, "the failure of the test that caught it"
+    assert "1 passed" in (run / "another_comment.focused.log").read_text(encoding="utf-8"), "a missed mutation keeps its run too"
+
+
+def test_a_mutation_name_with_characters_a_file_name_cannot_have_still_gets_its_logs(tmp_path):
+    """Windows refuses " : ? * < > | \\ / in a file name; a name with one of them would have made every run fail there."""
+    root = _repo(tmp_path)
+    name = 'a "wider" window: 4? *<big>* | a\\b/c'  # every character a file name cannot hold
+    mutations = [{"name": name, "file": "src/window.py", "old": "return 3", "new": "return 4"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs")])
+    (run,) = (tmp_path / "runs").iterdir()
+    (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    (log,) = result["logs"]
+    assert not set('"\\:*?<>|/') & set(log), log
+    assert (run / log).is_file()
+    assert mutate._slug("a wider window") == "a_wider_window", "a name without such characters is named as before"
+    assert len(mutate._slug("x" * 200)) == 80
+
+
 def test_a_mutation_of_several_lines_is_applied_to_a_file_with_crlf_endings_and_the_file_is_restored_byte_for_byte(tmp_path):
     # a Windows checkout with core.autocrlf=true has CRLF endings; a list's `old` and `new` are written with \n
     root = _repo(tmp_path)
@@ -178,8 +209,9 @@ def test_focused_only_runs_the_focused_tests_alone_and_a_mutation_they_miss_is_m
     results = json.loads((run / "results.json").read_text(encoding="utf-8"))
     assert [(r["mutation"], r["caught"], r["where"]) for r in results] == [("a wider window", True, "focused"),
                                                                           ("another comment", False, "focused")]
-    assert sorted(p.name for p in run.iterdir()) == ["baseline.focused.log", "mutations.yaml", "pid", "results.json"], \
-        "no run of the whole suite"
+    assert sorted(p.name for p in run.iterdir()) == [
+        "a_wider_window.focused.log", "another_comment.focused.log", "baseline.focused.log", "mutations.yaml", "pid", "results.json"], \
+        "the focused tests' logs, and no run of the whole suite"
     assert "MISSED another comment  (focused)" in capsys.readouterr().out
     assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
 
