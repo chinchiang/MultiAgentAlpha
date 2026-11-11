@@ -23,9 +23,10 @@ both together, in the foreground, and report the two results apart.
 - To try the old version of a file, `git worktree add` a copy under `scratch/` and remove it afterwards
   (`git worktree remove`). A worktree has no `.venv` and no `scratch/`, so run its tests with the main checkout's
   interpreter and `PYTHONPATH=<worktree>/src`, or the main checkout's own `src/` is imported.
-- Report in Traditional Chinese with Taiwan usage (the owner reads it), within 400 words. When the findings do not fit,
-  give the hard ones first, then the judgement calls, and the rest in one sentence. Code, paths and quoted output go in
-  backticks.
+- Report in Traditional Chinese with Taiwan usage (the owner reads it): at most 10 items in all, following the groups of
+  your section, the hard findings first and then the judgement calls; each item in at most three lines (where, what,
+  why), a quotation of the spec or of the hunk being one line; what does not fit goes in one sentence. Code, paths and
+  quoted output go in backticks.
 
 ## The standards sub-agent
 
@@ -68,4 +69,8 @@ Besides what the prompt names, always check:
 - when the commits already exist, each one passes the tests that cover it alone; and a new test fails against the old code
   (copy the new test file into a worktree of `origin/main`);
 - every sentence the change writes about what other code does (a docstring, a standard, a CHANGELOG row, a message) is
-  true: read that code, not only its docstring, and report a claim that says more than the code does.
+  true: read that code, not only its docstring, and report a claim that says more than the code does;
+- when the change adds or edits a mutation list (`git diff origin/main -- tests/mutations/`), each mutation it adds or
+  edits has an `old` that occurs once in its file and a `new` that makes the fault its name says: read the code, and do
+  not run `scripts/mutate.py`. Whether the test that caught it fails at the assertion its name gives is read in step 4
+  of `pr-flow.md`, from the logs of a run of the final code.
