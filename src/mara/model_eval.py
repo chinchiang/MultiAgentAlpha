@@ -28,6 +28,9 @@ GHSA-27vj-qcqg-25rc). The lists above and below were checked on 0.17.0. On 2026-
 and without calling any endpoint (credentials unset) the command line was read back on 0.17.1:
 - `--target_type`, `--target_name`, `--spec`, `--generator_option_file` and `--report_prefix` exist; `--probes` is
   marked DEPRECATED in favour of `--spec`, which is what `garak_command` uses.
+- `--report_prefix` is joined onto `~/.local/share/garak/garak_runs/` (`start_run`: `report_path / filename`), so a
+  relative prefix names a directory that does not exist there and the report cannot be opened (a live trial on
+  2026-11-11); an absolute path replaces that directory, which is why `garak_command` passes one.
 - `--list_probes` has promptinject, latentinjection, encoding, dan and test.Test; `--list_generators` has
   openai.OpenAICompatible, bedrock (BedrockGenerator, Converse API) and anthropic.
 - The bedrock generator's options still hold `region` (default us-east-1) and `suppressed_params`; the
@@ -165,22 +168,24 @@ def garak_command(target: EvalTarget, probes: list[str], out_dir: Path | str,
     """(argv, extra environment) for one family. The key is mapped from the target's own env var
     into the variable garak reads, at run time only; the argv never contains it."""
     out_dir = Path(out_dir)
+    # absolute: garak joins a relative prefix onto ~/.local/share/garak/garak_runs/, where the run directory does not exist
+    report_prefix = str(out_dir.absolute() / f"garak-{target.slug}")
     spec = ",".join(f"probes.{p}" for p in probes)
     if target.provider in ("openai_compatible", "gemini"):
         argv = ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible", "--target_name", target.model, "--spec", spec,
                 "--generator_option_file", str(option_file or out_dir / f"garak-{target.slug}.generator.json"),
-                "--report_prefix", str(out_dir / f"garak-{target.slug}")]
+                "--report_prefix", report_prefix]
         source = key_env(target.provider, target.api_key_env)
         env = {GARAK_KEY_ENV: f"${source}"} if source else {}
     elif target.provider == "bedrock":
         # no key: boto3 resolves AWS_PROFILE / the SSO cache, as for the review itself
         argv = ["python3", "-m", "garak", "--target_type", "bedrock", "--target_name", target.model, "--spec", spec,
                 "--generator_option_file", str(option_file or out_dir / f"garak-{target.slug}.generator.json"),
-                "--report_prefix", str(out_dir / f"garak-{target.slug}")]
+                "--report_prefix", report_prefix]
         env = {}
     elif target.provider == "anthropic":
         argv = ["python3", "-m", "garak", "--target_type", "anthropic", "--target_name", target.model, "--spec", spec,
-                "--report_prefix", str(out_dir / f"garak-{target.slug}")]
+                "--report_prefix", report_prefix]
         env = {ANTHROPIC_KEY_ENV: f"${key_env(target.provider, target.api_key_env)}"}
     else:
         raise ValueError(f"{target.name}: no garak generator for provider {target.provider}")
