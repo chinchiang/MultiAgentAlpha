@@ -189,6 +189,9 @@ def cmd_report(a: argparse.Namespace) -> int:
     summary = me.summarize(results, date=a.date, mode=mode, th=th, garak_version=garak_version, cse_ref=cfg.model_eval.cyberseceval_ref,
                            probes=cfg.model_eval.garak_probes)
     garak_cmds, cse_cmds, _ = _plan(cfg, a.run_dir, a.datasets, f"${cfg.model_eval.judge_llm_env}")
+    # the reports are committed: they name the run directory as it was given, not as this host spells it
+    garak_cmds = {fam: [part.replace(str(a.run_dir.absolute()), str(a.run_dir)) for part in argv] if isinstance(argv, list) else argv
+                  for fam, argv in garak_cmds.items()}
     docs = a.docs_dir
     docs.mkdir(parents=True, exist_ok=True)
     (docs / f"garak-{a.date}.md").write_text(me.render_garak_report(summary, results, garak_cmds), encoding="utf-8")

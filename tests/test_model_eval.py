@@ -294,3 +294,29 @@ def test_a_garak_run_of_mostly_empty_outputs_is_not_a_measurement(tmp_path):
     assert v["status"] == "missing" and v["empty_rate"] == 1.0 and v["value"] == 1.0
     ok = report([["a", "b", "c", "d", "e"], ["f", "g", "h", "i", ""]])
     assert me.evaluate_family(ok, None, None, th)["garak_pass_rate"]["status"] == "pass", "one blank answer in ten is fine"
+
+
+@pytest.mark.parametrize("family", ["anthropic", "gemini", "glm"])
+def test_garak_report_prefix_is_absolute(family, monkeypatch, tmp_path):
+    # garak 0.17.1 joins a relative --report_prefix onto ~/.local/share/garak/garak_runs/, where there is no ops/run,
+    # and fails to open the report; an absolute path replaces that directory
+    cfg = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
+    target = next(t for t in me.targets_from_config(cfg) if t.family == family)
+    monkeypatch.chdir(tmp_path)
+    argv, _ = me.garak_command(target, ["dan"], "ops/run")
+    assert argv[argv.index("--report_prefix") + 1] == str(tmp_path / "ops" / "run" / f"garak-{target.slug}")
+    an = me.EvalTarget("anthropic", "claude-reviewer", "claude-opus-5-5", "anthropic", "", "")  # the direct Anthropic API
+    argv, _ = me.garak_command(an, ["dan"], "ops/run")
+    assert argv[argv.index("--report_prefix") + 1] == str(tmp_path / "ops" / "run" / f"garak-{an.slug}")
+
+
+def test_the_report_names_the_run_directory_as_given_and_not_this_hosts_absolute_path(tmp_path):
+    # docs/garak-<date>.md is committed: the commands it lists must not carry /home/<someone>/... now that
+    # garak_command makes --report_prefix absolute
+    shutil.copytree(FIX, tmp_path / "runs")
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(FIXTURE_PANEL), "report", "--run-dir", "runs", "--date", "2026-09-12",
+                        "--mode", "dry-run", "--docs-dir", "docs", "--summary-root", "."], capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    garak_md = (tmp_path / "docs" / "garak-2026-09-12.md").read_text(encoding="utf-8")
+    assert "--report_prefix runs/garak-deepseek" in garak_md
+    assert str(tmp_path) not in garak_md
