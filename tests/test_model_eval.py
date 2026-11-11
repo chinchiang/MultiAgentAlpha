@@ -320,3 +320,34 @@ def test_the_report_names_the_run_directory_as_given_and_not_this_hosts_absolute
     garak_md = (tmp_path / "docs" / "garak-2026-09-12.md").read_text(encoding="utf-8")
     assert "--report_prefix runs/garak-deepseek" in garak_md
     assert str(tmp_path) not in garak_md
+
+
+def test_plan_names_the_ca_file_by_an_absolute_path_whatever_out_is(tmp_path):
+    # `plan` prints what `run` will set: SSL_CERT_FILE next to the garak report, absolute as the report prefix is.
+    # config/mara.yaml's glm family is the one behind an internal CA (its ca_bundle), so it is the one that gets it.
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(ROOT / "config" / "mara.yaml"), "plan", "--out", "ops/run"],
+                       capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert f"SSL_CERT_FILE={tmp_path / 'ops' / 'run' / 'ca-glm.pem'} " in r.stdout
+
+
+def test_the_ca_file_run_sets_is_written_where_its_absolute_path_says(tmp_path, monkeypatch):
+    import model_eval as script  # scripts/model_eval.py, on sys.path above
+
+    pem = tmp_path / "internal.pem"
+    pem.write_text("-----BEGIN CERTIFICATE-----\nINTERNAL\n-----END CERTIFICATE-----\n", encoding="utf-8")
+    target = me.EvalTarget(family="glm", name="glm-reviewer", model="glm", provider="openai_compatible",
+                           base_url="https://llm.invalid/v1", api_key_env="GLM_LOCAL_KEY", ca_bundle=str(pem))
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "ops" / "run").mkdir(parents=True)
+    env = script._tls_env(target, Path("ops/run"))
+    assert env == {"SSL_CERT_FILE": str(tmp_path / "ops" / "run" / "ca-glm.pem")}
+    assert "INTERNAL" in Path(env["SSL_CERT_FILE"]).read_text(encoding="utf-8")
+
+
+def test_a_family_without_an_internal_ca_gets_no_ssl_cert_file(tmp_path):
+    import model_eval as script
+
+    bedrock = me.EvalTarget(family="anthropic", name="claude-reviewer", model="m", provider="bedrock", base_url="", api_key_env="")
+    assert script._tls_env(bedrock, tmp_path) == {}
+    assert list(tmp_path.iterdir()) == []
