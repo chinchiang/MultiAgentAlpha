@@ -25,8 +25,11 @@ mutation, and the whole suite does not run after the focused tests. Tests run wi
 writing bytecode, after src/, tests/ and scripts/ are cleared of it: a mutant of the same size written within a second
 of the original would otherwise run as the original's cached bytecode. The file is restored after each mutation, and
 checked to be byte for byte what it was. Each run writes out/mutations/<UTC time>/results.json (one entry per mutation:
-caught, by which test, by the focused tests or the whole suite, pytest's exit code), the output of the runs without a
-mutation and of every run of the whole suite, a copy of the list and its pid; a later run never overwrites an earlier one.
+caught, by which test, by the focused tests or the whole suite, pytest's exit code, and the logs it wrote), the output of
+the runs without a mutation (baseline.focused.log, baseline.suite.log), the output of the focused tests with each mutation
+in <slug>.focused.log, the output of each run of the whole suite with a mutation in <slug>.suite.log (<slug> is the mutation's
+name with whitespace, / \\ : * ? " < > | turned into _, at most 80 characters), a copy of the list and its pid; a later run
+never overwrites an earlier one.
 Before it mutates a file, a run keeps the file and its mutant under original/ and mutant/ in its directory, and removes
 them once the file is restored. A run killed in between (SIGKILL, SIGTERM, the end of a session) never restores it, so
 every run first looks for such copies: a file still holding the mutant is restored from original/, one holding the
@@ -44,6 +47,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -87,6 +91,12 @@ def _clear_bytecode(root: Path) -> None:
     for top in ("src", "tests", "scripts"):
         for pyc in (root / top).rglob("*.pyc") if (root / top).is_dir() else ():
             pyc.unlink(missing_ok=True)
+
+
+def _slug(name: str) -> str:
+    """A mutation's name as the start of a file name: whitespace and what a file name cannot hold on Windows or Linux (`/`,
+    `\\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`) become `_`; at most 80 characters."""
+    return re.sub(r'[\s/\\:*?"<>|]', "_", name)[:80]
 
 
 def _pytest(root: Path, tests: list[str]) -> tuple[int, str, str]:
@@ -167,20 +177,23 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite
     try:
         path.write_bytes(mutant)
         _clear_bytecode(root)
-        code, by, where = 0, "", "focused"
+        code, by, where, logs, slug = 0, "", "focused", [], _slug(m["name"])
         if focused:
-            code, by, _ = _pytest(root, focused)
+            code, by, out = _pytest(root, focused)
+            (run_dir / f"{slug}.focused.log").write_text(out, encoding="utf-8")
+            logs.append(f"{slug}.focused.log")
         if code == 0 and whole_suite:
             where = "suite"
             code, by, out = _pytest(root, [])
-            (run_dir / (m["name"].replace("/", "_").replace(" ", "_")[:80] + ".suite.log")).write_text(out, encoding="utf-8")
+            (run_dir / f"{slug}.suite.log").write_text(out, encoding="utf-8")
+            logs.append(f"{slug}.suite.log")
     finally:
         path.write_bytes(original)
         _clear_bytecode(root)
     if path.read_bytes() != original:
         raise RuntimeError(f"{m['file']} was not restored")
     _drop_copies(run_dir)
-    return {"mutation": m["name"], "file": m["file"], "caught": code == 1, "by": by, "where": where, "exit": code}
+    return {"mutation": m["name"], "file": m["file"], "caught": code == 1, "by": by, "where": where, "exit": code, "logs": logs}
 
 
 def main(argv: list[str] | None = None) -> int:
