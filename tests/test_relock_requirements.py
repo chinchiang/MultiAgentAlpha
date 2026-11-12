@@ -1,7 +1,7 @@
 """scripts/relock_requirements.py turns a pip --report into a hash-pinned closure: every entry carries the
 index's SHA-256, entries are sorted, sdists are named in the header and refused unless allowed, an
-entry without a hash aborts, and the repository's own lockfiles are complete and consistent, the garak closure's
-hand-applied bumps kept by its .in file's floors."""
+entry without a hash aborts, and the repository's own lockfiles are complete and consistent: each `>=` floor of the
+garak closure's .in file is at the release its comment says fixes it, and its lockfile pins every floor or later."""
 
 import json
 import re
@@ -182,17 +182,12 @@ def test_the_cyberseceval_closure_keeps_the_floors_that_fix_its_advisories():
     asserted against the release that fixes the last of them (scripts/advisory_facts.py names it), and the lockfile has to
     be at or above it. setuptools is the reverse: it stays below 82.0.0, the release that removed pkg_resources, which
     CyberSecEval imports."""
-    from packaging.requirements import Requirement
     from packaging.utils import canonicalize_name
     from packaging.version import Version
 
     lock_text = (ROOT / "tools/cyberseceval-requirements.txt").read_text(encoding="utf-8")
     pins = {canonicalize_name(n): Version(v) for n, v, _ in _parse_lock(lock_text)}
-    floors: dict[str, Version] = {}
-    for line in (ROOT / "tools/cyberseceval-requirements.in").read_text(encoding="utf-8").splitlines():
-        if line.strip() and not line.startswith("#"):
-            req = Requirement(line.split("#", 1)[0].strip())
-            floors.update({canonicalize_name(req.name): Version(s.version) for s in req.specifier if s.operator == ">="})
+    floors = {name: floor for name, (floor, _) in _floors(ROOT / "tools/cyberseceval-requirements.in").items()}
     above_pin = sorted(f"{name} {floor} > {pins[name]}" for name, floor in floors.items() if floor > pins[name])
     assert not above_pin, above_pin
     fixed_in = {"pillow": "13.0.0", "pypdf": "6.21.4", "paramiko": "5.0.0", "langchain-core": "1.3.3", "urllib3": "2.8.0"}
@@ -226,28 +221,56 @@ def test_workflows_never_pip_install_without_hashes():
     assert not offenders, "pip install without --require-hashes (or --no-deps -e .): " + "; ".join(offenders)
 
 
-def test_the_garak_closures_hand_applied_bumps_are_kept_by_the_in_files_floors():
-    """Each bump the lockfile's header lists as hand-applied has a floor in tools/model-eval-requirements.in at or above
-    the version the lockfile pins: the header says the floors keep them, so a full relock cannot go back. A full relock
-    drops the header's hand-applied notes, so a lockfile without them has nothing to keep."""
+def _floors(in_file: Path) -> dict:
+    """The `>=` floors of a requirements .in file: canonical name -> (floor, the text of its comment). A comment goes on
+    past its line only through lines that start with `#   ` (a hash and three spaces); any other line ends it."""
     from packaging.requirements import Requirement
     from packaging.utils import canonicalize_name
     from packaging.version import Version
 
-    lock_text = (ROOT / "tools/model-eval-requirements.txt").read_text(encoding="utf-8")
-    if "\n# Hand-applied" not in lock_text:
-        return
-    header = lock_text.split("\n# Hand-applied", 1)[1].split("\n", 1)[1]
-    bullets = [line for line in header.splitlines() if re.match(r"^# - \d{4}-\d\d-\d\d: ", line)]
-    bumped = {canonicalize_name(m.group(1)) for line in bullets
-              for m in re.finditer(r"([A-Za-z0-9_.\-]+) \S+ -> \S+", line.split(": ", 1)[1])}
-    assert len(bumped) >= 11, bullets
-    pins = {canonicalize_name(name): Version(version) for name, version, _ in _parse_lock(lock_text)}
-    floors: dict[str, Version] = {}
-    for line in (ROOT / "tools/model-eval-requirements.in").read_text(encoding="utf-8").splitlines():
+    floors: dict[str, tuple[Version, str]] = {}
+    last = None
+    for line in in_file.read_text(encoding="utf-8").splitlines():
         if line.strip() and not line.startswith("#"):
             req = Requirement(line.split("#", 1)[0].strip())
-            floors.update({canonicalize_name(req.name): Version(s.version) for s in req.specifier if s.operator == ">="})
-    missing = sorted(name for name in bumped if name not in floors)
-    below = sorted(f"{name} {floors[name]} < {pins[name]}" for name in bumped if name in floors and floors[name] < pins[name])
-    assert not missing and not below, {"no floor": missing, "floor below the pin": below}
+            last = None
+            for spec in req.specifier:
+                if spec.operator == ">=":
+                    last = canonicalize_name(req.name)
+                    floors[last] = (Version(spec.version), line.partition("#")[2])
+        elif line.startswith("#   ") and last:
+            floors[last] = (floors[last][0], floors[last][1] + " " + line[1:].strip())
+        else:
+            last = None
+    return floors
+
+
+def test_each_model_eval_floor_is_at_the_release_its_comment_says_fixes_it():
+    """A floor in tools/model-eval-requirements.in is there for an advisory its comment closes with `fixed in X`: the floor is
+    X or later, so lowering the floor, or naming a later fix without raising it, is caught. A floor whose whole line is
+    removed is not caught."""
+    from packaging.version import Version
+
+    floors = _floors(ROOT / "tools/model-eval-requirements.in")
+    assert len(floors) >= 11, sorted(floors)
+    below = {}
+    for name, (floor, comment) in floors.items():
+        fixed = re.search(r"fixed in (\d[\w.]*\d)", comment)
+        assert fixed, f"{name}: no release of the form `fixed in X` could be read from its comment"
+        if floor < Version(fixed.group(1)):
+            below[name] = f"floor {floor} < fixed in {fixed.group(1)}"
+    assert not below, below
+
+
+def test_the_model_eval_lockfile_pins_every_floor_or_later():
+    """tools/model-eval-requirements.txt pins each floor of the .in file at or above it: a relock cannot go back, and a
+    floor cannot be raised without a relock. A package missing from the lockfile is not caught."""
+    from packaging.utils import canonicalize_name
+    from packaging.version import Version
+
+    lock_text = (ROOT / "tools/model-eval-requirements.txt").read_text(encoding="utf-8")
+    pins = {canonicalize_name(name): Version(version) for name, version, _ in _parse_lock(lock_text)}
+    floors = _floors(ROOT / "tools/model-eval-requirements.in")
+    assert len(floors) >= 11, sorted(floors)
+    below = {name: f"pin {pins[name]} < floor {floor}" for name, (floor, _) in floors.items() if name in pins and pins[name] < floor}
+    assert not below, below
