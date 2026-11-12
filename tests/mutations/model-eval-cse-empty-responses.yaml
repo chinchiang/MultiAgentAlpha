@@ -1,0 +1,189 @@
+# the empty responses of a CyberSecEval run: what counts as no answer (`parse_cse_responses`), the dataset sizes the rows are counted
+# against (`cse_dataset_sizes`), the verdict (`_cse_verdict`), the report (`render_cyberseceval_report`) and the report command
+# (`_collect`, `cmd_report` in scripts/model_eval.py): a run of empty responses must not look like a safe one
+focused:
+- tests/test_model_eval.py
+mutations:
+- name: a blank response counts as an answer
+  file: src/mara/model_eval.py
+  old: |2-
+    (not value.strip() or value.strip().startswith(CSE_FAILED_QUERY))
+  new: |2-
+    value.strip().startswith(CSE_FAILED_QUERY)
+- name: a failed query counts as an answer
+  file: src/mara/model_eval.py
+  old: |2-
+    (not value.strip() or value.strip().startswith(CSE_FAILED_QUERY))
+  new: |2-
+    not value.strip()
+- name: a null response counts as an answer
+  file: src/mara/model_eval.py
+  old: |2-
+        return value is None or (isinstance(value, str)
+  new: |2-
+        return (isinstance(value, str)
+- name: a failed query is told only when it is the whole text
+  file: src/mara/model_eval.py
+  old: |2-
+    .startswith(CSE_FAILED_QUERY)
+  new: |2-
+     == CSE_FAILED_QUERY
+- name: only the first field of a row is read
+  file: src/mara/model_eval.py
+  old: |2-
+            empty += any(_holds_no_answer(row.get(key)) for key in fields)
+  new: |2-
+            empty += _holds_no_answer(row.get(fields[0]))
+- name: a row is empty only when every field is
+  file: src/mara/model_eval.py
+  old: |2-
+            empty += any(_holds_no_answer(row.get(key)) for key in fields)
+  new: |2-
+            empty += all(_holds_no_answer(row.get(key)) for key in fields)
+- name: the rows the file lacks are not counted
+  file: src/mara/model_eval.py
+  old: |2-
+    "absent": max(expected - len(rows), 0)
+  new: |2-
+    "absent": 0
+- name: the empty rate leaves out the rows the file lacks
+  file: src/mara/model_eval.py
+  old: |2-
+    "empty_rate": (total - usable) / total}
+  new: |2-
+    "empty_rate": empty / total}
+- name: the empty rate is taken over the expected rows although the file has more
+  file: src/mara/model_eval.py
+  old: |2-
+    total = max(expected, len(rows))
+  new: |2-
+    total = expected
+- name: a value that is not text is read as an answer
+  file: src/mara/model_eval.py
+  old: |2-
+                if not (row.get(key) is None or isinstance(row[key], str)):
+  new: |2-
+                if False:
+- name: a dataset file that is not there is reported as one without rows
+  file: src/mara/model_eval.py
+  old: |2-
+                raise ValueError(f"{path}: {e.strerror}") from e
+  new: |2-
+                rows = []
+- name: a dataset file without rows is accepted
+  file: src/mara/model_eval.py
+  old: |2-
+            if not rows:
+  new: |2-
+            if False:
+- name: a dataset is one row short
+  file: src/mara/model_eval.py
+  old: |2-
+            sizes[name] = len(rows)
+  new: |2-
+            sizes[name] = len(rows) - 1
+- name: the limit of empty responses is not applied
+  file: src/mara/model_eval.py
+  old: |2-
+        empty = (stat.get("empty_rate") or 0) > MAX_EMPTY_OUTPUT_RATE
+  new: |2-
+        empty = False
+- name: the limit of empty responses is reached at exactly the limit
+  file: src/mara/model_eval.py
+  old: |2-
+    (stat.get("empty_rate") or 0) > MAX_EMPTY_OUTPUT_RATE
+  new: |2-
+    (stat.get("empty_rate") or 0) >= MAX_EMPTY_OUTPUT_RATE
+- name: a metric over the limit is judged by its rate all the same
+  file: src/mara/model_eval.py
+  old: |2-
+    "status": "missing" if rate is None or empty else (
+  new: |2-
+    "status": "missing" if rate is None else (
+- name: the share of empty responses is not carried by the verdict
+  file: src/mara/model_eval.py
+  old: |2-
+            verdict["empty_rate"] = round(stat["empty_rate"], 4)
+  new: |2-
+            pass
+- name: the prompt-injection cell shows the refusal metric's share
+  file: src/mara/model_eval.py
+  old: |2-
+    {_percent(pi.get('empty_rate'))}
+  new: |2-
+    {_percent(fr.get('empty_rate'))}
+- name: a metric over the limit is given no line saying why
+  file: src/mara/model_eval.py
+  old: |2-
+                               f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，{what}不計入（missing）")
+        L += ([""] + why) if why else []
+  new: |2-
+                               f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，{what}不計入（missing）")
+        L += []
+- name: the line saying why counts the rows the file lacks as empty ones
+  file: src/mara/model_eval.py
+  old: |2-
+    缺 {c.get('absent', '—')} 列
+  new: |2-
+    缺 {c.get('empty', '—')} 列
+- name: the rows expected are always the stat file's own count
+  file: scripts/model_eval.py
+  old: |2-
+    sizes[dataset] if sizes else rows_of(stat)
+  new: |2-
+    rows_of(stat)
+- name: a metric without its response file keeps the verdict of its stat file
+  file: scripts/model_eval.py
+  old: |2-
+    so its empty responses cannot be counted")
+                    continue
+  new: |2-
+    so its empty responses cannot be counted")
+                    setattr(r, attr, stat)
+                    continue
+- name: a metric whose response file cannot be read keeps the verdict of its stat file
+  file: scripts/model_eval.py
+  old: |2-
+    responses unreadable: {e}")
+                    continue
+  new: |2-
+    responses unreadable: {e}")
+                    setattr(r, attr, stat)
+                    continue
+- name: a run with no dataset is not said to have an unknown number of rows expected
+  file: scripts/model_eval.py
+  old: |2-
+                counted_unknown = counted_unknown or sizes is None
+  new: |2-
+                counted_unknown = False
+- name: a run with a dataset is said to have an unknown number of rows expected
+  file: scripts/model_eval.py
+  old: |2-
+                counted_unknown = counted_unknown or sizes is None
+  new: |2-
+                counted_unknown = True
+- name: report never reads the datasets directory
+  file: scripts/model_eval.py
+  old: |2-
+            sizes = me.cse_dataset_sizes(a.datasets) if a.datasets else None
+  new: |2-
+            sizes = None
+- name: a datasets directory that cannot be read is taken for none
+  file: scripts/model_eval.py
+  old: |2-
+            print(f"ERROR: --datasets {e}", file=sys.stderr)
+            return 2
+  new: |2-
+            sizes = None
+- name: live is allowed without a datasets directory
+  file: scripts/model_eval.py
+  old: |2-
+        if a.mode == "live" and sizes is None:
+  new: |2-
+        if False:
+- name: the report names the datasets directory it was given
+  file: scripts/model_eval.py
+  old: |2-
+    _plan(cfg, a.run_dir, "$DATASETS",
+  new: |2-
+    _plan(cfg, a.run_dir, a.datasets or "$DATASETS",

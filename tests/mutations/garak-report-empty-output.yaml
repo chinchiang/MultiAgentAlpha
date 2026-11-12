@@ -21,8 +21,12 @@ mutations:
                      f"| {_fmt(v.get('value'))} | {_percent(g.get('empty_rate') and v.get('value'))} | {v.get('status', 'missing')} |")
 - name: a family over the limit is given no line saying why
   file: src/mara/model_eval.py
-  old: '    L += ([""] + why) if why else []'
-  new: '    L += []'
+  old: |2
+               for r in results if "empty_rate" in r.verdict.get("garak_pass_rate", {})]
+        L += ([""] + why) if why else []
+  new: |2
+               for r in results if "empty_rate" in r.verdict.get("garak_pass_rate", {})]
+        L += []
 - name: a family missing for any reason is given the line
   file: src/mara/model_eval.py
   old: |2

@@ -6,8 +6,11 @@
       execute them on a host that reaches the endpoints; garak must be installed at the configured
       version, CyberSecEval (PurpleLlama CybersecurityBenchmarks) importable, keys in the environment.
   python3 scripts/model_eval.py report --run-dir ops/model-eval/<date> --date YYYY-MM-DD [--mode live|dry-run] [--docs-dir docs]
+                                       [--datasets "$DATASETS"]
       parse the outputs, apply the thresholds, write docs/garak-<date>.md, docs/cyberseceval-<date>.md
-      and calib/model-eval-<date>.json. `live` is refused when any family lacks any output.
+      and calib/model-eval-<date>.json. `live` is refused when any family lacks any output. --datasets names the directory
+      `run` read the CyberSecEval datasets from, which says how many rows each benchmark should have written: a metric whose
+      responses are over a fifth empty or absent is `missing`. `live` needs it; without it only empty responses are counted.
   python3 scripts/model_eval.py check [--summary calib/model-eval-<date>.json]
       exit 1 when any family fails or is missing a metric (what governance G-8 and calibration see).
 """
@@ -90,7 +93,8 @@ def cmd_plan(a: argparse.Namespace) -> int:
     for t in me.targets_from_config(cfg):
         if why := me.unsupported(t):
             print(f"\n# {t.family}: SKIPPED, {why}")
-    print(f"\n# outputs under {a.out}; then: python3 scripts/model_eval.py report --run-dir {a.out} --date <date> --mode live")
+    print(f"\n# outputs under {a.out}; then: python3 scripts/model_eval.py report --run-dir {a.out} --date <date> --mode live "
+          f"--datasets \"$DATASETS\"")
     return 0
 
 
@@ -150,7 +154,19 @@ def cmd_run(a: argparse.Namespace) -> int:
     return 1 if rc else 0
 
 
-def _collect(run_dir: Path, targets: list[me.EvalTarget], th: me.Thresholds) -> list[me.FamilyResult]:
+# Per CyberSecEval benchmark: its label, dataset, stat file, parser and FamilyResult attribute, then the response file that says
+# what the stat file cannot (its name, the fields a usable row has, and the rows a run is expected to write when no dataset is given)
+_CSE_BENCHMARKS = (
+    ("prompt-injection", "prompt_injection", "prompt_injection_stat.json", me.parse_cse_prompt_injection, "prompt_injection",
+     "prompt_injection_judge_responses.json", ("response", "judge_response"), lambda stat: stat["total"]),
+    ("mitre-frr", "mitre_frr", "mitre_frr_stat.json", me.parse_cse_frr, "frr",
+     "mitre_frr_responses.json", ("response",), lambda stat: stat["accept"] + stat["refusal"]),
+)
+
+
+def _collect(run_dir: Path, targets: list[me.EvalTarget], th: me.Thresholds, sizes: dict[str, int] | None) -> list[me.FamilyResult]:
+    """What each family's run directory holds. `sizes` is the rows each CyberSecEval dataset has (cse_dataset_sizes), or None
+    when no dataset was given: then a stat file's own count stands for the rows expected, and a row the run lost goes unseen."""
     results = []
     for t in targets:
         r = me.FamilyResult(t)
@@ -162,17 +178,31 @@ def _collect(run_dir: Path, targets: list[me.EvalTarget], th: me.Thresholds) -> 
                 r.notes.append(f"garak report unreadable: {e}")
         else:
             r.notes.append("no garak report found")
-        pi = next(iter(sorted(run_dir.glob(f"**/{t.slug}/prompt_injection_stat.json"))), None)
-        fr = next(iter(sorted(run_dir.glob(f"**/{t.slug}/mitre_frr_stat.json"))), None)
-        for label, path, fn, attr in (("prompt-injection", pi, me.parse_cse_prompt_injection, "prompt_injection"),
-                                      ("mitre-frr", fr, me.parse_cse_frr, "frr")):
+        counted_unknown = False
+        for label, dataset, stat_name, parse_stat, attr, responses_name, fields, rows_of in _CSE_BENCHMARKS:
+            path = next(iter(sorted(run_dir.glob(f"**/{t.slug}/{stat_name}"))), None)
             if path is None:
                 r.notes.append(f"no CyberSecEval {label} stat file found")
                 continue
             try:
-                setattr(r, attr, fn(path, t.model))
+                stat = parse_stat(path, t.model)
             except ValueError as e:
                 r.notes.append(f"CyberSecEval {label} stat unreadable: {e}")
+                continue
+            # without its response file a run of empty responses cannot be told from a complete one: the metric stays missing
+            responses = path.parent / responses_name
+            if not responses.is_file():
+                r.notes.append(f"no CyberSecEval {label} response file found ({responses_name}), so its empty responses cannot be counted")
+                continue
+            try:
+                counts = me.parse_cse_responses(responses, sizes[dataset] if sizes else rows_of(stat), fields)
+            except ValueError as e:
+                r.notes.append(f"CyberSecEval {label} responses unreadable: {e}")
+                continue
+            setattr(r, attr, {**stat, "empty_rate": counts["empty_rate"], "responses": counts})
+            counted_unknown = counted_unknown or sizes is None
+        if counted_unknown:
+            r.notes.append("the expected number of rows is unknown (no --datasets), so rows the run lost are not counted")
         r.verdict = me.evaluate_family(r.garak, r.prompt_injection, r.frr, th)
         results.append(r)
     return results
@@ -182,7 +212,16 @@ def cmd_report(a: argparse.Namespace) -> int:
     cfg = load_config(a.config, a.workspace)
     th = _thresholds(cfg)
     targets = me.targets_from_config(cfg)
-    results = _collect(a.run_dir, targets, th)
+    try:
+        sizes = me.cse_dataset_sizes(a.datasets) if a.datasets else None
+    except ValueError as e:
+        print(f"ERROR: --datasets {e}", file=sys.stderr)
+        return 2
+    if a.mode == "live" and sizes is None:
+        print("ERROR: cannot label the report live without --datasets: it says how many rows each CyberSecEval benchmark should have written",
+              file=sys.stderr)
+        return 2
+    results = _collect(a.run_dir, targets, th, sizes)
     missing = [r.target.family for r in results if r.verdict.get("overall") == "missing"]
     mode = a.mode
     if mode == "live":
@@ -195,7 +234,8 @@ def cmd_report(a: argparse.Namespace) -> int:
     garak_version = next((r.garak["garak_version"] for r in results if r.garak and r.garak.get("garak_version")), cfg.model_eval.garak_version)
     summary = me.summarize(results, date=a.date, mode=mode, th=th, garak_version=garak_version, cse_ref=cfg.model_eval.cyberseceval_ref,
                            probes=cfg.model_eval.garak_probes)
-    garak_cmds, cse_cmds, _ = _plan(cfg, a.run_dir, a.datasets, f"${cfg.model_eval.judge_llm_env}")
+    # the reports are committed and published: the datasets are named by the variable the commands use, never by this host's directory
+    garak_cmds, cse_cmds, _ = _plan(cfg, a.run_dir, "$DATASETS", f"${cfg.model_eval.judge_llm_env}")
     # the reports are committed: they name the run directory as it was given, not as this host spells it
     garak_cmds = {fam: [part.replace(str(a.run_dir.absolute()), str(a.run_dir)) for part in argv] if isinstance(argv, list) else argv
                   for fam, argv in garak_cmds.items()}
@@ -244,9 +284,11 @@ def main() -> int:
     s.add_argument("--date", type=dt.date.fromisoformat, default=dt.date.today())
     s.add_argument("--mode", choices=["live", "dry-run"], default="dry-run")
     s.add_argument("--docs-dir", type=Path, default=ROOT / "docs")
+    s.add_argument("--datasets", default="",
+                   help="the directory run read the CyberSecEval datasets from: how many rows each benchmark should have written "
+                        "(required for --mode live)")
     s.add_argument("--summary-root", type=Path, default=ws.root,
                    help="where calib/model-eval-<date>.json goes (default: the MARA workspace, where the pipeline reads it)")
-    s.add_argument("--datasets", default="$DATASETS")
     s = sub.add_parser("check")
     s.add_argument("--summary", type=Path)
     a = ap.parse_args()
