@@ -41,7 +41,8 @@ Install the tools once:
 ```
 python3 -m pip install --require-hashes --only-binary=:all: -r tools/build-requirements.txt
 python3 -m pip install --require-hashes --no-build-isolation -r tools/model-eval-requirements.txt   # garak 0.17.1 and its whole closure, every file's SHA-256 pinned
-git clone https://github.com/meta-llama/PurpleLlama && cd PurpleLlama && git checkout 4be64c3a24442b51c76175e6ec67722cc3f5fe38   # then pip install -r CybersecurityBenchmarks/requirements.txt
+python3 -m venv <cse-venv> && <cse-venv>/bin/python -m pip install --require-hashes --only-binary=:all: -r tools/cyberseceval-requirements.txt   # CyberSecEval's closure, in a venv of its own
+git clone https://github.com/meta-llama/PurpleLlama && cd PurpleLlama && git checkout 4be64c3a24442b51c76175e6ec67722cc3f5fe38   # CyberSecEval runs from this checkout
 export DATASETS=<path with prompt_injection/ and mitre_frr/ from CybersecurityBenchmarks/datasets>
 export CSE_JUDGE_LLM="OPENAI::<judge model>::<key>::<base_url>"      # judge for prompt-injection scoring; an on-prem model is fine
 ```
@@ -55,9 +56,21 @@ torch and the CUDA wheels included) is hash-pinned in `tools/model-eval-requirem
 with `scripts/relock_requirements.py` first. Two entries (langdetect, ecoji) are sdists because no
 wheel exists. Install the hash-pinned build closure first and disable build isolation; both
 sdists were built successfully with that backend on 2026-09-18. This pins their source and build
-tools but does not attest the publishers' builds or replace the actual live evaluation. CyberSecEval's
-`requirements.txt` at that commit pins versions but not hashes; it still needs its own resolved hash
-closure before the live run.
+tools but does not attest the publishers' builds or replace the actual live evaluation. CyberSecEval's own
+`requirements.txt` at that commit pins versions but not hashes, and osv-scanner reports advisories against several of its pins (pillow,
+pypdf, paramiko, langchain-core, urllib3, setuptools). `tools/cyberseceval-requirements.txt` is the hash-pinned closure of `tools/cyberseceval-requirements.in` (109
+distributions, wheels only, resolved on CPython 3.11 / Linux x86_64 like the others). That file is upstream's with floors in
+place of the vulnerable pins (pillow, pypdf, paramiko, langchain-core, urllib3), `typing-extensions` relaxed to what
+`langchain-core` needs, `semgrep` 1.179.0 for 1.51.0 (CodeShield looks up `semgrep-core` when it is imported, and 1.51.0 holds
+urllib3 at 1.26.20) and `setuptools` 81.0.0, the last release with `pkg_resources`, which two benchmark modules import. What
+relocking cannot fix is a dated exception in `tools/osv-cyberseceval.toml` and `tools/trivyignore.yaml`. Install it in a
+virtual environment of its own: its pins disagree with the garak closure (boto3, openai).
+
+What was run on it (2026-11-12): the install with `--require-hashes`; `import CybersecurityBenchmarks.benchmark.run` and `--help`
+from the PurpleLlama checkout; `model_eval.py plan` under that environment's interpreter with `PYTHONPATH=<repo>/src`.
+`model_eval.py run --tool cyberseceval` was not run (it needs the keys, the datasets and a judge). It starts CyberSecEval with
+its own interpreter and the working directory it was started in, so run it with that environment's Python, from the PurpleLlama
+checkout, with an absolute `--out`.
 
 Run:
 

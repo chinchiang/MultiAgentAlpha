@@ -15,8 +15,8 @@
 #     which downloaded its own unverified copy; it audits only the real workflows under .github/workflows and
 #     any finding fails the job. The seeded fixture workflow is audited in a separate step whose findings
 #     must match the pre-recorded fixtures/vuln-sample-sarif/zizmor.sarif
-#   - the SARIF of the eight scans of this repository (semgrep, osv-scanner three times: runtime/build,
-#     model-eval and semgrep tool closures, trivy, gitleaks, zizmor, csp-evaluator) goes to
+#   - the SARIF of the nine scans of this repository (semgrep, osv-scanner four times: runtime/build,
+#     model-eval, CyberSecEval and semgrep tool closures, trivy, gitleaks, zizmor, csp-evaluator) goes to
 #     GitHub Code Scanning from a separate job that runs no repository code and is the only job with
 #     security-events: write; it is skipped for pull requests from forks and from Dependabot (read-only
 #     token). The fixture scans and the mock review report describe seeded material and are never uploaded
@@ -143,6 +143,9 @@ jobs:
       - name: osv-scanner on the isolated model-evaluation closure only
         if: ${{ !cancelled() }}  # scanned even when an earlier closure's scan failed
         run: python3 scripts/osv_ci.py --lockfile tools/model-eval-requirements.txt --config tools/osv-model-eval.toml --report osv-model-eval.sarif
+      - name: osv-scanner on the CyberSecEval closure only (dated exceptions in tools/osv-cyberseceval.toml)
+        if: ${{ !cancelled() }}  # scanned even when an earlier closure's scan failed
+        run: python3 scripts/osv_ci.py --lockfile tools/cyberseceval-requirements.txt --config tools/osv-cyberseceval.toml --report osv-cyberseceval.sarif
       - name: osv-scanner on the semgrep closure only (dated exceptions in tools/osv-semgrep.toml)
         if: ${{ !cancelled() }}  # scanned even when an earlier closure's scan failed
         run: python3 scripts/osv_ci.py --lockfile tools/semgrep-requirements.txt --config tools/osv-semgrep.toml --report osv-semgrep.sarif
@@ -164,7 +167,7 @@ jobs:
         run: python3 scripts/gitleaks_ci.py --base "$BASE_SHA" --head "$HEAD_SHA" --event "$EVENT" --report gitleaks.sarif
       - name: Prepare Code Scanning data with a read-only token
         if: always()
-        run: python3 scripts/code_scanning_prep.py --out code-scanning semgrep=semgrep.sarif osv=osv.sarif osv-model-eval=osv-model-eval.sarif osv-semgrep=osv-semgrep.sarif trivy=trivy.sarif gitleaks=gitleaks.sarif zizmor=zizmor.sarif csp=csp-evaluator.sarif
+        run: python3 scripts/code_scanning_prep.py --out code-scanning semgrep=semgrep.sarif osv=osv.sarif osv-model-eval=osv-model-eval.sarif osv-cyberseceval=osv-cyberseceval.sarif osv-semgrep=osv-semgrep.sarif trivy=trivy.sarif gitleaks=gitleaks.sarif zizmor=zizmor.sarif csp=csp-evaluator.sarif
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -180,6 +183,7 @@ jobs:
             fixture-semgrep.sarif
             osv.sarif
             osv-model-eval.sarif
+            osv-cyberseceval.sarif
             osv-semgrep.sarif
             fixture-osv.sarif
             trivy.sarif

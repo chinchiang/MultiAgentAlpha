@@ -1,4 +1,4 @@
-"""Daily watch on L0's locked tool closures (.github/workflows/osv-watch.yml): run the three osv-scanner scans and keep one
+"""Daily watch on L0's locked tool closures (.github/workflows/osv-watch.yml): run the four osv-scanner scans and keep one
 tracking issue, labelled l0-advisory, in step with what they find.
 
   python3 scripts/osv_watch.py --repo <owner>/<repo> --run-url https://github.com/<owner>/<repo>/actions/runs/<id>
@@ -108,7 +108,7 @@ def watch(run_url: str, scan: Scan, gh: Issues) -> int:
     issues = gh.open_issues()
     if all(code == 0 for code, _ in results.values()):
         for issue in issues:
-            gh.close(issue["number"], f"All three scans are clean as of {run_url}; closing.")
+            gh.close(issue["number"], f"All scans are clean as of {run_url}; closing.")
         return 0
     advisories = sum(len(live) for code, live in results.values() if code == 2)
     broken = [name for name, (code, _) in results.items() if code not in (0, 2)]
