@@ -61,6 +61,7 @@ import datetime as dt
 import json
 import os
 import shlex
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -226,15 +227,15 @@ def cyberseceval_commands(target: EvalTarget, datasets_dir: Path | str, out_dir:
                           key: str | None = None) -> dict[str, list[str]]:
     d, o = Path(datasets_dir), Path(out_dir) / target.slug
     spec = cse_spec(target, key)
+    pi, frr = CSE_PROMPT_INJECTION, CSE_MITRE_FRR
     return {
-        "prompt-injection": ["python3", "-m", "CybersecurityBenchmarks.benchmark.run", "--benchmark=prompt-injection",
-                             f"--prompt-path={d / 'prompt_injection' / 'prompt_injection.json'}",
-                             f"--response-path={o / 'prompt_injection_responses.json'}",
-                             f"--judge-response-path={o / 'prompt_injection_judge_responses.json'}",
-                             f"--stat-path={o / 'prompt_injection_stat.json'}", f"--judge-llm={judge_spec}", f"--llm-under-test={spec}"],
-        "mitre-frr": ["python3", "-m", "CybersecurityBenchmarks.benchmark.run", "--benchmark=mitre-frr",
-                      f"--prompt-path={d / 'mitre_frr' / 'mitre_frr.json'}", f"--response-path={o / 'mitre_frr_responses.json'}",
-                      f"--stat-path={o / 'mitre_frr_stat.json'}", f"--llm-under-test={spec}"],
+        pi.label: ["python3", "-m", "CybersecurityBenchmarks.benchmark.run", f"--benchmark={pi.label}",
+                   f"--prompt-path={d / pi.dataset / f'{pi.dataset}.json'}", f"--response-path={o / f'{pi.dataset}_responses.json'}",
+                   f"--judge-response-path={o / pi.responses_file}", f"--stat-path={o / pi.stat_file}", f"--judge-llm={judge_spec}",
+                   f"--llm-under-test={spec}"],
+        frr.label: ["python3", "-m", "CybersecurityBenchmarks.benchmark.run", f"--benchmark={frr.label}",
+                    f"--prompt-path={d / frr.dataset / f'{frr.dataset}.json'}", f"--response-path={o / frr.responses_file}",
+                    f"--stat-path={o / frr.stat_file}", f"--llm-under-test={spec}"],
     }
 
 
@@ -358,6 +359,27 @@ def parse_cse_frr(path: Path | str, model: str) -> dict:
     return {"model_key": key, "accept": acc, "refusal": ref, "refusal_rate": refusal}
 
 
+@dataclass(frozen=True)
+class CseBenchmark:
+    """One CyberSecEval benchmark: the names its command line writes (`cyberseceval_commands`) and its report reads."""
+    label: str  # the `--benchmark=` value, and the name in the reports
+    dataset: str  # the directory and file stem of its dataset under `$DATASETS`, and the stem of its files in the run directory
+    stat_file: str  # the stat file the benchmark writes
+    parse_stat: Callable[[Path | str, str], dict]
+    attr: str  # the `FamilyResult` attribute that holds its stat
+    responses_file: str  # the response file that says what the stat file cannot (the judge's for prompt injection)
+    fields: tuple[str, ...]  # the fields a usable row of that file has
+    rows_of: Callable[[dict], int]  # the rows a run is expected to write, from its stat, when no dataset is given
+
+
+CSE_PROMPT_INJECTION = CseBenchmark("prompt-injection", "prompt_injection", "prompt_injection_stat.json", parse_cse_prompt_injection,
+                                    "prompt_injection", "prompt_injection_judge_responses.json", ("response", "judge_response"),
+                                    lambda stat: stat["total"])
+CSE_MITRE_FRR = CseBenchmark("mitre-frr", "mitre_frr", "mitre_frr_stat.json", parse_cse_frr, "frr", "mitre_frr_responses.json",
+                             ("response",), lambda stat: stat["accept"] + stat["refusal"])
+CSE_BENCHMARKS = (CSE_PROMPT_INJECTION, CSE_MITRE_FRR)
+
+
 # What CyberSecEval's process_prompt writes as the response of a prompt it could not query (any provider, after the retries);
 # the Anthropic provider appends ": <error>". The refusal scan reads it as an answer that is no refusal.
 CSE_FAILED_QUERY = "FAIL TO QUERY"
@@ -398,7 +420,7 @@ def cse_dataset_sizes(datasets: Path | str) -> dict[str, int]:
     """The number of rows of each dataset file a CyberSecEval run reads, which a complete run writes a response for:
     `{"prompt_injection": n, "mitre_frr": n}` from `<datasets>/<benchmark>/<benchmark>.json`."""
     sizes = {}
-    for name in ("prompt_injection", "mitre_frr"):
+    for name in (b.dataset for b in CSE_BENCHMARKS):
         path = Path(datasets) / name / f"{name}.json"
         try:
             rows = json.loads(path.read_text(encoding="utf-8"))

@@ -1,6 +1,6 @@
 # the empty responses of a CyberSecEval run: what counts as no answer (`parse_cse_responses`), the dataset sizes the rows are counted
 # against (`cse_dataset_sizes`), the verdict (`_cse_verdict`), the report (`render_cyberseceval_report`) and the report command
-# (`_collect`, `cmd_report` in scripts/model_eval.py): a run of empty responses must not look like a safe one
+# (`_collect`, `_read_benchmark`, `cmd_report` in scripts/model_eval.py): a run of empty responses must not look like a safe one
 focused:
 - tests/test_model_eval.py
 mutations:
@@ -129,39 +129,33 @@ mutations:
 - name: the rows expected are always the stat file's own count
   file: scripts/model_eval.py
   old: |2-
-    sizes[dataset] if sizes else rows_of(stat)
+    sizes[bench.dataset] if sizes else bench.rows_of(stat)
   new: |2-
-    rows_of(stat)
+    bench.rows_of(stat)
 - name: a metric without its response file keeps the verdict of its stat file
   file: scripts/model_eval.py
   old: |2-
-    so its empty responses cannot be counted")
-                    continue
+    return None, f"no CyberSecEval {bench.label} response file found ({bench.responses_file}), so its empty responses cannot be counted"
   new: |2-
-    so its empty responses cannot be counted")
-                    setattr(r, attr, stat)
-                    continue
+    return stat, None
 - name: a metric whose response file cannot be read keeps the verdict of its stat file
   file: scripts/model_eval.py
   old: |2-
-    responses unreadable: {e}")
-                    continue
+    return None, f"CyberSecEval {bench.label} responses unreadable: {e}"
   new: |2-
-    responses unreadable: {e}")
-                    setattr(r, attr, stat)
-                    continue
+    return stat, None
 - name: a run with no dataset is not said to have an unknown number of rows expected
   file: scripts/model_eval.py
   old: |2-
-                counted_unknown = counted_unknown or sizes is None
+    if sizes is None and any(
   new: |2-
-                counted_unknown = False
+    if False and any(
 - name: a run with a dataset is said to have an unknown number of rows expected
   file: scripts/model_eval.py
   old: |2-
-                counted_unknown = counted_unknown or sizes is None
+    if sizes is None and any(
   new: |2-
-                counted_unknown = True
+    if True and any(
 - name: report never reads the datasets directory
   file: scripts/model_eval.py
   old: |2-

@@ -154,14 +154,24 @@ def cmd_run(a: argparse.Namespace) -> int:
     return 1 if rc else 0
 
 
-# Per CyberSecEval benchmark: its label, dataset, stat file, parser and FamilyResult attribute, then the response file that says
-# what the stat file cannot (its name, the fields a usable row has, and the rows a run is expected to write when no dataset is given)
-_CSE_BENCHMARKS = (
-    ("prompt-injection", "prompt_injection", "prompt_injection_stat.json", me.parse_cse_prompt_injection, "prompt_injection",
-     "prompt_injection_judge_responses.json", ("response", "judge_response"), lambda stat: stat["total"]),
-    ("mitre-frr", "mitre_frr", "mitre_frr_stat.json", me.parse_cse_frr, "frr",
-     "mitre_frr_responses.json", ("response",), lambda stat: stat["accept"] + stat["refusal"]),
-)
+def _read_benchmark(run_dir: Path, t: me.EvalTarget, bench: me.CseBenchmark, sizes: dict[str, int] | None) -> tuple[dict | None, str | None]:
+    """One CyberSecEval benchmark of one family: its stat with the counts of its response file, or the note that says why not."""
+    path = next(iter(sorted(run_dir.glob(f"**/{t.slug}/{bench.stat_file}"))), None)
+    if path is None:
+        return None, f"no CyberSecEval {bench.label} stat file found"
+    try:
+        stat = bench.parse_stat(path, t.model)
+    except ValueError as e:
+        return None, f"CyberSecEval {bench.label} stat unreadable: {e}"
+    # without its response file a run of empty responses cannot be told from a complete one: the metric stays missing
+    responses = path.parent / bench.responses_file
+    if not responses.is_file():
+        return None, f"no CyberSecEval {bench.label} response file found ({bench.responses_file}), so its empty responses cannot be counted"
+    try:
+        counts = me.parse_cse_responses(responses, sizes[bench.dataset] if sizes else bench.rows_of(stat), bench.fields)
+    except ValueError as e:
+        return None, f"CyberSecEval {bench.label} responses unreadable: {e}"
+    return {**stat, "empty_rate": counts["empty_rate"], "responses": counts}, None
 
 
 def _collect(run_dir: Path, targets: list[me.EvalTarget], th: me.Thresholds, sizes: dict[str, int] | None) -> list[me.FamilyResult]:
@@ -178,30 +188,13 @@ def _collect(run_dir: Path, targets: list[me.EvalTarget], th: me.Thresholds, siz
                 r.notes.append(f"garak report unreadable: {e}")
         else:
             r.notes.append("no garak report found")
-        counted_unknown = False
-        for label, dataset, stat_name, parse_stat, attr, responses_name, fields, rows_of in _CSE_BENCHMARKS:
-            path = next(iter(sorted(run_dir.glob(f"**/{t.slug}/{stat_name}"))), None)
-            if path is None:
-                r.notes.append(f"no CyberSecEval {label} stat file found")
-                continue
-            try:
-                stat = parse_stat(path, t.model)
-            except ValueError as e:
-                r.notes.append(f"CyberSecEval {label} stat unreadable: {e}")
-                continue
-            # without its response file a run of empty responses cannot be told from a complete one: the metric stays missing
-            responses = path.parent / responses_name
-            if not responses.is_file():
-                r.notes.append(f"no CyberSecEval {label} response file found ({responses_name}), so its empty responses cannot be counted")
-                continue
-            try:
-                counts = me.parse_cse_responses(responses, sizes[dataset] if sizes else rows_of(stat), fields)
-            except ValueError as e:
-                r.notes.append(f"CyberSecEval {label} responses unreadable: {e}")
-                continue
-            setattr(r, attr, {**stat, "empty_rate": counts["empty_rate"], "responses": counts})
-            counted_unknown = counted_unknown or sizes is None
-        if counted_unknown:
+        for bench in me.CSE_BENCHMARKS:
+            stat, note = _read_benchmark(run_dir, t, bench, sizes)
+            if note:
+                r.notes.append(note)
+            else:
+                setattr(r, bench.attr, stat)
+        if sizes is None and any(getattr(r, bench.attr) for bench in me.CSE_BENCHMARKS):
             r.notes.append("the expected number of rows is unknown (no --datasets), so rows the run lost are not counted")
         r.verdict = me.evaluate_family(r.garak, r.prompt_injection, r.frr, th)
         results.append(r)

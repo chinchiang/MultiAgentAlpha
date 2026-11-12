@@ -324,7 +324,7 @@ expected, fields)` is called with response files written below `tmp_path` in the
 `_frr_row` build the rows): the counts it returns (`rows`, `empty`, `absent`, `usable`, `empty_rate`), one test for each kind of
 value that holds no answer (a missing key, null, blank text, `FAIL TO QUERY` with and without an error after it), and the
 value error that names the file. `mara.model_eval.cse_dataset_sizes(datasets)` reads a datasets directory that `_write_datasets`
-lays out, and is refused with the path of the file it could not read. `_collect` of the script has no test of its own: it is read
+lays out, and is refused with the path of the file it could not read. `_collect` and `_read_benchmark` of the script have no test of their own: they are read
 through the `report` command line (`_report`, with `--datasets` where a test needs it) on a copy of the fixtures whose deepseek
 directory holds the response files the test wrote and none of the fixtures' own (`_deepseek_run`): the verdict in the summary
 file under `calib`, the notes in the CyberSecEval report, and the exit status for a datasets directory that is bad or missing
