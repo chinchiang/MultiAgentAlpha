@@ -306,9 +306,18 @@ and `latest_record`, and `mara.model_eval.render_garak_report`) and hand what th
 `load_runs` and `training_requirement` of `scripts/calibrate.py` as module names and nothing of the readers. A test that
 reads the front matter of a Markdown report reads it through `mara.evidence.read_front_matter`, which `mara.govdocs`
 imports by name.
-The CA file `scripts/model_eval.py` writes for a family behind an internal CA is read in `test_model_eval.py` through `_tls_env(target, out_dir)`
-(the returned SSL_CERT_FILE and the file at that path, with a target built by keyword and a real PEM file) and, as the printed
-environment of `plan`, through the command line.
+The CA file `scripts/model_eval.py` writes for a family whose target or whose CyberSecEval judge sits behind an internal CA is read in
+`test_model_eval.py` through `_tls_env(target, out_dir, judge_ca_bundle)` (the returned SSL_CERT_FILE and the file at that path, with a
+target built by keyword and a real PEM file; the third argument is empty when no judge CA is named) and, as the printed environment of
+`plan`, through the command line. The judge's CA comes from the config field `judge_ca_bundle` of the `model_eval` block (empty by
+default, a typo in the key is refused): `plan` and `run` hand it to `_tls_env` for every family, in both tools, so the file holds the
+public roots, the target's `ca_bundle` and the judge's, a file named twice once. The text of that bundle is read through
+`ca_bundle_pem(target, judge_ca_bundle)` itself (a target built by keyword, real PEM files below `tmp_path`: the order of the
+three parts, a file named twice, also under two spellings, and the answer when neither names a file); a `~` path is tried by
+pointing the home directory variables of the process at `tmp_path`. A test that patches `_tls_env` replaces it with a
+function that takes that third argument, which has no default. The test of `run` replaces the script's call that starts a child process
+and reads the environment each command is given; the test of the handshake runs a local HTTPS server signed by a throwaway CA made with the `openssl` program (the test
+is skipped without it) and an `httpx` request in a child process that holds only the returned environment as its trust settings.
 
 ## The key variable (`src/mara/credentials.py`)
 

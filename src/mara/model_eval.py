@@ -49,9 +49,10 @@ Re-checked on 2026-10-08 for the production panel (Claude on Bedrock, Gemini, GL
 - Gemini runs through its OpenAI-compatible endpoint in both tools (garak OpenAICompatible, CyberSecEval
   OPENAI with that base_url): CyberSecEval's GOOGLEGENAI puts the API key in the URL query (`?key=`),
   which MARA's own Gemini provider avoids so the key never lands in a proxy or access log.
-- An endpoint with `ca_bundle` (the IEC gateway) runs garak and CyberSecEval with SSL_CERT_FILE pointing
-  at the public roots plus that chain (httpx honours SSL_CERT_FILE), so the CyberSecEval judge LLM, a
-  different endpoint in the same process, still verifies too.
+- An endpoint with `ca_bundle` (the IEC gateway), or a CyberSecEval judge behind one (`model_eval.judge_ca_bundle`),
+  makes `run` set SSL_CERT_FILE for every family, in garak and CyberSecEval alike, to the public roots plus those
+  chains (httpx honours SSL_CERT_FILE): the judge is another endpoint in the process of the model under evaluation
+  and must verify too.
 """
 
 from __future__ import annotations
@@ -158,17 +159,24 @@ def garak_generator_options(target: EvalTarget) -> dict | None:
     return None
 
 
-def ca_bundle_pem(target: EvalTarget) -> str | None:
-    """PEM for SSL_CERT_FILE when the target sits behind an internal CA: the public roots (certifi) plus
-    target.ca_bundle, so another endpoint in the same process (the CyberSecEval judge) still verifies."""
-    if not target.ca_bundle:
+def ca_bundle_pem(target: EvalTarget, judge_ca_bundle: str) -> str | None:
+    """PEM for SSL_CERT_FILE when the target or the CyberSecEval judge sits behind an internal CA: the public roots
+    (certifi) plus target.ca_bundle plus judge_ca_bundle (a file named twice is read once), so every endpoint in the
+    process verifies. None when neither names a file."""
+    if not target.ca_bundle and not judge_ca_bundle:
         return None
     import certifi
 
     from .workspace import resolve_user_path
 
-    internal = resolve_user_path(target.ca_bundle).read_text(encoding="utf-8")
-    return Path(certifi.where()).read_text(encoding="utf-8").rstrip("\n") + "\n" + internal
+    paths: list[Path] = []
+    for named in (target.ca_bundle, judge_ca_bundle):
+        if named and (path := resolve_user_path(named)) not in paths:
+            paths.append(path)
+    pem = Path(certifi.where()).read_text(encoding="utf-8")
+    for path in paths:
+        pem = pem.rstrip("\n") + "\n" + path.read_text(encoding="utf-8")
+    return pem
 
 
 def garak_command(target: EvalTarget, probes: list[str], out_dir: Path | str,

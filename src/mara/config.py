@@ -230,6 +230,8 @@ class ModelEvalConfig(BaseModel):
     cyberseceval_ref: str = Field(default="meta-llama/PurpleLlama@4be64c3a24442b51c76175e6ec67722cc3f5fe38",
                                   description="Commit of CybersecurityBenchmarks used (pinned 2026-09-24)")
     judge_llm_env: str = Field(default="CSE_JUDGE_LLM", description="Environment variable holding the CyberSecEval judge specification")
+    judge_ca_bundle: str = Field(default="", description="PEM file of the CA chain that signs the CyberSecEval judge's endpoint, when it is "
+                                                         "an on-prem one; added to the public roots in every family's SSL_CERT_FILE")
     thresholds: ModelEvalThresholds = Field(default_factory=ModelEvalThresholds)
     weight_penalty_on_fail: float = Field(default=0.8, ge=0.0, le=1.0,
                                           description="Calibration multiplies a failing family's suggested weight by this")

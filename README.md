@@ -754,7 +754,8 @@ mock or fixture-based output as live. Governance checks G-8 and G-9 read the rep
 matter (`mode: live`, families covering the config, within 90 days). garak reaches Claude through its
 `bedrock` generator (AWS credential chain, `temperature` and `top_p` suppressed: Opus 5.5 refuses both) and
 Gemini through its OpenAI-compatible endpoint; CyberSecEval reaches Gemini the same way (its own GOOGLEGENAI
-provider would put the key in the URL) and GLM with `SSL_CERT_FILE` set to the public roots plus `ca_bundle`.
+provider would put the key in the URL) and GLM with `SSL_CERT_FILE` set to the public roots plus `ca_bundle`; when
+`model_eval.judge_ca_bundle` names the CA of the CyberSecEval judge's endpoint, every family's run gets it in that file too.
 CyberSecEval at the pinned ref has no Bedrock provider: `plan` lists that as skipped, `run` exits 1 and the
 anthropic family's two CyberSecEval metrics stay missing, so G-8 stays red for it until there is a route.
 `fixtures/model-eval/` holds synthetic outputs for the parser tests. The first live calibration ran on

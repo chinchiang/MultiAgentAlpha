@@ -78,6 +78,10 @@ A reply that ended normally with no answer, neither as text nor as structured da
 One of the outputs garak records for a model under evaluation (G-8) that is `None` or holds only whitespace: a failed call, a reply cut short, or a reasoning model that spent its output limit before it wrote any text. It is counted over all of a run's outputs, not only those a detector scored; above the limit `MAX_EMPTY_OUTPUT_RATE` the family's verdict is `missing`.
 _Avoid_: empty reply (a reply of a MARA review, above), none (the count of `None` alone)
 
+**CyberSecEval judge**:
+The language model that CyberSecEval's `prompt-injection` benchmark asks whether a model's reply followed the injected instruction (G-8). It is named by a specification in the environment variable `model_eval.judge_llm_env` and runs in the same process as the model under evaluation, so the CA of an on-prem endpoint it sits behind is trusted through `model_eval.judge_ca_bundle`. It rules on a benchmark's replies, not on the findings of a MARA review.
+_Avoid_: judge alone (a ballot role of a review, above)
+
 **Refusal**:
 A reply the vendor or model marked as declining to answer; counted as an abstention, separate from invalid output.
 _Avoid_: block, rejection

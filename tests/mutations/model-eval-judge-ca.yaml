@@ -1,0 +1,46 @@
+# the SSL_CERT_FILE `model_eval.py` gives a family: the public roots, the target's chain and the CyberSecEval judge's chain
+# (`ca_bundle_pem` in src/mara/model_eval.py; `_tls_env`, `_plan` and `cmd_run` in scripts/model_eval.py; `judge_ca_bundle` in
+# config/mara.yaml). The judge runs in the process of the model under evaluation, so a family with no chain of its own needs it
+focused:
+- tests/test_model_eval.py
+mutations:
+- name: the bundle leaves the judge's chain out
+  file: src/mara/model_eval.py
+  old: '    for named in (target.ca_bundle, judge_ca_bundle):'
+  new: '    for named in (target.ca_bundle,):'
+- name: the bundle is made only when the target has a chain of its own
+  file: src/mara/model_eval.py
+  old: '    if not target.ca_bundle and not judge_ca_bundle:'
+  new: '    if not target.ca_bundle:'
+- name: the bundle lists the judge's chain before the target's
+  file: src/mara/model_eval.py
+  old: '    for named in (target.ca_bundle, judge_ca_bundle):'
+  new: '    for named in (judge_ca_bundle, target.ca_bundle):'
+- name: a chain named by both the target and the judge is listed twice
+  file: src/mara/model_eval.py
+  old: '        if named and (path := resolve_user_path(named)) not in paths:'
+  new: '        if named and (path := resolve_user_path(named)):'
+- name: a chain written with a tilde is looked for as a relative path
+  file: src/mara/model_eval.py
+  old: '        if named and (path := resolve_user_path(named)) not in paths:'
+  new: '        if named and (path := Path(named)) not in paths:'
+- name: the CA file is written without the judge's chain
+  file: scripts/model_eval.py
+  old: '    pem = me.ca_bundle_pem(t, judge_ca_bundle)'
+  new: '    pem = me.ca_bundle_pem(t, "")'
+- name: run gives garak the CA file of the target only
+  file: scripts/model_eval.py
+  old: '            env.update(_tls_env(t, a.out, cfg.model_eval.judge_ca_bundle))'
+  new: '            env.update(_tls_env(t, a.out, ""))'
+- name: run gives CyberSecEval the CA file of the target only
+  file: scripts/model_eval.py
+  old: '            tls = _tls_env(t, a.out, cfg.model_eval.judge_ca_bundle)'
+  new: '            tls = _tls_env(t, a.out, "")'
+- name: plan prints the CA file only for a family with a chain of its own
+  file: scripts/model_eval.py
+  old: '        if t.ca_bundle or cfg.model_eval.judge_ca_bundle:'
+  new: '        if t.ca_bundle:'
+- name: the shipped config names no chain for the judge
+  file: config/mara.yaml
+  old: '  judge_ca_bundle: ~/.mara/inventec-ca.pem'
+  new: '  judge_ca_bundle: ""'

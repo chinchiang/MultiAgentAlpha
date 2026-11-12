@@ -71,9 +71,9 @@ def test_targets_and_commands_never_carry_keys(monkeypatch, tmp_path):
     # an endpoint behind an internal CA runs with the public roots plus its chain, so the judge still verifies
     pem = tmp_path / "internal.pem"
     pem.write_text("-----BEGIN CERTIFICATE-----\nINTERNAL\n-----END CERTIFICATE-----\n", encoding="utf-8")
-    bundle = me.ca_bundle_pem(me.EvalTarget("glm", "glm-reviewer", "glm", "openai_compatible", ds.base_url, "GLM_LOCAL_KEY", "", str(pem)))
+    bundle = me.ca_bundle_pem(me.EvalTarget("glm", "glm-reviewer", "glm", "openai_compatible", ds.base_url, "GLM_LOCAL_KEY", "", str(pem)), "")
     assert bundle is not None and bundle.count("BEGIN CERTIFICATE") > 100 and bundle.endswith(pem.read_text(encoding="utf-8"))
-    assert me.ca_bundle_pem(br) is None and ds.ca_bundle == "~/.mara/inventec-ca.pem"
+    assert me.ca_bundle_pem(br, "") is None and ds.ca_bundle == "~/.mara/inventec-ca.pem"
     an = me.EvalTarget("anthropic", "claude-reviewer", "claude-opus-5-5", "anthropic", "", "")  # the direct Anthropic API
     argv, env = me.garak_command(an, ["dan"], "/tmp/out")
     assert argv[3:6] == ["--target_type", "anthropic", "--target_name"] and env == {"ANTHROPIC_API_KEY": "$ANTHROPIC_API_KEY"}
@@ -410,7 +410,7 @@ def test_the_garak_command_run_prints_is_the_one_it_executes(tmp_path, monkeypat
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(script.subprocess, "run", fake_run)
-    monkeypatch.setattr(script, "_tls_env", lambda target, out: {})  # the GLM family's CA file lives under ~/.mara
+    monkeypatch.setattr(script, "_tls_env", lambda target, out, judge_ca_bundle: {})  # the CA files live under ~/.mara
     a = argparse.Namespace(config=ROOT / "config" / "mara.yaml", workspace=Workspace(ROOT), out=tmp_path / "ops" / "run",
                            tool="garak", datasets="")
     script.cmd_run(a)
@@ -498,7 +498,7 @@ def test_the_ca_file_run_sets_is_written_where_its_absolute_path_says(tmp_path, 
                            base_url="https://llm.invalid/v1", api_key_env="GLM_LOCAL_KEY", ca_bundle=str(pem))
     monkeypatch.chdir(tmp_path)
     (tmp_path / "ops" / "run").mkdir(parents=True)
-    env = script._tls_env(target, Path("ops/run"))
+    env = script._tls_env(target, Path("ops/run"), "")
     assert env == {"SSL_CERT_FILE": str(tmp_path / "ops" / "run" / "ca-glm.pem")}
     assert "INTERNAL" in Path(env["SSL_CERT_FILE"]).read_text(encoding="utf-8")
 
@@ -507,5 +507,195 @@ def test_a_family_without_an_internal_ca_gets_no_ssl_cert_file(tmp_path):
     import model_eval as script
 
     bedrock = me.EvalTarget(family="anthropic", name="claude-reviewer", model="m", provider="bedrock", base_url="", api_key_env="")
-    assert script._tls_env(bedrock, tmp_path) == {}
+    assert script._tls_env(bedrock, tmp_path, "") == {}
     assert list(tmp_path.iterdir()) == []
+
+
+def _ca_pem(path: Path, marker: str) -> str:
+    """Write a PEM-shaped file holding `marker` and return its text, the one a bundle must carry through unchanged."""
+    text = f"-----BEGIN CERTIFICATE-----\n{marker}\n-----END CERTIFICATE-----\n"
+    path.write_text(text, encoding="utf-8")
+    return text
+
+
+def _gemini_target(ca_bundle: str = "") -> me.EvalTarget:
+    return me.EvalTarget(family="gemini", name="gemini-reviewer", model="gemini-3.8-flash", provider="gemini", base_url="",
+                         api_key_env="GEMINI_API_KEY", ca_bundle=ca_bundle)
+
+
+def test_the_bundle_lists_the_public_roots_then_the_targets_chain_then_the_judges(tmp_path):
+    import certifi
+
+    target_text = _ca_pem(tmp_path / "target.pem", "TARGET-CA")
+    judge_text = _ca_pem(tmp_path / "judge.pem", "JUDGE-CA")
+    bundle = me.ca_bundle_pem(_gemini_target(str(tmp_path / "target.pem")), str(tmp_path / "judge.pem"))
+    assert bundle is not None
+    assert bundle.startswith(Path(certifi.where()).read_text(encoding="utf-8").rstrip("\n") + "\n")
+    assert bundle.endswith(target_text + judge_text)
+
+
+def test_a_judge_behind_an_internal_ca_alone_makes_a_bundle_and_neither_makes_none(tmp_path):
+    judge_text = _ca_pem(tmp_path / "judge.pem", "JUDGE-CA")
+    bundle = me.ca_bundle_pem(_gemini_target(), str(tmp_path / "judge.pem"))
+    assert bundle is not None and bundle.endswith(judge_text) and bundle.count("JUDGE-CA") == 1
+    assert me.ca_bundle_pem(_gemini_target(), "") is None
+
+
+def test_a_chain_named_by_both_the_target_and_the_judge_is_in_the_bundle_once(tmp_path):
+    _ca_pem(tmp_path / "both.pem", "BOTH-CA")
+    bundle = me.ca_bundle_pem(_gemini_target(str(tmp_path / "both.pem")), str(tmp_path / "both.pem"))
+    assert bundle is not None and bundle.count("BOTH-CA") == 1
+
+
+def test_a_tilde_path_is_the_users_home_and_names_the_same_file_as_its_absolute_spelling(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # where Windows looks for `~`
+    (tmp_path / ".mara").mkdir()
+    judge_text = _ca_pem(tmp_path / ".mara" / "judge.pem", "JUDGE-CA")
+    assert (bundle := me.ca_bundle_pem(_gemini_target(), "~/.mara/judge.pem")) is not None and bundle.endswith(judge_text)
+    bundle = me.ca_bundle_pem(_gemini_target(str(tmp_path / ".mara" / "judge.pem")), "~/.mara/judge.pem")
+    assert bundle is not None and bundle.count("JUDGE-CA") == 1
+
+
+needs_openssl = pytest.mark.skipif(shutil.which("openssl") is None,
+                                   reason="the openssl program is not installed (apt install openssl); the handshake tests need it")
+
+
+@pytest.fixture
+def internal_https(tmp_path):
+    """A local HTTPS server whose certificate a throwaway CA signed: (url, the CA's PEM path). The CA is in no trust store."""
+    import http.server
+    import ssl
+    import threading
+
+    openssl = shutil.which("openssl") or "openssl"
+    d = tmp_path / "pki"
+    d.mkdir()
+    curve = ["-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes"]
+    for argv in (
+        ["req", "-x509", *curve, "-keyout", "ca.key", "-out", "ca.pem", "-days", "2", "-subj", "/CN=mara-test-internal-ca",
+         "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign"],
+        ["req", "-new", *curve, "-keyout", "srv.key", "-out", "srv.csr", "-subj", "/CN=localhost"],
+    ):
+        subprocess.run([openssl, *argv], cwd=d, check=True, capture_output=True)
+    (d / "srv.ext").write_text("subjectAltName=IP:127.0.0.1,DNS:localhost\n", encoding="ascii")
+    subprocess.run([openssl, "x509", "-req", "-in", "srv.csr", "-CA", "ca.pem", "-CAkey", "ca.key", "-CAcreateserial",
+                    "-out", "srv.pem", "-days", "2", "-extfile", "srv.ext"], cwd=d, check=True, capture_output=True)
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(d / "srv.pem", d / "srv.key")
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"https://127.0.0.1:{server.server_address[1]}/", d / "ca.pem"
+    server.shutdown()
+    server.server_close()
+    thread.join(5)
+
+
+def _httpx_get(url: str, env: dict[str, str]) -> subprocess.CompletedProcess:
+    """What the CyberSecEval judge's OpenAI client does: an httpx request in a child that holds only `env` as its trust settings."""
+    clean = {k: v for k, v in os.environ.items() if k not in ("SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE")}
+    code = "import sys, httpx; print(httpx.get(sys.argv[1], timeout=10).status_code)"
+    return subprocess.run([sys.executable, "-c", code, url], env={**clean, **env}, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=60)
+
+
+@needs_openssl
+def test_a_judge_behind_an_internal_ca_is_refused_when_the_family_has_no_ca_of_its_own(internal_https, tmp_path):
+    """The failure this change removes: the Gemini family has no ca_bundle, so its run trusts the public roots only."""
+    import model_eval as script
+
+    url, _ = internal_https
+    gemini = me.EvalTarget(family="gemini", name="gemini-reviewer", model="gemini-3.8-flash", provider="gemini", base_url="",
+                           api_key_env="GEMINI_API_KEY")
+    env = script._tls_env(gemini, tmp_path, "")
+    assert env == {}
+    refused = _httpx_get(url, env)
+    assert refused.returncode != 0 and "CERTIFICATE_VERIFY_FAILED" in refused.stderr
+
+
+@needs_openssl
+def test_a_family_without_a_ca_of_its_own_still_verifies_a_judge_behind_an_internal_one(internal_https, tmp_path):
+    import model_eval as script
+
+    url, ca = internal_https
+    gemini = me.EvalTarget(family="gemini", name="gemini-reviewer", model="gemini-3.8-flash", provider="gemini", base_url="",
+                           api_key_env="GEMINI_API_KEY")
+    env = script._tls_env(gemini, tmp_path, judge_ca_bundle=str(ca))
+    assert list(env) == ["SSL_CERT_FILE"]
+    verified = _httpx_get(url, env)
+    assert verified.returncode == 0, verified.stderr
+    assert verified.stdout.strip() == "200"
+
+
+def test_the_config_names_the_ca_of_the_gateway_the_judge_sits_behind(tmp_path):
+    assert load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT)).model_eval.judge_ca_bundle == "~/.mara/inventec-ca.pem"
+    assert load_config(FIXTURE_PANEL, Workspace(ROOT)).model_eval.judge_ca_bundle == ""  # a config that names none has none
+    from pydantic import ValidationError
+
+    data = yaml.safe_load(FIXTURE_PANEL.read_text(encoding="utf-8"))
+    data["model_eval"] = {"judge_ca_bundel": "x.pem"}
+    misspelt = tmp_path / "misspelt.yaml"
+    misspelt.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ValidationError, match="judge_ca_bundel"):
+        load_config(misspelt, Workspace(ROOT))
+
+
+def test_plan_sets_the_ca_file_of_every_family_once_the_config_names_a_judge_ca(tmp_path):
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(ROOT / "config" / "mara.yaml"), "plan", "--out", "ops/run"],
+                       capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    for family in ("anthropic", "gemini", "glm"):
+        command = lines[lines.index(f"# {family}: garak") + 1]
+        assert f"SSL_CERT_FILE={tmp_path / 'ops' / 'run' / f'ca-{family}.pem'} " in command, family
+
+
+def test_run_gives_every_command_of_both_tools_the_trust_of_the_judges_ca(tmp_path, monkeypatch):
+    import collections
+
+    import model_eval as script
+
+    target_pem, judge_pem = tmp_path / "target.pem", tmp_path / "judge.pem"
+    target_pem.write_text("-----BEGIN CERTIFICATE-----\nTARGET-CA\n-----END CERTIFICATE-----\n", encoding="utf-8")
+    judge_pem.write_text("-----BEGIN CERTIFICATE-----\nJUDGE-CA\n-----END CERTIFICATE-----\n", encoding="utf-8")
+    data = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    data["model_eval"]["judge_ca_bundle"] = str(judge_pem)
+    for model in data["models"]:
+        if model.get("ca_bundle"):
+            model["ca_bundle"] = str(target_pem)
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    monkeypatch.setenv("GEMINI_API_KEY", "k" * 32)
+    monkeypatch.setenv("GLM_LOCAL_KEY", "k" * 32)
+    monkeypatch.setenv("CSE_JUDGE_LLM", "OPENAI::judge::" + "k" * 32 + "::https://judge.invalid/v1")
+    ran = []
+
+    def fake_run(argv, **kwargs):
+        if argv[-1] == "--version":
+            return subprocess.CompletedProcess(argv, 0, "garak v0.17.1", "")
+        ran.append((list(argv), kwargs.get("env", {})))
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(script.subprocess, "run", fake_run)
+    a = argparse.Namespace(config=config, workspace=Workspace(ROOT), out=tmp_path / "ops" / "run", tool="all", datasets="datasets")
+    script.cmd_run(a)
+    trust = [Path(env["SSL_CERT_FILE"]) if "SSL_CERT_FILE" in env else None for _, env in ran]
+    assert None not in trust, [argv for (argv, _), path in zip(ran, trust, strict=True) if path is None]
+    # garak once per family; CyberSecEval twice for each family that has a provider (Claude's is a gap)
+    assert collections.Counter(p.name for p in trust) == {"ca-anthropic.pem": 1, "ca-gemini.pem": 3, "ca-glm.pem": 3}
+    texts = {p.name: p.read_text(encoding="utf-8") for p in trust}
+    assert all("JUDGE-CA" in text for text in texts.values())
+    assert "TARGET-CA" in texts["ca-glm.pem"] and "TARGET-CA" not in texts["ca-gemini.pem"]
