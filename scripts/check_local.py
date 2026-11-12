@@ -1,8 +1,8 @@
-"""Before a push, seven of the checks CI runs on a pull request, and on request its three osv-scanner scans, run here with every output kept.
+"""Before a push, seven of the checks CI runs on a pull request, and on request its four osv-scanner scans, run here with every output kept.
 
   .venv/bin/python scripts/check_local.py                     # ruff, line width, control characters, mypy, semgrep, the suite, gitleaks
   .venv/bin/python scripts/check_local.py --only ruff mypy    # some of them
-  .venv/bin/python scripts/check_local.py --only osv          # the three osv-scanner scans (the network)
+  .venv/bin/python scripts/check_local.py --only osv          # the four osv-scanner scans (the network)
   .venv/bin/python scripts/check_local.py --base origin/main  # the base of the branch's change (default origin/main)
 
 Run it with the dev environment's interpreter: ruff and pytest come from it. Each check writes its whole output to
@@ -24,10 +24,11 @@ was there follows), so from a git worktree it imports this checkout's mara, not 
   pytest    GITHUB_ACTIONS=true pytest -q -rs (CI colours CLI output), after clearing src/ and tests/ of compiled
             bytecode, which can keep a same-size edit made within a second from taking effect
   gitleaks  scripts/gitleaks_ci.py --event pull_request over the commits since the merge base with --base
-Run only when named, as they send package names and versions to api.osv.dev (osv names the three), L0's scans of
+Run only when named, as they send package names and versions to api.osv.dev (osv names the four), L0's scans of
 the hash-locked closures, each with its own config:
   osv-runtime     scripts/osv_ci.py on the closures this repository installs, with tools/osv-scanner.toml
   osv-model-eval  scripts/osv_ci.py on tools/model-eval-requirements.txt, with tools/osv-model-eval.toml
+  osv-cyberseceval  scripts/osv_ci.py on tools/cyberseceval-requirements.txt, with tools/osv-cyberseceval.toml
   osv-semgrep     scripts/osv_ci.py on tools/semgrep-requirements.txt, with tools/osv-semgrep.toml
 Not run here: the whole suite on CPython 3.12 and 3.13, the other repository scanners (trivy, zizmor, csp-evaluator, and
 osv-scanner on the seeded fixture), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
@@ -94,6 +95,7 @@ OSV_SCANS = {
                     "--lockfile", "tools/typecheck-requirements.txt", "--lockfile", "tools/build-requirements.txt",
                     "--config", "tools/osv-scanner.toml"),
     "osv-model-eval": ("--lockfile", "tools/model-eval-requirements.txt", "--config", "tools/osv-model-eval.toml"),
+    "osv-cyberseceval": ("--lockfile", "tools/cyberseceval-requirements.txt", "--config", "tools/osv-cyberseceval.toml"),
     "osv-semgrep": ("--lockfile", "tools/semgrep-requirements.txt", "--config", "tools/osv-semgrep.toml"),
 }
 
@@ -187,7 +189,7 @@ def _say(*parts: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--only", action="extend", nargs="+", choices=[*CHECKS, *GROUPS], default=None,
-                    help="the checks to run, the five but osv by default; osv: its three scans; repeats")
+                    help="the checks to run, the five but osv by default; osv: its four scans; repeats")
     ap.add_argument("--base", default="origin/main", help="the line width and gitleaks checks read the commits since the merge base with this")
     ap.add_argument("--python312", default=shutil.which("python3.12") or "python3.12", help="builds .venv-typecheck")
     ap.add_argument("--logs", type=Path, default=None, help="default: out/check-local/<UTC time>")

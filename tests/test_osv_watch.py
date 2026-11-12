@@ -1,4 +1,4 @@
-"""scripts/osv_watch.py, run daily by .github/workflows/osv-watch.yml: the three osv-scanner scans of L0's locked closures,
+"""scripts/osv_watch.py, run daily by .github/workflows/osv-watch.yml: the four osv-scanner scans of L0's locked closures,
 and one tracking issue labelled l0-advisory that a new advisory opens, a changed list comments on and a clean scan
 closes. The scans and gh are stand-ins here; nothing touches the network or GitHub."""
 
@@ -119,7 +119,7 @@ def test_a_scan_that_does_not_complete_is_reported_as_such_and_exits_1():
     assert "osv-model-eval: the scan did not complete (exit 1)" in body and "tools/model-eval-requirements.txt" in body
 
 
-def test_it_runs_the_three_scans_l0_runs():
+def test_it_runs_the_four_scans_l0_runs():
     """The lockfiles and configs of L0's osv-scanner steps in mara-review.yml, every one, and no other scan."""
     workflow = (ROOT / ".github" / "workflows" / "mara-review.yml").read_text(encoding="utf-8")
     ci = set()
@@ -129,8 +129,8 @@ def test_it_runs_the_three_scans_l0_runs():
         ci.add(tuple(args[:i] + args[i + 2:]))
     scans = Scans()
     watch(scans, Gh())
-    assert len(ci) == 3 and {args for _, args in scans.ran} == ci
-    assert [name for name, _ in scans.ran] == ["osv-runtime", "osv-model-eval", "osv-semgrep"]
+    assert len(ci) == 4 and {args for _, args in scans.ran} == ci
+    assert [name for name, _ in scans.ran] == ["osv-runtime", "osv-model-eval", "osv-cyberseceval", "osv-semgrep"]
 
 
 def test_the_workflow_runs_daily_and_by_hand_with_issues_write_alone():

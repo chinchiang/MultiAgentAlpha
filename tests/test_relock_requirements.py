@@ -97,6 +97,7 @@ def test_pyproject_requirements_include_the_dev_extra():
     ("tools/dev-requirements-py312.txt", ["anthropic", "pydantic", "pyyaml", "httpx", "typer", "rich", "pytest", "ruff", "markdown", "jsonschema"], True),
     ("tools/typecheck-requirements.txt", ["mypy", "types-jsonschema", "types-pyyaml"], True),
     ("tools/model-eval-requirements.txt", ["garak"], False),
+    ("tools/cyberseceval-requirements.txt", ["openai", "boto3", "semgrep", "pillow", "paramiko", "pypdf", "pyyaml"], True),
 ])
 def test_repository_lockfiles_are_complete(lock, top_level, wheels_only):
     text = (ROOT / lock).read_text(encoding="utf-8")
@@ -173,6 +174,32 @@ def test_the_closures_installed_with_the_build_closure_pin_its_shared_packages_a
         assert v == version and h in hashes, (
             f"{lock} pins {n}=={v} (sha256 {h[:12]}…), tools/build-requirements.txt {n}=={version}: "
             "pin it as tools/build-requirements.txt does")
+
+
+def test_the_cyberseceval_closure_keeps_the_floors_that_fix_its_advisories():
+    """tools/cyberseceval-requirements.in replaces five of upstream's exact pins with floors, because osv-scanner reports
+    advisories against the upstream versions. A floor lowered or dropped lets a relock go back to them; each one is
+    asserted against the release that fixes the last of them (scripts/advisory_facts.py names it), and the lockfile has to
+    be at or above it. setuptools is the reverse: it stays below 82.0.0, the release that removed pkg_resources, which
+    CyberSecEval imports."""
+    from packaging.requirements import Requirement
+    from packaging.utils import canonicalize_name
+    from packaging.version import Version
+
+    lock_text = (ROOT / "tools/cyberseceval-requirements.txt").read_text(encoding="utf-8")
+    pins = {canonicalize_name(n): Version(v) for n, v, _ in _parse_lock(lock_text)}
+    floors: dict[str, Version] = {}
+    for line in (ROOT / "tools/cyberseceval-requirements.in").read_text(encoding="utf-8").splitlines():
+        if line.strip() and not line.startswith("#"):
+            req = Requirement(line.split("#", 1)[0].strip())
+            floors.update({canonicalize_name(req.name): Version(s.version) for s in req.specifier if s.operator == ">="})
+    above_pin = sorted(f"{name} {floor} > {pins[name]}" for name, floor in floors.items() if floor > pins[name])
+    assert not above_pin, above_pin
+    fixed_in = {"pillow": "13.0.0", "pypdf": "6.21.4", "paramiko": "5.0.0", "langchain-core": "1.3.3", "urllib3": "2.8.0"}
+    for name, version in fixed_in.items():
+        assert floors.get(name, Version("0")) >= Version(version), f"{name}: no floor at the fixed release {version}"
+        assert pins[name] >= Version(version), f"{name} {pins[name]} in the lockfile is below the fixed release {version}"
+    assert pins["setuptools"] < Version("82"), "setuptools 82.0.0 removed pkg_resources, which CyberSecEval imports"
 
 
 def test_pins_from_lock_and_python_choice(tmp_path):

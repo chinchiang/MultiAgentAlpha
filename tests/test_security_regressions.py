@@ -973,16 +973,46 @@ def test_sarif_upload_job_has_no_repository_code_and_osv_scopes_are_separate():
     assert all("run" not in step and "checkout@" not in step.get("uses", "") for step in upload["steps"])
     runs = [s.get("run", "") for s in data["jobs"]["deterministic-tools"]["steps"]]
     later = [s for s in data["jobs"]["deterministic-tools"]["steps"] if "osv_ci.py" in s.get("run", "")
-             and ("osv-model-eval.toml" in s["run"] or "osv-semgrep.toml" in s["run"])]
-    assert len(later) == 2 and all(s.get("if") == "${{ !cancelled() }}" for s in later), \
-        "the garak and semgrep closures are scanned even when an earlier closure's scan failed"
+             and ("osv-model-eval.toml" in s["run"] or "osv-cyberseceval.toml" in s["run"] or "osv-semgrep.toml" in s["run"])]
+    assert len(later) == 3 and all(s.get("if") == "${{ !cancelled() }}" for s in later), \
+        "the garak, CyberSecEval and semgrep closures are scanned even when an earlier closure's scan failed"
     model_scan = [s for s in runs if "osv_ci.py" in s and "osv-model-eval.toml" in s]
     assert len(model_scan) == 1 and model_scan[0].count("--lockfile") == 1
+    cse_scan = [s for s in runs if "osv_ci.py" in s and "osv-cyberseceval.toml" in s]
+    assert len(cse_scan) == 1 and cse_scan[0].count("--lockfile") == 1 and "tools/cyberseceval-requirements.txt" in cse_scan[0]
     semgrep_scan = [s for s in runs if "osv_ci.py" in s and "osv-semgrep.toml" in s]
     assert len(semgrep_scan) == 1 and semgrep_scan[0].count("--lockfile") == 1 and "semgrep-requirements.txt" in semgrep_scan[0]
     main_scan = _main_osv_scan_runs(data)
     assert len(main_scan) == 1 and "semgrep-requirements.txt" not in main_scan[0]
     assert "IgnoredVulns" not in (ROOT / "tools/osv-scanner.toml").read_text(encoding="utf-8")
+
+
+def _osv_steps(workflow: dict) -> list[str]:
+    return [s["run"] for s in workflow["jobs"]["deterministic-tools"]["steps"] if "osv_ci.py" in s.get("run", "")
+            and "--lockfile" in s["run"]]
+
+
+def test_every_hash_locked_closure_under_tools_is_scanned_by_an_osv_step():
+    """A closure added to tools/ without its --lockfile in an osv-scanner step would be installed but never scanned."""
+    data = yaml.safe_load((ROOT / ".github/workflows/mara-review.yml").read_text(encoding="utf-8"))
+    scanned = {lock for run in _osv_steps(data) for lock in re.findall(r"--lockfile (\S+)", run)}
+    closures = {f"tools/{p.name}" for p in (ROOT / "tools").glob("*requirements*.txt")}
+    assert {"tools/model-eval-requirements.txt", "tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"} <= closures
+    assert closures <= scanned, f"add a --lockfile step for {sorted(closures - scanned)}"
+
+
+def test_every_osv_report_reaches_code_scanning():
+    """Each osv-scanner step writes a SARIF file; the read-only prepare step names it for the upload job and the l0-sarif
+    artifact keeps it, or its findings never appear in the Security tab."""
+    data = yaml.safe_load((ROOT / ".github/workflows/mara-review.yml").read_text(encoding="utf-8"))
+    steps = data["jobs"]["deterministic-tools"]["steps"]
+    reports = [m for run in _osv_steps(data) for m in re.findall(r"--report (\S+\.sarif)", run)]
+    assert len(reports) == 4, reports
+    prepare = next(s["run"] for s in steps if "code_scanning_prep.py" in s.get("run", ""))
+    kept = next(s["with"]["path"] for s in steps if s.get("with", {}).get("name") == "l0-sarif").split()
+    for report in reports:
+        assert any(arg.endswith(f"={report}") for arg in prepare.split()), f"{report} is not prepared for Code Scanning"
+        assert report in kept, f"{report} is not kept in the l0-sarif artifact"
 
 
 def test_the_osv_scan_of_the_installed_closures_names_every_dev_closure_of_each_python():

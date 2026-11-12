@@ -561,7 +561,8 @@ code with `pip install --no-deps --no-build-isolation -e .` after installing the
 `tools/build-requirements.txt` closure. The runtime CI path does not let build isolation resolve
 unpinned backends. `tools/dev-requirements-py313.txt` is the same closure for CPython 3.13, resolved the same
 way; the `tests (CPython 3.13)` job installs it and runs the test suite only, and is not a required check.
-The separate model-evaluation closure contains two source distributions;
+`tools/cyberseceval-requirements.txt` is the closure of CyberSecEval's requirements (109 wheels), installed in a virtual
+environment of its own. The separate model-evaluation closure contains two source distributions;
 the runbook also uses the hashed build closure with `--no-build-isolation`. Both sdists were
 successfully built this way; a full live evaluation still requires the deployment environment.
 
@@ -583,12 +584,14 @@ differs from the lock:
   fixture's `requests==2.19.0` flagged, so a silent scanner or database regression is caught.
 - The bootstrap, dev, typecheck and build closures use `tools/osv-scanner.toml` with no advisory
   exclusions. The model-evaluation closure is scanned separately with `tools/osv-model-eval.toml`
-  (its dated exceptions cover garak's datasets/fsspec pins); the semgrep tool closure is scanned with
+  (its dated exceptions cover garak's datasets/fsspec pins); the CyberSecEval closure with
+  `tools/osv-cyberseceval.toml` (dated exceptions for the mcp and opentelemetry-api pins that semgrep 1.179.0 carries, and for
+  setuptools 81.0.0, the last release with `pkg_resources`); the semgrep tool closure is scanned with
   `tools/osv-semgrep.toml`, whose dated exceptions, if any, that file lists and explains. These scans
   also run weekly and on manual workflow dispatch.
 
 New advisories arrive between those runs and turn every pull request's L0 red, so
-`.github/workflows/osv-watch.yml` runs the same three closure scans (`scripts/osv_watch.py`) every
+`.github/workflows/osv-watch.yml` runs the same four closure scans (`scripts/osv_watch.py`) every
 day at 04:00 UTC and on manual dispatch, with `contents: read` and `issues: write` only. It keeps one
 tracking issue labelled `l0-advisory`: un-ignored advisories open it, a changed list comments on it, a
 clean run closes it; the issue lists each advisory with its closure and lockfile, the run, whether the

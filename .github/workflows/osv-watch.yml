@@ -1,7 +1,7 @@
 # Daily osv-scanner watch on L0's hash-locked tool closures (scripts/osv_watch.py). New advisories land between
 # mara-review.yml's weekly scheduled runs and turn every pull request's L0 red; this finds them first and keeps one
 # tracking issue, labelled l0-advisory, in step: a new advisory opens it, a changed list comments on it, a clean scan
-# closes it. The three scans are L0's own (scripts/check_local.py OSV_SCANS, kept equal to mara-review.yml by tests).
+# closes it. The scans are L0's own (scripts/check_local.py OSV_SCANS, kept equal to mara-review.yml by tests).
 #
 # Hardening, as in mara-review.yml: top-level permissions {}; the one job has contents: read and issues: write (the
 # tracking issue, nothing else); actions pinned to commit SHAs; persist-credentials: false; only the two tools the
@@ -39,7 +39,7 @@ jobs:
         run: |
           python3 -m pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all: -r tools/bootstrap-requirements.txt
           python3 scripts/install_tools.py --only slsa-verifier osv-scanner
-      - name: Scan the three closures and open, update or close the l0-advisory issue
+      - name: Scan the closures and open, update or close the l0-advisory issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}

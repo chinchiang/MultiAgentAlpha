@@ -12,3 +12,19 @@ mutations:
     file: tools/model-eval-requirements.in
     old: 'langgraph-sdk>=0.4.6  # the same advisory'
     new: '#   langgraph-sdk 0.4.6, the same advisory'
+  - name: the CyberSecEval pillow floor lowered below the release that fixes its advisories
+    file: tools/cyberseceval-requirements.in
+    old: 'pillow>=13.0.0  # upstream pin'
+    new: 'pillow>=12.0.0  # upstream pin'
+  - name: the CyberSecEval pypdf floor dropped
+    file: tools/cyberseceval-requirements.in
+    old: 'pypdf>=6.21.4,<7  # upstream pin'
+    new: 'pypdf<7  # upstream pin'
+  - name: a CyberSecEval floor above the version the lockfile pins
+    file: tools/cyberseceval-requirements.in
+    old: 'paramiko>=5.0.0  # GHSA-r374-rxx8-8654'
+    new: 'paramiko>=9.0.0  # GHSA-r374-rxx8-8654'
+  - name: the CyberSecEval lockfile moves setuptools to the release without pkg_resources
+    file: tools/cyberseceval-requirements.txt
+    old: 'setuptools==81.0.0 \'
+    new: 'setuptools==82.0.0 \'

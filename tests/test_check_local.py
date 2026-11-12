@@ -1,4 +1,4 @@
-"""scripts/check_local.py: seven of the checks a pull request's CI runs, and on request its three osv-scanner scans, run
+"""scripts/check_local.py: seven of the checks a pull request's CI runs, and on request its four osv-scanner scans, run
 before the push with every output kept."""
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def test_the_lint_is_the_one_ci_runs():
     assert f"run: ruff check {' '.join(check_local.RUFF_PATHS)}\n" in WORKFLOW
 
 
-def test_the_osv_scans_are_the_three_closure_scans_ci_runs_and_report_into_the_logs(tmp_path):
+def test_the_osv_scans_are_the_four_closure_scans_ci_runs_and_report_into_the_logs(tmp_path):
     """L0 scans each hash-locked closure with its own config; a lock or config changed there and not here fails."""
     def without_report(args):
         i = args.index("--report")
@@ -36,7 +36,7 @@ def test_the_osv_scans_are_the_three_closure_scans_ci_runs_and_report_into_the_l
         args, report = without_report(argv[argv.index(str(ROOT / "scripts" / "osv_ci.py")) + 1:])
         assert report == str(tmp_path / f"{name}.sarif") and env == {} and first is None
         here.add(args)
-    assert len(ci) == 3 and here == ci
+    assert len(ci) == 4 and here == ci
 
 
 def test_the_semgrep_check_is_l0s_repository_scan_reporting_into_the_logs(tmp_path):
@@ -163,29 +163,30 @@ def test_a_repeated_only_runs_every_check_it_names_once(tmp_path, monkeypatch):
     assert ran == ["b", "a", "a"]
 
 
-TEN = ["ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks", "osv-runtime", "osv-model-eval", "osv-semgrep"]
+ALL_CHECKS = ["ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks", "osv-runtime", "osv-model-eval", "osv-cyberseceval",
+              "osv-semgrep"]
 
 
-def test_only_osv_runs_the_three_osv_scans(tmp_path, monkeypatch):
-    """`osv` names L0's three osv-scanner closure scans; a scan named again runs once."""
-    ran = _recording(monkeypatch, TEN)
+def test_only_osv_runs_the_four_osv_scans(tmp_path, monkeypatch):
+    """`osv` names L0's four osv-scanner closure scans; a scan named again runs once."""
+    ran = _recording(monkeypatch, ALL_CHECKS)
     assert check_local.main(["--only", "osv", "--logs", str(tmp_path / "1")]) == 0
-    assert ran == ["osv-runtime", "osv-model-eval", "osv-semgrep"]
+    assert ran == ["osv-runtime", "osv-model-eval", "osv-cyberseceval", "osv-semgrep"]
     ran.clear()
     assert check_local.main(["--only", "osv", "--only", "osv-semgrep", "--only", "ruff", "--logs", str(tmp_path / "2")]) == 0
-    assert ran == ["osv-runtime", "osv-model-eval", "osv-semgrep", "ruff"]
+    assert ran == ["osv-runtime", "osv-model-eval", "osv-cyberseceval", "osv-semgrep", "ruff"]
 
 
 def test_without_only_the_seven_checks_run_in_their_order_and_no_osv_scan(tmp_path, monkeypatch):
     """The osv scans need the network: they run when named, never by default. semgrep needs none, so it runs by default,
     after the static checks and before the suite."""
-    ran = _recording(monkeypatch, TEN)
+    ran = _recording(monkeypatch, ALL_CHECKS)
     assert check_local.main(["--logs", str(tmp_path)]) == 0
     assert ran == ["ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks"]
 
 
 def test_only_semgrep_runs_the_semgrep_check_alone(tmp_path, monkeypatch):
-    ran = _recording(monkeypatch, TEN)
+    ran = _recording(monkeypatch, ALL_CHECKS)
     assert check_local.main(["--only", "semgrep", "--logs", str(tmp_path)]) == 0
     assert ran == ["semgrep"]
 
