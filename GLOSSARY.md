@@ -78,6 +78,10 @@ A reply that ended normally with no answer, neither as text nor as structured da
 One of the outputs garak records for a model under evaluation (G-8) that is `None` or holds only whitespace: a failed call, a reply cut short, or a reasoning model that spent its output limit before it wrote any text. It is counted over all of a run's outputs, not only those a detector scored; above the limit `MAX_EMPTY_OUTPUT_RATE` the family's verdict is `missing`.
 _Avoid_: empty reply (a reply of a MARA review, above), none (the count of `None` alone)
 
+**Empty response**:
+A row a CyberSecEval benchmark should have for a model under evaluation (G-8) that holds no answer: the response (for prompt injection also the CyberSecEval judge's reply) is `null`, blank or `FAIL TO QUERY` (what the benchmark writes for a prompt it could not query), or the row is not in the response file at all (a query that failed all its retries is logged and dropped). The stat file shows none of this: prompt injection drops the row of an empty response from its totals (and reads an empty judge reply as no injection), and mitre-frr scores the row as an answer that is no refusal. It is counted over the rows the dataset has; above the limit `MAX_EMPTY_OUTPUT_RATE` the metric's verdict is `missing`.
+_Avoid_: empty output (an output of garak, above), empty reply (a reply of a MARA review, above)
+
 **CyberSecEval judge**:
 The language model that CyberSecEval's `prompt-injection` benchmark asks whether a model's reply followed the injected instruction (G-8). It is named by a specification in the environment variable `model_eval.judge_llm_env` and runs in the same process as the model under evaluation, so the CA of an on-prem endpoint it sits behind is trusted through `model_eval.judge_ca_bundle`. It rules on a benchmark's replies, not on the findings of a MARA review.
 _Avoid_: judge alone (a ballot role of a review, above)

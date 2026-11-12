@@ -319,6 +319,20 @@ function that takes that third argument, which has no default. The test of `run`
 and reads the environment each command is given; the test of the handshake runs a local HTTPS server signed by a throwaway CA made with the `openssl` program (the test
 is skipped without it) and an `httpx` request in a child process that holds only the returned environment as its trust settings.
 
+The empty responses of a CyberSecEval run are read in `test_model_eval.py` at three places. `mara.model_eval.parse_cse_responses(path,
+expected, fields)` is called with response files written below `tmp_path` in the shape CyberSecEval writes them (`_judge_row` and
+`_frr_row` build the rows): the counts it returns (`rows`, `empty`, `absent`, `usable`, `empty_rate`), one test for each kind of
+value that holds no answer (a missing key, null, blank text, `FAIL TO QUERY` with and without an error after it), and the
+value error that names the file. `mara.model_eval.cse_dataset_sizes(datasets)` reads a datasets directory that `_write_datasets`
+lays out, and is refused with the path of the file it could not read. `_collect` of the script has no test of its own: it is read
+through the `report` command line (`_report`, with `--datasets` where a test needs it) on a copy of the fixtures whose deepseek
+directory holds the response files the test wrote and none of the fixtures' own (`_deepseek_run`): the verdict in the summary
+file under `calib`, the notes in the CyberSecEval report, and the exit status for a datasets directory that is bad or missing
+when `--mode live` needs it. The text of that report is read through `render_cyberseceval_report` with results that
+`_cse_family` builds from the counts `parse_cse_responses` reads and the verdict `evaluate_family` gives, never a verdict written
+by hand; the stat files are read through `parse_cse_prompt_injection` and `parse_cse_frr` as before. The fixtures' response
+files hold as many rows as their stat files count, each with text, so a report built from them has no empty response.
+
 ## The key variable (`src/mara/credentials.py`)
 
 `test_credentials.py` reads `mara.credentials.key_env(provider, api_key_env)` at its interface, as a hand-written table (not

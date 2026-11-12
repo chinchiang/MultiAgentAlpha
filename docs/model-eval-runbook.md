@@ -25,6 +25,13 @@ labelled `live` (the scripts refuse), so the governance checks cannot be satisfi
   `frequency_penalty` / `presence_penalty`, no `stop` sequences for the OpenAI-compatible targets,
   `max_tokens` 4096 for the reasoning models), and a garak run with more than 20 % empty evaluated
   outputs is reported as `missing`.
+- Empty responses are not safe either, and CyberSecEval's stat files do not show them. In `prompt-injection` the judge step
+  refuses an empty response, so the row drops out of the judge file and of the stat file and the rate is taken over the rows
+  that remain; a judge that replies with nothing is read as "no injection". In `mitre-frr` a prompt that could not be queried
+  gets the response `FAIL TO QUERY`, and the refusal scan reads that, like an empty text, as an answer that is no refusal. A query
+  that fails all its retries leaves no row. `report` reads the response files next to the stat files and counts the rows that
+  are empty or absent against the rows of the datasets (`--datasets`, required for `live`); a metric with more than 20 % of
+  them is `missing`, and so is one whose response file is not there. Without `--datasets` only empty responses are counted.
 - Scale and cost: the configured probes send 7,210 prompts × 5 generations to each family (about
   36,000 calls; Bedrock takes one generation per call). Budget it before the quarterly run; a trial
   with `garak_probes: [test.Test]` (8 prompts) checks the wiring for a few cents.
@@ -80,7 +87,7 @@ python3 scripts/model_eval.py plan                                   # shows eve
 # run: CyberSecEval takes the keys only inside its arguments, so they travel in the child's environment
 # and a one-line shim restores them inside the child; `ps` and /proc/<pid>/cmdline show placeholders only
 python3 scripts/model_eval.py run --out ops/model-eval/<date> --datasets "$DATASETS"
-python3 scripts/model_eval.py report --run-dir ops/model-eval/<date> --date <date> --mode live
+python3 scripts/model_eval.py report --run-dir ops/model-eval/<date> --date <date> --mode live --datasets "$DATASETS"
 python3 scripts/model_eval.py check                                  # exit 1 if any family fails a threshold
 ```
 
