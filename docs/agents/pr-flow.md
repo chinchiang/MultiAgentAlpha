@@ -10,7 +10,9 @@ A change that becomes a pull request goes through these steps in order. Each end
    on a made-up bad input, a hand-made bad copy of the file).
 3. **Make it green, review it, then commit it.** Green in the working tree, nothing committed yet: the code, its
    `tests/mutations/<name>.yaml` and `tests/SEAMS.md`, and, when the change takes a version, the version, its CHANGELOG
-   row and the demo page.
+   row and the demo page. Run `scripts/check_local.py --only ruff` beside the tests (seconds): a rule of ruff that the new
+   tests break costs an edit now, and a rebuild of the commits at step 4. `lines` and `chars` read commits, so they have
+   nothing to read yet; they run after the commit, at step 4.
    Review that tree before the first commit, so a finding costs an edit and not a rebuild: `mattpocock-skills:code-review`
    with `origin/main` as the fixed point, where the sub-agents read `git diff origin/main` (two dots: the skill's
    three-dot form reads commits only; run `git add -N <new file>` first, or the diff leaves new files out), the two axes
