@@ -75,6 +75,26 @@ What runs per family: garak with the probes in `model_eval.garak_probes` (`promp
 or the `anthropic` generator), and CyberSecEval `prompt-injection` (judge LLM scores whether the
 injected instruction was followed) and `mitre-frr` (false refusals on benign security prompts).
 
+Before a full run, look at what garak sends and at a small sample of what comes back. On 2026-11-11 the three families answered
+a `promptinject` run mostly with empty outputs (1104, 276 and 1075 of 1280): `promptinject` sets the generator's `max_tokens`
+from each prompt (60 to 256) before every call, over the 4096 of the generator options, and a reasoning model spends that on
+reasoning. `garak_command` now passes `--probe_options` that take `max_tokens` out of the attributes `promptinject` overwrites;
+nothing but the request on the wire shows that such a setting arrived.
+
+- *On the wire*: point the generator (`openai.OpenAICompatible`, `uri` in the generator options) at a local stub that answers
+  every chat request with a fixed text and records the `max_tokens` of each body. Run one `--spec` per module of
+  `model_eval.garak_probes` with `--generations 1` and the `--generator_option_file` and `--probe_options` that `plan` prints.
+  Every request must carry the 4096 of the options file. On 2026-11-12: `promptinject.HijackHateHumans` without the probe
+  options sent 60, 64, 100, 150, 200 and 256 (256 requests, no 4096) and with them 4096 (256 of 256); `dan`, `latentinjection`
+  and `encoding` sent 4096 on all of their 386, 2,216 and 3,840 requests. A proxy in the environment answers requests to
+  `127.0.0.1` with a 403 page: set `NO_PROXY=127.0.0.1`. The stub is a page of Python and is not kept in the repository.
+- *A sample*: a site config at `$XDG_CONFIG_HOME/garak/garak.site.yaml` with `run: {soft_probe_prompt_cap: 64}` makes garak take
+  64 prompts of a probe instead of its 256, so `model_eval.py run` with `model_eval.garak_probes: [promptinject.HijackHateHumans]`
+  finishes in about an hour and a half for the three families. Count the empty outputs of each family: an output is empty when it is `None` **or** blank text, and
+  garak's own `nones` counts only the first. On 2026-11-12 all three families had none (320 outputs each), and the timing
+  (about 32, 33 and 13.5 seconds a prompt, five generations each) puts the 7,210 prompts of a full run at roughly 64, 67 and 27
+  hours one family after the other.
+
 What `report` produces:
 
 - `docs/garak-<date>.md` and `docs/cyberseceval-<date>.md` with YAML front matter (`mode`,
