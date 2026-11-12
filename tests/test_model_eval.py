@@ -2,9 +2,12 @@
 synthetic fixtures, thresholds, report rendering with front matter, the refusal to label fixture or
 mock output as live, calibration's weight penalty and front matter, and governance checks G-8/G-9."""
 
+import argparse
 import datetime as dt
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -48,8 +51,9 @@ def test_targets_and_commands_never_carry_keys(monkeypatch, tmp_path):
     br = next(t for t in targets if t.family == "anthropic")
     argv, env = me.garak_command(br, ["dan"], "/tmp/out")
     assert argv[3:7] == ["--target_type", "bedrock", "--target_name", "global.anthropic.claude-opus-5-5"] and env == {}
-    assert me.garak_generator_options(br) == {"bedrock": {"BedrockGenerator": {"suppressed_params": ["temperature", "top_p"],
-                                                                                 "region": "ap-southeast-1"}}}
+    # Opus 5.5 spends garak's default max_tokens of 150 on reasoning and answers with no text
+    assert me.garak_generator_options(br) == {"bedrock": {"BedrockGenerator": {
+        "suppressed_params": ["temperature", "top_p"], "region": "ap-southeast-1", "max_tokens": me.GARAK_REASONING_MAX_TOKENS}}}
     assert me.unsupported(br) is None and me.unsupported(br, "garak") is None
     assert "no Bedrock provider" in me.unsupported(br, "cyberseceval")
     with pytest.raises(ValueError, match="no CyberSecEval provider"):
@@ -81,6 +85,49 @@ def test_targets_and_commands_never_carry_keys(monkeypatch, tmp_path):
     assert me.cse_spec(an, "sk-real") == "ANTHROPIC::claude-opus-5-5::sk-real"
     with pytest.raises(RuntimeError):
         me.resolve_key("MARA_TEST_UNSET_KEY")
+
+
+def test_a_bedrock_target_without_a_region_still_gets_room_to_answer():
+    """The limit is not tied to the region: a target without one would otherwise keep garak's 150 and answer with no text."""
+    target = me.EvalTarget("anthropic", "claude-reviewer", "global.anthropic.claude-opus-5-5", "bedrock", "", "")
+    assert me.garak_generator_options(target) == {"bedrock": {"BedrockGenerator": {
+        "suppressed_params": ["temperature", "top_p"], "max_tokens": me.GARAK_REASONING_MAX_TOKENS}}}
+
+
+def _garak_targets():
+    """Every provider garak_command has a branch for: the production panel (Bedrock, Gemini, an OpenAI-compatible gateway)
+    and the PSIRT example's direct Anthropic API."""
+    targets = []
+    for path in (ROOT / "config" / "mara.yaml", FIXTURE_PANEL):
+        targets += me.targets_from_config(load_config(path, Workspace(ROOT)))
+    assert {t.provider for t in targets} == {"bedrock", "gemini", "openai_compatible", "anthropic"}
+    return targets
+
+
+def _probe_options(argv):
+    return json.loads(argv[argv.index("--probe_options") + 1])
+
+
+def test_promptinject_is_not_allowed_to_overwrite_the_max_tokens_of_the_generator():
+    """promptinject sets the generator's max_tokens from each prompt before every call, over the limit of the generator
+    options, for the attributes in the probe's generation_params. Taking max_tokens out of them keeps the limit."""
+    for target in _garak_targets():
+        argv, _ = me.garak_command(target, ["promptinject", "dan"], "/tmp/out")
+        assert "--probe_options" in argv, target.provider
+        options = _probe_options(argv)
+        assert list(options) == ["promptinject"]
+        assert sorted(options["promptinject"]) == ["HijackHateHumans", "HijackKillHumans", "HijackLongPrompt"]
+        for params in options["promptinject"].values():
+            assert params["generation_params"] and "max_tokens" not in params["generation_params"], target.provider
+
+
+def test_only_the_probes_of_promptinject_get_probe_options():
+    for target in _garak_targets():
+        argv, _ = me.garak_command(target, ["dan", "encoding"], "/tmp/out")
+        assert "--probe_options" not in argv, target.provider
+        # one class of the module, as the 2026-11-11 measurement named it, is a promptinject probe all the same
+        argv, _ = me.garak_command(target, ["dan", "promptinject.HijackHateHumans"], "/tmp/out")
+        assert "--probe_options" in argv, target.provider
 
 
 def test_cyberseceval_keys_never_reach_the_process_command_line(tmp_path):
@@ -329,6 +376,56 @@ def test_plan_names_the_ca_file_by_an_absolute_path_whatever_out_is(tmp_path):
                        capture_output=True, text=True, cwd=tmp_path)
     assert r.returncode == 0, r.stderr
     assert f"SSL_CERT_FILE={tmp_path / 'ops' / 'run' / 'ca-glm.pem'} " in r.stdout
+
+
+def test_a_planned_garak_command_pasted_into_a_shell_is_the_argv_garak_command_builds(tmp_path):
+    # `plan` prints commands to paste: --probe_options is JSON, whose quotes a shell strips unless the command is quoted.
+    # (The CyberSecEval commands keep `$DATASETS` and `${KEY}` for the shell to expand, so they are printed as they are.)
+    cfg = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
+    out = tmp_path / "ops" / "run"
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(ROOT / "config" / "mara.yaml"), "plan", "--out", str(out)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    for target in me.targets_from_config(cfg):
+        printed = shlex.split(lines[lines.index(f"# {target.family}: garak") + 1])
+        while re.match(r"[A-Z][A-Z0-9_]*=", printed[0]):  # the environment the command is given: OPENAICOMPATIBLE_API_KEY=$KEY ...
+            printed.pop(0)
+        assert printed == me.garak_command(target, cfg.model_eval.garak_probes, out)[0], target.family
+
+
+def test_the_garak_command_run_prints_is_the_one_it_executes(tmp_path, monkeypatch, capsys):
+    import model_eval as script
+
+    monkeypatch.setenv("GEMINI_API_KEY", "k" * 32)
+    monkeypatch.setenv("GLM_LOCAL_KEY", "k" * 32)
+    executed = []
+
+    def fake_run(argv, **kwargs):
+        if argv[-1] == "--version":
+            return subprocess.CompletedProcess(argv, 0, "garak v0.17.1", "")
+        executed.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(script.subprocess, "run", fake_run)
+    monkeypatch.setattr(script, "_tls_env", lambda target, out: {})  # the GLM family's CA file lives under ~/.mara
+    a = argparse.Namespace(config=ROOT / "config" / "mara.yaml", workspace=Workspace(ROOT), out=tmp_path / "ops" / "run",
+                           tool="garak", datasets="")
+    script.cmd_run(a)
+    printed = [shlex.split(line) for line in capsys.readouterr().out.splitlines() if line.startswith("+ [")]
+    assert len(printed) == len(executed) == 3
+    for line, argv in zip(printed, executed, strict=True):
+        assert line[3:] == argv[1:] and "--probe_options" in argv  # "+", "[family]", "python3" against this interpreter
+
+
+def test_the_garak_command_the_report_records_is_the_argv_that_ran(tmp_path):
+    target = me.EvalTarget("anthropic", "claude-reviewer", "global.anthropic.claude-opus-5-5", "bedrock", "", "", "ap-southeast-1")
+    argv, _ = me.garak_command(target, ["promptinject"], tmp_path)
+    results = [me.FamilyResult(target)]
+    summary = me.summarize(results, date=TODAY, mode="dry-run", th=me.Thresholds(), garak_version="0.17.1", cse_ref="4be64c3a2444",
+                           probes=["promptinject"])
+    lines = me.render_garak_report(summary, results, {"anthropic": argv}).splitlines()
+    assert shlex.split(lines[lines.index("# anthropic") + 1]) == argv
 
 
 def test_the_ca_file_run_sets_is_written_where_its_absolute_path_says(tmp_path, monkeypatch):

@@ -59,6 +59,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -107,10 +108,16 @@ def targets_from_config(cfg: MaraConfig) -> list[EvalTarget]:
 SUPPORTED_PROVIDERS = {"garak": ("openai_compatible", "anthropic", "bedrock", "gemini"),
                        "cyberseceval": ("openai_compatible", "anthropic", "gemini")}
 GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
-# garak's generators default to max_tokens 150. Gemini 3.8 Flash and GLM-5.3 spend that on reasoning and return empty
-# content, which every detector scores as a pass: the 2026-10-08 smoke run had 0/80 and 20/80 non-empty outputs. Claude
-# on Bedrock answered within the default (70/80; the 10 empty were the blank prompt), so it keeps it.
+# garak's generators default to max_tokens 150, which the reasoning models of the panel (Claude Opus 5.5, Gemini 3.8 Flash,
+# GLM) spend on reasoning: the reply has no text, garak records an empty output, and a detector scores it as a pass. All
+# three families get this limit.
 GARAK_REASONING_MAX_TOKENS = 4096
+# promptinject sets the generator's max_tokens from each prompt (60 to 256) before every call, over the limit above. It does
+# that for the attributes in the probe's generation_params, so these options list the others. The classes are the three the
+# module ships active; a Full class named in garak_probes would get the option but no entry here.
+PROMPTINJECT_PROBE_OPTIONS = {"promptinject": {
+    cls: {"generation_params": ["temperature", "top_p", "frequency_penalty", "presence_penalty"]}
+    for cls in ("HijackHateHumans", "HijackKillHumans", "HijackLongPrompt")}}
 # garak's OpenAICompatible default stop sequences ["#", ";"] end a chat model's answer at its first Markdown heading:
 # GLM answered "Liberté, égalité, fraternité" with 0 characters with them and 1412 without. Gemini's OpenAI-compatible
 # endpoint also answers HTTP 400 "Unknown name frequency_penalty" to garak's default request. garak records both as
@@ -143,7 +150,7 @@ def garak_generator_options(target: EvalTarget) -> dict | None:
                 "suppressed_params": GEMINI_SUPPRESSED_PARAMS if target.provider == "gemini" else CHAT_SUPPRESSED_PARAMS}
         return {"openai": {"OpenAICompatible": opts}}
     if target.provider == "bedrock":
-        opts = {"suppressed_params": ["temperature", "top_p"]}
+        opts = {"suppressed_params": ["temperature", "top_p"], "max_tokens": GARAK_REASONING_MAX_TOKENS}
         if target.region:
             opts["region"] = target.region
         return {"bedrock": {"BedrockGenerator": opts}}
@@ -189,6 +196,8 @@ def garak_command(target: EvalTarget, probes: list[str], out_dir: Path | str,
         env = {ANTHROPIC_KEY_ENV: f"${key_env(target.provider, target.api_key_env)}"}
     else:
         raise ValueError(f"{target.name}: no garak generator for provider {target.provider}")
+    if any(p == "promptinject" or p.startswith("promptinject.") for p in probes):
+        argv += ["--probe_options", json.dumps(PROMPTINJECT_PROBE_OPTIONS, separators=(",", ":"))]
     return argv, env
 
 
@@ -477,7 +486,7 @@ def render_garak_report(summary: dict, results: list[FamilyResult], commands: di
             for det, c in sorted(dets.items()):
                 L.append(f"| {probe} | {det} | {c['passed']} | {c['total']} | {_fmt(c['pass_rate'])} |")
     L += ["", "## 執行指令（金鑰只從環境變數取，不在此記錄）", "", "```"]
-    L += [f"# {fam}\n{' '.join(argv)}" for fam, argv in commands.items()] + ["```", ""]
+    L += [f"# {fam}\n{shlex.join(argv)}" for fam, argv in commands.items()] + ["```", ""]
     for r in results:
         for n in r.notes:
             L.append(f"- {r.target.family}: {n}")

@@ -19,6 +19,7 @@ import datetime as dt
 import json
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 import sys
@@ -79,7 +80,7 @@ def cmd_plan(a: argparse.Namespace) -> int:
     print(f"# garak {cfg.model_eval.garak_version}, probes {cfg.model_eval.garak_probes}; CyberSecEval {cfg.model_eval.cyberseceval_ref}")
     for fam, argv in garak_cmds.items():
         env = " ".join(f"{k}={v}" for k, v in envs[fam].items())
-        print(f"\n# {fam}: garak\n{env + ' ' if env else ''}{' '.join(argv)}")
+        print(f"\n# {fam}: garak\n{env + ' ' if env else ''}{shlex.join(argv)}")
         if isinstance(cse_cmds[fam], str):
             print(f"# {fam}: CyberSecEval SKIPPED, {cse_cmds[fam]}")
             continue
@@ -118,7 +119,7 @@ def cmd_run(a: argparse.Namespace) -> int:
             for k, v in env_map.items():
                 env[k] = me.resolve_key(v.lstrip("$"))
             env.update(_tls_env(t, a.out))
-            print(f"+ [{t.family}] {' '.join(argv)}")
+            print(f"+ [{t.family}] {shlex.join(argv)}")
             r = subprocess.run(_this_python(argv), env=env)
             rc |= r.returncode
     if a.tool in ("cyberseceval", "all"):

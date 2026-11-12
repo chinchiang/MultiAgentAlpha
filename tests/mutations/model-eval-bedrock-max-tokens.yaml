@@ -1,0 +1,65 @@
+# the max_tokens garak is given (mara.model_eval.garak_generator_options and garak_command): Opus 5.5 spends garak's default
+# of 150 on a reasoningContent block and answers with no text block, so 86 % of a measured run was empty; and promptinject
+# overwrites the generator's max_tokens with its own 60 to 256 unless --probe_options takes it out of generation_params
+focused:
+- tests/test_model_eval.py
+mutations:
+- name: the Bedrock options leave garak its default max_tokens
+  file: src/mara/model_eval.py
+  old: '        opts = {"suppressed_params": ["temperature", "top_p"], "max_tokens": GARAK_REASONING_MAX_TOKENS}'
+  new: '        opts = {"suppressed_params": ["temperature", "top_p"]}'
+- name: the Bedrock options give max_tokens the old garak default of 150
+  file: src/mara/model_eval.py
+  old: '        opts = {"suppressed_params": ["temperature", "top_p"], "max_tokens": GARAK_REASONING_MAX_TOKENS}'
+  new: '        opts = {"suppressed_params": ["temperature", "top_p"], "max_tokens": 150}'
+- name: the Bedrock options give max_tokens a limit other than the shared one
+  file: src/mara/model_eval.py
+  old: '        opts = {"suppressed_params": ["temperature", "top_p"], "max_tokens": GARAK_REASONING_MAX_TOKENS}'
+  new: '        opts = {"suppressed_params": ["temperature", "top_p"], "max_tokens": GARAK_REASONING_MAX_TOKENS // 2}'
+- name: the Bedrock options give max_tokens only to a target with a region
+  file: src/mara/model_eval.py
+  old: |2-
+            opts = {"suppressed_params": ["temperature", "top_p"], "max_tokens": GARAK_REASONING_MAX_TOKENS}
+            if target.region:
+                opts["region"] = target.region
+  new: |2-
+            opts = {"suppressed_params": ["temperature", "top_p"]}
+            if target.region:
+                opts["region"] = target.region
+                opts["max_tokens"] = GARAK_REASONING_MAX_TOKENS
+- name: promptinject is given no --probe_options
+  file: src/mara/model_eval.py
+  old: '        argv += ["--probe_options", json.dumps(PROMPTINJECT_PROBE_OPTIONS, separators=(",", ":"))]'
+  new: '        pass'
+- name: --probe_options is given whatever the probes are
+  file: src/mara/model_eval.py
+  old: '    if any(p == "promptinject" or p.startswith("promptinject.") for p in probes):'
+  new: '    if True:'
+- name: only a probe named exactly promptinject gets --probe_options
+  file: src/mara/model_eval.py
+  old: '    if any(p == "promptinject" or p.startswith("promptinject.") for p in probes):'
+  new: '    if any(p == "promptinject" for p in probes):'
+- name: --probe_options names only one promptinject class
+  file: src/mara/model_eval.py
+  old: '    for cls in ("HijackHateHumans", "HijackKillHumans", "HijackLongPrompt")}'
+  new: '    for cls in ("HijackHateHumans",)}'
+- name: the promptinject generation_params keep max_tokens
+  file: src/mara/model_eval.py
+  old: '    cls: {"generation_params": ["temperature", "top_p", "frequency_penalty", "presence_penalty"]}'
+  new: '    cls: {"generation_params": ["temperature", "top_p", "frequency_penalty", "presence_penalty", "max_tokens"]}'
+- name: plan prints a garak command joined by spaces
+  file: scripts/model_eval.py
+  old: "{env + ' ' if env else ''}{shlex.join(argv)}"
+  new: "{env + ' ' if env else ''}{' '.join(argv)}"
+- name: the direct Anthropic generator is given no --probe_options
+  file: src/mara/model_eval.py
+  old: '    if any(p == "promptinject" or p.startswith("promptinject.") for p in probes):'
+  new: '    if target.provider != "anthropic" and any(p == "promptinject" or p.startswith("promptinject.") for p in probes):'
+- name: run prints the garak command joined by spaces
+  file: scripts/model_eval.py
+  old: 'print(f"+ [{t.family}] {shlex.join(argv)}")'
+  new: 'print(f"+ [{t.family}] {'' ''.join(argv)}")'
+- name: the report records the garak command joined by spaces
+  file: src/mara/model_eval.py
+  old: 'L += [f"# {fam}\n{shlex.join(argv)}" for fam, argv in commands.items()]'
+  new: 'L += [f"# {fam}\n{'' ''.join(argv)}" for fam, argv in commands.items()]'
