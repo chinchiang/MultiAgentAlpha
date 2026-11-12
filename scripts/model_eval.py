@@ -44,7 +44,7 @@ def _plan(cfg, out_dir: Path, datasets: str, judge: str) -> tuple[dict, dict, di
         if me.unsupported(t):
             continue
         argv, env = me.garak_command(t, cfg.model_eval.garak_probes, out_dir)
-        if t.ca_bundle:
+        if t.ca_bundle or cfg.model_eval.judge_ca_bundle:
             env = {**env, "SSL_CERT_FILE": str(_ca_path(t, out_dir))}
         garak_cmds[t.family], envs[t.family] = argv, env
         why = me.unsupported(t, "cyberseceval")
@@ -63,9 +63,10 @@ def _ca_path(t: me.EvalTarget, out_dir: Path) -> Path:
     return out_dir.absolute() / f"ca-{t.slug}.pem"
 
 
-def _tls_env(t: me.EvalTarget, out_dir: Path) -> dict[str, str]:
-    """SSL_CERT_FILE for a target behind an internal CA (public roots + its ca_bundle), else nothing."""
-    pem = me.ca_bundle_pem(t)
+def _tls_env(t: me.EvalTarget, out_dir: Path, judge_ca_bundle: str) -> dict[str, str]:
+    """SSL_CERT_FILE for a target or a CyberSecEval judge behind an internal CA (public roots + their ca_bundle files), else nothing.
+    `judge_ca_bundle` is empty when the config names none."""
+    pem = me.ca_bundle_pem(t, judge_ca_bundle)
     if pem is None:
         return {}
     path = _ca_path(t, out_dir)
@@ -118,7 +119,7 @@ def cmd_run(a: argparse.Namespace) -> int:
             env = dict(os.environ)
             for k, v in env_map.items():
                 env[k] = me.resolve_key(v.lstrip("$"))
-            env.update(_tls_env(t, a.out))
+            env.update(_tls_env(t, a.out, cfg.model_eval.judge_ca_bundle))
             print(f"+ [{t.family}] {shlex.join(argv)}")
             r = subprocess.run(_this_python(argv), env=env)
             rc |= r.returncode
@@ -134,7 +135,7 @@ def cmd_run(a: argparse.Namespace) -> int:
                 continue
             env_name = me.target_key_env(t)
             key = me.resolve_key(env_name) if env_name else me.NO_KEY
-            tls = _tls_env(t, a.out)
+            tls = _tls_env(t, a.out, cfg.model_eval.judge_ca_bundle)
             for bench, argv in me.cyberseceval_commands(t, a.datasets, a.out, judge, key).items():
                 shown = [x.replace(key, me.MASK).replace(judge, "$" + cfg.model_eval.judge_llm_env) for x in argv]
                 print(f"+ [{t.family}] {bench}: {' '.join(shown)}")

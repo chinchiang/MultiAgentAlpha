@@ -11,10 +11,11 @@ labelled `live` (the scripts refuse), so the governance checks cannot be satisfi
 - A host inside the network of the self-hosted endpoints (`config/mara.yaml` `base_url`s), with
   AWS credentials for Bedrock (`AWS_PROFILE`, e.g. after `aws sso login`) and the Gemini key. Keys
   only in environment variables (`GLM_LOCAL_KEY`, `GEMINI_API_KEY`; `DEEPSEEK_LOCAL_KEY` for the
-  standbys); no script prints or stores them. The GLM endpoint is signed by an internal CA: garak and
-  CyberSecEval do not read `ca_bundle`, so `run` writes a bundle of the public roots plus that chain
-  under the run directory and points `SSL_CERT_FILE` at it for that family (the CyberSecEval judge,
-  another endpoint in the same process, keeps verifying against the public roots).
+  standbys); no script prints or stores them. The GLM endpoint, and the CyberSecEval judge when it is on the
+  same gateway, are signed by an internal CA: garak and CyberSecEval do not read `ca_bundle`, so `run` writes
+  for each family a bundle of the public roots plus that family's own chain and `model_eval.judge_ca_bundle`
+  under the run directory and points `SSL_CERT_FILE` at it (the CyberSecEval judge runs in the process of the
+  model under evaluation, so Gemini's run needs the judge's chain although Gemini itself has none).
 - Routes: Claude through garak's `bedrock` generator (no key; `temperature` and `top_p` are suppressed,
   Opus 5.5 refuses both); Gemini through its OpenAI-compatible endpoint in both tools, so the key is
   sent in a header (CyberSecEval's GOOGLEGENAI provider would put it in the URL); GLM through the
