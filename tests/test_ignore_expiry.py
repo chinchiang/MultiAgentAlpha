@@ -15,21 +15,30 @@ D = dt.date
 
 
 def test_closure_exceptions_are_the_same_in_osv_and_trivy():
-    # Every closure config (the isolated model-evaluation closure, and the semgrep tool closure whose
-    # pyjwt is pinned upstream) must appear in tools/trivyignore.yaml with the same ids and expiries, or
-    # one scanner fails while the other passes.
+    # Every closure config (the isolated model-evaluation closure, the CyberSecEval closure, and the semgrep tool
+    # closure whose pyjwt is pinned upstream) must appear in tools/trivyignore.yaml with the same ids and expiries, or
+    # one scanner fails while the other passes. An advisory in two closures (semgrep is in both of the last two) is one
+    # trivyignore entry whose paths name both lockfiles, and the two configs give it the same expiry.
+    import yaml
+
     trivy: dict[str, object] = {}
+    trivy_paths: dict[str, set[str]] = {}
     for vid, until in ie.trivy_entries(ROOT / "tools" / "trivyignore.yaml"):
         assert vid not in trivy, f"{vid} listed twice in trivyignore.yaml"
         trivy[vid] = until
-    osv_ids: set[str] = set()
-    for name in ("osv-model-eval.toml", "osv-semgrep.toml"):
+    for entry in yaml.safe_load((ROOT / "tools" / "trivyignore.yaml").read_text(encoding="utf-8"))["vulnerabilities"]:
+        trivy_paths[str(entry["id"])] = set(entry["paths"])
+    lockfile_of = {"osv-model-eval.toml": "tools/model-eval-requirements.txt",
+                   "osv-cyberseceval.toml": "tools/cyberseceval-requirements.txt",
+                   "osv-semgrep.toml": "tools/semgrep-requirements.txt"}
+    osv_until: dict[str, object] = {}
+    for name, lock in lockfile_of.items():
         for vid, until in ie.osv_entries(ROOT / "tools" / name):
             assert until is not None, f"{name}: {vid} has no expiry"
-            assert vid not in osv_ids, f"{vid} listed in two osv configs"
-            osv_ids.add(vid)
+            assert osv_until.setdefault(vid, until) == until, f"{vid}: two osv configs give it different expiries"
             assert trivy.get(vid) == until, f"{vid}: osv expiry {until} but trivy expiry {trivy.get(vid)}"
-    assert set(trivy) == osv_ids, f"trivyignore ids with no osv entry: {sorted(set(trivy) - osv_ids)}"
+            assert lock in trivy_paths[vid], f"{vid}: trivyignore.yaml does not scope it to {lock}"
+    assert set(trivy) == set(osv_until), f"trivyignore ids with no osv entry: {sorted(set(trivy) - set(osv_until))}"
 
 
 def test_every_exception_has_an_expiry_and_the_main_osv_list_stays_empty():

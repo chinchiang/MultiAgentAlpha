@@ -12,16 +12,18 @@ vulnerabilities:
   # semgrep 1.179.0 relaxed the pyjwt[crypto]~=2.13.0 pin, the closure relocked to pyjwt 2.15.1, and the
   # fixed releases (2.14.0 / 2.15.0) cover every advisory. See tools/osv-semgrep.toml.
   - id: CVE-2026-59951
-    paths: ["tools/semgrep-requirements.txt"]
+    paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
       mcp 1.29.0 in the semgrep closure (GHSA-84m7-p3x7-pcfv, published 2026-10-14): unbounded session
       accumulation in the StreamableHTTP transport, fixed in mcp 1.30.0. semgrep 1.179.0 through 1.181.0
       (the newest release, checked 2026-10-16) pin mcp==1.29.0, so relocking cannot reach the fix. MARA runs
       semgrep scan only and never starts semgrep's MCP server. Mirrors tools/osv-semgrep.toml; re-check at
       a semgrep release that relaxes the pin.
+      The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
+      mirrors tools/osv-cyberseceval.toml.
     expired_at: 2026-12-31
   - id: CVE-2026-114603
-    paths: ["tools/semgrep-requirements.txt"]
+    paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
       opentelemetry-api 1.37.0 in the semgrep closure (GHSA-xcq7-p3pf-p88h, published 2026-10-22): unbounded
       tracestate parsing, fixed in opentelemetry-api 1.45.1. semgrep 1.179.0 through 1.182.1 (the newest
@@ -29,32 +31,57 @@ vulnerabilities:
       extracts a trace context only under --trace and never from a tracestate; MARA runs semgrep scan without
       --trace and passes it no SEMGREP_* or OTEL_* variable. Mirrors tools/osv-semgrep.toml; re-check at a
       semgrep release that relaxes the pin.
+      The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
+      mirrors tools/osv-cyberseceval.toml.
     expired_at: 2026-12-31
   - id: CVE-2026-116684
-    paths: ["tools/semgrep-requirements.txt"]
+    paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
       mcp 1.29.0 in the semgrep closure (GHSA-w4fh-qvv9-3v23, published 2026-10-27): server bearer-token authentication accepts a token issued for another
       resource server; fixed in mcp 1.30.0.
       semgrep 1.179.0 through 1.182.1 (the newest release, checked 2026-10-28) pin mcp==1.29.0, so
       relocking cannot reach the fix. Only semgrep mcp builds the auth settings and token verifier; MARA runs semgrep scan only. Mirrors tools/osv-semgrep.toml; re-check at a semgrep
       release that relaxes the pin.
+      The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
+      mirrors tools/osv-cyberseceval.toml.
     expired_at: 2026-12-31
   - id: CVE-2026-116685
-    paths: ["tools/semgrep-requirements.txt"]
+    paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
       mcp 1.29.0 in the semgrep closure (GHSA-5h93-6whr-6q8j, published 2026-10-27): client HTTP transports follow cross-origin redirects carrying custom
       headers and bodies; fixed in mcp 1.30.0.
       semgrep 1.179.0 through 1.182.1 (the newest release, checked 2026-10-28) pin mcp==1.29.0, so
       relocking cannot reach the fix. semgrep contains no MCP client code, and MARA runs semgrep scan only. Mirrors tools/osv-semgrep.toml; re-check at a semgrep
       release that relaxes the pin.
+      The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
+      mirrors tools/osv-cyberseceval.toml.
     expired_at: 2026-12-31
   - id: CVE-2026-116686
-    paths: ["tools/semgrep-requirements.txt"]
+    paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
       mcp 1.29.0 in the semgrep closure (GHSA-rwrf-2pqf-9j8j, published 2026-10-27): the client fetches server-chosen $ref URLs while validating tool output
       schemas; fixed in mcp 1.30.0.
       semgrep 1.179.0 through 1.182.1 (the newest release, checked 2026-10-28) pin mcp==1.29.0, so
       relocking cannot reach the fix. semgrep contains no MCP client code, and MARA runs semgrep scan only. Mirrors tools/osv-semgrep.toml; re-check at a semgrep
       release that relaxes the pin.
+      The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
+      mirrors tools/osv-cyberseceval.toml.
+    expired_at: 2026-12-31
+  - id: CVE-2026-59890
+    paths: ["tools/cyberseceval-requirements.txt"]
+    statement: >-
+      setuptools 81.0.0 in the CyberSecEval closure (GHSA-h35f-9h28-mq5c): the MANIFEST.in exclusion bypass in an sdist through
+      a Unicode normalization collision on macOS APFS/HFS+, fixed in setuptools 83.0.0. setuptools 82.0.0 removed pkg_resources,
+      which CyberSecEval imports (benchmark/autopatching_benchmark.py, arvo_utils.py), so relocking cannot reach the fix. The
+      closure is installed from wheels on Linux: setuptools builds no sdist in it. Mirrors tools/osv-cyberseceval.toml;
+      re-check when CyberSecEval stops importing pkg_resources.
+    expired_at: 2026-12-31
+  - id: GHSA-xmj3-9gf7-h52w
+    paths: ["tools/cyberseceval-requirements.txt"]
+    statement: >-
+      setuptools 81.0.0 in the CyberSecEval closure: Windows path escape through namespace_packages.txt during a legacy wheel
+      installation, fixed in setuptools 84.1.0. The closure stays on 81.0.0 because 82.0.0 removed pkg_resources, which
+      CyberSecEval imports. It is installed with pip from wheels on Linux, never on Windows. Mirrors tools/osv-cyberseceval.toml;
+      re-check when CyberSecEval stops importing pkg_resources.
     expired_at: 2026-12-31
 misconfigurations: []

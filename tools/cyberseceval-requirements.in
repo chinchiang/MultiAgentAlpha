@@ -1,0 +1,30 @@
+# Requirements of CyberSecEval (meta-llama/PurpleLlama, CybersecurityBenchmarks) for `scripts/model_eval.py run --tool cyberseceval`
+# (the prompt-injection and mitre-frr benchmarks). The hash-pinned closure lives in tools/cyberseceval-requirements.txt;
+# regenerate it with
+#   python3 scripts/relock_requirements.py --in tools/cyberseceval-requirements.in --out tools/cyberseceval-requirements.txt
+# Install it in a venv of its own (its exact pins disagree with tools/model-eval-requirements.txt, e.g. boto3, openai):
+#   python3 -m pip install --require-hashes --only-binary=:all: -r tools/cyberseceval-requirements.txt
+# The list is CybersecurityBenchmarks/requirements.txt at the commit config/mara.yaml model_eval.cyberseceval_ref pins
+# (4be64c3a2444), except the lines marked below; moving the pin means re-reading that file.
+openai==1.58.1
+pyyaml==6.0.1
+sacrebleu==2.0.0
+tqdm==4.66.3
+typing-extensions>=4.13.0  # upstream pin 4.11.0; langchain-core 1.3.3 and later need langchain-protocol, which needs >=4.13.0
+tree-sitter==0.24.0
+tree-sitter-cpp==0.23.4
+async_lru==2.0.5
+boto3==1.37.31
+pdf2image==1.17.0
+# The upstream file pins these five to a version that osv-scanner reports advisories for; a floor replaces the exact pin,
+# as in tools/model-eval-requirements.in. setuptools is the exception (see its line):
+pillow>=13.0.0  # upstream pin 12.2.0; the advisories against it are fixed in 12.3.0 and 13.0.0
+pypdf>=6.21.4,<7  # upstream pin 6.10.2; the last advisory against it is fixed in 6.21.4; <7: stay in upstream's major version
+paramiko>=5.0.0  # GHSA-r374-rxx8-8654 / CVE-2026-44405 (rsakey.py allows SHA-1), fixed in 5.0.0; upstream pin 3.4.0
+langchain-core>=1.3.3  # GHSA-pjwx-r37v-7724 / CVE-2026-44843 (unsafe deserialization through `load()` allowlists), fixed in 1.3.3; upstream pin 1.2.28
+urllib3>=2.8.0  # 1.26.20, which semgrep 1.51.0 held it at, has advisories (GHSA-8988-9cw3-xx77, GHSA-vxq7-64xx-v4gw and others) fixed in 2.6.0 to 2.8.0
+setuptools==81.0.0  # the newest release that still has pkg_resources, which benchmark/autopatching_benchmark.py and arvo_utils.py import (removed in 82.0.0)
+semgrep==1.179.0  # upstream pins 1.51.0, which requires urllib3 ~=1.26 and would hold urllib3 at 1.26.20; this is the version
+#   of tools/semgrep-requirements.txt. CodeShield's insecure-code detector looks up semgrep-core when it is imported
+#   (CodeShield/insecure_code_detector/oss.py), and benchmark/run.py imports instruct_or_autocomplete_benchmark.py, which
+#   imports CodeShield; the benchmarks that run semgrep (instruct, autocomplete) are not run here.
