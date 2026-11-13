@@ -389,30 +389,42 @@ def _holds_no_answer(value: object) -> bool:
     return value is None or (isinstance(value, str) and (not value.strip() or value.strip().startswith(CSE_FAILED_QUERY)))
 
 
-def parse_cse_responses(path: Path | str, expected: int, fields: tuple[str, ...]) -> dict:
-    """What a CyberSecEval response file (the judge's for prompt injection, mitre_frr_responses.json) holds against the
-    `expected` number of rows: `rows` it has, `empty` of them with a field of `fields` that is missing, None, blank or
-    CSE_FAILED_QUERY, `absent` rows it lacks (a query that failed all its retries is logged and its row is not written),
-    `usable` rows, and `empty_rate`, the share of the rows it should have (`expected`, or the file's own rows when it has
-    more) that are not usable: rows beyond `expected` do not make up for empty ones. The stat file cannot show any of this: a
-    benchmark drops the row of an empty response from its totals or scores it as no injection or as no refusal, and a missing
-    row only shrinks its total."""
+def _of_model(value: object, model: str) -> bool:
+    """Whether a response row's `model` names `model`: exactly, or as the last `::` part of a `PROVIDER::model` value. Unlike
+    _find_model_entry, which binds no stat when two `PROVIDER::model` keys match, every matching row counts, so the rows of
+    `OPENAI::m` and `ANTHROPIC::m` both count for `m` (test_rows_of_two_providers_of_one_model_both_count_for_it): a row holds
+    `llm.model`, the bare name, so a file of one run tells its models apart by name only. A `model` that is not text names none."""
+    return isinstance(value, str) and (value == model or value.rsplit("::", 1)[-1] == model)
+
+
+def parse_cse_responses(path: Path | str, model: str, expected: int, fields: tuple[str, ...]) -> dict:
+    """What a CyberSecEval response file (the judge's for prompt injection, mitre_frr_responses.json) holds for `model` against
+    the `expected` number of rows: `rows` of that model it has (a row whose `model` names another, or that has none, is not
+    counted: one run given several models writes all their rows into one file), `empty` of them with a field of `fields` that
+    is missing, None, blank or CSE_FAILED_QUERY, `absent` rows of that model it lacks (a query that failed all its retries is logged and its
+    row is not written), `usable` rows, and `empty_rate`, the share of the rows it should have (`expected`, or the model's own
+    rows when it has more) that are not usable: rows beyond `expected` do not make up for empty ones. The stat file cannot show
+    any of this: a benchmark drops the row of an empty response from its totals or scores it as no injection or as no refusal,
+    and a missing row only shrinks its total. Every row of the file, of any model, must be an object whose `fields` are text or
+    missing, or the file is refused; its `model` is not checked (_of_model)."""
     if expected < 1:
         raise ValueError(f"{path}: expected must be positive, got {expected}")
     rows = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(rows, list):
         raise ValueError(f"{path}: not a list of responses")
-    empty = 0
+    model_rows = []
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
             raise ValueError(f"{path}: row {i} is not an object")
         for key in fields:
             if not (row.get(key) is None or isinstance(row[key], str)):
                 raise ValueError(f"{path}: row {i} field {key!r} is not text")
-        empty += any(_holds_no_answer(row.get(key)) for key in fields)
-    usable = len(rows) - empty
-    total = max(expected, len(rows))  # a file with more rows than the dataset (pass_k above 1) is judged over the rows it has
-    return {"expected": expected, "rows": len(rows), "empty": empty, "absent": max(expected - len(rows), 0), "usable": usable,
+        if _of_model(row.get("model"), model):
+            model_rows.append(row)
+    empty = sum(1 for row in model_rows if any(_holds_no_answer(row.get(key)) for key in fields))
+    usable = len(model_rows) - empty
+    total = max(expected, len(model_rows))  # a model with more rows than the dataset (pass_k above 1) is judged over the rows it has
+    return {"expected": expected, "rows": len(model_rows), "empty": empty, "absent": max(expected - len(model_rows), 0), "usable": usable,
             "empty_rate": (total - usable) / total}
 
 

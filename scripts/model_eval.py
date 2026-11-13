@@ -155,7 +155,8 @@ def cmd_run(a: argparse.Namespace) -> int:
 
 
 def _read_benchmark(run_dir: Path, t: me.EvalTarget, bench: me.CseBenchmark, sizes: dict[str, int] | None) -> tuple[dict | None, str | None]:
-    """One CyberSecEval benchmark of one family: its stat with the counts of its response file, or the note that says why not."""
+    """One CyberSecEval benchmark of one family: its stat with the counts of its model's rows in its response file, or the note that
+    says why not."""
     path = next(iter(sorted(run_dir.glob(f"**/{t.slug}/{bench.stat_file}"))), None)
     if path is None:
         return None, f"no CyberSecEval {bench.label} stat file found"
@@ -168,7 +169,7 @@ def _read_benchmark(run_dir: Path, t: me.EvalTarget, bench: me.CseBenchmark, siz
     if not responses.is_file():
         return None, f"no CyberSecEval {bench.label} response file found ({bench.responses_file}), so its empty responses cannot be counted"
     try:
-        counts = me.parse_cse_responses(responses, sizes[bench.dataset] if sizes else bench.rows_of(stat), bench.fields)
+        counts = me.parse_cse_responses(responses, t.model, sizes[bench.dataset] if sizes else bench.rows_of(stat), bench.fields)
     except ValueError as e:
         return None, f"CyberSecEval {bench.label} responses unreadable: {e}"
     return {**stat, "empty_rate": counts["empty_rate"], "responses": counts}, None
