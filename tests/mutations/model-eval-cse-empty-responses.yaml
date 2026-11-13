@@ -109,17 +109,17 @@ mutations:
 - name: the prompt-injection cell shows the refusal metric's share
   file: src/mara/model_eval.py
   old: |2-
-    {_percent(pi.get('empty_rate'))}
+    {_empty_cell(pi)}
   new: |2-
-    {_percent(fr.get('empty_rate'))}
+    {_empty_cell(fr)}
 - name: a metric over the limit is given no line saying why
   file: src/mara/model_eval.py
   old: |2-
-                               f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，{what}不計入（missing）")
         L += ([""] + why) if why else []
+        L += ["", "## 執行指令（`"
   new: |2-
-                               f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，{what}不計入（missing）")
         L += []
+        L += ["", "## 執行指令（`"
 - name: the line saying why counts the rows the file lacks as empty ones
   file: src/mara/model_eval.py
   old: |2-

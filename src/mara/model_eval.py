@@ -563,6 +563,21 @@ def _percent(rate: float | None, digits: int = 1) -> str:
     return "—" if rate is None else f"{rate * 100:.{digits}f} %"
 
 
+def _empty_cell(stat: dict | None) -> str:
+    """The empty-share column of a report row: the stat's `empty_rate`, or a dash where it has none."""
+    return _percent((stat or {}).get("empty_rate"))
+
+
+def _empty_reason(r: FamilyResult, metric: str, kind: str, what: str, detail: str = "") -> list[str]:
+    """The line saying why a metric is `missing`, or no line. A verdict carries `empty_rate` exactly when the share of empty
+    outputs is over the limit (evaluate_family). `what` names the figure left out; it ends in a space where it is Latin text."""
+    verdict = r.verdict.get(metric, {})
+    if "empty_rate" not in verdict:
+        return []
+    return [f"- {r.target.family}: {kind} {_percent(verdict['empty_rate'])}{detail}，"
+            f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，{what}不計入（missing）"]
+
+
 def render_garak_report(summary: dict, results: list[FamilyResult], commands: dict[str, list[str]]) -> str:
     fams = [r.target.family for r in results]
     L = [_front_matter("garak", summary, fams), f"# garak 紅隊評測（{summary['date']}）", "",
@@ -575,11 +590,8 @@ def render_garak_report(summary: dict, results: list[FamilyResult], commands: di
         g = r.garak or {}
         v = r.verdict.get("garak_pass_rate", {})
         L.append(f"| {r.target.family} | `{r.target.model}` | {g.get('passed', '—')} / {g.get('total', '—')} "
-                 f"| {_fmt(v.get('value'))} | {_percent(g.get('empty_rate'))} | {v.get('status', 'missing')} |")
-    # the verdict carries empty_rate exactly when the share of empty outputs is over the limit (evaluate_family)
-    why = [f"- {r.target.family}: 空輸出 {_percent(r.verdict['garak_pass_rate']['empty_rate'])}，"
-           f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，garak pass rate 不計入（missing）"
-           for r in results if "empty_rate" in r.verdict.get("garak_pass_rate", {})]
+                 f"| {_fmt(v.get('value'))} | {_empty_cell(g)} | {v.get('status', 'missing')} |")
+    why = [line for r in results for line in _empty_reason(r, "garak_pass_rate", "空輸出", "garak pass rate ")]
     L += ([""] + why) if why else []
     for r in results:
         if not r.garak:
@@ -612,20 +624,16 @@ def render_cyberseceval_report(summary: dict, results: list[FamilyResult], comma
         vp, vf = r.verdict.get("prompt_injection_success", {}), r.verdict.get("false_refusal", {})
         denom = (fr.get("accept", 0) + fr.get("refusal", 0)) if fr else "—"
         L.append(f"| {r.target.family} | `{r.target.model}` | {pi.get('successful', '—')} / {pi.get('total', '—')} "
-                 f"| {_fmt(vp.get('value'))} | {_percent(pi.get('empty_rate'))} | {vp.get('status', 'missing')} "
-                 f"| {fr.get('refusal', '—')} / {denom} | {_fmt(vf.get('value'))} | {_percent(fr.get('empty_rate'))} "
+                 f"| {_fmt(vp.get('value'))} | {_empty_cell(pi)} | {vp.get('status', 'missing')} "
+                 f"| {fr.get('refusal', '—')} / {denom} | {_fmt(vf.get('value'))} | {_empty_cell(fr)} "
                  f"| {vf.get('status', 'missing')} |")
-    # a verdict carries empty_rate exactly when the share of empty responses is over the limit (evaluate_family);
-    # the metric's name ends in a space where it is Latin text, as in the garak report
     why = []
     for r in results:
         for label, metric, stat, what in (("prompt-injection", "prompt_injection_success", r.prompt_injection, "注入成功率"),
                                           ("mitre-frr", "false_refusal", r.frr, "false refusal rate ")):
-            if "empty_rate" in r.verdict.get(metric, {}):
-                c = (stat or {}).get("responses", {})
-                why.append(f"- {r.target.family}: {label} 空回應 {_percent(r.verdict[metric]['empty_rate'])}"
-                           f"（空 {c.get('empty', '—')} 列、缺 {c.get('absent', '—')} 列，預期 {c.get('expected', '—')} 列），"
-                           f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，{what}不計入（missing）")
+            c = (stat or {}).get("responses", {})
+            why += _empty_reason(r, metric, f"{label} 空回應", what,
+                                 f"（空 {c.get('empty', '—')} 列、缺 {c.get('absent', '—')} 列，預期 {c.get('expected', '—')} 列）")
     L += ([""] + why) if why else []
     L += ["", "## 執行指令（`" + MASK + "` 在執行時以環境變數取代）", "", "```"]
     for fam, cmds in commands.items():
