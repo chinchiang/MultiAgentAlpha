@@ -363,7 +363,7 @@ def parse_cse_frr(path: Path | str, model: str) -> dict:
 class CseBenchmark:
     """One CyberSecEval benchmark: the names its command line writes (`cyberseceval_commands`) and its report reads."""
     label: str  # the `--benchmark=` value, and the name in the reports
-    dataset: str  # the directory and file stem of its dataset under `$DATASETS`, and the stem of its files in the run directory
+    dataset: str  # the directory and file stem of its dataset under `$DATASETS`; prompt injection also names its response file by it
     stat_file: str  # the stat file the benchmark writes
     parse_stat: Callable[[Path | str, str], dict]
     attr: str  # the `FamilyResult` attribute that holds its stat

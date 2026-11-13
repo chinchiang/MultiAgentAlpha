@@ -1,4 +1,5 @@
-# the empty outputs in the garak report (mara.model_eval.render_garak_report and evaluate_family): a column of their share and,
+# the empty outputs in the garak report (mara.model_eval.render_garak_report, its helpers _empty_cell and _empty_reason, and
+# evaluate_family): a column of their share and,
 # for a family whose pass rate is missing for them, a line saying so (2026-11-11: the report said only `missing`)
 focused:
 - tests/test_model_eval.py
