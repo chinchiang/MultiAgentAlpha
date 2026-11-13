@@ -3,6 +3,7 @@ synthetic fixtures, thresholds, report rendering with front matter, the refusal 
 mock output as live, calibration's weight penalty and front matter, and governance checks G-8/G-9."""
 
 import argparse
+import dataclasses
 import datetime as dt
 import json
 import os
@@ -21,7 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from mara import model_eval as me  # noqa: E402
-from mara.config import load_config  # noqa: E402
+from mara.config import ModelEvalConfig, load_config  # noqa: E402
 from mara.pipeline import Pipeline  # noqa: E402
 from mara.report.markdown_out import render_markdown  # noqa: E402
 from mara.workspace import Workspace  # noqa: E402
@@ -32,56 +33,79 @@ TODAY = dt.date(2026, 9, 12)
 SCRIPT = ROOT / "scripts" / "model_eval.py"
 
 
-def test_targets_and_commands_never_carry_keys(monkeypatch, tmp_path):
+def _plan_of(targets, out="/tmp/out", *, probes=("dan",), judge_ca_bundle="", datasets="/data") -> me.EvalPlan:
+    return me.invocations(list(targets), ModelEvalConfig(garak_probes=list(probes), judge_ca_bundle=judge_ca_bundle), out, datasets)
+
+
+def _invocation(target, tool="garak", benchmark="", **kw) -> me.EvalInvocation:
+    """The one evaluation invocation of `target` for `tool` (and `benchmark`), as invocations() builds it."""
+    return next(inv for inv in _plan_of([target], **kw).invocations if inv.tool == tool and (not benchmark or inv.benchmark == benchmark))
+
+
+def _generator_options(target) -> dict | None:
+    """What the garak invocation of `target` writes to its --generator_option_file, or None when it has no such file."""
+    return next((f.generator_options for f in _invocation(target).files if f.generator_options is not None), None)
+
+
+def test_targets_and_invocations_never_carry_keys(monkeypatch, tmp_path):
     cfg = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     targets = me.targets_from_config(cfg)
     assert [t.family for t in targets] == ["anthropic", "gemini", "glm"]
     monkeypatch.setenv("GLM_LOCAL_KEY", "sk-secret-glm")
     ds = next(t for t in targets if t.family == "glm")
-    argv, env = me.garak_command(ds, ["promptinject", "encoding"], "/tmp/out")
-    assert argv[:5] == ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible"] and "--target_name" in argv
-    assert "probes.promptinject,probes.encoding" in argv and "sk-secret-glm" not in " ".join(argv)
-    assert env == {"OPENAICOMPATIBLE_API_KEY": "$GLM_LOCAL_KEY"}
+    inv = _invocation(ds, probes=("promptinject", "encoding"))
+    assert inv.argv[:5] == ("python3", "-m", "garak", "--target_type", "openai.OpenAICompatible") and "--target_name" in inv.argv
+    assert "probes.promptinject,probes.encoding" in inv.argv and "sk-secret-glm" not in " ".join(inv.argv)
+    assert inv.key_variables == {"OPENAICOMPATIBLE_API_KEY": me.KeyVariable("GLM_LOCAL_KEY", "$GLM_LOCAL_KEY")}
     # reasoning models need room, and garak's default stop sequences end a chat answer at its first "#"
-    assert me.garak_generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://llm.iec.inventec/v1/", "max_tokens": 4096,
-                                                                               "suppressed_params": ["stop"]}}}
+    assert _generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://llm.iec.inventec/v1/", "max_tokens": 4096,
+                                                                       "suppressed_params": ["stop"]}}}
     assert me.unsupported(ds) is None and me.unsupported(ds, "cyberseceval") is None
     # Claude on Bedrock: garak's bedrock generator on the AWS credential chain, no key; CyberSecEval has no
     # Bedrock provider, so that family's two CyberSecEval metrics stay missing (named, never a command)
     br = next(t for t in targets if t.family == "anthropic")
-    argv, env = me.garak_command(br, ["dan"], "/tmp/out")
-    assert argv[3:7] == ["--target_type", "bedrock", "--target_name", "global.anthropic.claude-opus-5-5"] and env == {}
+    inv = _invocation(br)
+    assert inv.argv[3:7] == ("--target_type", "bedrock", "--target_name", "global.anthropic.claude-opus-5-5") and inv.key_variables == {}
     # Opus 5.5 spends garak's default max_tokens of 150 on reasoning and answers with no text
-    assert me.garak_generator_options(br) == {"bedrock": {"BedrockGenerator": {
+    assert _generator_options(br) == {"bedrock": {"BedrockGenerator": {
         "suppressed_params": ["temperature", "top_p"], "region": "ap-southeast-1", "max_tokens": me.GARAK_REASONING_MAX_TOKENS}}}
     assert me.unsupported(br) is None and me.unsupported(br, "garak") is None
     assert "no Bedrock provider" in me.unsupported(br, "cyberseceval")
+    assert _plan_of([br]).skip("anthropic", "cyberseceval").reason == me.unsupported(br, "cyberseceval")
+    assert _plan_of([br]).of("anthropic", "cyberseceval") == []
     with pytest.raises(ValueError, match="no CyberSecEval provider"):
         me.cse_spec(br)
     # Gemini: its OpenAI-compatible endpoint in both tools, so the key travels in a header and never in a URL
     # (CyberSecEval's GOOGLEGENAI provider would put it in the query string)
     gm = next(t for t in targets if t.family == "gemini")
-    argv, env = me.garak_command(gm, ["dan"], "/tmp/out")
-    assert argv[3:5] == ["--target_type", "openai.OpenAICompatible"] and env == {"OPENAICOMPATIBLE_API_KEY": "$GEMINI_API_KEY"}
-    assert me.garak_generator_options(gm) == {"openai": {"OpenAICompatible": {
+    inv = _invocation(gm)
+    assert inv.argv[3:5] == ("--target_type", "openai.OpenAICompatible")
+    assert inv.key_variables == {"OPENAICOMPATIBLE_API_KEY": me.KeyVariable("GEMINI_API_KEY", "$GEMINI_API_KEY")}
+    assert _generator_options(gm) == {"openai": {"OpenAICompatible": {
         "uri": me.GEMINI_OPENAI_BASE, "max_tokens": 4096, "suppressed_params": ["stop", "frequency_penalty", "presence_penalty"]}}}
     assert me.cse_spec(gm) == f"OPENAI::gemini-3.8-flash::{me.MASK}::{me.GEMINI_OPENAI_BASE}"
     other = me.EvalTarget("x", "x-reviewer", "x", "mock", "", "")
     assert "G-8 gap" in me.unsupported(other)
+    assert _plan_of([other]).skips == (me.EvalSkip("x", None, me.unsupported(other)),) and _plan_of([other]).invocations == ()
     # an endpoint behind an internal CA runs with the public roots plus its chain, so the judge still verifies
     pem = tmp_path / "internal.pem"
     pem.write_text("-----BEGIN CERTIFICATE-----\nINTERNAL\n-----END CERTIFICATE-----\n", encoding="utf-8")
-    bundle = me.ca_bundle_pem(me.EvalTarget("glm", "glm-reviewer", "glm", "openai_compatible", ds.base_url, "GLM_LOCAL_KEY", "", str(pem)), "")
+    bundle = me._ca_bundle_pem(me.EvalTarget("glm", "glm-reviewer", "glm", "openai_compatible", ds.base_url, "GLM_LOCAL_KEY", "", str(pem)), "")
     assert bundle is not None and bundle.count("BEGIN CERTIFICATE") > 100 and bundle.endswith(pem.read_text(encoding="utf-8"))
-    assert me.ca_bundle_pem(br, "") is None and ds.ca_bundle == "~/.mara/inventec-ca.pem"
+    assert me._ca_bundle_pem(br, "") is None and ds.ca_bundle == "~/.mara/inventec-ca.pem"
     an = me.EvalTarget("anthropic", "claude-reviewer", "claude-opus-5-5", "anthropic", "", "")  # the direct Anthropic API
-    argv, env = me.garak_command(an, ["dan"], "/tmp/out")
-    assert argv[3:6] == ["--target_type", "anthropic", "--target_name"] and env == {"ANTHROPIC_API_KEY": "$ANTHROPIC_API_KEY"}
-    assert me.garak_generator_options(an) is None
-    cmds = me.cyberseceval_commands(ds, "/data", "/tmp/out", "$CSE_JUDGE_LLM")
-    assert set(cmds) == {"prompt-injection", "mitre-frr"}
-    assert f"--llm-under-test=OPENAI::{ds.model}::{me.MASK}::https://llm.iec.inventec/v1" in cmds["prompt-injection"]
-    assert "--judge-llm=$CSE_JUDGE_LLM" in cmds["prompt-injection"] and "--benchmark=mitre-frr" in cmds["mitre-frr"]
+    inv = _invocation(an)
+    assert inv.argv[3:6] == ("--target_type", "anthropic", "--target_name")
+    assert inv.key_variables == {"ANTHROPIC_API_KEY": me.KeyVariable("ANTHROPIC_API_KEY", "$ANTHROPIC_API_KEY")}
+    assert _generator_options(an) is None and "--generator_option_file" not in inv.argv
+    cse = _plan_of([ds]).of("glm", "cyberseceval")
+    assert [inv.benchmark for inv in cse] == ["prompt-injection", "mitre-frr"]
+    pi = me.shown(cse[0])
+    assert f"--llm-under-test=OPENAI::{ds.model}::{me.MASK}::https://llm.iec.inventec/v1" in pi
+    assert "--judge-llm=$CSE_JUDGE_LLM" in pi and "--benchmark=mitre-frr" in cse[1].argv
+    judge, key = me.KeyVariable("CSE_JUDGE_LLM", "$CSE_JUDGE_LLM"), me.KeyVariable("GLM_LOCAL_KEY", me.MASK)
+    assert cse[0].key_variables == {"MARA_CSE_JUDGE": judge, "MARA_CSE_KEY": key}
+    assert cse[1].key_variables == {"MARA_CSE_KEY": key}, "mitre-frr has no judge"
     assert me.cse_spec(an, "sk-real") == "ANTHROPIC::claude-opus-5-5::sk-real"
     with pytest.raises(RuntimeError):
         me.resolve_key("MARA_TEST_UNSET_KEY")
@@ -90,12 +114,12 @@ def test_targets_and_commands_never_carry_keys(monkeypatch, tmp_path):
 def test_a_bedrock_target_without_a_region_still_gets_room_to_answer():
     """The limit is not tied to the region: a target without one would otherwise keep garak's 150 and answer with no text."""
     target = me.EvalTarget("anthropic", "claude-reviewer", "global.anthropic.claude-opus-5-5", "bedrock", "", "")
-    assert me.garak_generator_options(target) == {"bedrock": {"BedrockGenerator": {
+    assert _generator_options(target) == {"bedrock": {"BedrockGenerator": {
         "suppressed_params": ["temperature", "top_p"], "max_tokens": me.GARAK_REASONING_MAX_TOKENS}}}
 
 
 def _garak_targets():
-    """Every provider garak_command has a branch for: the production panel (Bedrock, Gemini, an OpenAI-compatible gateway)
+    """Every provider garak has a generator for: the production panel (Bedrock, Gemini, an OpenAI-compatible gateway)
     and the PSIRT example's direct Anthropic API."""
     targets = []
     for path in (ROOT / "config" / "mara.yaml", FIXTURE_PANEL):
@@ -112,7 +136,7 @@ def test_promptinject_is_not_allowed_to_overwrite_the_max_tokens_of_the_generato
     """promptinject sets the generator's max_tokens from each prompt before every call, over the limit of the generator
     options, for the attributes in the probe's generation_params. Taking max_tokens out of them keeps the limit."""
     for target in _garak_targets():
-        argv, _ = me.garak_command(target, ["promptinject", "dan"], "/tmp/out")
+        argv = list(_invocation(target, probes=("promptinject", "dan")).argv)
         assert "--probe_options" in argv, target.provider
         options = _probe_options(argv)
         assert list(options) == ["promptinject"]
@@ -123,11 +147,9 @@ def test_promptinject_is_not_allowed_to_overwrite_the_max_tokens_of_the_generato
 
 def test_only_the_probes_of_promptinject_get_probe_options():
     for target in _garak_targets():
-        argv, _ = me.garak_command(target, ["dan", "encoding"], "/tmp/out")
-        assert "--probe_options" not in argv, target.provider
+        assert "--probe_options" not in _invocation(target, probes=("dan", "encoding")).argv, target.provider
         # one class of the module, as the 2026-11-11 measurement named it, is a promptinject probe all the same
-        argv, _ = me.garak_command(target, ["dan", "promptinject.HijackHateHumans"], "/tmp/out")
-        assert "--probe_options" in argv, target.provider
+        assert "--probe_options" in _invocation(target, probes=("dan", "promptinject.HijackHateHumans")).argv, target.provider
 
 
 def test_cyberseceval_keys_never_reach_the_process_command_line(tmp_path):
@@ -138,15 +160,36 @@ def test_cyberseceval_keys_never_reach_the_process_command_line(tmp_path):
     pkg.mkdir()
     (pkg / "__init__.py").write_text("")
     (pkg / "run.py").write_text("import json, sys\nprint(json.dumps(sys.argv))\n")
-    real = [sys.executable, "-m", "fakebench.run", "--llm-under-test=OPENAI::m::sk-SECRET-123::https://x/v1", "--judge-llm=OPENAI::j::JUDGE-456::u"]
-    argv, env = me.argv_without_secrets(real, {"MARA_CSE_KEY": "sk-SECRET-123", "MARA_CSE_JUDGE": "OPENAI::j::JUDGE-456::u"})
+    argv = ("python3", "-m", "fakebench.run", "--llm-under-test=OPENAI::m::{MARA_CSE_KEY}::https://x/v1", "--judge-llm={MARA_CSE_JUDGE}")
+    key_variables = {"MARA_CSE_JUDGE": me.KeyVariable("JUDGE_ENV", "$JUDGE_ENV"), "MARA_CSE_KEY": me.KeyVariable("KEY_ENV", me.MASK)}
+    inv = me.EvalInvocation("x", "cyberseceval", "prompt-injection", argv, {}, key_variables, (), tmp_path / "out")
+    environ = {**os.environ, "PYTHONPATH": str(tmp_path), "KEY_ENV": "sk-SECRET-123", "JUDGE_ENV": "OPENAI::j::JUDGE-456::u"}
+    argv, env = me.prepare(inv, environ)
     assert not any("sk-SECRET-123" in a or "JUDGE-456" in a for a in argv), argv
     assert "--llm-under-test=OPENAI::m::{MARA_CSE_KEY}::https://x/v1" in argv and "--judge-llm={MARA_CSE_JUDGE}" in argv
-    out = subprocess.run(argv, env={**os.environ, **env, "PYTHONPATH": str(tmp_path)}, capture_output=True, text=True, check=True)
-    child = json.loads(out.stdout)
+    assert (env["MARA_CSE_KEY"], env["MARA_CSE_JUDGE"]) == ("sk-SECRET-123", "OPENAI::j::JUDGE-456::u")
+    child = json.loads(subprocess.run(argv, env=env, capture_output=True, text=True, check=True).stdout)
+    real = [sys.executable, "-m", "fakebench.run", "--llm-under-test=OPENAI::m::sk-SECRET-123::https://x/v1", "--judge-llm=OPENAI::j::JUDGE-456::u"]
     assert child[1:] == real[3:], "the child sees the real arguments"
     direct = json.loads(subprocess.run(real, env={**os.environ, "PYTHONPATH": str(tmp_path)}, capture_output=True, text=True, check=True).stdout)
     assert child == direct, "exactly what `python -m` would have given the module, argv[0] included"
+
+
+def test_an_endpoint_without_a_key_is_given_no_key_and_shown_masked(tmp_path):
+    keyless = me.EvalTarget("deepseek", "deepseek-reviewer", "deepseek-v3.2", "openai_compatible", "https://vllm.invalid/v1", "")
+    inv = _invocation(keyless, "cyberseceval", "mitre-frr", out=tmp_path)
+    assert inv.key_variables == {"MARA_CSE_KEY": me.KeyVariable("", me.MASK)} and _invocation(keyless, out=tmp_path).key_variables == {}
+    assert f"--llm-under-test=OPENAI::deepseek-v3.2::{me.MASK}::https://vllm.invalid/v1" in me.shown(inv)
+    _, env = me.prepare(inv, {})
+    assert env["MARA_CSE_KEY"] == me.NO_KEY
+
+
+def test_a_key_that_is_not_in_the_environment_stops_the_invocation_before_it_writes_anything(tmp_path):
+    gemini = me.EvalTarget("gemini", "gemini-reviewer", "gemini-3.8-flash", "gemini", "", "GEMINI_API_KEY")
+    inv = _invocation(gemini, out=tmp_path / "run")
+    with pytest.raises(RuntimeError, match="environment variable GEMINI_API_KEY is empty"):
+        me.prepare(inv, {"GEMINI_API_KEY": ""})
+    assert not (tmp_path / "run").exists()
 
 
 def test_parsers_on_the_synthetic_fixtures():
@@ -354,16 +397,16 @@ def test_garak_report_prefix_is_absolute(family, monkeypatch, tmp_path):
     cfg = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
     target = next(t for t in me.targets_from_config(cfg) if t.family == family)
     monkeypatch.chdir(tmp_path)
-    argv, _ = me.garak_command(target, ["dan"], "ops/run")
+    argv = _invocation(target, out="ops/run").argv
     assert argv[argv.index("--report_prefix") + 1] == str(tmp_path / "ops" / "run" / f"garak-{target.slug}")
     an = me.EvalTarget("anthropic", "claude-reviewer", "claude-opus-5-5", "anthropic", "", "")  # the direct Anthropic API
-    argv, _ = me.garak_command(an, ["dan"], "ops/run")
+    argv = _invocation(an, out="ops/run").argv
     assert argv[argv.index("--report_prefix") + 1] == str(tmp_path / "ops" / "run" / f"garak-{an.slug}")
 
 
 def test_the_report_names_the_run_directory_as_given_and_not_this_hosts_absolute_path(tmp_path):
     # docs/garak-<date>.md is committed: the commands it lists must not carry /home/<someone>/... now that
-    # garak_command makes --report_prefix absolute
+    # the garak invocation's --report_prefix is absolute
     shutil.copytree(FIX, tmp_path / "runs")
     r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(FIXTURE_PANEL), "report", "--run-dir", "runs", "--date", "2026-09-12",
                         "--mode", "dry-run", "--docs-dir", "docs", "--summary-root", "."], capture_output=True, text=True, cwd=tmp_path)
@@ -382,7 +425,7 @@ def test_plan_names_the_ca_file_by_an_absolute_path_whatever_out_is(tmp_path):
     assert f"SSL_CERT_FILE={tmp_path / 'ops' / 'run' / 'ca-glm.pem'} " in r.stdout
 
 
-def test_a_planned_garak_command_pasted_into_a_shell_is_the_argv_garak_command_builds(tmp_path):
+def test_a_planned_garak_command_pasted_into_a_shell_is_the_argv_of_its_invocation(tmp_path):
     # `plan` prints commands to paste: --probe_options is JSON, whose quotes a shell strips unless the command is quoted.
     # (The CyberSecEval commands keep `$DATASETS` and `${KEY}` for the shell to expand, so they are printed as they are.)
     cfg = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
@@ -391,16 +434,42 @@ def test_a_planned_garak_command_pasted_into_a_shell_is_the_argv_garak_command_b
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     lines = r.stdout.splitlines()
-    for target in me.targets_from_config(cfg):
-        printed = shlex.split(lines[lines.index(f"# {target.family}: garak") + 1])
+    plan = me.invocations(me.targets_from_config(cfg), cfg.model_eval, out, "$DATASETS")
+    for inv in (inv for inv in plan.invocations if inv.tool == "garak"):
+        printed = shlex.split(lines[lines.index(f"# {inv.family}: garak") + 1])
         while re.match(r"[A-Z][A-Z0-9_]*=", printed[0]):  # the environment the command is given: OPENAICOMPATIBLE_API_KEY=$KEY ...
             printed.pop(0)
-        assert printed == me.garak_command(target, cfg.model_eval.garak_probes, out)[0], target.family
+        assert printed == list(inv.argv), inv.family
+
+
+def test_what_run_executes_is_the_invocation_plan_prints_with_its_keys_given_by_the_environment(tmp_path):
+    cfg = load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT))
+    # without the CA files, which live under ~/.mara: what is under test is the command line and the keys
+    targets = [dataclasses.replace(t, ca_bundle="") for t in me.targets_from_config(cfg)]
+    plan = me.invocations(targets, cfg.model_eval.model_copy(update={"judge_ca_bundle": ""}), tmp_path, "/data")
+    environ = {"GEMINI_API_KEY": "gem-" + "k" * 28, "GLM_LOCAL_KEY": "glm-" + "k" * 28, "CSE_JUDGE_LLM": "OPENAI::j::judge-" + "k" * 26 + "::u"}
+    assert len(plan.invocations) == 7  # garak for three families, two benchmarks for each of the two CyberSecEval can run
+    for inv in plan.invocations:
+        argv, env = me.prepare(inv, environ)
+        assert argv[0] == sys.executable and not any(v in " ".join(argv) for v in environ.values()), inv
+        if inv.tool == "garak":  # its keys are variables garak reads
+            assert argv[1:] == me.shown(inv)[1:] == list(inv.argv[1:])
+        else:  # the shim, then the arguments with their placeholders, which plan shows masked
+            assert argv[1] == "-c" and argv[3:] == list(inv.argv[3:])
+            assert me.MASK in " ".join(me.shown(inv)) and "{MARA_CSE_KEY}" not in " ".join(me.shown(inv))
+        for name, kv in inv.key_variables.items():
+            assert env[name] == environ[kv.source]
 
 
 def test_the_garak_command_run_prints_is_the_one_it_executes(tmp_path, monkeypatch, capsys):
     import model_eval as script
 
+    data = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    data["model_eval"]["judge_ca_bundle"] = ""  # the CA files live under ~/.mara: what is under test is the command line
+    for model in data["models"]:
+        model.pop("ca_bundle", None)
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
     monkeypatch.setenv("GEMINI_API_KEY", "k" * 32)
     monkeypatch.setenv("GLM_LOCAL_KEY", "k" * 32)
     executed = []
@@ -412,9 +481,7 @@ def test_the_garak_command_run_prints_is_the_one_it_executes(tmp_path, monkeypat
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(script.subprocess, "run", fake_run)
-    monkeypatch.setattr(script, "_tls_env", lambda target, out, judge_ca_bundle: {})  # the CA files live under ~/.mara
-    a = argparse.Namespace(config=ROOT / "config" / "mara.yaml", workspace=Workspace(ROOT), out=tmp_path / "ops" / "run",
-                           tool="garak", datasets="")
+    a = argparse.Namespace(config=config, workspace=Workspace(ROOT), out=tmp_path / "ops" / "run", tool="garak", datasets="")
     script.cmd_run(a)
     printed = [shlex.split(line) for line in capsys.readouterr().out.splitlines() if line.startswith("+ [")]
     assert len(printed) == len(executed) == 3
@@ -424,12 +491,12 @@ def test_the_garak_command_run_prints_is_the_one_it_executes(tmp_path, monkeypat
 
 def test_the_garak_command_the_report_records_is_the_argv_that_ran(tmp_path):
     target = me.EvalTarget("anthropic", "claude-reviewer", "global.anthropic.claude-opus-5-5", "bedrock", "", "", "ap-southeast-1")
-    argv, _ = me.garak_command(target, ["promptinject"], tmp_path)
+    plan = _plan_of([target], tmp_path, probes=("promptinject",))
     results = [me.FamilyResult(target)]
     summary = me.summarize(results, date=TODAY, mode="dry-run", th=me.Thresholds(), garak_version="0.17.1", cse_ref="4be64c3a2444",
                            probes=["promptinject"])
-    lines = me.render_garak_report(summary, results, {"anthropic": argv}).splitlines()
-    assert shlex.split(lines[lines.index("# anthropic") + 1]) == argv
+    lines = me.render_garak_report(summary, results, plan).splitlines()
+    assert shlex.split(lines[lines.index("# anthropic") + 1]) == list(plan.of("anthropic", "garak")[0].argv)
 
 
 def _garak_family(family, outputs, empty, pass_rate=1.0):
@@ -444,7 +511,7 @@ def _garak_family(family, outputs, empty, pass_rate=1.0):
 def _garak_report_lines(results):
     summary = me.summarize(results, date=TODAY, mode="dry-run", th=me.Thresholds(), garak_version="0.17.1", cse_ref="4be64c3a2444",
                            probes=["promptinject"])
-    return me.render_garak_report(summary, results, {}).splitlines()
+    return me.render_garak_report(summary, results, me.EvalPlan()).splitlines()
 
 
 def _family_rows(lines):
@@ -857,7 +924,7 @@ def _cse_family(tmp_path: Path, family: str, judge_rows=None, frr_rows=None, *, 
 def _cse_report_lines(results) -> list[str]:
     summary = me.summarize(results, date=TODAY, mode="dry-run", th=me.Thresholds(), garak_version="0.17.1", cse_ref="4be64c3a2444",
                            probes=["promptinject"])
-    return me.render_cyberseceval_report(summary, results, {}).splitlines()
+    return me.render_cyberseceval_report(summary, results, me.EvalPlan()).splitlines()
 
 
 def _good_judge_rows(family, empty=0, absent=0):
@@ -900,26 +967,28 @@ def test_a_cyberseceval_metric_without_a_response_file_shows_a_dash_and_no_reaso
     assert cells[4] == "—" and cells[5] == "missing" and cells[8] == "0.0 %" and not [line for line in lines if "超過上限" in line]
 
 
-def test_the_ca_file_run_sets_is_written_where_its_absolute_path_says(tmp_path, monkeypatch):
-    import model_eval as script  # scripts/model_eval.py, on sys.path above
+def _tls_of(target: me.EvalTarget, out_dir, judge_ca_bundle: str = "") -> dict[str, str]:
+    """The SSL_CERT_FILE `run` gives the garak invocation of `target`, from prepare() with a key for every variable it reads."""
+    inv = _invocation(target, out=out_dir, judge_ca_bundle=judge_ca_bundle)
+    _, env = me.prepare(inv, {s.source: "k" * 32 for s in inv.key_variables.values()})
+    return {k: env[k] for k in ("SSL_CERT_FILE",) if k in env}
 
+
+def test_the_ca_file_run_sets_is_written_where_its_absolute_path_says(tmp_path, monkeypatch):
     pem = tmp_path / "internal.pem"
     pem.write_text("-----BEGIN CERTIFICATE-----\nINTERNAL\n-----END CERTIFICATE-----\n", encoding="utf-8")
     target = me.EvalTarget(family="glm", name="glm-reviewer", model="glm", provider="openai_compatible",
                            base_url="https://llm.invalid/v1", api_key_env="GLM_LOCAL_KEY", ca_bundle=str(pem))
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "ops" / "run").mkdir(parents=True)
-    env = script._tls_env(target, Path("ops/run"), "")
+    env = _tls_of(target, Path("ops/run"))
     assert env == {"SSL_CERT_FILE": str(tmp_path / "ops" / "run" / "ca-glm.pem")}
     assert "INTERNAL" in Path(env["SSL_CERT_FILE"]).read_text(encoding="utf-8")
 
 
 def test_a_family_without_an_internal_ca_gets_no_ssl_cert_file(tmp_path):
-    import model_eval as script
-
     bedrock = me.EvalTarget(family="anthropic", name="claude-reviewer", model="m", provider="bedrock", base_url="", api_key_env="")
-    assert script._tls_env(bedrock, tmp_path, "") == {}
-    assert list(tmp_path.iterdir()) == []
+    assert _tls_of(bedrock, tmp_path) == {}
+    assert list(tmp_path.glob("ca-*.pem")) == []
 
 
 def _ca_pem(path: Path, marker: str) -> str:
@@ -939,7 +1008,7 @@ def test_the_bundle_lists_the_public_roots_then_the_targets_chain_then_the_judge
 
     target_text = _ca_pem(tmp_path / "target.pem", "TARGET-CA")
     judge_text = _ca_pem(tmp_path / "judge.pem", "JUDGE-CA")
-    bundle = me.ca_bundle_pem(_gemini_target(str(tmp_path / "target.pem")), str(tmp_path / "judge.pem"))
+    bundle = me._ca_bundle_pem(_gemini_target(str(tmp_path / "target.pem")), str(tmp_path / "judge.pem"))
     assert bundle is not None
     assert bundle.startswith(Path(certifi.where()).read_text(encoding="utf-8").rstrip("\n") + "\n")
     assert bundle.endswith(target_text + judge_text)
@@ -947,14 +1016,14 @@ def test_the_bundle_lists_the_public_roots_then_the_targets_chain_then_the_judge
 
 def test_a_judge_behind_an_internal_ca_alone_makes_a_bundle_and_neither_makes_none(tmp_path):
     judge_text = _ca_pem(tmp_path / "judge.pem", "JUDGE-CA")
-    bundle = me.ca_bundle_pem(_gemini_target(), str(tmp_path / "judge.pem"))
+    bundle = me._ca_bundle_pem(_gemini_target(), str(tmp_path / "judge.pem"))
     assert bundle is not None and bundle.endswith(judge_text) and bundle.count("JUDGE-CA") == 1
-    assert me.ca_bundle_pem(_gemini_target(), "") is None
+    assert me._ca_bundle_pem(_gemini_target(), "") is None
 
 
 def test_a_chain_named_by_both_the_target_and_the_judge_is_in_the_bundle_once(tmp_path):
     _ca_pem(tmp_path / "both.pem", "BOTH-CA")
-    bundle = me.ca_bundle_pem(_gemini_target(str(tmp_path / "both.pem")), str(tmp_path / "both.pem"))
+    bundle = me._ca_bundle_pem(_gemini_target(str(tmp_path / "both.pem")), str(tmp_path / "both.pem"))
     assert bundle is not None and bundle.count("BOTH-CA") == 1
 
 
@@ -963,8 +1032,8 @@ def test_a_tilde_path_is_the_users_home_and_names_the_same_file_as_its_absolute_
     monkeypatch.setenv("USERPROFILE", str(tmp_path))  # where Windows looks for `~`
     (tmp_path / ".mara").mkdir()
     judge_text = _ca_pem(tmp_path / ".mara" / "judge.pem", "JUDGE-CA")
-    assert (bundle := me.ca_bundle_pem(_gemini_target(), "~/.mara/judge.pem")) is not None and bundle.endswith(judge_text)
-    bundle = me.ca_bundle_pem(_gemini_target(str(tmp_path / ".mara" / "judge.pem")), "~/.mara/judge.pem")
+    assert (bundle := me._ca_bundle_pem(_gemini_target(), "~/.mara/judge.pem")) is not None and bundle.endswith(judge_text)
+    bundle = me._ca_bundle_pem(_gemini_target(str(tmp_path / ".mara" / "judge.pem")), "~/.mara/judge.pem")
     assert bundle is not None and bundle.count("JUDGE-CA") == 1
 
 
@@ -1026,12 +1095,10 @@ def _httpx_get(url: str, env: dict[str, str]) -> subprocess.CompletedProcess:
 @needs_openssl
 def test_a_judge_behind_an_internal_ca_is_refused_when_the_family_has_no_ca_of_its_own(internal_https, tmp_path):
     """The failure this change removes: the Gemini family has no ca_bundle, so its run trusts the public roots only."""
-    import model_eval as script
-
     url, _ = internal_https
     gemini = me.EvalTarget(family="gemini", name="gemini-reviewer", model="gemini-3.8-flash", provider="gemini", base_url="",
                            api_key_env="GEMINI_API_KEY")
-    env = script._tls_env(gemini, tmp_path, "")
+    env = _tls_of(gemini, tmp_path)
     assert env == {}
     refused = _httpx_get(url, env)
     assert refused.returncode != 0 and "CERTIFICATE_VERIFY_FAILED" in refused.stderr
@@ -1039,12 +1106,10 @@ def test_a_judge_behind_an_internal_ca_is_refused_when_the_family_has_no_ca_of_i
 
 @needs_openssl
 def test_a_family_without_a_ca_of_its_own_still_verifies_a_judge_behind_an_internal_one(internal_https, tmp_path):
-    import model_eval as script
-
     url, ca = internal_https
     gemini = me.EvalTarget(family="gemini", name="gemini-reviewer", model="gemini-3.8-flash", provider="gemini", base_url="",
                            api_key_env="GEMINI_API_KEY")
-    env = script._tls_env(gemini, tmp_path, judge_ca_bundle=str(ca))
+    env = _tls_of(gemini, tmp_path, judge_ca_bundle=str(ca))
     assert list(env) == ["SSL_CERT_FILE"]
     verified = _httpx_get(url, env)
     assert verified.returncode == 0, verified.stderr

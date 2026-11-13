@@ -3,10 +3,19 @@
 The review pipeline trusts three model families with untrusted code; the report (Part X, G-8)
 requires that each family is itself tested every quarter for prompt-injection susceptibility and
 false refusals, and that the results feed the calibration weights and the review report. This module
-turns the configuration into the exact garak and CyberSecEval commands (keys only from the
-environment, never printed), parses the tools' native outputs, applies the thresholds from the
-config and renders the dated reports governance check G-8 reads. It never runs anything itself;
-scripts/model_eval.py does, on a host that can reach the endpoints.
+turns the configuration into its evaluation invocations (`invocations`: the exact garak and CyberSecEval
+commands, their environment, the files they need and where their keys come from, never a key), makes one
+ready to run (`prepare`), parses the tools' native outputs, applies the thresholds from the config and
+renders the dated reports governance check G-8 reads. It never runs anything itself; scripts/model_eval.py
+does, on a host that can reach the endpoints.
+
+GLOSSARY.md terms: Evaluation invocation, Empty output, Empty response, CyberSecEval judge, Evidence record (the front
+matter of the reports). It follows docs/adr/0009-report-metadata.md: `family_eval_status` gives the review report's
+`model_eval` field. Not pure: the parsers read the tools' output files, `write_summary` writes the summary file and
+`latest_summary` reads it, `prepare` makes the output directory of the invocation it is given, writes its files (reading
+certifi's roots and the CA files they bundle) and reads its keys from the environment it is given, and `resolve_key` reads
+the process environment; `invocations` and `shown` are pure but for the working directory, which an absolute path is
+made from.
 
 Verified against the tools' sources on 2026-09-12:
 - garak (PyPI 0.17.0): `python -m garak --target_type openai.OpenAICompatible --target_name <model>
@@ -27,10 +36,10 @@ GHSA-27vj-qcqg-25rc). The lists above and below were checked on 0.17.0. On 2026-
 (197 distributions) was installed on CPython 3.11 / Linux x86_64 (`pip check` clean, `python -m garak --version` is 0.17.1),
 and without calling any endpoint (credentials unset) the command line was read back on 0.17.1:
 - `--target_type`, `--target_name`, `--spec`, `--generator_option_file` and `--report_prefix` exist; `--probes` is
-  marked DEPRECATED in favour of `--spec`, which is what `garak_command` uses.
+  marked DEPRECATED in favour of `--spec`, which is what `_garak_command` uses.
 - `--report_prefix` is joined onto `~/.local/share/garak/garak_runs/` (`start_run`: `report_path / filename`), so a
   relative prefix names a directory that does not exist there and the report cannot be opened (a live trial on
-  2026-11-11); an absolute path replaces that directory, which is why `garak_command` passes one.
+  2026-11-11); an absolute path replaces that directory, which is why `_garak_command` passes one.
 - `--list_probes` has promptinject, latentinjection, encoding, dan and test.Test; `--list_generators` has
   openai.OpenAICompatible, bedrock (BedrockGenerator, Converse API) and anthropic.
 - The bedrock generator's options still hold `region` (default us-east-1) and `suppressed_params`; the
@@ -61,7 +70,8 @@ import datetime as dt
 import json
 import os
 import shlex
-from collections.abc import Callable
+import sys
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -70,7 +80,7 @@ from .credentials import key_env
 from .evidence import header_fields
 
 if TYPE_CHECKING:
-    from .config import MaraConfig
+    from .config import MaraConfig, ModelEvalConfig
 
 MASK = "$" + "{KEY}"
 GARAK_KEY_ENV = "OPENAICOMPATIBLE_API_KEY"
@@ -145,7 +155,7 @@ def unsupported(target: EvalTarget, tool: str | None = None) -> str | None:
     return f"{target.name}: no {' / '.join(missing)} wrapper for provider {target.provider} (G-8 gap)"
 
 
-def garak_generator_options(target: EvalTarget) -> dict | None:
+def _garak_generator_options(target: EvalTarget) -> dict | None:
     opts: dict[str, Any]
     if target.provider in ("openai_compatible", "gemini"):
         base = GEMINI_OPENAI_BASE if target.provider == "gemini" else target.base_url
@@ -160,7 +170,7 @@ def garak_generator_options(target: EvalTarget) -> dict | None:
     return None
 
 
-def ca_bundle_pem(target: EvalTarget, judge_ca_bundle: str) -> str | None:
+def _ca_bundle_pem(target: EvalTarget, judge_ca_bundle: str) -> str | None:
     """PEM for SSL_CERT_FILE when the target or the CyberSecEval judge sits behind an internal CA: the public roots
     (certifi) plus target.ca_bundle plus judge_ca_bundle (a file named twice is read once), so every endpoint in the
     process verifies. None when neither names a file."""
@@ -180,35 +190,31 @@ def ca_bundle_pem(target: EvalTarget, judge_ca_bundle: str) -> str | None:
     return pem
 
 
-def garak_command(target: EvalTarget, probes: list[str], out_dir: Path | str,
-                  option_file: Path | str | None = None) -> tuple[list[str], dict[str, str]]:
-    """(argv, extra environment) for one family. The key is mapped from the target's own env var
-    into the variable garak reads, at run time only; the argv never contains it."""
-    out_dir = Path(out_dir)
+def _garak_command(target: EvalTarget, probes: list[str], out_dir: Path, option_file: Path) -> tuple[list[str], dict[str, str]]:
+    """(argv, keys) for one family: the keys map the variable garak reads to the environment variable the target's key is
+    in, given to the process at run time only; the argv never contains one."""
     # absolute: garak joins a relative prefix onto ~/.local/share/garak/garak_runs/, where the run directory does not exist
     report_prefix = str(out_dir.absolute() / f"garak-{target.slug}")
     spec = ",".join(f"probes.{p}" for p in probes)
     if target.provider in ("openai_compatible", "gemini"):
         argv = ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible", "--target_name", target.model, "--spec", spec,
-                "--generator_option_file", str(option_file or out_dir / f"garak-{target.slug}.generator.json"),
-                "--report_prefix", report_prefix]
+                "--generator_option_file", str(option_file), "--report_prefix", report_prefix]
         source = key_env(target.provider, target.api_key_env)
-        env = {GARAK_KEY_ENV: f"${source}"} if source else {}
+        keys = {GARAK_KEY_ENV: source} if source else {}
     elif target.provider == "bedrock":
         # no key: boto3 resolves AWS_PROFILE / the SSO cache, as for the review itself
         argv = ["python3", "-m", "garak", "--target_type", "bedrock", "--target_name", target.model, "--spec", spec,
-                "--generator_option_file", str(option_file or out_dir / f"garak-{target.slug}.generator.json"),
-                "--report_prefix", report_prefix]
-        env = {}
+                "--generator_option_file", str(option_file), "--report_prefix", report_prefix]
+        keys = {}
     elif target.provider == "anthropic":
         argv = ["python3", "-m", "garak", "--target_type", "anthropic", "--target_name", target.model, "--spec", spec,
                 "--report_prefix", report_prefix]
-        env = {ANTHROPIC_KEY_ENV: f"${key_env(target.provider, target.api_key_env)}"}
+        keys = {ANTHROPIC_KEY_ENV: str(key_env(target.provider, target.api_key_env))}
     else:
         raise ValueError(f"{target.name}: no garak generator for provider {target.provider}")
     if any(p == "promptinject" or p.startswith("promptinject.") for p in probes):
         argv += ["--probe_options", json.dumps(PROMPTINJECT_PROBE_OPTIONS, separators=(",", ":"))]
-    return argv, env
+    return argv, keys
 
 
 def cse_spec(target: EvalTarget, key: str | None = None) -> str:
@@ -223,9 +229,8 @@ def cse_spec(target: EvalTarget, key: str | None = None) -> str:
     raise ValueError(f"{target.name}: no CyberSecEval provider for {target.provider}")
 
 
-def cyberseceval_commands(target: EvalTarget, datasets_dir: Path | str, out_dir: Path | str, judge_spec: str,
-                          key: str | None = None) -> dict[str, list[str]]:
-    d, o = Path(datasets_dir), Path(out_dir) / target.slug
+def _cyberseceval_commands(target: EvalTarget, datasets_dir: Path | str, out_dir: Path, judge_spec: str, key: str) -> dict[str, list[str]]:
+    d, o = Path(datasets_dir), out_dir / target.slug
     spec = cse_spec(target, key)
     pi, frr = CSE_PROMPT_INJECTION, CSE_MITRE_FRR
     return {
@@ -239,25 +244,19 @@ def cyberseceval_commands(target: EvalTarget, datasets_dir: Path | str, out_dir:
     }
 
 
-def argv_without_secrets(argv: list[str], secrets: dict[str, str]) -> tuple[list[str], dict[str, str]]:
-    """Move secrets out of a `python3 -m <module> args...` command line into the child's environment.
+def _through_shim(argv: list[str], names: list[str]) -> list[str]:
+    """A `python -m <module> args...` command whose args hold `{NAME}` placeholders, run through a one-line shim that puts the
+    values of the environment variables `names` back into sys.argv inside the child.
 
-    A running process's command line is readable by every local user (`ps`, /proc/<pid>/cmdline);
-    its environment is not. CyberSecEval takes the API keys only inside --llm-under-test and
-    --judge-llm, so the command runs through a one-line shim that puts them back into sys.argv inside
-    the child: the OS-level argv carries `{NAME}` placeholders only. Returns (argv, env additions)."""
+    A running process's command line is readable by every local user (`ps`, /proc/<pid>/cmdline); its environment is not.
+    CyberSecEval takes the API keys only inside --llm-under-test and --judge-llm, so the OS-level argv carries the
+    placeholders only."""
     if len(argv) < 3 or argv[1] != "-m":
         raise ValueError("expected a `python -m <module> ...` command")
-    module, env, args = argv[2], {}, []
-    for a in argv[3:]:
-        for name, value in secrets.items():
-            if value and value in a:
-                a = a.replace(value, "{" + name + "}")
-                env[name] = value
-        args.append(a)
+    module = argv[2]
     shim = "\n".join([
         "import os, runpy, sys",
-        f"names = {sorted(env)!r}",
+        f"names = {sorted(names)!r}",
         "def put(a):",
         "    for n in names:",
         "        a = a.replace('{' + n + '}', os.environ[n])",
@@ -265,7 +264,148 @@ def argv_without_secrets(argv: list[str], secrets: dict[str, str]) -> tuple[list
         f"sys.argv = [{module!r}] + [put(a) for a in sys.argv[1:]]",
         f"runpy.run_module({module!r}, run_name='__main__', alter_sys=True)",
     ])
-    return [argv[0], "-c", shim, *args], env
+    return [argv[0], "-c", shim, *argv[3:]]
+
+
+# ---------------------------------------------------------------- evaluation invocations
+
+CSE_KEY_VAR = "MARA_CSE_KEY"      # the process variable a CyberSecEval command's key is put back from (_through_shim)
+CSE_JUDGE_VAR = "MARA_CSE_JUDGE"  # the same for the CyberSecEval judge's specification
+
+
+@dataclass(frozen=True)
+class KeyVariable:
+    """The key variable (GLOSSARY.md) of a key an evaluation invocation is given at run time ("" for an endpoint without
+    a key, which is given NO_KEY), and how a printed or recorded command shows that key."""
+    source: str
+    shown: str
+
+
+@dataclass(frozen=True)
+class InvocationFile:
+    """A file an evaluation invocation needs written before it starts: garak's generator options, or the CA bundle of its
+    SSL_CERT_FILE (the public roots and the chains of the target's and the CyberSecEval judge's CA files, _ca_bundle_pem)."""
+    path: Path
+    generator_options: dict | None = None
+    ca_bundles: tuple[str, str] = ("", "")  # (target.ca_bundle, model_eval.judge_ca_bundle)
+
+
+@dataclass(frozen=True)
+class EvalInvocation:
+    """One evaluation invocation (GLOSSARY.md): garak once, or one CyberSecEval benchmark, for one family."""
+    family: str
+    tool: str                        # garak | cyberseceval
+    benchmark: str                   # the CyberSecEval benchmark's label, "" for garak
+    argv: tuple[str, ...]            # `python3 -m ...`; a key given on the command line is a `{NAME}` placeholder of `key_variables`
+    env: dict[str, str]              # the environment it runs with besides its keys (SSL_CERT_FILE)
+    key_variables: dict[str, KeyVariable]  # process variable -> the key variable its key is read from; never a key
+    files: tuple[InvocationFile, ...]
+    out_dir: Path                    # where it writes its outputs, made before it starts
+
+
+@dataclass(frozen=True)
+class EvalSkip:
+    family: str
+    tool: str | None                 # None: the family has an invocation for neither tool
+    reason: str
+
+
+@dataclass(frozen=True)
+class EvalPlan:
+    """Every evaluation invocation of a config, each family's garak first, then CyberSecEval by family and benchmark; the
+    families left out of a tool and why; and the families that have an invocation, in the config's order."""
+    invocations: tuple[EvalInvocation, ...] = ()
+    skips: tuple[EvalSkip, ...] = ()
+    families: tuple[str, ...] = ()
+
+    def of(self, family: str, tool: str) -> list[EvalInvocation]:
+        return [inv for inv in self.invocations if inv.family == family and inv.tool == tool]
+
+    def skip(self, family: str, tool: str | None) -> EvalSkip | None:
+        return next((s for s in self.skips if s.family == family and s.tool == tool), None)
+
+
+def _tls(target: EvalTarget, out_dir: Path, judge_ca_bundle: str) -> tuple[dict[str, str], tuple[InvocationFile, ...]]:
+    """SSL_CERT_FILE and its file for a target or a CyberSecEval judge behind an internal CA, else nothing. The file lies
+    beside garak's report, absolute as its --report_prefix is (_garak_command)."""
+    if not target.ca_bundle and not judge_ca_bundle:
+        return {}, ()
+    path = out_dir.absolute() / f"ca-{target.slug}.pem"
+    return {"SSL_CERT_FILE": str(path)}, (InvocationFile(path, ca_bundles=(target.ca_bundle, judge_ca_bundle)),)
+
+
+def invocations(targets: list[EvalTarget], settings: ModelEvalConfig, out_dir: Path | str, datasets: str) -> EvalPlan:
+    """Every evaluation invocation of `targets` under `settings` (the config's model_eval block), writing below `out_dir` and
+    reading the CyberSecEval datasets from `datasets` (a directory, or the `$DATASETS` a printed command keeps). Pure but for the
+    working directory its absolute paths are made from: it reads no file and no key; prepare() does, for the one invocation
+    it is given."""
+    out = Path(out_dir)
+    found: list[EvalInvocation] = []
+    skips: list[EvalSkip] = []
+    planned: list[EvalTarget] = []
+    for t in targets:
+        if why := unsupported(t):
+            skips.append(EvalSkip(t.family, None, why))
+            continue
+        planned.append(t)
+        option_file = out / f"garak-{t.slug}.generator.json"
+        argv, keys = _garak_command(t, settings.garak_probes, out, option_file)
+        env, files = _tls(t, out, settings.judge_ca_bundle)
+        if (options := _garak_generator_options(t)) is not None:
+            files = (InvocationFile(option_file, generator_options=options), *files)
+        found.append(EvalInvocation(t.family, "garak", "", tuple(argv), env, {var: KeyVariable(src, "$" + src) for var, src in keys.items()},
+                                    files, out))
+    judge = KeyVariable(settings.judge_llm_env, "$" + settings.judge_llm_env)
+    for t in planned:
+        if why := unsupported(t, "cyberseceval"):
+            skips.append(EvalSkip(t.family, "cyberseceval", why))
+            continue
+        key = KeyVariable(target_key_env(t), MASK)
+        env, files = _tls(t, out, settings.judge_ca_bundle)
+        for bench, argv in _cyberseceval_commands(t, datasets, out, "{" + CSE_JUDGE_VAR + "}", "{" + CSE_KEY_VAR + "}").items():
+            # the judge first, so a missing judge is named before the family's key
+            key_variables = {CSE_JUDGE_VAR: judge, CSE_KEY_VAR: key} if any(CSE_JUDGE_VAR in a for a in argv) else {CSE_KEY_VAR: key}
+            found.append(EvalInvocation(t.family, "cyberseceval", bench, tuple(argv), env, key_variables, files, out / t.slug))
+    return EvalPlan(tuple(found), tuple(skips), tuple(t.family for t in planned))
+
+
+def shown(inv: EvalInvocation, relative_to: Path | str | None = None) -> list[str]:
+    """The command line of `inv` as `plan` prints it and `report` records it: each key placeholder as its KeyVariable.shown, and,
+    with `relative_to` (the run directory as it was given), that directory's absolute spelling put back as given, for the
+    reports are committed and must not name this host's directories."""
+    parts = []
+    for a in inv.argv:
+        for name, kv in inv.key_variables.items():
+            a = a.replace("{" + name + "}", kv.shown)
+        if relative_to is not None:
+            a = a.replace(str(Path(relative_to).absolute()), str(relative_to))
+        parts.append(a)
+    return parts
+
+
+def _file_text(f: InvocationFile) -> str:
+    if f.generator_options is not None:
+        return json.dumps(f.generator_options, indent=2) + "\n"
+    pem = _ca_bundle_pem(EvalTarget("", "", "", "", "", "", ca_bundle=f.ca_bundles[0]), f.ca_bundles[1])
+    if pem is None:  # pragma: no cover - _tls names no file without a CA file
+        raise ValueError(f"{f.path}: no CA file to bundle")
+    return pem
+
+
+def prepare(inv: EvalInvocation, environ: Mapping[str, str]) -> tuple[list[str], dict[str, str]]:
+    """What `run` executes for `inv`: (argv, env). Reads its keys from `environ` (a RuntimeError names a variable that is
+    empty), makes its output directory, writes its files, and gives an argv that runs it with this interpreter (the one whose garak
+    version was checked, not PATH's python3) and, when its command line holds key placeholders, through _through_shim; env is `environ`
+    with the invocation's environment and its keys."""
+    keys = {name: _read_key(s.source, environ) if s.source else NO_KEY for name, s in inv.key_variables.items()}
+    inv.out_dir.mkdir(parents=True, exist_ok=True)
+    for f in inv.files:
+        f.path.write_text(_file_text(f), encoding="utf-8")
+    argv = [sys.executable, *inv.argv[1:]] if inv.argv and inv.argv[0] == "python3" else list(inv.argv)
+    placed = [name for name in keys if any("{" + name + "}" in a for a in argv)]
+    if placed:
+        argv = _through_shim(argv, placed)
+    return argv, {**environ, **inv.env, **keys}
 
 
 def target_key_env(target: EvalTarget) -> str:
@@ -279,7 +419,11 @@ NO_KEY = "no-key"  # what a keyless OpenAI-compatible endpoint gets in a CyberSe
 
 
 def resolve_key(env_name: str) -> str:
-    v = os.environ.get(env_name, "") if env_name else ""
+    return _read_key(env_name, os.environ)
+
+
+def _read_key(env_name: str, environ: Mapping[str, str]) -> str:
+    v = environ.get(env_name, "") if env_name else ""
     if not v:
         raise RuntimeError(f"environment variable {env_name or '<unset>'} is empty; keys come only from the environment")
     return v
@@ -361,7 +505,7 @@ def parse_cse_frr(path: Path | str, model: str) -> dict:
 
 @dataclass(frozen=True)
 class CseBenchmark:
-    """One CyberSecEval benchmark: the names its command line writes (`cyberseceval_commands`) and its report reads."""
+    """One CyberSecEval benchmark: the names its command line writes (`_cyberseceval_commands`) and its report reads."""
     label: str  # the `--benchmark=` value, and the name in the reports
     dataset: str  # the directory and file stem of its dataset under `$DATASETS`; prompt injection also names its response file by it
     stat_file: str  # the stat file the benchmark writes
@@ -597,7 +741,8 @@ def _empty_reason(r: FamilyResult, metric: str, kind: str, what: str, detail: st
             f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，{what}不計入（missing）"]
 
 
-def render_garak_report(summary: dict, results: list[FamilyResult], commands: dict[str, list[str]]) -> str:
+def render_garak_report(summary: dict, results: list[FamilyResult], plan: EvalPlan, relative_to: Path | str | None = None) -> str:
+    """`plan`'s garak invocations are listed as they ran, the run directory spelt as `relative_to` (shown)."""
     fams = [r.target.family for r in results]
     L = [_front_matter("garak", summary, fams), f"# garak 紅隊評測（{summary['date']}）", "",
          f"模式：**{summary['mode']}**；garak {summary['garak_version'] or '（版本未記錄）'}；probes：{', '.join(summary['garak_probes'])}；"
@@ -620,15 +765,16 @@ def render_garak_report(summary: dict, results: list[FamilyResult], commands: di
             for det, c in sorted(dets.items()):
                 L.append(f"| {probe} | {det} | {c['passed']} | {c['total']} | {_fmt(c['pass_rate'])} |")
     L += ["", "## 執行指令（金鑰只從環境變數取，不在此記錄）", "", "```"]
-    L += [f"# {fam}\n{shlex.join(argv)}" for fam, argv in commands.items()] + ["```", ""]
+    L += [f"# {inv.family}\n{shlex.join(shown(inv, relative_to))}" for inv in plan.invocations if inv.tool == "garak"] + ["```", ""]
     for r in results:
         for n in r.notes:
             L.append(f"- {r.target.family}: {n}")
     return "\n".join(L) + "\n"
 
 
-def render_cyberseceval_report(summary: dict, results: list[FamilyResult], commands: dict[str, dict[str, list[str]] | str]) -> str:
-    """`commands`: per family the benchmark argvs, or the reason the family has none (a Bedrock target)."""
+def render_cyberseceval_report(summary: dict, results: list[FamilyResult], plan: EvalPlan, relative_to: Path | str | None = None) -> str:
+    """`plan`'s CyberSecEval invocations are listed per family, or the reason a family has none (a Bedrock target); the run
+    directory is spelt as `relative_to` (shown)."""
     fams = [r.target.family for r in results]
     th = summary["thresholds"]
     L = [_front_matter("cyberseceval", summary, fams), f"# CyberSecEval 4 評測（{summary['date']}）", "",
@@ -655,12 +801,12 @@ def render_cyberseceval_report(summary: dict, results: list[FamilyResult], comma
                                  f"（空 {c.get('empty', '—')} 列、缺 {c.get('absent', '—')} 列，預期 {c.get('expected', '—')} 列）")
     L += ([""] + why) if why else []
     L += ["", "## 執行指令（`" + MASK + "` 在執行時以環境變數取代）", "", "```"]
-    for fam, cmds in commands.items():
-        if isinstance(cmds, str):
-            L.append(f"# {fam}: skipped: {cmds}")
+    for fam in plan.families:
+        if skip := plan.skip(fam, "cyberseceval"):
+            L.append(f"# {fam}: skipped: {skip.reason}")
             continue
-        for bench, argv in cmds.items():
-            L.append(f"# {fam} {bench}\n{' '.join(argv)}")
+        for inv in plan.of(fam, "cyberseceval"):
+            L.append(f"# {fam} {inv.benchmark}\n{' '.join(shown(inv, relative_to))}")
     L += ["```", ""]
     for r in results:
         for n in r.notes:

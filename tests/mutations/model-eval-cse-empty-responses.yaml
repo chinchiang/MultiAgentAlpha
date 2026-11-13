@@ -191,9 +191,9 @@ mutations:
 - name: the report names the datasets directory it was given
   file: scripts/model_eval.py
   old: |2-
-    _plan(cfg, a.run_dir, "$DATASETS",
+    cfg.model_eval, a.run_dir, "$DATASETS")
   new: |2-
-    _plan(cfg, a.run_dir, a.datasets or "$DATASETS",
+    cfg.model_eval, a.run_dir, a.datasets or "$DATASETS")
 - name: the rows of every model are counted
   file: src/mara/model_eval.py
   old: |2

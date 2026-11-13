@@ -116,9 +116,12 @@ def _target(provider: str, api_key_env: str = "", base_url: str = ""):
 ])
 def test_garak_maps_the_key_variable_the_target_names_into_the_one_garak_reads(target, expected_env, monkeypatch):
     from mara import model_eval as me
+    from mara.config import ModelEvalConfig
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret")
-    _, env = me.garak_command(target, ["dan"], "/tmp/out")
+    plan = me.invocations([target], ModelEvalConfig(garak_probes=["dan"]), "/tmp/out", "/data")
+    # the variable garak reads, and the one its key is in as plan prints it
+    env = {var: kv.shown for var, kv in plan.of(target.family, "garak")[0].key_variables.items()}
     assert env == expected_env
 
 

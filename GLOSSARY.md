@@ -86,6 +86,10 @@ _Avoid_: empty output (an output of garak, above), empty reply (a reply of a MAR
 The language model that CyberSecEval's `prompt-injection` benchmark asks whether a model's reply followed the injected instruction (G-8). It is named by a specification in the environment variable `model_eval.judge_llm_env` and runs in the same process as the model under evaluation, so the CA of an on-prem endpoint it sits behind is trusted through `model_eval.judge_ca_bundle`. It rules on a benchmark's replies, not on the findings of a MARA review.
 _Avoid_: judge alone (a ballot role of a review, above)
 
+**Evaluation invocation**:
+One execution of an evaluation tool for one model family (G-8): garak once, or one CyberSecEval benchmark. It is its command line, the environment it runs with, the files that must be written before it starts and its key variables, never the keys themselves. `plan` prints it, `run` executes it and `report` records it, all from the one invocation.
+_Avoid_: invocation alone (a review invocation, below), call, command (the command line is one part of it), exchange (one prompt and reply of a review)
+
 **Refusal**:
 A reply the vendor or model marked as declining to answer; counted as an abstention, separate from invalid output.
 _Avoid_: block, rejection

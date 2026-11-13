@@ -306,18 +306,25 @@ and `latest_record`, and `mara.model_eval.render_garak_report`) and hand what th
 `load_runs` and `training_requirement` of `scripts/calibrate.py` as module names and nothing of the readers. A test that
 reads the front matter of a Markdown report reads it through `mara.evidence.read_front_matter`, which `mara.govdocs`
 imports by name.
-The CA file `scripts/model_eval.py` writes for a family whose target or whose CyberSecEval judge sits behind an internal CA is read in
-`test_model_eval.py` through `_tls_env(target, out_dir, judge_ca_bundle)` (the returned SSL_CERT_FILE and the file at that path, with a
-target built by keyword and a real PEM file; the third argument is empty when no judge CA is named) and, as the printed environment of
-`plan`, through the command line. The judge's CA comes from the config field `judge_ca_bundle` of the `model_eval` block (empty by
-default, a typo in the key is refused): `plan` and `run` hand it to `_tls_env` for every family, in both tools, so the file holds the
-public roots, the target's `ca_bundle` and the judge's, a file named twice once. The text of that bundle is read through
-`ca_bundle_pem(target, judge_ca_bundle)` itself (a target built by keyword, real PEM files below `tmp_path`: the order of the
-three parts, a file named twice, also under two spellings, and the answer when neither names a file); a `~` path is tried by
-pointing the home directory variables of the process at `tmp_path`. A test that patches `_tls_env` replaces it with a
-function that takes that third argument, which has no default. The test of `run` replaces the script's call that starts a child process
-and reads the environment each command is given; the test of the handshake runs a local HTTPS server signed by a throwaway CA made with the `openssl` program (the test
-is skipped without it) and an `httpx` request in a child process that holds only the returned environment as its trust settings.
+The evaluation invocations of a config are read in `test_model_eval.py` through `mara.model_eval.invocations(targets, settings, out_dir,
+datasets)`, with targets built by keyword or from a shipped config and a `ModelEvalConfig` built by keyword (`_plan_of`, `_invocation`):
+each invocation's argv, key variables and files (`_generator_options`), and the plan's skips. `mara.model_eval.prepare(invocation, environ)` is
+given an `environ` the test holds and returns the argv and the environment `run` executes: this interpreter, the shim and the keys; one test
+builds an `EvalInvocation` by hand whose module is a package below `tmp_path`, to read what the child receives. `mara.model_eval.shown`
+gives what `plan` prints and the reports record. `plan`, `run` and `report` are read through the command line, `run` with the script's call
+that starts a child process replaced, recording the argv and the environment each command is given. The command builders behind them
+(`_garak_command`, `_cyberseceval_commands`, `_through_shim`) have no test of their own.
+
+The CA file `run` writes for a family whose target or whose CyberSecEval judge sits behind an internal CA is read in `test_model_eval.py`
+through `prepare` on the garak invocation of a target (`_tls_of`: the SSL_CERT_FILE of the returned environment and the file at that path,
+with a target built by keyword, a real PEM file and a key for each variable the invocation reads) and, as the printed environment of `plan`,
+through the command line. The judge's CA comes from the config field `judge_ca_bundle` of the `model_eval` block (empty by default, a typo
+in the key is refused): `invocations` gives it to every family, in both tools, so the file holds the public roots, the target's `ca_bundle`
+and the judge's, a file named twice once. The text of that bundle is read through `mara.model_eval._ca_bundle_pem(target, judge_ca_bundle)`,
+an internal seam (a target built by keyword, real PEM files below `tmp_path`: the order of the three parts, a file named twice, also under
+two spellings, and the answer when neither names a file); a `~` path is tried by pointing the home directory variables of the process at
+`tmp_path`. The test of the handshake runs a local HTTPS server signed by a throwaway CA made with the `openssl` program (the test is
+skipped without it) and an `httpx` request in a child process that holds only the returned SSL_CERT_FILE as its trust settings.
 
 The empty responses of a CyberSecEval run are read in `test_model_eval.py` at three places. `mara.model_eval.parse_cse_responses(path,
 model, expected, fields)`, the model under evaluation second and with no default, is called with response files written below `tmp_path` in
@@ -353,7 +360,7 @@ output.
 derived from the module's own defaults), and each place that asks it through that place's own interface: the provider
 adapters by constructing them (`OpenAICompatibleProvider(spec).client.headers`, `GeminiProvider(spec).client.headers`, and
 `AnthropicProvider(spec)` with the Anthropic SDK's client class patched as a module attribute to record its keyword
-arguments), `mara.model_eval.garak_command` (its returned environment) and `target_key_env`, and
+arguments), `mara.model_eval.invocations` (the key variables of a garak invocation, as `plan` shows them) and `target_key_env`, and
 `mara.web.env.credential`. A test of a self-hosted endpoint sets the Anthropic key in the environment and asserts it is not
 used. A spec built without validation stands in where the spec's data-residency rules are not what is tested.
 
