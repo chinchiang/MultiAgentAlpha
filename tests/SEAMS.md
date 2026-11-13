@@ -333,6 +333,15 @@ when `--mode live` needs it. The text of that report is read through `render_cyb
 by hand; the stat files are read through `parse_cse_prompt_injection` and `parse_cse_frr` as before. The fixtures' response
 files hold as many rows as their stat files count, each with text, so a report built from them has no empty response.
 
+The empty outputs of a garak run are read in `test_model_eval.py` through `mara.model_eval.evaluate_family` with garak results in the shape
+`parse_garak_report` returns (`_garak_family` builds them; one test writes the `empty_rate` None of a report with no outputs), and
+`test_thresholds_and_verdicts` hands it results that hold only `pass_rate` and `empty_rate`, which stands while `evaluate_family` reads no
+other key of garak's. They are read through `render_garak_report` with those results, and through the `report` command line on a copy of the
+fixtures whose deepseek garak report has lost its `attempt` rows: the test drops them by their `entry_type`, and reads the verdict in the
+summary file under `calib`, the family's row and the note `_collect` gives for it. The fixtures' garak reports hold one evaluated (`status`
+2) attempt row per probe, with as many outputs as the probe's eval row counts, each with text, so a report built from them has no empty
+output.
+
 ## The key variable (`src/mara/credentials.py`)
 
 `test_credentials.py` reads `mara.credentials.key_env(provider, api_key_env)` at its interface, as a hand-written table (not

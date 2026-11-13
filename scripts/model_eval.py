@@ -184,6 +184,8 @@ def _collect(run_dir: Path, targets: list[me.EvalTarget], th: me.Thresholds, siz
         if garak_files:
             try:
                 r.garak = me.parse_garak_report(garak_files[-1])
+                if r.garak["empty_rate"] is None:
+                    r.notes.append("garak report has no outputs, so its empty outputs cannot be counted")
             except ValueError as e:
                 r.notes.append(f"garak report unreadable: {e}")
         else:
