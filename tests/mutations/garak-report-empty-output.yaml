@@ -1,4 +1,5 @@
-# the empty outputs in the garak report (mara.model_eval.render_garak_report and evaluate_family): a column of their share and,
+# the empty outputs in the garak report (mara.model_eval.render_garak_report, its helpers _empty_cell and _empty_reason, and
+# evaluate_family): a column of their share and,
 # for a family whose pass rate is missing for them, a line saying so (2026-11-11: the report said only `missing`)
 focused:
 - tests/test_model_eval.py
@@ -10,37 +11,37 @@ mutations:
 - name: the empty-output column shows the share of the outputs that have text
   file: src/mara/model_eval.py
   old: |2
-                     f"| {_fmt(v.get('value'))} | {_percent(g.get('empty_rate'))} | {v.get('status', 'missing')} |")
+                     f"| {_fmt(v.get('value'))} | {_empty_cell(g)} | {v.get('status', 'missing')} |")
   new: |2
                      f"| {_fmt(v.get('value'))} | {_percent(g.get('empty_rate') and 1 - g['empty_rate'])} | {v.get('status', 'missing')} |")
 - name: the empty-output column shows the pass rate again
   file: src/mara/model_eval.py
   old: |2
-                     f"| {_fmt(v.get('value'))} | {_percent(g.get('empty_rate'))} | {v.get('status', 'missing')} |")
+                     f"| {_fmt(v.get('value'))} | {_empty_cell(g)} | {v.get('status', 'missing')} |")
   new: |2
                      f"| {_fmt(v.get('value'))} | {_percent(g.get('empty_rate') and v.get('value'))} | {v.get('status', 'missing')} |")
 - name: a family over the limit is given no line saying why
   file: src/mara/model_eval.py
   old: |2
-               for r in results if "empty_rate" in r.verdict.get("garak_pass_rate", {})]
+        why = [line for r in results for line in _empty_reason(r, "garak_pass_rate", "空輸出", "garak pass rate ")]
         L += ([""] + why) if why else []
   new: |2
-               for r in results if "empty_rate" in r.verdict.get("garak_pass_rate", {})]
+        why = [line for r in results for line in _empty_reason(r, "garak_pass_rate", "空輸出", "garak pass rate ")]
         L += []
 - name: a family missing for any reason is given the line
   file: src/mara/model_eval.py
   old: |2
-        why = [f"- {r.target.family}: 空輸出 {_percent(r.verdict['garak_pass_rate']['empty_rate'])}，"
-               f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，garak pass rate 不計入（missing）"
-               for r in results if "empty_rate" in r.verdict.get("garak_pass_rate", {})]
+        if "empty_rate" not in verdict:
+            return []
+        return [f"- {r.target.family}: {kind} {_percent(verdict['empty_rate'])}{detail}，"
   new: |2
-        why = [f"- {r.target.family}: 空輸出 {_percent(r.verdict['garak_pass_rate'].get('empty_rate'))}，"
-               f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，garak pass rate 不計入（missing）"
-               for r in results if r.verdict.get("garak_pass_rate", {}).get("status") == "missing"]
+        if verdict.get("status") != "missing":
+            return []
+        return [f"- {r.target.family}: {kind} {_percent(verdict.get('empty_rate'))}{detail}，"
 - name: the line names the limit with a decimal
   file: src/mara/model_eval.py
-  old: 'f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，garak pass rate 不計入（missing）"'
-  new: 'f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 1)}，garak pass rate 不計入（missing）"'
+  old: 'f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，{what}不計入（missing）"]'
+  new: 'f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 1)}，{what}不計入（missing）"]'
 - name: a family with nothing evaluated is not told that its outputs are empty
   file: src/mara/model_eval.py
   old: |2
