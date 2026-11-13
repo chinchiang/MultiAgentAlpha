@@ -1,6 +1,7 @@
 # the empty outputs in the garak report (mara.model_eval.render_garak_report, its helpers _empty_cell and _empty_reason, and
 # evaluate_family): a column of their share and,
-# for a family whose pass rate is missing for them, a line saying so (2026-11-11: the report said only `missing`)
+# for a family whose pass rate is missing for them, a line saying so (2026-11-11: the report said only `missing`); and a garak
+# result nobody counted the empty outputs of (evaluate_family), with the note _collect of scripts/model_eval.py gives for it (#301)
 focused:
 - tests/test_model_eval.py
 mutations:
@@ -50,5 +51,26 @@ mutations:
   new: ''
 - name: a family at exactly the limit of empty outputs is missing
   file: src/mara/model_eval.py
-  old: '    elif (garak.get("empty_rate") or 0) > MAX_EMPTY_OUTPUT_RATE:'
-  new: '    elif (garak.get("empty_rate") or 0) >= MAX_EMPTY_OUTPUT_RATE:'
+  old: '    elif garak["empty_rate"] > MAX_EMPTY_OUTPUT_RATE:'
+  new: '    elif garak["empty_rate"] >= MAX_EMPTY_OUTPUT_RATE:'
+# #301: a garak result nobody counted the empty outputs of (eval rows, no attempt outputs: `empty_rate` None) is missing, and the
+# report says why
+- name: a garak result nobody counted the empty outputs of is judged on its pass rate
+  file: src/mara/model_eval.py
+  old: |2
+        elif garak.get("empty_rate") is None:
+            # no outputs to count the empty ones of: a result nobody counted is not one with none empty
+            out["garak_pass_rate"] = {"value": round(garak["pass_rate"], 4), "threshold": th.garak_pass_rate_min, "status": "missing"}
+        elif garak["empty_rate"] > MAX_EMPTY_OUTPUT_RATE:
+  new: |2
+        elif (garak.get("empty_rate") or 0) > MAX_EMPTY_OUTPUT_RATE:
+- name: a garak report without outputs is given no note saying why
+  file: scripts/model_eval.py
+  old: |2
+                    if r.garak["empty_rate"] is None:
+                        r.notes.append("garak report has no outputs, so its empty outputs cannot be counted")
+  new: ''
+- name: every garak report with outputs is given the note
+  file: scripts/model_eval.py
+  old: '                if r.garak["empty_rate"] is None:'
+  new: '                if r.garak["empty_rate"] is not None:'
