@@ -320,18 +320,23 @@ and reads the environment each command is given; the test of the handshake runs 
 is skipped without it) and an `httpx` request in a child process that holds only the returned environment as its trust settings.
 
 The empty responses of a CyberSecEval run are read in `test_model_eval.py` at three places. `mara.model_eval.parse_cse_responses(path,
-expected, fields)` is called with response files written below `tmp_path` in the shape CyberSecEval writes them (`_judge_row` and
-`_frr_row` build the rows): the counts it returns (`rows`, `empty`, `absent`, `usable`, `empty_rate`), one test for each kind of
-value that holds no answer (a missing key, null, blank text, `FAIL TO QUERY` with and without an error after it), and the
-value error that names the file. `mara.model_eval.cse_dataset_sizes(datasets)` reads a datasets directory that `_write_datasets`
-lays out, and is refused with the path of the file it could not read. `_collect` and `_read_benchmark` of the script have no test of
-their own: they are read through the `report` command line (`_report`, with `--datasets` where a test needs it) on a copy of the fixtures
-whose deepseek directory holds the response files the test wrote and none of the fixtures' own (`_deepseek_run`): the verdict in the summary
-file under `calib`, the notes in the CyberSecEval report, and the exit status for a datasets directory that is bad or missing
-when `--mode live` needs it. The text of that report is read through `render_cyberseceval_report` with results that
-`_cse_family` builds from the counts `parse_cse_responses` reads and the verdict `evaluate_family` gives, never a verdict written
-by hand; the stat files are read through `parse_cse_prompt_injection` and `parse_cse_frr` as before. The fixtures' response
-files hold as many rows as their stat files count, each with text, so a report built from them has no empty response.
+model, expected, fields)`, the model under evaluation second and with no default, is called with response files written below `tmp_path` in
+the shape CyberSecEval writes them: `_judge_row` and `_frr_row` build the rows and take the row's `model` as a keyword with no default, so
+every test names the model its rows belong to. The tests read the counts it returns (`rows`, `empty`, `absent`, `usable`, `empty_rate`) of
+that model's rows only, one test for each kind of value that holds no answer (a missing key, null, blank text, `FAIL TO QUERY` with and
+without an error after it), the rows of another model in the same file, a row with no `model`, a `model` matched exactly or as the model of
+a `PROVIDER::model` value and never as a part of another name, the rows of two providers of one model both counted for it, and the value
+error that names the file. `mara.model_eval.cse_dataset_sizes(datasets)` reads a datasets directory that `_write_datasets` lays out, and is
+refused with the path of the file it could not read. `_collect` and `_read_benchmark` of the script have no test of their own: they are read
+through the `report` command line (`_report`, with `--datasets` where a test needs it) on a copy of the fixtures whose deepseek directory
+holds the response files the test wrote and none of the fixtures' own (`_deepseek_run`, which writes the rows a test hands it: of the
+fixtures' deepseek model, and of another family's model where the test is about such rows): the verdict and the counts (`responses`) in the
+summary file under `calib` (`_deepseek_verdict`, `_deepseek_counts`), the notes in the CyberSecEval report, and the exit status for a
+datasets directory that is bad or missing when `--mode live` needs it. The text of that report is read through `render_cyberseceval_report`
+with results that `_cse_family` builds from the counts `parse_cse_responses` reads for the family's model (`<family>-model`) and the verdict
+`evaluate_family` gives, never a verdict written by hand; `_good_judge_rows` and `_good_frr_rows` take the family's name and give rows of
+that model. The stat files are read through `parse_cse_prompt_injection` and `parse_cse_frr` as before. The fixtures' response files hold as
+many rows as their stat files count, each with text and each of its own family's model, so a report built from them has no empty response.
 
 The empty outputs of a garak run are read in `test_model_eval.py` through `mara.model_eval.evaluate_family` with garak results in the shape
 `parse_garak_report` returns (`_garak_family` builds them; one test writes the `empty_rate` None of a report with no outputs), and

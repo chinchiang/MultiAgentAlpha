@@ -1,6 +1,7 @@
 # the empty responses of a CyberSecEval run: what counts as no answer (`parse_cse_responses`), the dataset sizes the rows are counted
 # against (`cse_dataset_sizes`), the verdict (`_cse_verdict`), the report (`render_cyberseceval_report`) and the report command
 # (`_collect`, `_read_benchmark`, `cmd_report` in scripts/model_eval.py): a run of empty responses must not look like a safe one
+# and, from #299, the rows of the model under evaluation only (`_of_model`): another model's rows must not make up for its empty ones
 focused:
 - tests/test_model_eval.py
 mutations:
@@ -31,19 +32,19 @@ mutations:
 - name: only the first field of a row is read
   file: src/mara/model_eval.py
   old: |2-
-            empty += any(_holds_no_answer(row.get(key)) for key in fields)
+        empty = sum(1 for row in model_rows if any(_holds_no_answer(row.get(key)) for key in fields))
   new: |2-
-            empty += _holds_no_answer(row.get(fields[0]))
+        empty = sum(1 for row in model_rows if _holds_no_answer(row.get(fields[0])))
 - name: a row is empty only when every field is
   file: src/mara/model_eval.py
   old: |2-
-            empty += any(_holds_no_answer(row.get(key)) for key in fields)
+        empty = sum(1 for row in model_rows if any(_holds_no_answer(row.get(key)) for key in fields))
   new: |2-
-            empty += all(_holds_no_answer(row.get(key)) for key in fields)
+        empty = sum(1 for row in model_rows if all(_holds_no_answer(row.get(key)) for key in fields))
 - name: the rows the file lacks are not counted
   file: src/mara/model_eval.py
   old: |2-
-    "absent": max(expected - len(rows), 0)
+    "absent": max(expected - len(model_rows), 0)
   new: |2-
     "absent": 0
 - name: the empty rate leaves out the rows the file lacks
@@ -55,7 +56,7 @@ mutations:
 - name: the empty rate is taken over the expected rows although the file has more
   file: src/mara/model_eval.py
   old: |2-
-    total = max(expected, len(rows))
+    total = max(expected, len(model_rows))
   new: |2-
     total = expected
 - name: a value that is not text is read as an answer
@@ -193,3 +194,18 @@ mutations:
     _plan(cfg, a.run_dir, "$DATASETS",
   new: |2-
     _plan(cfg, a.run_dir, a.datasets or "$DATASETS",
+- name: the rows of every model are counted
+  file: src/mara/model_eval.py
+  old: |2
+            if _of_model(row.get("model"), model):
+                model_rows.append(row)
+  new: |2
+            model_rows.append(row)
+- name: a row's model is matched as a substring of its value
+  file: src/mara/model_eval.py
+  old: '    return isinstance(value, str) and (value == model or value.rsplit("::", 1)[-1] == model)'
+  new: '    return isinstance(value, str) and model in value'
+- name: a row without a model is counted for every model
+  file: src/mara/model_eval.py
+  old: '    return isinstance(value, str) and (value == model or value.rsplit("::", 1)[-1] == model)'
+  new: '    return value is None or (isinstance(value, str) and (value == model or value.rsplit("::", 1)[-1] == model))'
