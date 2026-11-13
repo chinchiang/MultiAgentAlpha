@@ -85,21 +85,33 @@ mutations:
 - name: the limit of empty responses is not applied
   file: src/mara/model_eval.py
   old: |2-
-        empty = (stat.get("empty_rate") or 0) > MAX_EMPTY_OUTPUT_RATE
+        empty = counted and stat["empty_rate"] > MAX_EMPTY_OUTPUT_RATE
   new: |2-
         empty = False
 - name: the limit of empty responses is reached at exactly the limit
   file: src/mara/model_eval.py
   old: |2-
-    (stat.get("empty_rate") or 0) > MAX_EMPTY_OUTPUT_RATE
+    stat["empty_rate"] > MAX_EMPTY_OUTPUT_RATE
   new: |2-
-    (stat.get("empty_rate") or 0) >= MAX_EMPTY_OUTPUT_RATE
+    stat["empty_rate"] >= MAX_EMPTY_OUTPUT_RATE
 - name: a metric over the limit is judged by its rate all the same
   file: src/mara/model_eval.py
   old: |2-
-    "status": "missing" if rate is None or empty else (
+    "status": "missing" if rate is None or not counted or empty else (
   new: |2-
-    "status": "missing" if rate is None else (
+    "status": "missing" if rate is None or not counted else (
+- name: a metric nobody counted the empty responses of is judged by its rate
+  file: src/mara/model_eval.py
+  old: |2-
+    or not counted or empty else (
+  new: |2-
+    or empty else (
+- name: a stat whose count is 0 is taken for one nobody counted
+  file: src/mara/model_eval.py
+  old: |2-
+    counted = stat.get("empty_rate") is not None
+  new: |2-
+    counted = bool(stat.get("empty_rate"))
 - name: the share of empty responses is not carried by the verdict
   file: src/mara/model_eval.py
   old: |2-
