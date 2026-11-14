@@ -22,7 +22,6 @@ import datetime as dt
 import json
 import os
 import platform
-import shlex
 import shutil
 import subprocess
 import sys
@@ -47,16 +46,12 @@ def cmd_plan(a: argparse.Namespace) -> int:
     print(f"# garak {cfg.model_eval.garak_version}, probes {cfg.model_eval.garak_probes}; CyberSecEval {cfg.model_eval.cyberseceval_ref}")
     for fam in plan.families:
         for inv in plan.of(fam, "garak"):
-            env = " ".join([f"{k}={s.shown}" for k, s in inv.key_variables.items()] + [f"{k}={v}" for k, v in inv.env.items()])
-            print(f"\n# {fam}: garak\n{env + ' ' if env else ''}{shlex.join(me.shown(inv))}")
+            print(f"\n# {fam}: garak\n{me.shell_line(inv)}")
         if skip := plan.skip(fam, "cyberseceval"):
             print(f"# {fam}: CyberSecEval SKIPPED, {skip.reason}")
             continue
         for inv in plan.of(fam, "cyberseceval"):
-            # only the environment: the keys are in the command line as each one's KeyVariable.shown (the target's ${KEY}, and
-            # for prompt-injection the judge's $<judge_llm_env>)
-            env = " ".join(f"{k}={v}" for k, v in inv.env.items())
-            print(f"# {fam}: CyberSecEval {inv.benchmark}\n{env + ' ' if env else ''}{' '.join(me.shown(inv))}")
+            print(f"# {fam}: CyberSecEval {inv.benchmark}\n{me.shell_line(inv)}")
     for skip in plan.skips:
         if skip.tool is None:
             print(f"\n# {skip.family}: SKIPPED, {skip.reason}")
@@ -82,7 +77,7 @@ def cmd_run(a: argparse.Namespace) -> int:
         for fam in plan.families:
             for inv in plan.of(fam, "garak"):
                 argv, env = me.prepare(inv, os.environ)
-                print(f"+ [{fam}] {shlex.join(me.shown(inv))}")
+                print(f"+ [{fam}] {me.shell_line(inv)}")
                 rc |= subprocess.run(argv, env=env).returncode
     if a.tool in ("cyberseceval", "all"):
         if not a.datasets:
@@ -97,7 +92,7 @@ def cmd_run(a: argparse.Namespace) -> int:
             for inv in plan.of(fam, "cyberseceval"):
                 # the keys travel in the child's environment, never in its (world-readable) command line
                 argv, env = me.prepare(inv, os.environ)
-                print(f"+ [{fam}] {inv.benchmark}: {' '.join(me.shown(inv))}")
+                print(f"+ [{fam}] {inv.benchmark}: {me.shell_line(inv)}")
                 rc |= subprocess.run(argv, env=env).returncode
     (a.out / "run.json").write_text(json.dumps({"date": dt.date.today().isoformat(), "tool": a.tool, "garak_version": cfg.model_eval.garak_version,
                                                "cyberseceval_ref": cfg.model_eval.cyberseceval_ref, "families": list(plan.families),

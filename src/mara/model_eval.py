@@ -14,7 +14,7 @@ matter of the reports). It follows docs/adr/0009-report-metadata.md: `family_eva
 `model_eval` field. Not pure: the parsers read the tools' output files, `write_summary` writes the summary file and
 `latest_summary` reads it, `prepare` makes the output directory of the invocation it is given, writes its files (reading
 certifi's roots and the CA files they bundle) and reads its keys from the environment it is given, and `resolve_key` reads
-the process environment; `invocations` and `shown` are pure but for the working directory, which an absolute path is
+the process environment; `invocations`, `shown` and `shell_line` are pure but for the working directory, which an absolute path is
 made from.
 
 Verified against the tools' sources on 2026-09-12:
@@ -364,7 +364,7 @@ def invocations(targets: list[EvalTarget], settings: ModelEvalConfig, out_dir: P
         if why := unsupported(t, "cyberseceval"):
             skips.append(EvalSkip(t.family, "cyberseceval", why))
             continue
-        key = KeyVariable(target_key_env(t), MASK)
+        key = KeyVariable(source, MASK) if (source := target_key_env(t)) else KeyVariable("", NO_KEY)  # shown as run gives it
         env, files = _tls(t, out, settings.judge_ca_bundle)
         for bench, argv in _cyberseceval_commands(t, datasets, out, "{" + CSE_JUDGE_VAR + "}", "{" + CSE_KEY_VAR + "}").items():
             # the judge first, so a missing judge is named before the family's key
@@ -374,17 +374,50 @@ def invocations(targets: list[EvalTarget], settings: ModelEvalConfig, out_dir: P
 
 
 def shown(inv: EvalInvocation, relative_to: Path | str | None = None) -> list[str]:
-    """The command line of `inv` as `plan` prints it and `report` records it: each key placeholder as its KeyVariable.shown, and,
-    with `relative_to` (the run directory as it was given), that directory's absolute spelling put back as given, for the
-    reports are committed and must not name this host's directories."""
+    """The command line of `inv`, one string per argument, unquoted: each key placeholder as its KeyVariable.shown, and, with
+    `relative_to` (the run directory as it was given), that directory's absolute spelling put back as given, for the reports
+    are committed and must not name this host's directories. `shell_line` quotes it for `plan`, `run` and the reports."""
     parts = []
     for a in inv.argv:
         for name, kv in inv.key_variables.items():
             a = a.replace("{" + name + "}", kv.shown)
         if relative_to is not None:
-            a = a.replace(str(Path(relative_to).absolute()), str(relative_to))
+            a = _as_given(a, relative_to)
         parts.append(a)
     return parts
+
+
+
+def _as_given(value: str, run_dir: Path | str) -> str:
+    """`value` with the absolute spelling of `run_dir` put back as `run_dir` was given."""
+    return value.replace(str(Path(run_dir).absolute()), str(run_dir))
+
+
+def shell_line(inv: EvalInvocation, relative_to: Path | str | None = None) -> str:
+    """`inv` as one line a shell runs as `run` does: its environment (and the key variables of a key it is given in the
+    environment, as garak is) as assignments, then its command line as `shown` gives it. An argument holding a placeholder the
+    shell is to expand ($DATASETS, a KeyVariable.shown that starts with $) is double-quoted, with \\, ", ` and every other $
+    escaped; any other is quoted as shlex.quote quotes it. With `relative_to`, the run directory is put back as given in the
+    environment too, as `shown` does in the command line."""
+    placeholders = ["$DATASETS", *(kv.shown for kv in inv.key_variables.values() if kv.shown.startswith("$"))]
+
+    def quoted(a: str) -> str:
+        if not any(p in a for p in placeholders):
+            return shlex.quote(a)
+        out, i = [], 0
+        while i < len(a):
+            if (p := next((p for p in placeholders if a.startswith(p, i)), None)) is not None:
+                out.append(p)
+                i += len(p)
+                continue
+            out.append("\\" + a[i] if a[i] in '\\"`$' else a[i])
+            i += 1
+        return '"' + "".join(out) + '"'
+
+    in_argv = {name for name in inv.key_variables if any("{" + name + "}" in a for a in inv.argv)}
+    environment = [(k, v if relative_to is None else _as_given(v, relative_to)) for k, v in inv.env.items()]
+    env = [(k, kv.shown) for k, kv in inv.key_variables.items() if k not in in_argv] + environment
+    return " ".join([f"{k}={quoted(v)}" for k, v in env] + [quoted(a) for a in shown(inv, relative_to)])
 
 
 def _file_text(f: InvocationFile) -> str:
@@ -746,7 +779,7 @@ def _empty_reason(r: FamilyResult, metric: str, kind: str, what: str, detail: st
 
 
 def render_garak_report(summary: dict, results: list[FamilyResult], plan: EvalPlan, relative_to: Path | str | None = None) -> str:
-    """`plan`'s garak invocations are listed as they ran, the run directory spelt as `relative_to` (shown)."""
+    """`plan`'s garak invocations are listed as they ran, the run directory spelt as `relative_to` (shell_line)."""
     fams = [r.target.family for r in results]
     L = [_front_matter("garak", summary, fams), f"# garak 紅隊評測（{summary['date']}）", "",
          f"模式：**{summary['mode']}**；garak {summary['garak_version'] or '（版本未記錄）'}；probes：{', '.join(summary['garak_probes'])}；"
@@ -769,7 +802,7 @@ def render_garak_report(summary: dict, results: list[FamilyResult], plan: EvalPl
             for det, c in sorted(dets.items()):
                 L.append(f"| {probe} | {det} | {c['passed']} | {c['total']} | {_fmt(c['pass_rate'])} |")
     L += ["", "## 執行指令（金鑰只從環境變數取，不在此記錄）", "", "```"]
-    L += [f"# {inv.family}\n{shlex.join(shown(inv, relative_to))}" for inv in plan.invocations if inv.tool == "garak"] + ["```", ""]
+    L += [f"# {inv.family}\n{shell_line(inv, relative_to)}" for inv in plan.invocations if inv.tool == "garak"] + ["```", ""]
     for r in results:
         for n in r.notes:
             L.append(f"- {r.target.family}: {n}")
@@ -778,7 +811,7 @@ def render_garak_report(summary: dict, results: list[FamilyResult], plan: EvalPl
 
 def render_cyberseceval_report(summary: dict, results: list[FamilyResult], plan: EvalPlan, relative_to: Path | str | None = None) -> str:
     """`plan`'s CyberSecEval invocations are listed per family, or the reason a family has none (a Bedrock target); the run
-    directory is spelt as `relative_to` (shown)."""
+    directory is spelt as `relative_to` (shell_line)."""
     fams = [r.target.family for r in results]
     th = summary["thresholds"]
     L = [_front_matter("cyberseceval", summary, fams), f"# CyberSecEval 4 評測（{summary['date']}）", "",
@@ -810,7 +843,7 @@ def render_cyberseceval_report(summary: dict, results: list[FamilyResult], plan:
             L.append(f"# {fam}: skipped: {skip.reason}")
             continue
         for inv in plan.of(fam, "cyberseceval"):
-            L.append(f"# {fam} {inv.benchmark}\n{' '.join(shown(inv, relative_to))}")
+            L.append(f"# {fam} {inv.benchmark}\n{shell_line(inv, relative_to)}")
     L += ["```", ""]
     for r in results:
         for n in r.notes:

@@ -84,6 +84,8 @@ Run:
 
 ```
 python3 scripts/model_eval.py plan                                   # shows every command, keys masked
+# a line pasted from plan expands $DATASETS, and a CyberSecEval line ${KEY} (that family's key) and $CSE_JUDGE_LLM
+# (model_eval.judge_llm_env): set them in the shell first; a keyless endpoint is shown with its no-key
 # run: CyberSecEval takes the keys only inside its arguments, so they travel in the child's environment
 # and a one-line shim restores them inside the child; `ps` and /proc/<pid>/cmdline show placeholders only
 python3 scripts/model_eval.py run --out ops/model-eval/<date> --datasets "$DATASETS"
