@@ -1,0 +1,22 @@
+# the SSL_CERT_FILE `model_eval.py plan` prints before each CyberSecEval command (`cmd_plan` in scripts/model_eval.py): the
+# invocation's own environment, as `run` gives it, and nothing when the family and the judge have no chain; never the process
+# variables its keys are put back from
+focused:
+- tests/test_model_eval.py
+mutations:
+- name: plan prints a CyberSecEval command without its CA file
+  file: scripts/model_eval.py
+  old: '            env = " ".join(f"{k}={v}" for k, v in inv.env.items())'
+  new: '            env = ""'
+- name: plan prints a CA file before a CyberSecEval command that has none
+  file: scripts/model_eval.py
+  old: '            env = " ".join(f"{k}={v}" for k, v in inv.env.items())'
+  new: '            env = " ".join(f"{k}={v}" for k, v in inv.env.items()) or "SSL_CERT_FILE=ca.pem"'
+- name: plan prints another CA file than the one run gives a CyberSecEval command
+  file: scripts/model_eval.py
+  old: '            env = " ".join(f"{k}={v}" for k, v in inv.env.items())'
+  new: '            env = " ".join(f"{k}={v}x" for k, v in inv.env.items())'
+- name: plan prints the process variables of a CyberSecEval command's keys before it
+  file: scripts/model_eval.py
+  old: '            env = " ".join(f"{k}={v}" for k, v in inv.env.items())'
+  new: '            env = " ".join([f"{k}={s.shown}" for k, s in inv.key_variables.items()] + [f"{k}={v}" for k, v in inv.env.items()])'
