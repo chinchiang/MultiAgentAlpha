@@ -1,33 +1,33 @@
-# the --report_prefix garak is given (mara.model_eval._garak_command): absolute, so garak 0.17.1 does not file it under
-# ~/.local/share/garak/garak_runs/, and the same for each of the three generators; the report records it with the run
-# directory as it was given (mara.model_eval.shown)
+# the --report_prefix garak is given (mara.model_eval._garak_command, below the run directory `invocations` made absolute):
+# absolute, so garak 0.17.1 does not file it under ~/.local/share/garak/garak_runs/, and the same for each of the three
+# generators; the report records it with the run directory as it was given (mara.model_eval.shown)
 focused:
 - tests/test_model_eval.py
 mutations:
 - name: the report prefix stays relative to the working directory
   file: src/mara/model_eval.py
-  old: '    report_prefix = str(out_dir.absolute() / f"garak-{target.slug}")'
-  new: '    report_prefix = str(out_dir / f"garak-{target.slug}")'
+  old: '    report_prefix = str(out_dir / f"garak-{target.slug}")'
+  new: '    report_prefix = str(Path(os.path.relpath(out_dir)) / f"garak-{target.slug}")'
 - name: the report prefix is made absolute under the home directory
   file: src/mara/model_eval.py
-  old: '    report_prefix = str(out_dir.absolute() / f"garak-{target.slug}")'
-  new: '    report_prefix = str(Path.home() / out_dir / f"garak-{target.slug}")'
+  old: '    report_prefix = str(out_dir / f"garak-{target.slug}")'
+  new: '    report_prefix = str(Path.home() / os.path.relpath(out_dir) / f"garak-{target.slug}")'
 - name: the report prefix drops the family slug
   file: src/mara/model_eval.py
-  old: '    report_prefix = str(out_dir.absolute() / f"garak-{target.slug}")'
-  new: '    report_prefix = str(out_dir.absolute() / "garak")'
+  old: '    report_prefix = str(out_dir / f"garak-{target.slug}")'
+  new: '    report_prefix = str(out_dir / "garak")'
 - name: the direct Anthropic generator keeps a relative prefix
   file: src/mara/model_eval.py
   old: "\"--target_name\", target.model, \"--spec\", spec,\n                \"--report_prefix\", report_prefix]"
-  new: "\"--target_name\", target.model, \"--spec\", spec,\n                \"--report_prefix\", str(out_dir / f\"garak-{target.slug}\")]"
+  new: "\"--target_name\", target.model, \"--spec\", spec,\n                \"--report_prefix\", str(Path(os.path.relpath(out_dir)) / f\"garak-{target.slug}\")]"
 - name: the Bedrock generator keeps a relative prefix
   file: src/mara/model_eval.py
   old: "\"--report_prefix\", report_prefix]\n        keys = {}"
-  new: "\"--report_prefix\", str(out_dir / f\"garak-{target.slug}\")]\n        keys = {}"
+  new: "\"--report_prefix\", str(Path(os.path.relpath(out_dir)) / f\"garak-{target.slug}\")]\n        keys = {}"
 - name: the OpenAI-compatible generator keeps a relative prefix
   file: src/mara/model_eval.py
   old: "\"--report_prefix\", report_prefix]\n        source = key_env(target.provider, target.api_key_env)"
-  new: "\"--report_prefix\", str(out_dir / f\"garak-{target.slug}\")]\n        source = key_env(target.provider, target.api_key_env)"
+  new: "\"--report_prefix\", str(Path(os.path.relpath(out_dir)) / f\"garak-{target.slug}\")]\n        source = key_env(target.provider, target.api_key_env)"
 - name: the report keeps this host's absolute path
   file: src/mara/model_eval.py
   old: '            a = a.replace(str(Path(relative_to).absolute()), str(relative_to))'

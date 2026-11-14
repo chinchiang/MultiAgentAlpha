@@ -414,6 +414,12 @@ def test_the_report_names_the_run_directory_as_given_and_not_this_hosts_absolute
     garak_md = (tmp_path / "docs" / "garak-2026-09-12.md").read_text(encoding="utf-8")
     assert "--report_prefix runs/garak-deepseek" in garak_md
     assert str(tmp_path) not in garak_md
+    # and the CyberSecEval report, whose response, judge-response and stat paths are absolute in the invocation too
+    cse_md = (tmp_path / "docs" / "cyberseceval-2026-09-12.md").read_text(encoding="utf-8")
+    assert "--response-path=runs/deepseek/prompt_injection_responses.json" in cse_md
+    assert "--judge-response-path=runs/deepseek/prompt_injection_judge_responses.json" in cse_md
+    assert "--stat-path=runs/deepseek/mitre_frr_stat.json" in cse_md
+    assert str(tmp_path) not in cse_md
 
 
 def test_plan_names_the_ca_file_by_an_absolute_path_whatever_out_is(tmp_path):
@@ -983,6 +989,84 @@ def test_the_ca_file_run_sets_is_written_where_its_absolute_path_says(tmp_path, 
     env = _tls_of(target, Path("ops/run"))
     assert env == {"SSL_CERT_FILE": str(tmp_path / "ops" / "run" / "ca-glm.pem")}
     assert "INTERNAL" in Path(env["SSL_CERT_FILE"]).read_text(encoding="utf-8")
+
+
+def _path_args(argv) -> dict[str, str]:
+    """The `--<name>-path=<path>` arguments of a CyberSecEval command line, by flag."""
+    return dict(a.split("=", 1) for a in argv if re.match(r"--[a-z-]+-path=", a))
+
+
+def test_every_path_of_an_evaluation_invocation_is_absolute_whatever_out_is(tmp_path, monkeypatch):
+    # a child started from another directory, or a command pasted elsewhere, must still find its files and write into the run
+    target = me.EvalTarget(family="glm", name="glm-reviewer", model="glm", provider="openai_compatible",
+                           base_url="https://llm.invalid/v1", api_key_env="GLM_LOCAL_KEY", ca_bundle="internal.pem")
+    monkeypatch.chdir(tmp_path)
+    run = tmp_path / "ops" / "run"
+    plan = _plan_of([target], out="ops/run", datasets="data/cse")
+    garak = plan.of("glm", "garak")[0]
+    argv = list(garak.argv)
+    assert argv[argv.index("--generator_option_file") + 1] == str(run / "garak-glm.generator.json")
+    assert argv[argv.index("--report_prefix") + 1] == str(run / "garak-glm")
+    assert [f.path for f in garak.files] == [run / "garak-glm.generator.json", run / "ca-glm.pem"]
+    pi, frr = plan.of("glm", "cyberseceval")
+    assert _path_args(pi.argv) == {
+        "--prompt-path": str(tmp_path / "data" / "cse" / "prompt_injection" / "prompt_injection.json"),
+        "--response-path": str(run / "glm" / "prompt_injection_responses.json"),
+        "--judge-response-path": str(run / "glm" / "prompt_injection_judge_responses.json"),
+        "--stat-path": str(run / "glm" / "prompt_injection_stat.json")}
+    assert _path_args(frr.argv) == {
+        "--prompt-path": str(tmp_path / "data" / "cse" / "mitre_frr" / "mitre_frr.json"),
+        "--response-path": str(run / "glm" / "mitre_frr_responses.json"),
+        "--stat-path": str(run / "glm" / "mitre_frr_stat.json")}
+    for inv in (garak, pi, frr):
+        assert inv.env == {"SSL_CERT_FILE": str(run / "ca-glm.pem")}
+        assert inv.out_dir.is_absolute(), (inv.tool, inv.benchmark, inv.out_dir)
+
+
+def test_plan_keeps_the_datasets_variable_for_the_shell_and_makes_a_datasets_directory_absolute(tmp_path):
+    def prompt_paths(*datasets: str) -> set[str]:
+        r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(ROOT / "config" / "mara.yaml"), "plan", "--out", "ops/run", *datasets],
+                           capture_output=True, text=True, cwd=tmp_path)
+        assert r.returncode == 0, r.stderr
+        return set(re.findall(r"--prompt-path=(\S+)", r.stdout))
+
+    assert prompt_paths() == {"$DATASETS/prompt_injection/prompt_injection.json", "$DATASETS/mitre_frr/mitre_frr.json"}
+    assert prompt_paths("--datasets", "data/cse") == {str(tmp_path / "data" / "cse" / "prompt_injection" / "prompt_injection.json"),
+                                                      str(tmp_path / "data" / "cse" / "mitre_frr" / "mitre_frr.json")}
+
+
+def test_run_gives_every_command_absolute_paths_whatever_out_is(tmp_path, monkeypatch):
+    import collections
+
+    import model_eval as script
+
+    for name in ("ANTHROPIC_API_KEY", "DEEPSEEK_LOCAL_KEY", "NIM_LOCAL_KEY"):
+        monkeypatch.setenv(name, "k" * 32)
+    monkeypatch.setenv("CSE_JUDGE_LLM", "OPENAI::judge::" + "k" * 32 + "::https://judge.invalid/v1")
+    ran = []
+
+    def fake_run(argv, **kwargs):
+        if argv[-1] == "--version":
+            return subprocess.CompletedProcess(argv, 0, "garak v0.17.1", "")
+        ran.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(script.subprocess, "run", fake_run)
+    monkeypatch.chdir(tmp_path)
+    a = argparse.Namespace(config=FIXTURE_PANEL, workspace=Workspace(ROOT), out=Path("ops/run"), tool="all", datasets="data/cse")
+    script.cmd_run(a)
+    paths = collections.defaultdict(list)  # flag -> the paths every command was given for it
+    for argv in ran:
+        for i, arg in enumerate(argv):
+            if arg in ("--generator_option_file", "--report_prefix"):
+                paths[arg].append(argv[i + 1])
+        for flag, path in _path_args(argv).items():
+            paths[flag].append(path)
+    # three families (garak's generator option file for the two OpenAI-compatible ones), two benchmarks each
+    assert {flag: len(given) for flag, given in paths.items()} == {"--generator_option_file": 2, "--report_prefix": 3, "--prompt-path": 6,
+                                                                  "--response-path": 6, "--judge-response-path": 3, "--stat-path": 6}
+    relative = [(flag, p) for flag, given in paths.items() for p in given if not Path(p).is_absolute()]
+    assert relative == []
 
 
 def test_a_family_without_an_internal_ca_gets_no_ssl_cert_file(tmp_path):
