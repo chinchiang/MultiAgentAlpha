@@ -5,7 +5,7 @@
 # Two sources:
 #  - semgrep 1.179.0 is in the closure because CodeShield's insecure-code detector looks up semgrep-core when it is imported
 #    (CodeShield/insecure_code_detector/oss.py), and benchmark/run.py imports a module that imports CodeShield. It pins mcp==1.29.0 and
-#    opentelemetry-api~=1.37.0 exactly as in tools/semgrep-requirements.txt, so the same five advisories carry the same dated
+#    opentelemetry-api~=1.37.0 exactly as in tools/semgrep-requirements.txt, so the same six advisories carry the same dated
 #    entries as tools/osv-semgrep.toml (reviewed in docs/cve-2026-59951-exception-review-2026-10-16.md). Here semgrep is never
 #    started at all: the prompt-injection and mitre-frr benchmarks do not call it. Remove them with the entries there.
 #  - setuptools 81.0.0 is the newest release with pkg_resources, which benchmark/autopatching_benchmark.py and arvo_utils.py
@@ -20,6 +20,11 @@ reason = "MCP Python SDK unbounded session accumulation in the StreamableHTTP tr
 id = "CVE-2026-114603"
 ignoreUntil = 2026-12-31
 reason = "OpenTelemetry Python unbounded tracestate parsing in opentelemetry-api (GHSA-xcq7-p3pf-p88h, CVSS 3.1 A:L); fixed in opentelemetry-api 1.45.1, but semgrep 1.179.0-1.182.1 pin opentelemetry-api~=1.37.0 so the closure cannot take it. The parser (TraceState.from_header) runs only on a carrier holding a tracestate. semgrep 1.179.0 extracts a context only in Telemetry.extract(), only under --trace (no envvar, no auto envvar prefix), from a carrier holding a traceparent it builds from SEMGREP_TRACE_PARENT_TRACE_ID and SEMGREP_TRACE_PARENT_SPAN_ID and never a tracestate. MARA runs semgrep scan without --trace, with runner.tool_env, which passes no SEMGREP_* or OTEL_* variable, and never semgrep ci or mcp. Re-check at a semgrep release that relaxes the pin."
+
+[[IgnoredVulns]]
+id = "CVE-2026-126360"
+ignoreUntil = 2026-12-31
+reason = "OpenTelemetry Python API denial of service through quadratic-time traceparent parsing (GHSA-mf5v-w3w3-f6cg); fixed in opentelemetry-api 1.45.2, but semgrep 1.179.0 pins opentelemetry-api~=1.37.0 (and opentelemetry-sdk 1.37.0 and opentelemetry-semantic-conventions 0.58b0 pin ==1.37.0) so the closure cannot take it. The parser (TraceContextTextMapPropagator.extract, through propagate.extract) runs only in Telemetry.extract(), which configure_tracing calls only when tracing is enabled, that is only under --trace (no envvar, no auto envvar prefix), on a traceparent semgrep builds from SEMGREP_TRACE_PARENT_TRACE_ID and SEMGREP_TRACE_PARENT_SPAN_ID; semgrep mcp only reads the current span. MARA runs semgrep scan without --trace, with runner.tool_env, which passes no SEMGREP_* or OTEL_* variable, and never semgrep ci or mcp. Re-check at a semgrep release that relaxes the pin."
 
 [[IgnoredVulns]]
 id = "CVE-2026-116684"

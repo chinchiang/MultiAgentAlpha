@@ -34,6 +34,18 @@ vulnerabilities:
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
     expired_at: 2026-12-31
+  - id: CVE-2026-126360
+    paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
+    statement: >-
+      opentelemetry-api 1.37.0 in the semgrep closure (GHSA-mf5v-w3w3-f6cg): denial of service through
+      quadratic-time traceparent parsing, fixed in opentelemetry-api 1.45.2. semgrep 1.179.0 pins
+      opentelemetry-api~=1.37.0, so relocking cannot reach the fix. semgrep parses a traceparent only under
+      --trace, and only one it builds from SEMGREP_TRACE_PARENT_TRACE_ID and SEMGREP_TRACE_PARENT_SPAN_ID;
+      MARA runs semgrep scan without --trace and passes it no SEMGREP_* or OTEL_* variable. Mirrors
+      tools/osv-semgrep.toml; re-check at a semgrep release that relaxes the pin.
+      The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
+      mirrors tools/osv-cyberseceval.toml.
+    expired_at: 2026-12-31
   - id: CVE-2026-116684
     paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
