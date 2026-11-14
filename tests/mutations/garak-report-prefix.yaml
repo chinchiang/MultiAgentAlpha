@@ -30,9 +30,9 @@ mutations:
   new: "\"--report_prefix\", str(Path(os.path.relpath(out_dir)) / f\"garak-{target.slug}\")]\n        source = key_env(target.provider, target.api_key_env)"
 - name: the report keeps this host's absolute path
   file: src/mara/model_eval.py
-  old: '            a = a.replace(str(Path(relative_to).absolute()), str(relative_to))'
-  new: '            pass'
+  old: '    return value.replace(str(Path(run_dir).absolute()), str(run_dir))'
+  new: '    return value'
 - name: the report drops the run directory from the prefix
   file: src/mara/model_eval.py
-  old: '            a = a.replace(str(Path(relative_to).absolute()), str(relative_to))'
-  new: '            a = a.replace(str(Path(relative_to).absolute()), "")'
+  old: '    return value.replace(str(Path(run_dir).absolute()), str(run_dir))'
+  new: '    return value.replace(str(Path(run_dir).absolute()), "")'

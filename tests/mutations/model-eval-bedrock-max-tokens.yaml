@@ -47,19 +47,19 @@ mutations:
   file: src/mara/model_eval.py
   old: '    cls: {"generation_params": ["temperature", "top_p", "frequency_penalty", "presence_penalty"]}'
   new: '    cls: {"generation_params": ["temperature", "top_p", "frequency_penalty", "presence_penalty", "max_tokens"]}'
-- name: plan prints a garak command joined by spaces
+- name: plan prints a garak line with its single quotes taken out
   file: scripts/model_eval.py
-  old: "{env + ' ' if env else ''}{shlex.join(me.shown(inv))}"
-  new: "{env + ' ' if env else ''}{' '.join(me.shown(inv))}"
+  old: 'print(f"\n# {fam}: garak\n{me.shell_line(inv)}")'
+  new: 'print(f"\n# {fam}: garak\n{me.shell_line(inv).replace(chr(39), '''')}")'
 - name: the direct Anthropic generator is given no --probe_options
   file: src/mara/model_eval.py
   old: '    if any(p == "promptinject" or p.startswith("promptinject.") for p in probes):'
   new: '    if target.provider != "anthropic" and any(p == "promptinject" or p.startswith("promptinject.") for p in probes):'
-- name: run prints the garak command joined by spaces
+- name: run prints the garak line with its single quotes taken out
   file: scripts/model_eval.py
-  old: 'print(f"+ [{fam}] {shlex.join(me.shown(inv))}")'
-  new: 'print(f"+ [{fam}] {'' ''.join(me.shown(inv))}")'
-- name: the report records the garak command joined by spaces
+  old: 'print(f"+ [{fam}] {me.shell_line(inv)}")'
+  new: 'print(f"+ [{fam}] {me.shell_line(inv).replace(chr(39), '''')}")'
+- name: the report records the garak line with its single quotes taken out
   file: src/mara/model_eval.py
-  old: 'L += [f"# {inv.family}\n{shlex.join(shown(inv, relative_to))}"'
-  new: 'L += [f"# {inv.family}\n{'' ''.join(shown(inv, relative_to))}"'
+  old: 'L += [f"# {inv.family}\n{shell_line(inv, relative_to)}"'
+  new: 'L += [f"# {inv.family}\n{shell_line(inv, relative_to).replace(chr(39), '''')}"'

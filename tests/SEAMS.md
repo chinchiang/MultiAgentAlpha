@@ -310,9 +310,12 @@ The evaluation invocations of a config are read in `test_model_eval.py` through 
 datasets)`, with targets built by keyword or from a shipped config and a `ModelEvalConfig` built by keyword (`_plan_of`, `_invocation`):
 each invocation's argv, key variables and files (`_generator_options`), and the plan's skips. `mara.model_eval.prepare(invocation, environ)` is
 given an `environ` the test holds and returns the argv and the environment `run` executes: this interpreter, the shim and the keys; one test
-builds an `EvalInvocation` by hand whose module is a package below `tmp_path`, to read what the child receives. `mara.model_eval.shown`
-gives what `plan` prints and the reports record. `plan`, `run` and `report` are read through the command line, `run` with the script's call
-that starts a child process replaced, recording the argv and the environment each command is given. The command builders behind them
+builds an `EvalInvocation` by hand whose module is a package below `tmp_path`, to read what the child receives.
+`mara.model_eval.shell_line(invocation, relative_to)` is given an `EvalInvocation` built by hand and returns the one line `plan` and
+`run` print and the reports record; `mara.model_eval.shown` gives its command line with the key placeholders shown. `plan`, `run`
+and `report` are read through the command line, `run` with the script's call that starts a child process replaced, recording the
+argv and the environment each command is given. `_lines_of` collects the line each of them shows, and one test runs each in `bash`
+with a `python3` on PATH that says what it was given. The command builders behind them
 (`_garak_command`, `_cyberseceval_commands`, `_through_shim`) have no test of their own.
 
 The CA file `run` writes for a family whose target or whose CyberSecEval judge sits behind an internal CA is read in `test_model_eval.py`

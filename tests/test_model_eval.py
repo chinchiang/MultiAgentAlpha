@@ -175,11 +175,11 @@ def test_cyberseceval_keys_never_reach_the_process_command_line(tmp_path):
     assert child == direct, "exactly what `python -m` would have given the module, argv[0] included"
 
 
-def test_an_endpoint_without_a_key_is_given_no_key_and_shown_masked(tmp_path):
+def test_an_endpoint_without_a_key_is_given_no_key_and_shown_as_no_key(tmp_path):
     keyless = me.EvalTarget("deepseek", "deepseek-reviewer", "deepseek-v3.2", "openai_compatible", "https://vllm.invalid/v1", "")
     inv = _invocation(keyless, "cyberseceval", "mitre-frr", out=tmp_path)
-    assert inv.key_variables == {"MARA_CSE_KEY": me.KeyVariable("", me.MASK)} and _invocation(keyless, out=tmp_path).key_variables == {}
-    assert f"--llm-under-test=OPENAI::deepseek-v3.2::{me.MASK}::https://vllm.invalid/v1" in me.shown(inv)
+    assert inv.key_variables == {"MARA_CSE_KEY": me.KeyVariable("", me.NO_KEY)} and _invocation(keyless, out=tmp_path).key_variables == {}
+    assert "--llm-under-test=OPENAI::deepseek-v3.2::no-key::https://vllm.invalid/v1" in me.shown(inv)
     _, env = me.prepare(inv, {})
     assert env["MARA_CSE_KEY"] == me.NO_KEY
 
@@ -190,6 +190,166 @@ def test_a_key_that_is_not_in_the_environment_stops_the_invocation_before_it_wri
     with pytest.raises(RuntimeError, match="environment variable GEMINI_API_KEY is empty"):
         me.prepare(inv, {"GEMINI_API_KEY": ""})
     assert not (tmp_path / "run").exists()
+
+
+def test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live():
+    # a placeholder the shell must expand ($DATASETS, ${KEY}, $<judge_llm_env>, garak's $<key variable>) is double-quoted;
+    # anything else is quoted as shlex.quote quotes it, so a path holding a space can be pasted back
+    cse = me.EvalInvocation(
+        "glm", "cyberseceval", "prompt-injection",
+        ("python3", "-m", "CybersecurityBenchmarks.benchmark.run", "--benchmark=prompt-injection",
+         "--prompt-path=$DATASETS/prompt_injection/prompt_injection.json", "--response-path=/runs/my run/glm/responses.json",
+         "--judge-llm={MARA_CSE_JUDGE}", "--llm-under-test=OPENAI::glm::{MARA_CSE_KEY}::https://llm.invalid/v1"),
+        {"SSL_CERT_FILE": "/runs/my run/ca-glm.pem"},
+        {"MARA_CSE_JUDGE": me.KeyVariable("CSE_JUDGE_LLM", "$CSE_JUDGE_LLM"), "MARA_CSE_KEY": me.KeyVariable("GLM_LOCAL_KEY", me.MASK)},
+        (), Path("/runs/my run/glm"))
+    assert me.shell_line(cse) == (
+        "SSL_CERT_FILE='/runs/my run/ca-glm.pem' python3 -m CybersecurityBenchmarks.benchmark.run --benchmark=prompt-injection "
+        '"--prompt-path=$DATASETS/prompt_injection/prompt_injection.json" \'--response-path=/runs/my run/glm/responses.json\' '
+        '"--judge-llm=$CSE_JUDGE_LLM" "--llm-under-test=OPENAI::glm::${KEY}::https://llm.invalid/v1"')
+    # garak takes its key from the environment: the key variable is the prefix, and an argument with JSON in it is single-quoted
+    garak = me.EvalInvocation(
+        "glm", "garak", "", ("python3", "-m", "garak", "--report_prefix", "/runs/my run/garak-glm", "--probe_options", '{"a":[1]}'),
+        {}, {"OPENAICOMPATIBLE_API_KEY": me.KeyVariable("GLM_LOCAL_KEY", "$GLM_LOCAL_KEY")}, (), Path("/runs/my run"))
+    assert me.shell_line(garak) == (
+        'OPENAICOMPATIBLE_API_KEY="$GLM_LOCAL_KEY" python3 -m garak --report_prefix \'/runs/my run/garak-glm\' --probe_options \'{"a":[1]}\'')
+    # inside double quotes only the placeholder stays live: \ " ` and any other $ are escaped
+    odd = me.EvalInvocation("x", "cyberseceval", "mitre-frr", ("python3", "-m", "m", '--x=a"b\\c`d$e:$DATASETS'), {}, {}, (), Path("/runs"))
+    assert me.shell_line(odd) == 'python3 -m m "--x=a\\"b\\\\c\\`d\\$e:$DATASETS"'
+
+
+def test_the_shell_line_of_an_evaluation_invocation_names_the_run_directory_as_given_in_its_environment_too(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    run = tmp_path / "runs"
+    inv = me.EvalInvocation("glm", "garak", "", ("python3", "-m", "garak", "--report_prefix", str(run / "garak-glm")),
+                            {"SSL_CERT_FILE": str(run / "ca-glm.pem")}, {}, (), run)
+    assert me.shell_line(inv, "runs") == "SSL_CERT_FILE=runs/ca-glm.pem python3 -m garak --report_prefix runs/garak-glm"
+
+
+_PASTE_KEYS = {"GEMINI_API_KEY": "gemini-key-1", "GLM_LOCAL_KEY": "glm-key-2",
+               "CSE_JUDGE_LLM": "OPENAI::judge::judge-key-3::https://judge.invalid/v1"}
+
+
+def _paste_config(tmp_path) -> Path:
+    """config/mara.yaml with its CA files pointing at a PEM under tmp_path (CI has no ~/.mara)."""
+    pem = tmp_path / "gateway.pem"
+    pem.write_text("-----BEGIN CERTIFICATE-----\nGATEWAY-CA\n-----END CERTIFICATE-----\n", encoding="utf-8")
+    data = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    data["model_eval"]["judge_ca_bundle"] = str(pem)
+    for model in data["models"]:
+        if model.get("ca_bundle"):
+            model["ca_bundle"] = str(pem)
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    return config
+
+
+def _lines_of(place: str, config: Path, run: Path, monkeypatch, capsys) -> tuple[tuple[str, ...], dict[tuple[str, str, str], str]]:
+    """The tools whose evaluation invocations `place` shows, and (family, tool, benchmark) -> the line it prints or records."""
+    import model_eval as script
+
+    families = ("anthropic", "gemini", "glm")
+    if place == "plan":
+        r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(config), "plan", "--out", str(run)], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        lines = r.stdout.splitlines()
+        found = {(f, "garak", ""): lines[lines.index(f"# {f}: garak") + 1] for f in families}
+        return ("garak", "cyberseceval"), found | {(f, "cyberseceval", b): lines[lines.index(f"# {f}: CyberSecEval {b}") + 1]
+                        for f in ("gemini", "glm") for b in ("prompt-injection", "mitre-frr")}
+    if place == "run":
+        for name, value in _PASTE_KEYS.items():
+            monkeypatch.setenv(name, value)
+        with monkeypatch.context() as m:  # only while run runs: the test's own subprocess is the same module
+            m.setattr(script.subprocess, "run", lambda argv, **kw: subprocess.CompletedProcess(argv, 0, "garak v0.17.1", ""))
+            script.cmd_run(argparse.Namespace(config=config, workspace=Workspace(ROOT), out=run, tool="all", datasets="/data/cse"))
+        found = {}
+        for line in capsys.readouterr().out.splitlines():
+            if m := re.match(r"\+ \[(\w+)\] (prompt-injection|mitre-frr): (.*)", line):
+                found[(m.group(1), "cyberseceval", m.group(2))] = m.group(3)
+            elif m := re.match(r"\+ \[(\w+)\] (.*)", line):
+                found[(m.group(1), "garak", "")] = m.group(2)
+        return ("garak", "cyberseceval"), found
+    shutil.copytree(FIX, run, dirs_exist_ok=True)
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(config), "report", "--run-dir", str(run), "--date", "2026-09-12",
+                        "--mode", "dry-run", "--docs-dir", str(run.parent / "docs"), "--summary-root", str(run.parent)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    if place == "garak report":
+        lines = (run.parent / "docs" / "garak-2026-09-12.md").read_text(encoding="utf-8").splitlines()
+        return ("garak",), {(f, "garak", ""): lines[lines.index(f"# {f}") + 1] for f in families}
+    lines = (run.parent / "docs" / "cyberseceval-2026-09-12.md").read_text(encoding="utf-8").splitlines()
+    return ("cyberseceval",), {(f, "cyberseceval", b): lines[lines.index(f"# {f} {b}") + 1]
+                               for f in ("gemini", "glm") for b in ("prompt-injection", "mitre-frr")}
+
+
+@pytest.mark.parametrize("place", ["plan", "run", "garak report", "cyberseceval report"])
+def test_a_line_pasted_from_plan_run_or_a_report_into_a_shell_runs_what_run_executes(place, tmp_path, monkeypatch, capsys):
+    config = _paste_config(tmp_path)
+    run = tmp_path / "my run"  # a space: the line must quote it
+    tools, found = _lines_of(place, config, run, monkeypatch, capsys)
+    cfg = load_config(config, Workspace(ROOT))
+    plan = me.invocations(me.targets_from_config(cfg), cfg.model_eval, run, "/data/cse")
+    invocations = [inv for inv in plan.invocations if inv.tool in tools]
+    assert {(inv.family, inv.tool, inv.benchmark) for inv in invocations} == set(found), found
+    bin_dir = tmp_path / "bin"  # a python3 that only says what it was given
+    bin_dir.mkdir()
+    dump = "import json, os, sys; print(json.dumps({'argv': sys.argv[1:], 'env': dict(os.environ)}))"
+    (bin_dir / "python3").write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} -c {shlex.quote(dump)} \"$@\"\n", encoding="utf-8")
+    (bin_dir / "python3").chmod(0o755)
+    for inv in invocations:
+        argv, env = me.prepare(inv, {**os.environ, **_PASTE_KEYS})
+        if inv.tool == "cyberseceval":  # the shim's arguments with its placeholders filled, as the child sees them
+            expected = ["-m", inv.argv[2], *[re.sub(r"\{(\w+)\}", lambda m, env=env: env[m.group(1)], a) for a in argv[3:]]]
+        else:
+            expected = argv[1:]
+        key = next((_PASTE_KEYS[kv.source] for kv in inv.key_variables.values() if kv.source in _PASTE_KEYS and kv.shown == me.MASK), "")
+        shell_env = {**os.environ, **_PASTE_KEYS, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}", "DATASETS": "/data/cse", "KEY": key}
+        line = found[(inv.family, inv.tool, inv.benchmark)]
+        # in front: the CA file, and for garak the variable it reads its key from; never the variables the shim reads
+        words = shlex.split(line)
+        assigned = {w.split("=", 1)[0] for w in words[:words.index("python3")]}
+        assert assigned == set(inv.env) | (set(inv.key_variables) if inv.tool == "garak" else set()), (inv.family, inv.tool, inv.benchmark)
+        r = subprocess.run(["bash", "-c", line], capture_output=True, text=True, env=shell_env, cwd=run.parent)
+        assert r.returncode == 0, (inv.family, inv.tool, inv.benchmark, r.stderr)
+        child = json.loads(r.stdout)
+        assert child["argv"] == expected, (inv.family, inv.tool, inv.benchmark)
+        for name in assigned:
+            assert child["env"].get(name) == env.get(name), (inv.family, inv.tool, inv.benchmark, name)
+
+
+def test_plan_and_the_report_show_a_keyless_endpoint_as_the_no_key_run_gives_it(tmp_path):
+    # pasted with ${KEY}, the line would take whatever KEY the shell holds, or none; run gives such an endpoint `no-key`
+    config = tmp_path / "keyless.yaml"
+    config.write_text(FIXTURE_PANEL.read_text(encoding="utf-8").replace(" api_key_env: DEEPSEEK_LOCAL_KEY,", ""), encoding="utf-8")
+    keyless = "--llm-under-test=OPENAI::deepseek-v3.2::no-key::https://vllm-deepseek.internal:8000/v1"
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(config), "plan", "--out", str(tmp_path / "run")],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    for bench in ("prompt-injection", "mitre-frr"):
+        assert keyless in shlex.split(lines[lines.index(f"# deepseek: CyberSecEval {bench}") + 1]), bench
+    shutil.copytree(FIX, tmp_path / "runs")
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(config), "report", "--run-dir", "runs", "--date", "2026-09-12",
+                        "--mode", "dry-run", "--docs-dir", "docs", "--summary-root", "."], capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    lines = (tmp_path / "docs" / "cyberseceval-2026-09-12.md").read_text(encoding="utf-8").splitlines()
+    for bench in ("prompt-injection", "mitre-frr"):
+        assert keyless in shlex.split(lines[lines.index(f"# deepseek {bench}") + 1]), bench
+
+
+def test_the_reports_record_the_ca_file_by_the_run_directory_as_given_and_never_this_hosts_path(tmp_path):
+    # the reports are committed: SSL_CERT_FILE, in front of each command line, is absolute in the invocation like every path
+    config = _paste_config(tmp_path)
+    shutil.copytree(FIX, tmp_path / "runs")
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(config), "report", "--run-dir", "runs", "--date", "2026-09-12",
+                        "--mode", "dry-run", "--docs-dir", "docs", "--summary-root", "."], capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    garak_md = (tmp_path / "docs" / "garak-2026-09-12.md").read_text(encoding="utf-8").splitlines()
+    cse_md = (tmp_path / "docs" / "cyberseceval-2026-09-12.md").read_text(encoding="utf-8").splitlines()
+    assert garak_md[garak_md.index("# glm") + 1].startswith("OPENAICOMPATIBLE_API_KEY=\"$GLM_LOCAL_KEY\" SSL_CERT_FILE=runs/ca-glm.pem ")
+    for bench in ("prompt-injection", "mitre-frr"):
+        assert cse_md[cse_md.index(f"# glm {bench}") + 1].startswith("SSL_CERT_FILE=runs/ca-glm.pem "), bench
+    assert not [line for line in garak_md + cse_md if str(tmp_path) in line]
 
 
 def test_parsers_on_the_synthetic_fixtures():
@@ -273,11 +433,11 @@ def test_plan_masks_keys(monkeypatch):
     monkeypatch.setenv("GLM_LOCAL_KEY", "glm-secret-value")
     r = subprocess.run([sys.executable, str(SCRIPT), "plan"], capture_output=True, text=True)
     assert r.returncode == 0 and "glm-secret-value" not in r.stdout
-    assert "OPENAICOMPATIBLE_API_KEY=$GLM_LOCAL_KEY" in r.stdout and "${KEY}" in r.stdout
+    assert 'OPENAICOMPATIBLE_API_KEY="$GLM_LOCAL_KEY"' in r.stdout and "${KEY}" in r.stdout
     assert "--target_type bedrock --target_name global.anthropic.claude-opus-5-5" in r.stdout
     assert "# anthropic: CyberSecEval SKIPPED" in r.stdout and "no Bedrock provider" in r.stdout
-    assert "OPENAICOMPATIBLE_API_KEY=$GEMINI_API_KEY" in r.stdout and "# gemini: SKIPPED" not in r.stdout
-    assert "OPENAICOMPATIBLE_API_KEY=$GLM_LOCAL_KEY SSL_CERT_FILE=" in r.stdout
+    assert 'OPENAICOMPATIBLE_API_KEY="$GEMINI_API_KEY"' in r.stdout and "# gemini: SKIPPED" not in r.stdout
+    assert 'OPENAICOMPATIBLE_API_KEY="$GLM_LOCAL_KEY" SSL_CERT_FILE=' in r.stdout
     # the direct Anthropic API path is still planned (the PSIRT example config keeps it)
     r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(FIXTURE_PANEL), "plan"],
                        capture_output=True, text=True)
@@ -492,7 +652,10 @@ def test_the_garak_command_run_prints_is_the_one_it_executes(tmp_path, monkeypat
     printed = [shlex.split(line) for line in capsys.readouterr().out.splitlines() if line.startswith("+ [")]
     assert len(printed) == len(executed) == 3
     for line, argv in zip(printed, executed, strict=True):
-        assert line[3:] == argv[1:] and "--probe_options" in argv  # "+", "[family]", "python3" against this interpreter
+        words = line[2:]  # after "+", "[family]": the environment it is given, then "python3" against this interpreter
+        while re.match(r"[A-Z][A-Z0-9_]*=", words[0]):
+            words.pop(0)
+        assert words[1:] == argv[1:] and "--probe_options" in argv
 
 
 def test_the_garak_command_the_report_records_is_the_argv_that_ran(tmp_path):
@@ -1028,7 +1191,7 @@ def test_plan_keeps_the_datasets_variable_for_the_shell_and_makes_a_datasets_dir
         r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(ROOT / "config" / "mara.yaml"), "plan", "--out", "ops/run", *datasets],
                            capture_output=True, text=True, cwd=tmp_path)
         assert r.returncode == 0, r.stderr
-        return set(re.findall(r"--prompt-path=(\S+)", r.stdout))
+        return set(re.findall(r"--prompt-path=([^\s\"']+)", r.stdout))
 
     assert prompt_paths() == {"$DATASETS/prompt_injection/prompt_injection.json", "$DATASETS/mitre_frr/mitre_frr.json"}
     assert prompt_paths("--datasets", "data/cse") == {str(tmp_path / "data" / "cse" / "prompt_injection" / "prompt_injection.json"),
