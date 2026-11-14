@@ -1,0 +1,30 @@
+# every path an evaluation invocation names is absolute, whatever --out is (`invocations` and `_cyberseceval_commands` in
+# src/mara/model_eval.py), except the `$DATASETS` a printed command keeps for the shell; and the reports still record both tools'
+# commands with the run directory as it was given (`shown`)
+focused:
+- tests/test_model_eval.py
+mutations:
+- name: the run directory stays as it was given
+  file: src/mara/model_eval.py
+  old: '    out = Path(out_dir).absolute()'
+  new: '    out = Path(out_dir)'
+- name: garak's generator option file is named relative to the working directory
+  file: src/mara/model_eval.py
+  old: '        option_file = out / f"garak-{t.slug}.generator.json"'
+  new: '        option_file = Path(os.path.relpath(out)) / f"garak-{t.slug}.generator.json"'
+- name: CyberSecEval's outputs are named relative to the working directory
+  file: src/mara/model_eval.py
+  old: '    d, o = Path(datasets_dir), out_dir / target.slug'
+  new: '    d, o = Path(datasets_dir), Path(os.path.relpath(out_dir)) / target.slug'
+- name: a datasets directory stays as it was given
+  file: src/mara/model_eval.py
+  old: '    datasets = datasets if datasets == "$DATASETS" else str(Path(datasets).absolute())'
+  new: '    datasets = datasets'
+- name: the $DATASETS of a printed command is made a path under this host's working directory
+  file: src/mara/model_eval.py
+  old: '    datasets = datasets if datasets == "$DATASETS" else str(Path(datasets).absolute())'
+  new: '    datasets = str(Path(datasets).absolute())'
+- name: the CyberSecEval report records this host's absolute path
+  file: src/mara/model_eval.py
+  old: '        if relative_to is not None:'
+  new: '        if relative_to is not None and inv.tool == "garak":'

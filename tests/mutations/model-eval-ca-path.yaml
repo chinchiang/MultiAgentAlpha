@@ -1,20 +1,21 @@
 # the CA bundle file `model_eval.py run` writes for a family behind an internal CA, and the SSL_CERT_FILE that names it
-# (`_tls` and `prepare` in src/mara/model_eval.py; plan prints and run sets the one invocation's): absolute, whatever --out is
+# (`_tls` and `prepare` in src/mara/model_eval.py; plan prints and run sets the one invocation's): absolute, whatever --out is,
+# below the run directory `invocations` made absolute
 focused:
 - tests/test_model_eval.py
 mutations:
 - name: the CA file path stays relative to the working directory
   file: src/mara/model_eval.py
-  old: '    path = out_dir.absolute() / f"ca-{target.slug}.pem"'
-  new: '    path = out_dir / f"ca-{target.slug}.pem"'
+  old: '    path = out_dir / f"ca-{target.slug}.pem"'
+  new: '    path = Path(os.path.relpath(out_dir)) / f"ca-{target.slug}.pem"'
 - name: the CA file path is made absolute under the home directory
   file: src/mara/model_eval.py
-  old: '    path = out_dir.absolute() / f"ca-{target.slug}.pem"'
-  new: '    path = Path.home() / out_dir / f"ca-{target.slug}.pem"'
+  old: '    path = out_dir / f"ca-{target.slug}.pem"'
+  new: '    path = Path.home() / os.path.relpath(out_dir) / f"ca-{target.slug}.pem"'
 - name: the CA file path drops the family slug
   file: src/mara/model_eval.py
-  old: '    path = out_dir.absolute() / f"ca-{target.slug}.pem"'
-  new: '    path = out_dir.absolute() / "ca.pem"'
+  old: '    path = out_dir / f"ca-{target.slug}.pem"'
+  new: '    path = out_dir / "ca.pem"'
 - name: run names another file than the one it wrote
   file: src/mara/model_eval.py
   old: '    return {"SSL_CERT_FILE": str(path)},'

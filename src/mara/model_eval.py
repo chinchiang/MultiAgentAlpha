@@ -39,7 +39,7 @@ and without calling any endpoint (credentials unset) the command line was read b
   marked DEPRECATED in favour of `--spec`, which is what `_garak_command` uses.
 - `--report_prefix` is joined onto `~/.local/share/garak/garak_runs/` (`start_run`: `report_path / filename`), so a
   relative prefix names a directory that does not exist there and the report cannot be opened (a live trial on
-  2026-11-11); an absolute path replaces that directory, which is why `_garak_command` passes one.
+  2026-11-11); an absolute path replaces that directory, which is why garak's --report_prefix is absolute.
 - `--list_probes` has promptinject, latentinjection, encoding, dan and test.Test; `--list_generators` has
   openai.OpenAICompatible, bedrock (BedrockGenerator, Converse API) and anthropic.
 - The bedrock generator's options still hold `region` (default us-east-1) and `suppressed_params`; the
@@ -193,8 +193,9 @@ def _ca_bundle_pem(target: EvalTarget, judge_ca_bundle: str) -> str | None:
 def _garak_command(target: EvalTarget, probes: list[str], out_dir: Path, option_file: Path) -> tuple[list[str], dict[str, str]]:
     """(argv, keys) for one family: the keys map the variable garak reads to the environment variable the target's key is
     in, given to the process at run time only; the argv never contains one."""
-    # absolute: garak joins a relative prefix onto ~/.local/share/garak/garak_runs/, where the run directory does not exist
-    report_prefix = str(out_dir.absolute() / f"garak-{target.slug}")
+    # out_dir is absolute (invocations): garak joins a relative prefix onto ~/.local/share/garak/garak_runs/, where the run
+    # directory does not exist
+    report_prefix = str(out_dir / f"garak-{target.slug}")
     spec = ",".join(f"probes.{p}" for p in probes)
     if target.provider in ("openai_compatible", "gemini"):
         argv = ["python3", "-m", "garak", "--target_type", "openai.OpenAICompatible", "--target_name", target.model, "--spec", spec,
@@ -327,10 +328,10 @@ class EvalPlan:
 
 def _tls(target: EvalTarget, out_dir: Path, judge_ca_bundle: str) -> tuple[dict[str, str], tuple[InvocationFile, ...]]:
     """SSL_CERT_FILE and its file for a target or a CyberSecEval judge behind an internal CA, else nothing. The file lies
-    beside garak's report, absolute as its --report_prefix is (_garak_command)."""
+    beside garak's report, below the run directory `invocations` made absolute."""
     if not target.ca_bundle and not judge_ca_bundle:
         return {}, ()
-    path = out_dir.absolute() / f"ca-{target.slug}.pem"
+    path = out_dir / f"ca-{target.slug}.pem"
     return {"SSL_CERT_FILE": str(path)}, (InvocationFile(path, ca_bundles=(target.ca_bundle, judge_ca_bundle)),)
 
 
@@ -339,7 +340,10 @@ def invocations(targets: list[EvalTarget], settings: ModelEvalConfig, out_dir: P
     reading the CyberSecEval datasets from `datasets` (a directory, or the `$DATASETS` a printed command keeps). Pure but for the
     working directory its absolute paths are made from: it reads no file and no key; prepare() does, for the one invocation
     it is given."""
-    out = Path(out_dir)
+    # absolute, so a child started from another directory, or a command pasted elsewhere, finds its files; the `$DATASETS`
+    # a printed command keeps is left for the shell
+    out = Path(out_dir).absolute()
+    datasets = datasets if datasets == "$DATASETS" else str(Path(datasets).absolute())
     found: list[EvalInvocation] = []
     skips: list[EvalSkip] = []
     planned: list[EvalTarget] = []
