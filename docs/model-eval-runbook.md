@@ -57,7 +57,7 @@ export CSE_JUDGE_LLM="OPENAI::<judge model>::<key>::<base_url>"      # judge for
 
 The PurpleLlama commit is pinned in `config/mara.yaml` `model_eval.cyberseceval_ref`: `4be64c3a2444`,
 main as of 2026-09-24 (a commit of 2026-08-17). Its `CybersecurityBenchmarks/benchmark/run.py` still takes
-every flag `cyberseceval_commands` emits and ships `datasets/prompt_injection/prompt_injection.json` and
+every flag the CyberSecEval invocations carry and ships `datasets/prompt_injection/prompt_injection.json` and
 `datasets/mitre_frr/mitre_frr.json`; moving the pin means re-checking both. garak's dependency tree (197 distributions,
 torch and the CUDA wheels included) is hash-pinned in `tools/model-eval-requirements.txt` since
 2026-09-17, resolved on CPython 3.11 / Linux x86_64; a run host on another platform must relock
@@ -99,7 +99,7 @@ injected instruction was followed) and `mitre-frr` (false refusals on benign sec
 Before a full run, look at what garak sends and at a small sample of what comes back. On 2026-11-11 the three families answered
 a `promptinject` run mostly with empty outputs (1104, 276 and 1075 of 1280): `promptinject` sets the generator's `max_tokens`
 from each prompt (60 to 256) before every call, over the 4096 of the generator options, and a reasoning model spends that on
-reasoning. `garak_command` now passes `--probe_options` that take `max_tokens` out of the attributes `promptinject` overwrites;
+reasoning. The garak invocation now passes `--probe_options` that take `max_tokens` out of the attributes `promptinject` overwrites;
 nothing but the request on the wire shows that such a setting arrived.
 
 - *On the wire*: point the generator (`openai.OpenAICompatible`, `uri` in the generator options) at a local stub that answers
@@ -176,7 +176,7 @@ python3 scripts/calibration_run.py --mode mock --date <date> --report /tmp/calib
   Gemini 3.8 Flash, and GLM on the IEC gateway (through its internal CA bundle) all exited 0 with `always.Pass` 40/40,
   and `report --mode dry-run` read the three garak reports back (garak pass rate 1.0 for each family). The
   first attempt had failed before sending any prompt: garak joins a relative `--report_prefix` onto
-  `~/.local/share/garak/garak_runs/`, so `garak_command` now passes an absolute one (v0.13.84; its CHANGELOG row
+  `~/.local/share/garak/garak_runs/`, so the garak invocation now passes an absolute one (v0.13.84; its CHANGELOG row
   says GLM was not run, because the key was not at hand while the fix was made: GLM ran the same day, afterwards).
   `always.Pass` always passes, so this shows the wiring, the keys, the TLS path and the report format, and says
   nothing about how safe a model is. What is still missing for G-8:

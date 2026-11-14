@@ -38,6 +38,13 @@ accepted:
       existing file. This replaced a lookup of `sh` on PATH (v0.5.5): an environment variable the operator names is
       the same trust as MARA_TOOLS_DIR, which already decides which binaries run; argv stays a list, no shell=True.
       Reviewed 2026-10-13 with the scan that introduced it.
+  - rule: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
+    paths: [scripts/model_eval.py, tests/test_model_eval.py]
+    reason: >
+      run gives garak and CyberSecEval the operator's own environment (PATH, the cloud credentials, and the keys
+      prepare() read from it) plus the invocation's SSL_CERT_FILE. argv is the list invocations() built, never a
+      shell line. The test runs that same environment against a local fake module, to show the keys stay out of the
+      OS command line. Reviewed 2026-11-14 with the evaluation-invocation refactor.
   - rule: python.lang.security.audit.dangerous-subprocess-use-audit
     paths: ["src/mara/web/*.py"]
     reason: >

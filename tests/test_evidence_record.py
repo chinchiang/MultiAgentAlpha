@@ -218,7 +218,7 @@ def _passing_aat():
 @pytest.mark.parametrize("render", [me.render_garak_report, me.render_cyberseceval_report], ids=["garak", "cyberseceval"])
 def test_an_evaluation_report_puts_the_header_first_in_its_front_matter(tmp_path, render):
     results = _eval_results(["glm", "anthropic"])
-    meta = _front_matter_of(render(_eval_summary(results, "live"), results, {}), tmp_path)
+    meta = _front_matter_of(render(_eval_summary(results, "live"), results, me.EvalPlan()), tmp_path)
     assert list(meta)[:4] == ["report", "date", "mode", "families"]
     assert (meta["date"], meta["mode"], meta["families"]) == ("2026-09-05", "live", ["anthropic", "glm"])
 
@@ -227,7 +227,7 @@ def test_an_evaluation_report_puts_the_header_first_in_its_front_matter(tmp_path
 def test_an_evaluation_report_of_a_mode_no_run_has_is_not_written(render):
     results = _eval_results(["glm"])
     with pytest.raises(ValueError, match="mode"):
-        render(_eval_summary(results, "production"), results, {})
+        render(_eval_summary(results, "production"), results, me.EvalPlan())
 
 
 def test_a_calibration_report_puts_the_header_first_in_its_front_matter(tmp_path):
@@ -302,8 +302,8 @@ def test_the_evaluation_reports_the_script_writes_stand_for_check_g8(tmp_path):
     def write(families, mode):
         results = _eval_results(families)
         summary = _eval_summary(results, mode)
-        (root / "docs" / "garak-2026-09-05.md").write_text(me.render_garak_report(summary, results, {}), encoding="utf-8")
-        (root / "docs" / "cyberseceval-2026-09-05.md").write_text(me.render_cyberseceval_report(summary, results, {}), encoding="utf-8")
+        (root / "docs" / "garak-2026-09-05.md").write_text(me.render_garak_report(summary, results, me.EvalPlan()), encoding="utf-8")
+        (root / "docs" / "cyberseceval-2026-09-05.md").write_text(me.render_cyberseceval_report(summary, results, me.EvalPlan()), encoding="utf-8")
 
     write(["deepseek", "anthropic"], "live")
     assert gc.check_g8(root, A_WEEK_LATER, cfg).status == gc.PASS

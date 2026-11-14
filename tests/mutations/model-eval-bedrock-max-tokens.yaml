@@ -1,4 +1,4 @@
-# the max_tokens garak is given (mara.model_eval.garak_generator_options and garak_command): Opus 5.5 spends garak's default
+# the max_tokens garak is given (mara.model_eval._garak_generator_options and _garak_command): Opus 5.5 spends garak's default
 # of 150 on a reasoningContent block and answers with no text block, so 86 % of a measured run was empty; and promptinject
 # overwrites the generator's max_tokens with its own 60 to 256 unless --probe_options takes it out of generation_params
 focused:
@@ -49,17 +49,17 @@ mutations:
   new: '    cls: {"generation_params": ["temperature", "top_p", "frequency_penalty", "presence_penalty", "max_tokens"]}'
 - name: plan prints a garak command joined by spaces
   file: scripts/model_eval.py
-  old: "{env + ' ' if env else ''}{shlex.join(argv)}"
-  new: "{env + ' ' if env else ''}{' '.join(argv)}"
+  old: "{env + ' ' if env else ''}{shlex.join(me.shown(inv))}"
+  new: "{env + ' ' if env else ''}{' '.join(me.shown(inv))}"
 - name: the direct Anthropic generator is given no --probe_options
   file: src/mara/model_eval.py
   old: '    if any(p == "promptinject" or p.startswith("promptinject.") for p in probes):'
   new: '    if target.provider != "anthropic" and any(p == "promptinject" or p.startswith("promptinject.") for p in probes):'
 - name: run prints the garak command joined by spaces
   file: scripts/model_eval.py
-  old: 'print(f"+ [{t.family}] {shlex.join(argv)}")'
-  new: 'print(f"+ [{t.family}] {'' ''.join(argv)}")'
+  old: 'print(f"+ [{fam}] {shlex.join(me.shown(inv))}")'
+  new: 'print(f"+ [{fam}] {'' ''.join(me.shown(inv))}")'
 - name: the report records the garak command joined by spaces
   file: src/mara/model_eval.py
-  old: 'L += [f"# {fam}\n{shlex.join(argv)}" for fam, argv in commands.items()]'
-  new: 'L += [f"# {fam}\n{'' ''.join(argv)}" for fam, argv in commands.items()]'
+  old: 'L += [f"# {inv.family}\n{shlex.join(shown(inv, relative_to))}"'
+  new: 'L += [f"# {inv.family}\n{'' ''.join(shown(inv, relative_to))}"'

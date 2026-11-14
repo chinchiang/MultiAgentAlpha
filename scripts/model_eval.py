@@ -41,58 +41,22 @@ def _thresholds(cfg) -> me.Thresholds:
     return me.Thresholds(t.garak_pass_rate_min, t.prompt_injection_success_max, t.false_refusal_max)
 
 
-def _plan(cfg, out_dir: Path, datasets: str, judge: str) -> tuple[dict, dict, dict]:
-    garak_cmds, cse_cmds, envs = {}, {}, {}
-    for t in me.targets_from_config(cfg):
-        if me.unsupported(t):
-            continue
-        argv, env = me.garak_command(t, cfg.model_eval.garak_probes, out_dir)
-        if t.ca_bundle or cfg.model_eval.judge_ca_bundle:
-            env = {**env, "SSL_CERT_FILE": str(_ca_path(t, out_dir))}
-        garak_cmds[t.family], envs[t.family] = argv, env
-        why = me.unsupported(t, "cyberseceval")
-        cse_cmds[t.family] = why if why else me.cyberseceval_commands(t, datasets, out_dir, judge)
-    return garak_cmds, cse_cmds, envs
-
-
-def _this_python(argv: list[str]) -> list[str]:
-    """The planned `python3 -m ...` run by this interpreter, the one whose garak version was just checked:
-    PATH's python3 is another installation unless the venv happens to be activated."""
-    return [sys.executable, *argv[1:]] if argv and argv[0] == "python3" else argv
-
-
-def _ca_path(t: me.EvalTarget, out_dir: Path) -> Path:
-    """Where the CA bundle `run` writes for a target lies, absolute like garak's --report_prefix (`garak_command`)."""
-    return out_dir.absolute() / f"ca-{t.slug}.pem"
-
-
-def _tls_env(t: me.EvalTarget, out_dir: Path, judge_ca_bundle: str) -> dict[str, str]:
-    """SSL_CERT_FILE for a target or a CyberSecEval judge behind an internal CA (public roots + their ca_bundle files), else nothing.
-    `judge_ca_bundle` is empty when the config names none."""
-    pem = me.ca_bundle_pem(t, judge_ca_bundle)
-    if pem is None:
-        return {}
-    path = _ca_path(t, out_dir)
-    path.write_text(pem, encoding="utf-8")
-    return {"SSL_CERT_FILE": str(path)}
-
-
 def cmd_plan(a: argparse.Namespace) -> int:
     cfg = load_config(a.config, a.workspace)
-    judge = f"${cfg.model_eval.judge_llm_env}"
-    garak_cmds, cse_cmds, envs = _plan(cfg, a.out, a.datasets, judge)
+    plan = me.invocations(me.targets_from_config(cfg), cfg.model_eval, a.out, a.datasets)
     print(f"# garak {cfg.model_eval.garak_version}, probes {cfg.model_eval.garak_probes}; CyberSecEval {cfg.model_eval.cyberseceval_ref}")
-    for fam, argv in garak_cmds.items():
-        env = " ".join(f"{k}={v}" for k, v in envs[fam].items())
-        print(f"\n# {fam}: garak\n{env + ' ' if env else ''}{shlex.join(argv)}")
-        if isinstance(cse_cmds[fam], str):
-            print(f"# {fam}: CyberSecEval SKIPPED, {cse_cmds[fam]}")
+    for fam in plan.families:
+        for inv in plan.of(fam, "garak"):
+            env = " ".join([f"{k}={s.shown}" for k, s in inv.key_variables.items()] + [f"{k}={v}" for k, v in inv.env.items()])
+            print(f"\n# {fam}: garak\n{env + ' ' if env else ''}{shlex.join(me.shown(inv))}")
+        if skip := plan.skip(fam, "cyberseceval"):
+            print(f"# {fam}: CyberSecEval SKIPPED, {skip.reason}")
             continue
-        for bench, c in cse_cmds[fam].items():
-            print(f"# {fam}: CyberSecEval {bench}\n{' '.join(c)}")
-    for t in me.targets_from_config(cfg):
-        if why := me.unsupported(t):
-            print(f"\n# {t.family}: SKIPPED, {why}")
+        for inv in plan.of(fam, "cyberseceval"):
+            print(f"# {fam}: CyberSecEval {inv.benchmark}\n{' '.join(me.shown(inv))}")
+    for skip in plan.skips:
+        if skip.tool is None:
+            print(f"\n# {skip.family}: SKIPPED, {skip.reason}")
     print(f"\n# outputs under {a.out}; then: python3 scripts/model_eval.py report --run-dir {a.out} --date <date> --mode live "
           f"--datasets \"$DATASETS\"")
     return 0
@@ -101,55 +65,39 @@ def cmd_plan(a: argparse.Namespace) -> int:
 def cmd_run(a: argparse.Namespace) -> int:
     cfg = load_config(a.config, a.workspace)
     a.out.mkdir(parents=True, exist_ok=True)
-    targets, rc = [], 0
-    for t in me.targets_from_config(cfg):
-        if why := me.unsupported(t):
-            print(f"SKIP [{t.family}] {why}", file=sys.stderr)
+    plan, rc = me.invocations(me.targets_from_config(cfg), cfg.model_eval, a.out, a.datasets), 0
+    for skip in plan.skips:
+        if skip.tool is None:
+            print(f"SKIP [{skip.family}] {skip.reason}", file=sys.stderr)
             rc = 1  # a family left out is never a clean run
-        else:
-            targets.append(t)
     if a.tool in ("garak", "all"):
         ver = subprocess.run([sys.executable, "-m", "garak", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace")
         if ver.returncode != 0 or cfg.model_eval.garak_version not in (ver.stdout + ver.stderr):
             print(f"ERROR: garak {cfg.model_eval.garak_version} is not installed (pip install -r tools/model-eval-requirements.txt): "
                   f"{(ver.stdout + ver.stderr).strip()[:120]}", file=sys.stderr)
             return 2
-        for t in targets:
-            opts = me.garak_generator_options(t)
-            option_file = a.out / f"garak-{t.slug}.generator.json"
-            if opts:
-                option_file.write_text(json.dumps(opts, indent=2) + "\n", encoding="utf-8")
-            argv, env_map = me.garak_command(t, cfg.model_eval.garak_probes, a.out, option_file)
-            env = dict(os.environ)
-            for k, v in env_map.items():
-                env[k] = me.resolve_key(v.lstrip("$"))
-            env.update(_tls_env(t, a.out, cfg.model_eval.judge_ca_bundle))
-            print(f"+ [{t.family}] {shlex.join(argv)}")
-            r = subprocess.run(_this_python(argv), env=env)
-            rc |= r.returncode
+        for fam in plan.families:
+            for inv in plan.of(fam, "garak"):
+                argv, env = me.prepare(inv, os.environ)
+                print(f"+ [{fam}] {shlex.join(me.shown(inv))}")
+                rc |= subprocess.run(argv, env=env).returncode
     if a.tool in ("cyberseceval", "all"):
         if not a.datasets:
             print("ERROR: --datasets <dir with prompt_injection/ and mitre_frr/> is required for CyberSecEval", file=sys.stderr)
             return 2
-        judge = me.resolve_key(cfg.model_eval.judge_llm_env)
-        for t in targets:
-            if why := me.unsupported(t, "cyberseceval"):
-                print(f"SKIP [{t.family}] {why}", file=sys.stderr)
+        me.resolve_key(cfg.model_eval.judge_llm_env)  # a missing judge stops the run before any benchmark
+        for fam in plan.families:
+            if skip := plan.skip(fam, "cyberseceval"):
+                print(f"SKIP [{fam}] {skip.reason}", file=sys.stderr)
                 rc = 1  # a metric left out is never a clean run
                 continue
-            env_name = me.target_key_env(t)
-            key = me.resolve_key(env_name) if env_name else me.NO_KEY
-            tls = _tls_env(t, a.out, cfg.model_eval.judge_ca_bundle)
-            for bench, argv in me.cyberseceval_commands(t, a.datasets, a.out, judge, key).items():
-                shown = [x.replace(key, me.MASK).replace(judge, "$" + cfg.model_eval.judge_llm_env) for x in argv]
-                print(f"+ [{t.family}] {bench}: {' '.join(shown)}")
-                (a.out / t.slug).mkdir(parents=True, exist_ok=True)
+            for inv in plan.of(fam, "cyberseceval"):
                 # the keys travel in the child's environment, never in its (world-readable) command line
-                argv, secret_env = me.argv_without_secrets(_this_python(argv), {"MARA_CSE_KEY": key, "MARA_CSE_JUDGE": judge})
-                r = subprocess.run(argv, env={**os.environ, **tls, **secret_env})
-                rc |= r.returncode
+                argv, env = me.prepare(inv, os.environ)
+                print(f"+ [{fam}] {inv.benchmark}: {' '.join(me.shown(inv))}")
+                rc |= subprocess.run(argv, env=env).returncode
     (a.out / "run.json").write_text(json.dumps({"date": dt.date.today().isoformat(), "tool": a.tool, "garak_version": cfg.model_eval.garak_version,
-                                               "cyberseceval_ref": cfg.model_eval.cyberseceval_ref, "families": [t.family for t in targets],
+                                               "cyberseceval_ref": cfg.model_eval.cyberseceval_ref, "families": list(plan.families),
                                                "python": sys.version.split()[0], "host": platform.node()}, indent=2) + "\n", encoding="utf-8")
     return 1 if rc else 0
 
@@ -231,14 +179,12 @@ def cmd_report(a: argparse.Namespace) -> int:
     summary = me.summarize(results, date=a.date, mode=mode, th=th, garak_version=garak_version, cse_ref=cfg.model_eval.cyberseceval_ref,
                            probes=cfg.model_eval.garak_probes)
     # the reports are committed and published: the datasets are named by the variable the commands use, never by this host's directory
-    garak_cmds, cse_cmds, _ = _plan(cfg, a.run_dir, "$DATASETS", f"${cfg.model_eval.judge_llm_env}")
-    # the reports are committed: they name the run directory as it was given, not as this host spells it
-    garak_cmds = {fam: [part.replace(str(a.run_dir.absolute()), str(a.run_dir)) for part in argv] if isinstance(argv, list) else argv
-                  for fam, argv in garak_cmds.items()}
+    plan = me.invocations(me.targets_from_config(cfg), cfg.model_eval, a.run_dir, "$DATASETS")
     docs = a.docs_dir
     docs.mkdir(parents=True, exist_ok=True)
-    (docs / f"garak-{a.date}.md").write_text(me.render_garak_report(summary, results, garak_cmds), encoding="utf-8")
-    (docs / f"cyberseceval-{a.date}.md").write_text(me.render_cyberseceval_report(summary, results, cse_cmds), encoding="utf-8")
+    # the reports are committed: they name the run directory as it was given, not as this host spells it
+    (docs / f"garak-{a.date}.md").write_text(me.render_garak_report(summary, results, plan, a.run_dir), encoding="utf-8")
+    (docs / f"cyberseceval-{a.date}.md").write_text(me.render_cyberseceval_report(summary, results, plan, a.run_dir), encoding="utf-8")
     sp = me.write_summary(summary, a.summary_root)
     for r in results:
         print(f"{r.target.family}: {r.verdict['overall']} — " + ", ".join(f"{k} {v['value']} ({v['status']})" for k, v in r.verdict.items() if k != "overall"))
