@@ -1139,6 +1139,56 @@ def test_plan_sets_the_ca_file_of_every_family_once_the_config_names_a_judge_ca(
         assert f"SSL_CERT_FILE={tmp_path / 'ops' / 'run' / f'ca-{family}.pem'} " in command, family
 
 
+def test_plan_prints_each_cyberseceval_command_with_the_ca_file_of_its_family(tmp_path):
+    # config/mara.yaml names a judge behind the gateway's CA, so `run` gives every CyberSecEval command its family's CA file;
+    # a command pasted from `plan` must verify the same way. Claude runs on Bedrock, which CyberSecEval has no provider for:
+    # gemini and glm, two benchmarks each.
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(ROOT / "config" / "mara.yaml"), "plan", "--out", "ops/run"],
+                       capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    printed = {(f, b): lines[lines.index(f"# {f}: CyberSecEval {b}") + 1] for f in ("gemini", "glm") for b in ("prompt-injection", "mitre-frr")}
+    for (family, bench), command in printed.items():
+        expected = f"SSL_CERT_FILE={tmp_path / 'ops' / 'run' / f'ca-{family}.pem'} python3 -m CybersecurityBenchmarks.benchmark.run "
+        assert command.startswith(expected), (family, bench, command)
+
+
+def test_plan_prints_a_cyberseceval_command_without_a_ca_file_when_neither_the_family_nor_the_judge_has_one(tmp_path):
+    # the fixture panel names no ca_bundle and no judge_ca_bundle: `run` sets no SSL_CERT_FILE, so `plan` prints none
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(FIXTURE_PANEL), "plan", "--out", "ops/run"],
+                       capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    for family in ("anthropic", "deepseek", "nemotron"):
+        for bench in ("prompt-injection", "mitre-frr"):
+            command = lines[lines.index(f"# {family}: CyberSecEval {bench}") + 1]
+            assert command.startswith("python3 -m CybersecurityBenchmarks.benchmark.run "), (family, bench, command)
+
+
+def test_the_ca_file_plan_prints_for_a_cyberseceval_command_is_the_one_run_gives_it(tmp_path):
+    pem = tmp_path / "gateway.pem"
+    pem.write_text("-----BEGIN CERTIFICATE-----\nGATEWAY-CA\n-----END CERTIFICATE-----\n", encoding="utf-8")
+    data = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    data["model_eval"]["judge_ca_bundle"] = str(pem)
+    for model in data["models"]:
+        if model.get("ca_bundle"):
+            model["ca_bundle"] = str(pem)
+    config = tmp_path / "mara.yaml"
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    out = tmp_path / "ops" / "run"
+    r = subprocess.run([sys.executable, str(SCRIPT), "--config", str(config), "plan", "--out", str(out)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    cfg = load_config(config, Workspace(ROOT))
+    plan = me.invocations(me.targets_from_config(cfg), cfg.model_eval, out, "$DATASETS")
+    cse = [inv for inv in plan.invocations if inv.tool == "cyberseceval"]
+    assert len(cse) == 4  # gemini and glm, two benchmarks each
+    for inv in cse:
+        _, env = me.prepare(inv, {kv.source: "k" * 32 for kv in inv.key_variables.values() if kv.source})
+        printed = lines[lines.index(f"# {inv.family}: CyberSecEval {inv.benchmark}") + 1]
+        assert printed.startswith(f"SSL_CERT_FILE={env['SSL_CERT_FILE']} "), (inv.family, inv.benchmark, printed)
+
+
 def test_run_gives_every_command_of_both_tools_the_trust_of_the_judges_ca(tmp_path, monkeypatch):
     import collections
 

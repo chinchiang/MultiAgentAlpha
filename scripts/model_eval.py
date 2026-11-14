@@ -53,7 +53,10 @@ def cmd_plan(a: argparse.Namespace) -> int:
             print(f"# {fam}: CyberSecEval SKIPPED, {skip.reason}")
             continue
         for inv in plan.of(fam, "cyberseceval"):
-            print(f"# {fam}: CyberSecEval {inv.benchmark}\n{' '.join(me.shown(inv))}")
+            # only the environment: the keys are in the command line as each one's KeyVariable.shown (the target's ${KEY}, and
+            # for prompt-injection the judge's $<judge_llm_env>)
+            env = " ".join(f"{k}={v}" for k, v in inv.env.items())
+            print(f"# {fam}: CyberSecEval {inv.benchmark}\n{env + ' ' if env else ''}{' '.join(me.shown(inv))}")
     for skip in plan.skips:
         if skip.tool is None:
             print(f"\n# {skip.family}: SKIPPED, {skip.reason}")
