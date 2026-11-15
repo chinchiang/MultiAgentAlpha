@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_manifest_entry, installed_version, tool_path, tools_dir  # noqa: E402
-from mara.tools.sarif import scan_complete  # noqa: E402
+from mara.tools.sarif import error_notifications, scan_complete  # noqa: E402
 from mara.tools.semgrep_rules import RULES_DIR_NAME, normalize_sarif, result_keys, rules_dir, scan_args, scan_env  # noqa: E402
 from mara.workspace import Workspace  # noqa: E402
 
@@ -138,8 +138,14 @@ def main() -> int:
     rules, tools = str(rules_dir(workspace=ws)), str(tools_dir(workspace=ws))
     print("+ (cd " + str(target) + " && " + " ".join(x if not x.startswith(rules) else x.replace(tools, "$MARA_TOOLS_DIR") for x in argv) + ")")
     r = subprocess.run(argv, cwd=target, capture_output=True, text=True, encoding="utf-8", errors="replace", env=scan_env())
-    for line in (r.stderr or r.stdout).strip().splitlines()[-4:]:
+    said = (r.stderr or r.stdout).strip().splitlines()
+    # semgrep ends with its summary table and its warnings: a failed scan prints every line, for its error is earlier,
+    # and the errors its SARIF records
+    failed = r.returncode != 0
+    for line in said if failed else said[-4:]:
         print("  " + line)
+    for note in error_notifications(report) if failed else []:
+        print("  semgrep error: " + note)
     if not report.is_file() or not report.read_text(encoding="utf-8").strip():
         print(f"ERROR: semgrep exited {r.returncode} and produced no SARIF", file=sys.stderr)
         return 1

@@ -22,6 +22,13 @@ class ToolResult:
     cwes: list[str] = field(default_factory=list)  # every CWE the rule names; corroboration matches any of them
 
 
+NOTIFICATION_KEYS = ("toolExecutionNotifications", "toolConfigurationNotifications")  # where an invocation says what went wrong
+
+
+def _notifications(invocation: dict) -> list[dict]:
+    return [n for key in NOTIFICATION_KEYS for n in invocation.get(key) or []]
+
+
 def scan_complete(doc: dict) -> bool:
     """A report must contain runs and must not record a failed/partial invocation."""
     if not isinstance(doc, dict) or not doc.get("runs"):
@@ -30,10 +37,26 @@ def scan_complete(doc: dict) -> bool:
         for invocation in run.get("invocations", []):
             if invocation.get("executionSuccessful") is False:
                 return False
-            for key in ("toolExecutionNotifications", "toolConfigurationNotifications"):
-                if any(n.get("level") == "error" for n in invocation.get(key, [])):
-                    return False
+            if any(n.get("level") == "error" for n in _notifications(invocation)):
+                return False
     return True
+
+
+def error_notifications(path: Path | str) -> list[str]:
+    """Each error-level notification of the SARIF at `path` (both kinds `scan_complete` reads), as its message and the
+    locations it names; none when the file cannot be read or is not JSON."""
+    try:
+        doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    notes = []
+    for run in doc.get("runs") or []:
+        for invocation in run.get("invocations") or []:
+            for n in _notifications(invocation):
+                if n.get("level") == "error":
+                    where = [loc.get("physicalLocation", {}).get("artifactLocation", {}).get("uri", "") for loc in n.get("locations") or []]
+                    notes.append(" ".join([(n.get("message") or {}).get("text", ""), *(f"({w})" for w in where if w)]))
+    return notes
 
 
 # SARIF driver names are product labels, not the lock's tool ids; normalize the known ones so

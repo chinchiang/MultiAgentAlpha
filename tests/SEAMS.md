@@ -405,3 +405,13 @@ scan to the next, at `scripts/calibration_run.py`, `scripts/osv_ci.py`, `scripts
 `dangerous-subprocess-use-audit` is the same every time. The triage entries match by rule and path, so every position
 that moves is covered and the check's result does not change. A test or a script compares the untriaged count (0), not
 the accepted count.
+
+## A stand-in semgrep
+
+A test of what `scripts/semgrep_ci.py` prints of a scan, or of how it judges semgrep's exit code, runs it through the
+command line with a tool directory of its own (`_tool_dir_with_a_fake_semgrep` in `test_semgrep_ci.py`). `check_pins` passes
+it because its semgrep is an executable file, its manifest copies the installed entries (the version it checks is read
+from there, not asked of the binary) and its rules are the locked checkout linked (whose HEAD it checks). The fake semgrep
+finds where to write its SARIF after `--output` in the argv `scan_args` builds, and answers `--version`, which only the
+printed version line reads, with the locked version. It needs the locked tools installed, as every scan test does
+(`needs_tools`).

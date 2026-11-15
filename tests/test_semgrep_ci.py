@@ -15,7 +15,7 @@ SCRIPT = ROOT / "scripts" / "semgrep_ci.py"
 TOOLS = ROOT / ".mara-tools"
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from semgrep_ci import apply_triage, load_triage, match_triage  # noqa: E402
+from semgrep_ci import apply_triage, load_triage, locked, match_triage  # noqa: E402
 
 from mara.tools.sarif import read_sarif  # noqa: E402
 from mara.tools.semgrep_rules import canonical_rule_id, normalize_sarif, result_keys  # noqa: E402
@@ -114,6 +114,70 @@ def test_fixture_scan_matches_the_recording(tmp_path):
     assert "semgrep 1.179.0" in r.stdout and "matches the recording" in r.stdout and "--metrics=off --disable-version-check" in r.stdout
     doc = json.loads((tmp_path / "fx.sarif").read_text())
     assert result_keys(doc) == result_keys(json.loads((ROOT / "fixtures" / "vuln-sample-sarif" / "semgrep.sarif").read_text()))
+
+
+def _tool_dir_with_a_fake_semgrep(tmp_path, exit_code: int, sarif: dict) -> Path:
+    """A tool directory whose semgrep answers --version with the locked version and, for a scan, prints six numbered lines to
+    stderr, writes `sarif` where --output says and exits `exit_code`; the rules are the locked checkout, linked."""
+    tools = tmp_path / "tools"
+    (tools / "bin").mkdir(parents=True)
+    (tools / "semgrep-rules").symlink_to(TOOLS / "semgrep-rules")
+    manifest = json.loads((TOOLS / "manifest.json").read_text(encoding="utf-8"))
+    (tools / "manifest.json").write_text(json.dumps({"tools": {k: manifest["tools"][k] for k in ("semgrep", "semgrep-rules")}}))
+    body = (
+        "import json, sys\n"
+        "if '--version' in sys.argv:\n"
+        f"    print({locked()[0]!r}); sys.exit(0)\n"
+        "for i in range(1, 7):\n"
+        "    print(f'fake semgrep stderr line {i}', file=sys.stderr)\n"
+        f"open(sys.argv[sys.argv.index('--output') + 1], 'w').write(json.dumps({sarif!r}))\n"
+        f"sys.exit({exit_code})\n")
+    script = tools / "bin" / "semgrep"
+    script.write_text(f"#!{sys.executable}\n{body}", encoding="utf-8")
+    script.chmod(0o755)
+    return tools
+
+
+@needs_tools
+def test_a_scan_fails_when_semgrep_exits_non_zero_even_with_a_complete_report(tmp_path):
+    # the recording itself, which passes when semgrep exits 0: exit 2 alone must fail the scan
+    recorded = json.loads((ROOT / "fixtures" / "vuln-sample-sarif" / "semgrep.sarif").read_text(encoding="utf-8"))
+    tools = _tool_dir_with_a_fake_semgrep(tmp_path, 2, recorded)
+    r = _run("--target", "fixtures/vuln-sample", "--report", str(tmp_path / "c.sarif"), "--expect", "fixtures/vuln-sample-sarif/semgrep.sarif",
+             tools=tools)
+    assert r.returncode == 1 and "ERROR: semgrep exited 2; partial results cannot pass" in r.stderr, r.stdout + r.stderr
+
+
+@needs_tools
+def test_a_scan_semgrep_fails_prints_every_error_semgrep_reported(tmp_path):
+    # the last lines of semgrep's stderr are its summary table and its warnings: the error that made it exit 2 is earlier,
+    # or in the SARIF's notifications
+    execution = [{"level": "error", "message": {"text": "Timeout when running rule-x"},
+                  "locations": [{"physicalLocation": {"artifactLocation": {"uri": "app.py"}}}]},
+                 {"level": "warning", "message": {"text": "Skipped a minified file"}}]  # not an error: not printed
+    configuration = [{"level": "error", "message": {"text": "Invalid rule rule-y"}}]
+    sarif = {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "semgrep"}}, "results": [], "invocations": [
+        {"executionSuccessful": False, "toolExecutionNotifications": execution, "toolConfigurationNotifications": configuration}]}]}
+    tools = _tool_dir_with_a_fake_semgrep(tmp_path, 2, sarif)
+    r = _run("--target", "fixtures/vuln-sample", "--report", str(tmp_path / "f.sarif"), "--expect", "fixtures/vuln-sample-sarif/semgrep.sarif",
+             tools=tools)
+    assert r.returncode == 1, r.stdout + r.stderr
+    out = r.stdout + r.stderr
+    assert [n for n in range(1, 7) if f"fake semgrep stderr line {n}" not in out] == [], out
+    assert "semgrep error: Timeout when running rule-x (app.py)" in out and "semgrep error: Invalid rule rule-y" in out, out
+    assert "Skipped a minified file" not in out, out
+    assert "ERROR: semgrep exited 2; partial results cannot pass" in r.stderr
+
+
+@needs_tools
+def test_a_scan_semgrep_completes_prints_only_the_last_lines_semgrep_said(tmp_path):
+    recorded = json.loads((ROOT / "fixtures" / "vuln-sample-sarif" / "semgrep.sarif").read_text(encoding="utf-8"))
+    tools = _tool_dir_with_a_fake_semgrep(tmp_path, 0, recorded)
+    r = _run("--target", "fixtures/vuln-sample", "--report", str(tmp_path / "ok.sarif"), "--expect", "fixtures/vuln-sample-sarif/semgrep.sarif",
+             tools=tools)
+    assert r.returncode == 0 and "matches the recording" in r.stdout, r.stdout + r.stderr
+    printed = [n for n in range(1, 7) if f"fake semgrep stderr line {n}" in r.stdout + r.stderr]
+    assert printed == [3, 4, 5, 6], r.stdout
 
 
 @needs_tools
