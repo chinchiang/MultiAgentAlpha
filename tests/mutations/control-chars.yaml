@@ -2,12 +2,12 @@ focused: [tests/test_control_chars.py]
 mutations:
   - name: only Python files are read
     file: scripts/control_chars.py
-    old: 'f"{base}..{a.head}"], capture_output=True, encoding="utf-8", check=True).stdout'
-    new: 'f"{base}..{a.head}", "--", "*.py"], capture_output=True, encoding="utf-8", check=True).stdout'
+    old: '"--dst-prefix=b/", base if a.worktree else f"{base}..{a.head}"]))'
+    new: '"--dst-prefix=b/", base if a.worktree else f"{base}..{a.head}", "--", "*.py"]))'
   - name: the lines already there are read as added
     file: scripts/control_chars.py
-    old: 'f"{base}..{a.head}"], capture_output=True, encoding="utf-8", check=True).stdout'
-    new: '"4b825dc642cb6eb9a060e54bf8d69288fbee4904", a.head], capture_output=True, encoding="utf-8", check=True).stdout'
+    old: 'else f"{base}..{a.head}"]))'
+    new: 'else "4b825dc642cb6eb9a060e54bf8d69288fbee4904", a.head]))'
   - name: the commit messages are not read
     file: scripts/control_chars.py
     old: '        hits += [f"commit'

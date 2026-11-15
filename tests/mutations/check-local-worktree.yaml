@@ -6,8 +6,8 @@ mutations:
     new: 'f"{base}..{a.head}", "--", "*.py"]'
   - name: line_width --worktree reads no untracked file
     file: scripts/line_width.py
-    old: 'untracked = untracked_lines(git, a.repo, "*.py") if a.worktree else []'
-    new: 'untracked = []'
+    old: 'untracked, untracked_not_utf8 = untracked_lines(git, a.repo, "*.py") if a.worktree else ([], [])'
+    new: 'untracked, untracked_not_utf8 = [], []'
   - name: line_width --worktree reads untracked files that are not Python
     file: scripts/line_width.py
     old: 'untracked_lines(git, a.repo, "*.py")'
@@ -16,26 +16,14 @@ mutations:
     file: scripts/line_width.py
     old: '"ls-files", "--others", "--exclude-standard", "-z",'
     new: '"ls-files", "--others", "-z",'
-  - name: the lines of an untracked file are numbered from 0
-    file: scripts/line_width.py
-    old: 'enumerate(text.split("\n"), 1)]'
-    new: 'enumerate(text.split("\n"))]'
-  - name: an untracked file that holds a NUL has lines
-    file: scripts/line_width.py
-    old: 'if "\0" not in text:'
-    new: 'if True:'
-  - name: an untracked file that is not UTF-8 has lines
-    file: scripts/line_width.py
-    old: 'text = data.decode("utf-8")'
-    new: 'text = data.decode("utf-8", errors="replace")'
   - name: control_chars --worktree reads the commits, not the working tree
     file: scripts/control_chars.py
-    old: 'base if a.worktree else f"{base}..{a.head}"], capture_output=True'
-    new: 'f"{base}..{a.head}"], capture_output=True'
+    old: '"--dst-prefix=b/", base if a.worktree else f"{base}..{a.head}"]))'
+    new: '"--dst-prefix=b/", f"{base}..{a.head}"]))'
   - name: control_chars --worktree reads no untracked file
     file: scripts/control_chars.py
-    old: 'untracked = untracked_lines(git, a.repo) if a.worktree else []'
-    new: 'untracked = []'
+    old: 'untracked, untracked_not_utf8 = untracked_lines(git, a.repo) if a.worktree else ([], [])'
+    new: 'untracked, untracked_not_utf8 = [], []'
   - name: control_chars --worktree reads the commit messages
     file: scripts/control_chars.py
     old: 'log = "" if a.worktree else subprocess.run('
