@@ -1,0 +1,14 @@
+# the Eio backend semgrep-core runs with (`scan_env` in src/mara/tools/semgrep_rules.py, for MARA's own scans and
+# scripts/semgrep_ci.py alike): posix on Linux, for the Linux backend's io_uring rings fail now and then with "Cannot allocate
+# memory"; elsewhere the backend its build chose
+focused:
+- tests/test_tool_env.py
+mutations:
+- name: semgrep-core runs on Eio's Linux backend
+  file: src/mara/tools/semgrep_rules.py
+  old: '    eio = {"EIO_BACKEND": "posix"} if sys.platform == "linux" else {}'
+  new: '    eio = {}'
+- name: semgrep-core is given the posix backend on every platform
+  file: src/mara/tools/semgrep_rules.py
+  old: '    eio = {"EIO_BACKEND": "posix"} if sys.platform == "linux" else {}'
+  new: '    eio = {"EIO_BACKEND": "posix"}'

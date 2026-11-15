@@ -1,0 +1,38 @@
+# what `scripts/semgrep_ci.py` prints of a scan (`main`, and `error_notifications` in src/mara/tools/sarif.py): every line
+# semgrep said and each error-level notification of its SARIF, of both kinds, when semgrep exits non-zero, which still
+# fails; the last four lines only when it exits 0
+focused:
+- tests/test_semgrep_ci.py
+mutations:
+- name: a failed scan prints only the last lines semgrep said
+  file: scripts/semgrep_ci.py
+  old: '    for line in said if failed else said[-4:]:'
+  new: '    for line in said[-4:]:'
+- name: a completed scan prints every line semgrep said
+  file: scripts/semgrep_ci.py
+  old: '    for line in said if failed else said[-4:]:'
+  new: '    for line in said:'
+- name: a failed scan prints no notification of its SARIF
+  file: scripts/semgrep_ci.py
+  old: '    for note in error_notifications(report) if failed else []:'
+  new: '    for note in []:'
+- name: the notifications printed are not the errors
+  file: src/mara/tools/sarif.py
+  old: '                if n.get("level") == "error":'
+  new: '                if n.get("level") == "warning":'
+- name: every notification is printed whatever its level
+  file: src/mara/tools/sarif.py
+  old: '                if n.get("level") == "error":'
+  new: '                if True:'
+- name: a configuration notification is not read
+  file: src/mara/tools/sarif.py
+  old: 'NOTIFICATION_KEYS = ("toolExecutionNotifications", "toolConfigurationNotifications")'
+  new: 'NOTIFICATION_KEYS = ("toolExecutionNotifications",)'
+- name: a notification is printed without the locations it names
+  file: src/mara/tools/sarif.py
+  old: '                    notes.append(" ".join([(n.get("message") or {}).get("text", ""), *(f"({w})" for w in where if w)]))'
+  new: '                    notes.append((n.get("message") or {}).get("text", ""))'
+- name: a scan semgrep failed is judged by its SARIF alone
+  file: scripts/semgrep_ci.py
+  old: '    if r.returncode != 0:'
+  new: '    if False:'
