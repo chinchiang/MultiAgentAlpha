@@ -19,7 +19,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-HUNK = re.compile(rb"^@@ -\S+ \+(\d+)(?:,\d+)? @@")
+HUNK = re.compile(rb"^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")  # -start[,removed] +start[,added]: no count is 1
 DIFF_FLAGS = ("--unified=0", "--no-color", "--no-ext-diff", "--src-prefix=a/", "--dst-prefix=b/")
 ESCAPES = {b"a": 7, b"b": 8, b"t": 9, b"n": 10, b"v": 11, b"f": 12, b"r": 13, b'"': 34, b"\\": 92}
 
@@ -81,19 +81,25 @@ def header_path(name: bytes) -> str | None:
 def diff_lines(diff: bytes) -> AddedLines:
     """What a `git diff --unified=0` adds. A file whose added lines are not UTF-8 is named once and the rest of its
     lines skipped, and every other file is still read. Only what is added must be UTF-8: a line removed, a deleted file
-    or a hunk header's context is not read as it. A binary file has no lines in it."""
-    added, path, number = AddedLines(), None, 0
+    or a hunk header's context is not read as it. A binary file has no lines in it. A hunk holds the lines its header
+    counts, so an added line whose text looks like a header ("++ x", written "+++ x") is a line of its file."""
+    added, path, number, removed_left, added_left = AddedLines(), None, 0, 0, 0
     for line in diff.split(b"\n"):  # git ends a line at a newline only; splitlines() also splits at FF, FS, NEL, LS, PS
-        if line.startswith(b"+++ "):
+        if removed_left or added_left:  # inside a hunk: every - or + line is the file's, whatever follows the sign
+            if line.startswith(b"-"):
+                removed_left -= 1
+            elif line.startswith(b"+"):
+                added_left -= 1
+                if path is not None and path not in added.not_utf8:
+                    try:
+                        added.lines.append((path, number, line[1:].decode("utf-8")))
+                    except UnicodeDecodeError:
+                        added.not_utf8.append(path)
+                number += 1
+        elif line.startswith(b"+++ "):
             path = header_path(line[len(b"+++ "):])
         elif m := HUNK.match(line):
-            number = int(m[1])
-        elif line.startswith(b"+") and path is not None and path not in added.not_utf8:
-            try:
-                added.lines.append((path, number, line[1:].decode("utf-8")))
-            except UnicodeDecodeError:
-                added.not_utf8.append(path)
-            number += 1
+            removed_left, number, added_left = int(m[1] or 1), int(m[2]), int(m[3] or 1)
     return added
 
 

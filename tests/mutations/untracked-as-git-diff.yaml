@@ -18,8 +18,8 @@ mutations:
     new: 'lines.append((path, number, line[1:].decode("utf-8", "replace")))'
   - name: a line the change removes must be UTF-8 too
     file: scripts/change_lines.py
-    old: "        elif line.startswith(b\"+\") and path is not None and path not in added.not_utf8:"
-    new: "        elif line.startswith(b\"-\") and not line.startswith(b\"--- \") and not line.decode(\"utf-8\", \"ignore\").encode() == line:\n            added.not_utf8.append(path or \"?\")\n        elif line.startswith(b\"+\") and path is not None and path not in added.not_utf8:"
+    old: "            if line.startswith(b\"-\"):\n                removed_left -= 1\n"
+    new: "            if line.startswith(b\"-\"):\n                removed_left -= 1\n                if line.decode(\"utf-8\", \"ignore\").encode() != line:\n                    added.not_utf8.append(path or \"?\")\n"
   - name: a file that is only not UTF-8 passes
     file: scripts/change_lines.py
     old: "return 1 if summary else 0"

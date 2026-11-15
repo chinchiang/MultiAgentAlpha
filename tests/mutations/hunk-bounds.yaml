@@ -1,0 +1,22 @@
+focused: [tests/test_control_chars.py, tests/test_line_width.py]
+mutations:
+  - name: a line inside a hunk that starts with +++ is read as a header
+    file: scripts/change_lines.py
+    old: '        if removed_left or added_left:  # inside a hunk'
+    new: '        if (removed_left or added_left) and not line.startswith(b"+++ "):  # inside a hunk'
+  - name: a hunk ends one added line early
+    file: scripts/change_lines.py
+    old: 'int(m[2]), int(m[3] or 1)'
+    new: 'int(m[2]), int(m[3] or 1) - 1'
+  - name: a hunk header without a count holds no added line
+    file: scripts/change_lines.py
+    old: 'int(m[3] or 1)'
+    new: 'int(m[3] or 0)'
+  - name: a removed line is not counted, so the hunk never ends
+    file: scripts/change_lines.py
+    old: "                removed_left -= 1\n"
+    new: "                pass\n"
+  - name: an added line that looks like a hunk header is dropped, and the hunk runs on
+    file: scripts/change_lines.py
+    old: '        if removed_left or added_left:  # inside a hunk'
+    new: '        if (removed_left or added_left) and not HUNK.match(line[1:]):  # inside a hunk'

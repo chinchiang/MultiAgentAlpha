@@ -169,6 +169,38 @@ def test_a_path_git_pads_or_quotes_is_named_as_it_is(tmp_path, capsys, mode):
                                                     "2 control character(s) in what the change adds"]
 
 
+@pytest.mark.parametrize("mode", MODES)
+def test_an_added_line_starting_with_plus_plus_is_a_line_of_its_file_and_the_lines_after_it_are_read(tmp_path, capsys, mode):
+    """git writes an added line "++ counter" as "+++ counter", which reads like a file's header; inside a hunk it is a
+    line of the file, and the lines after it are still the file's. An untracked file goes through the same reading
+    (git diff --no-index), so the rule holds for it too."""
+    repo = _repo(tmp_path)
+    _put(repo, mode, "new.md", f"ok\n++ counter\nbad{FS}one\n".encode())
+    assert control_chars.main(["--base", "main", *MODES[mode], "--repo", str(repo)]) == 1
+    assert capsys.readouterr().out.splitlines() == ["new.md:3: U+001C", "1 control character(s) in what the change adds"]
+
+
+@pytest.mark.parametrize("mode", ["committed", "tracked"])
+def test_an_added_line_naming_another_path_does_not_move_the_lines_after_it(tmp_path, capsys, mode):
+    """"++ b/elsewhere.txt" is written "+++ b/elsewhere.txt", a header naming a file the change does not touch; the line
+    after it is still other.md's third."""
+    repo = _repo(tmp_path)
+    _put(repo, mode, "other.md", f"x\n++ b/elsewhere.txt\nbad{FS}two\n".encode())
+    assert control_chars.main(["--base", "main", *MODES[mode], "--repo", str(repo)]) == 1
+    assert capsys.readouterr().out.splitlines() == ["other.md:3: U+001C", "1 control character(s) in what the change adds"]
+
+
+def test_an_added_line_that_looks_like_a_hunk_header_or_a_diff_line_is_a_line_of_its_file(tmp_path, capsys):
+    """An added "@@ -1 +1 @@" or "diff --git a/x b/x" is written with its "+", inside the hunk that counts it: neither
+    starts a hunk nor a file, and the lines after them keep their numbers. The parser read them right before the hunk
+    counts too; this keeps a later parser from reading them as git's own lines."""
+    repo = _repo(tmp_path)
+    _put(repo, "committed", "notes.md", f"ok\n@@ -1 +1 @@\nbad{FS}one\ndiff --git a/x b/x\nworse{LS}two\n".encode())
+    assert control_chars.main(["--base", "main", "--repo", str(repo)]) == 1
+    assert capsys.readouterr().out.splitlines() == ["notes.md:3: U+001C", "notes.md:5: U+2028",
+                                                    "2 control character(s) in what the change adds"]
+
+
 def test_only_the_lines_a_change_adds_must_be_utf8(tmp_path, capsys):
     """A file already in another encoding is the base's business: deleting it, or rewriting it as UTF-8, is no finding."""
     repo = _repo(tmp_path)
