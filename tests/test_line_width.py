@@ -65,6 +65,38 @@ def test_the_working_tree_mode_reads_what_is_not_committed_yet_tracked_or_untrac
                                                     "2 added line(s) wider than 150 columns"]
 
 
+def _put(repo: Path, mode: str, name: str, data: bytes) -> None:
+    """`name` holds `data` in the change: untracked, tracked and edited but not committed, or committed."""
+    if mode == "tracked":
+        (repo / name).write_bytes(b"placeholder = 1\n")
+        _git(repo, "add", name)
+        _git(repo, "commit", "-q", "-m", f"add {name}")
+    (repo / name).write_bytes(data)
+    if mode == "committed":
+        _git(repo, "add", name)
+        _git(repo, "commit", "-q", "-m", f"change {name}")
+
+
+MODES = {"untracked": ["--worktree"], "tracked": ["--worktree"], "committed": []}
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_a_python_file_that_is_not_utf8_is_a_finding_and_the_rest_is_still_read(tmp_path, capsys, mode):
+    repo = _repo(tmp_path)
+    _put(repo, mode, "latin.py", "x = 'café'\n".encode("latin-1"))
+    _put(repo, mode, "other.py", WIDE.encode())
+    assert line_width.main(["--base", "main", *MODES[mode], "--repo", str(repo)]) == 1
+    assert capsys.readouterr().out.splitlines() == ["other.py:1: 156 columns", "latin.py: not UTF-8",
+                                                    "1 added line(s) wider than 150 columns; 1 file(s) not UTF-8"]
+
+
+def test_a_python_file_that_is_not_utf8_alone_fails_the_check(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    _put(repo, "committed", "latin.py", "x = 'café'\n".encode("latin-1"))
+    assert line_width.main(["--base", "main", "--repo", str(repo)]) == 1
+    assert capsys.readouterr().out.splitlines() == ["latin.py: not UTF-8", "1 file(s) not UTF-8"]
+
+
 def test_a_change_that_adds_no_wide_line_passes_even_beside_old_ones(tmp_path, capsys):
     repo = _repo(tmp_path)
     (repo / "old.py").write_text("a = 2\n" + WIDE, encoding="utf-8")
@@ -93,8 +125,8 @@ def _run_in_a_locale_that_is_not_utf8(repo: Path) -> subprocess.CompletedProcess
 
 
 def test_a_change_with_text_beyond_ascii_is_read_as_utf8_whatever_the_locale(tmp_path):
-    """git writes the diff in UTF-8; read in the locale's encoding (cp950 on a Windows host) it raised
-    UnicodeDecodeError in subprocess's reader thread, and the check died on a None diff."""
+    """git writes the diff in UTF-8, whatever the locale's encoding (cp950 on a Windows host, ASCII here): an added line
+    is read as UTF-8, so text beyond ASCII is neither a finding nor misread."""
     repo = _repo(tmp_path)
     (repo / "new.py").write_text("s = '" + "中" * 144 + "'\n" + "s = '" + "中" * 145 + "'\n", encoding="utf-8")  # 150, then 151
     _git(repo, "add", ".")

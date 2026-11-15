@@ -1,0 +1,42 @@
+focused: [tests/test_control_chars.py, tests/test_line_width.py]
+mutations:
+  - name: an untracked symlink is read through to its target
+    file: scripts/line_width.py
+    old: '"--", "/dev/null", name]'
+    new: '"--", "/dev/null", str((repo / name).resolve()) if (repo / name).is_symlink() else name]'
+  - name: an untracked directory is diffed as a file
+    file: scripts/line_width.py
+    old: 'if (repo / name).is_dir():'
+    new: 'if False:'
+  - name: untracked files are staged to be read
+    file: scripts/line_width.py
+    old: "    lines, not_utf8 = [], []\n    for name in filter(None, names.split(\"\\0\")):"
+    new: "    git_bytes([*git, \"add\", \"-N\", \"--\", *filter(None, names.split(\"\\0\"))])\n    lines, not_utf8 = [], []\n    for name in filter(None, names.split(\"\\0\")):"
+  - name: a file that is not UTF-8 has lines
+    file: scripts/line_width.py
+    old: 'lines.append((path, number, line[1:].decode("utf-8")))'
+    new: 'lines.append((path, number, line[1:].decode("utf-8", "replace")))'
+  - name: a line the change removes must be UTF-8 too
+    file: scripts/line_width.py
+    old: "        elif line.startswith(b\"+\") and path is not None and path not in not_utf8:"
+    new: "        elif line.startswith(b\"-\") and not line.startswith(b\"--- \") and not line.decode(\"utf-8\", \"ignore\").encode() == line:\n            not_utf8.append(path or \"?\")\n        elif line.startswith(b\"+\") and path is not None and path not in not_utf8:"
+  - name: a file that is only not UTF-8 passes in line_width
+    file: scripts/line_width.py
+    old: 'return 1 if summary else 0'
+    new: 'return 1 if wide else 0'
+  - name: a file that is only not UTF-8 passes in control_chars
+    file: scripts/control_chars.py
+    old: 'return 1 if summary else 0'
+    new: 'return 1 if hits else 0'
+  - name: an untracked file is diffed as text whatever git's binary rule says
+    file: scripts/line_width.py
+    old: "--dst-prefix=b/\",\n               \"--\", \"/dev/null\", name]"
+    new: "--dst-prefix=b/\",\n               \"--text\", \"--\", \"/dev/null\", name]"
+  - name: a path git quotes is left quoted
+    file: scripts/line_width.py
+    old: "    if name.startswith(b'\"'):"
+    new: "    if False:"
+  - name: the tab git ends a path with is kept
+    file: scripts/line_width.py
+    old: 'name = name.split(b"\t")[0]'
+    new: 'name = name'
