@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -76,8 +77,11 @@ def default_configs(*, workspace: Workspace) -> list[str]:
 def scan_env() -> dict[str, str]:
     """Environment for every semgrep invocation: the tool allowlist (runner.tool_env: no provider keys or tokens,
     no SEMGREP_* setting from the parent) plus no version check (the call to semgrep.dev hangs on networks that
-    block it, even for `--version`) and no metrics, on top of the command-line flags."""
-    return tool_env(SEMGREP_ENABLE_VERSION_CHECK="0", SEMGREP_SEND_METRICS="off")
+    block it, even for `--version`) and no metrics, on top of the command-line flags; and, on Linux, Eio's posix
+    backend for semgrep-core, whose io_uring rings (the Linux backend, one per worker) failed now and then with "Cannot
+    allocate memory", exit 2, on a many-CPU host. Elsewhere semgrep-core keeps the backend its build chose."""
+    eio = {"EIO_BACKEND": "posix"} if sys.platform == "linux" else {}
+    return tool_env(SEMGREP_ENABLE_VERSION_CHECK="0", SEMGREP_SEND_METRICS="off", **eio)
 
 
 def scan_args(exe: str, configs: list[str], sarif_out: Path) -> list[str]:

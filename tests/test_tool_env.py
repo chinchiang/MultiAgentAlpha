@@ -49,10 +49,16 @@ def test_tool_env_keeps_only_the_allowlist(parent_env):
     _clean(env, "GH_TOKEN")
 
 
-def test_semgrep_scan_env_is_the_allowlist_plus_its_own_switches(parent_env):
+def test_semgrep_scan_env_is_the_allowlist_plus_its_own_switches(parent_env, monkeypatch):
+    monkeypatch.setattr(semgrep_rules.sys, "platform", "linux")
     env = semgrep_rules.scan_env()
     _clean(env)
     assert env["SEMGREP_ENABLE_VERSION_CHECK"] == "0" and env["SEMGREP_SEND_METRICS"] == "off"
+    # semgrep-core's io_uring rings fail with "Cannot allocate memory" now and then on a many-CPU host: the posix backend
+    assert env["EIO_BACKEND"] == "posix"
+    # io_uring is Linux's: elsewhere semgrep-core keeps the backend its build chose, which may have no posix one
+    monkeypatch.setattr(semgrep_rules.sys, "platform", "win32")
+    assert "EIO_BACKEND" not in semgrep_rules.scan_env()
 
 
 @pytest.fixture
