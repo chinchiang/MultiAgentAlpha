@@ -1,0 +1,14 @@
+focused: [tests/test_control_chars.py, tests/test_line_width.py]
+mutations:
+  - name: control_chars imports change_lines from the checkout's root, not from beside it
+    file: scripts/control_chars.py
+    old: "from change_lines import git_error, git_prefix, parse_args, read_change, report"
+    new: "from scripts.change_lines import git_error, git_prefix, parse_args, read_change, report"
+  - name: a not-UTF-8 path is dropped when two readings are joined
+    file: scripts/change_lines.py
+    old: "        self.not_utf8 += other.not_utf8\n"
+    new: "        self.not_utf8 += []\n"
+  - name: the lines already there are read as added
+    file: scripts/change_lines.py
+    old: "base if a.worktree else f\"{base}..{a.head}\","
+    new: "base if a.worktree else \"4b825dc642cb6eb9a060e54bf8d69288fbee4904\", a.head,"
