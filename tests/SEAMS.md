@@ -293,6 +293,23 @@ outside would show nothing until it ended. A test sees that by replacing stdout 
 not yet flushed (`test_a_result_line_is_flushed_before_the_next_check_starts`, which reads it from inside the next check's set-up
 function, and `test_everything_main_prints_is_flushed_when_it_returns`); `capsys` cannot, for it never buffers.
 
+## The two change checks (`scripts/line_width.py`, `scripts/control_chars.py`)
+
+`test_line_width.py` and `test_control_chars.py` drive each script through `main`, given its command line as a list,
+with the hidden `--repo` pointing at a throwaway repository the test builds and commits in (`_repo`, `_put`). They read
+what it printed with `capsys`, and never patch anything: the script runs real git. Both scripts read the change
+through `scripts/change_lines.py` (its arguments, the merge base, the diff and the untracked files, the error a git
+failure prints, and the ending: each file not UTF-8 and the summary), so a change to that module reaches both test
+files, and either may be the one that catches a mutation of it.
+
+Three tests run a script as check_local and CI do, as a child process. Two run `scripts/line_width.py` in a locale
+that is not UTF-8 (`_run_in_a_locale_that_is_not_utf8`):
+`test_line_width.py::test_a_change_with_text_beyond_ascii_is_read_as_utf8_whatever_the_locale` and
+`test_line_width.py::test_a_python_file_whose_name_is_beyond_ascii_is_checked_too`. The third,
+`test_control_chars.py::test_it_runs_as_check_local_and_ci_run_it_from_any_directory`, runs `scripts/control_chars.py`
+from a directory that is not the checkout. Only these see the imports a script makes from beside it (`from
+change_lines import ...`); every other test imports the scripts with `scripts/` put on the import path.
+
 ## The Evidence record (`src/mara/evidence.py`)
 
 `test_evidence_record.py` reads `mara.evidence` at its interface: `Header` (made by `Header.from_json` and `Header.from_front_matter`),

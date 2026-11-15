@@ -298,6 +298,10 @@ _Avoid_: hook, mock point (a seam is the place, a mock is only one thing a test 
 The file `tests/mutations/<name>.yaml`: the faults a behaviour change's tests were checked against, each an `old` text of the code and the `new` text that makes the fault its name says. `scripts/mutate.py` applies them one by one; the tests must fail on every one (the mutation is caught).
 _Avoid_: mutation file, fault list, mutant list (a mutant is one applied mutation)
 
+**Change**:
+What a branch adds over its base: the commits since the merge base of the two, or, before they are made, what the working tree adds over that merge base, its untracked files included. `scripts/change_lines.py` reads the lines a change adds as git diff shows them, for the two checks of a change, `scripts/line_width.py` and `scripts/control_chars.py`; the lines already there are not its business.
+_Avoid_: diff, patch (git's text of a change, not the change), finding (a finding is what a reviewer reports; a check's are its hits)
+
 **Handoff**:
 The one living file in `scratch/` (never in git) that a session reads at its start and folds its own work into at its end: the state of the repository, the decisions, the open work, the way of working. A new session starts from it, not from the chat.
 _Avoid_: notes, summary, status file (the progress record is a review's, not a session's)

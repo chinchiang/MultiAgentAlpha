@@ -226,6 +226,18 @@ def test_a_control_character_in_a_commit_message_of_the_change_is_named_with_its
                                                     "1 control character(s) in what the change adds"]
 
 
+def test_it_runs_as_check_local_and_ci_run_it_from_any_directory(tmp_path):
+    """As a script, `python3 scripts/control_chars.py`, from a directory that is not the checkout: the modules it
+    imports from beside it are found there, not on the caller's path."""
+    repo = _repo(tmp_path)
+    (repo / "notes.md").write_text(f"ok\nbad{FS}one\n", encoding="utf-8")
+    _git(repo, "commit", "-q", "-am", "notes")
+    run = subprocess.run([sys.executable, str(ROOT / "scripts" / "control_chars.py"), "--base", "main", "--repo", str(repo)],
+                         cwd=tmp_path, capture_output=True, encoding="utf-8")
+    assert (run.returncode, run.stdout.splitlines()) == (1, ["notes.md:2: U+001C", "1 control character(s) in what the change adds"]), \
+        run.stderr
+
+
 def test_check_local_and_ci_run_it_on_what_a_pull_request_adds():
     argv, _, _ = check_local.CHECKS["chars"](type("A", (), {"base": "origin/main"})())
     assert argv[1:] == [str(ROOT / "scripts" / "control_chars.py"), "--base", "origin/main"]
