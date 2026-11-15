@@ -97,6 +97,14 @@ def test_a_python_file_that_is_not_utf8_alone_fails_the_check(tmp_path, capsys):
     assert capsys.readouterr().out.splitlines() == ["latin.py: not UTF-8", "1 file(s) not UTF-8"]
 
 
+def test_a_wide_line_after_an_added_line_starting_with_plus_plus_is_reported(tmp_path, capsys):
+    """"++ x" is written "+++ x", which reads like a header; the 166-column line after it is still wide.py's third."""
+    repo = _repo(tmp_path)
+    _put(repo, "committed", "wide.py", ("a = 1\n++ x\nb = '" + "w" * 160 + "'\n").encode())
+    assert line_width.main(["--base", "main", "--repo", str(repo)]) == 1
+    assert capsys.readouterr().out.splitlines() == ["wide.py:3: 166 columns", "1 added line(s) wider than 150 columns"]
+
+
 def test_a_change_that_adds_no_wide_line_passes_even_beside_old_ones(tmp_path, capsys):
     repo = _repo(tmp_path)
     (repo / "old.py").write_text("a = 2\n" + WIDE, encoding="utf-8")

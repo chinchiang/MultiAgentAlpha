@@ -14,8 +14,8 @@ mutations:
     new: "e.cmd[3:5]"
   - name: an added line is numbered from 0
     file: scripts/change_lines.py
-    old: 'number = int(m[1])'
-    new: 'number = int(m[1]) - 1'
+    old: "int(m[2]), int(m[3] or 1)"
+    new: "int(m[2]) - 1, int(m[3] or 1)"
   - name: a path is read in the locale's encoding
     file: scripts/change_lines.py
     old: 'return name[len(b"b/"):].decode("utf-8", "replace")'
