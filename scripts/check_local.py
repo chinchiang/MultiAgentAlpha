@@ -1,8 +1,9 @@
-"""Before a push, seven of the checks CI runs on a pull request, and on request its four osv-scanner scans, run here with every output kept.
+"""Seven of the checks CI runs on a pull request, before a push, or on request its osv scans or the worktree group, run here with every output kept.
 
   .venv/bin/python scripts/check_local.py                     # ruff, line width, control characters, mypy, semgrep, the suite, gitleaks
   .venv/bin/python scripts/check_local.py --only ruff mypy    # some of them
   .venv/bin/python scripts/check_local.py --only osv          # the four osv-scanner scans (the network)
+  .venv/bin/python scripts/check_local.py --only worktree     # before a commit, in seconds: what the working tree adds
   .venv/bin/python scripts/check_local.py --base origin/main  # the base of the branch's change (default origin/main)
 
 Run it with the dev environment's interpreter: ruff and pytest come from it. Each check writes its whole output to
@@ -30,6 +31,13 @@ the hash-locked closures, each with its own config:
   osv-model-eval  scripts/osv_ci.py on tools/model-eval-requirements.txt, with tools/osv-model-eval.toml
   osv-cyberseceval  scripts/osv_ci.py on tools/cyberseceval-requirements.txt, with tools/osv-cyberseceval.toml
   osv-semgrep     scripts/osv_ci.py on tools/semgrep-requirements.txt, with tools/osv-semgrep.toml
+Run only when named, before the first commit of a change (docs/agents/pr-flow.md step 3), in seconds, the group worktree:
+  ruff            as above
+  lines-worktree  scripts/line_width.py --worktree: the lines the working tree adds to Python files over the merge base
+                  with --base, committed or not and its untracked files included, are within 150 columns
+  chars-worktree  scripts/control_chars.py --worktree: the same lines hold no control character
+  pytest-worktree tests/test_mutation_lists.py and tests/test_seams.py: every mutation list loads, and every pointer of
+                  tests/SEAMS.md names something that is there
 Not run here: the whole suite on CPython 3.12 and 3.13, the other repository scanners (trivy, zizmor, csp-evaluator, and
 osv-scanner on the seeded fixture), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
 When a check that reads the branch's commits (lines, chars, gitleaks) ran and the working tree has changes git status lists,
@@ -114,13 +122,18 @@ CHECKS: dict[str, Check] = {
                          _clear_bytecode),
     "semgrep": lambda a: ([sys.executable, str(ROOT / "scripts" / "semgrep_ci.py"), "--target", ".", "--report",
                            str(a.logs / "semgrep.sarif"), "--triage", "tools/semgrep-triage.yaml"], {}, None),
+    "lines-worktree": lambda a: ([sys.executable, str(ROOT / "scripts" / "line_width.py"), "--base", a.base, "--worktree"], {}, None),
+    "chars-worktree": lambda a: ([sys.executable, str(ROOT / "scripts" / "control_chars.py"), "--base", a.base, "--worktree"], {}, None),
+    "pytest-worktree": lambda a: ([sys.executable, "-m", "pytest", "-q", "tests/test_mutation_lists.py", "tests/test_seams.py"], {},
+                                  _clear_bytecode),
     "gitleaks": lambda a: ([sys.executable, str(ROOT / "scripts" / "gitleaks_ci.py"), "--base", a.base, "--head", "HEAD",
                             "--event", "pull_request", "--report", str(a.logs / "gitleaks.sarif")], {}, None),
     **{name: _osv(name) for name in OSV_SCANS},
 }
 DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks")  # the osv scans need the network: by name
 OSV_CHECKS = tuple(OSV_SCANS)
-GROUPS = {"osv": OSV_CHECKS}
+WORKTREE_CHECKS = ("ruff", "lines-worktree", "chars-worktree", "pytest-worktree")  # the working tree, before a commit: by name
+GROUPS = {"osv": OSV_CHECKS, "worktree": WORKTREE_CHECKS}
 
 
 COMMIT_CHECKS = ("lines", "chars", "gitleaks")  # the checks that read the branch's commits, not the working tree
@@ -189,8 +202,9 @@ def _say(*parts: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--only", action="extend", nargs="+", choices=[*CHECKS, *GROUPS], default=None,
-                    help="the checks to run, the five but osv by default; osv: its four scans; repeats")
-    ap.add_argument("--base", default="origin/main", help="the line width and gitleaks checks read the commits since the merge base with this")
+                    help="the checks to run, the seven by default; osv: its four scans; worktree: the four of the working tree; repeats")
+    ap.add_argument("--base", default="origin/main",
+                    help="lines, chars, gitleaks: the commits since the merge base with this; lines-worktree, chars-worktree: the working tree")
     ap.add_argument("--python312", default=shutil.which("python3.12") or "python3.12", help="builds .venv-typecheck")
     ap.add_argument("--logs", type=Path, default=None, help="default: out/check-local/<UTC time>")
     a = ap.parse_args(argv)
@@ -198,10 +212,11 @@ def main(argv: list[str] | None = None) -> int:
     a.logs = a.logs or ROOT / "out" / "check-local" / dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
     a.logs.mkdir(parents=True, exist_ok=True)
     failed = []
+    width = max(8, *map(len, a.only))  # the names line up; the seven default ones are 8 wide at most
     for name in a.only:
         code = run_check(name, CHECKS[name], a)
         log = a.logs / f"{name}.log"
-        _say(f"{'ok  ' if code == 0 else 'FAIL'} {name:8} {_last_line(log)}")
+        _say(f"{'ok  ' if code == 0 else 'FAIL'} {name:{width}} {_last_line(log)}")
         if name == "pytest" and code != 0:
             tests, errors = failed_tests(log.read_text(encoding="utf-8", errors="replace"))
             named = ([f"failed tests: {', '.join(tests)}"] if tests else []) + ([f"errors: {', '.join(errors)}"] if errors else [])

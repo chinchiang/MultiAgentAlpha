@@ -50,6 +50,21 @@ def test_only_the_wide_lines_a_change_adds_to_python_files_are_reported(tmp_path
                                                     "2 added line(s) wider than 150 columns"]
 
 
+def test_the_working_tree_mode_reads_what_is_not_committed_yet_tracked_or_untracked(tmp_path, capsys):
+    # before the first commit: a wide line in a tracked file edited and in a new file git does not know of yet
+    repo = _repo(tmp_path)
+    (repo / "old.py").write_text("a = 1\n" + WIDE + "b = 2\n" + WIDE, encoding="utf-8")
+    (repo / "new.py").write_text("c = 3\n" + WIDE, encoding="utf-8")
+    (repo / "notes.md").write_text(WIDE, encoding="utf-8")  # untracked, not Python
+    (repo / ".git" / "info" / "exclude").write_text("ignored.py\n", encoding="utf-8")
+    (repo / "ignored.py").write_text(WIDE, encoding="utf-8")  # untracked, and git ignores it
+    assert line_width.main(["--base", "main", "--repo", str(repo)]) == 0, "the commits add nothing yet"
+    capsys.readouterr()
+    assert line_width.main(["--base", "main", "--worktree", "--repo", str(repo)]) == 1
+    assert capsys.readouterr().out.splitlines() == ["new.py:2: 156 columns", "old.py:4: 156 columns",
+                                                    "2 added line(s) wider than 150 columns"]
+
+
 def test_a_change_that_adds_no_wide_line_passes_even_beside_old_ones(tmp_path, capsys):
     repo = _repo(tmp_path)
     (repo / "old.py").write_text("a = 2\n" + WIDE, encoding="utf-8")

@@ -6,8 +6,8 @@ mutations:
     new: 'for given in a.only or CHECKS for'
   - name: --only osv runs one scan alone
     file: scripts/check_local.py
-    old: 'GROUPS = {"osv": OSV_CHECKS}'
-    new: 'GROUPS = {"osv": OSV_CHECKS[:1]}'
+    old: 'GROUPS = {"osv": OSV_CHECKS, "worktree": WORKTREE_CHECKS}'
+    new: 'GROUPS = {"osv": OSV_CHECKS[:1], "worktree": WORKTREE_CHECKS}'
   - name: an osv check scans a lock CI does not
     file: scripts/check_local.py
     old: '"osv-semgrep": ("--lockfile", "tools/semgrep-requirements.txt",'

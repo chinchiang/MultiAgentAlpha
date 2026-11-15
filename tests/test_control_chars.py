@@ -45,6 +45,20 @@ def test_a_control_character_a_change_adds_to_a_text_file_is_named_with_its_line
                                                     "2 control character(s) in what the change adds"]
 
 
+def test_the_working_tree_mode_reads_the_lines_not_committed_yet_and_no_commit_message(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    message = tmp_path / "message.txt"
+    message.write_text(f"A message{LS}with a separator\n", encoding="utf-8")
+    _git(repo, "commit", "-q", "--allow-empty", "-F", str(message))  # the commits are --head's business, not the working tree's
+    (repo / "notes.md").write_text(f"ok\nbad{FS}one\n", encoding="utf-8")  # tracked, edited, not committed
+    (repo / "new.txt").write_text(f"also{LS}bad\n", encoding="utf-8")  # untracked
+    (repo / "nul.bin").write_bytes(bytes([0x1C, 0]))  # untracked, UTF-8 with a NUL: binary, no lines in it
+    (repo / "latin1.bin").write_bytes(bytes([0x1C, 0xFF]))  # untracked, no NUL but not UTF-8: binary too
+    assert control_chars.main(["--base", "main", "--worktree", "--repo", str(repo)]) == 1
+    assert capsys.readouterr().out.splitlines() == ["notes.md:2: U+001C", "new.txt:1: U+2028",
+                                                    "2 control character(s) in what the change adds"]
+
+
 def test_a_control_character_already_there_is_not_the_changes_business(tmp_path, capsys):
     repo = _repo(tmp_path)
     (repo / "notes.md").write_text(f"ok{FS}\n", encoding="utf-8")
