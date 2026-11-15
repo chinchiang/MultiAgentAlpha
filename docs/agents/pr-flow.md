@@ -10,9 +10,12 @@ A change that becomes a pull request goes through these steps in order. Each end
    on a made-up bad input, a hand-made bad copy of the file).
 3. **Make it green, review it, then commit it.** Green in the working tree, nothing committed yet: the code, its
    `tests/mutations/<name>.yaml` and `tests/SEAMS.md`, and, when the change takes a version, the version, its CHANGELOG
-   row and the demo page. Run `scripts/check_local.py --only ruff` beside the tests (seconds): a rule of ruff that the new
-   tests break costs an edit now, and a rebuild of the commits at step 4. `lines` and `chars` read commits, so they have
-   nothing to read yet; they run after the commit, at step 4.
+   row and the demo page. Run `scripts/check_local.py --only worktree` beside the tests (seconds): ruff; the width of
+   the lines the working tree adds to Python files (`lines-worktree`) and the control characters of those it adds to any
+   text file (`chars-worktree`), over the merge base with `--base` (origin/main by default), committed or not, untracked
+   files included and those git ignores left out; and `pytest-worktree`, which checks that every mutation list loads
+   and every pointer of `tests/SEAMS.md` names something that is there. A finding costs an edit now, and a rebuild of
+   the commits at step 4. mypy, semgrep, the whole suite and gitleaks wait for step 4.
    Review that tree before the first commit, so a finding costs an edit and not a rebuild: `mattpocock-skills:code-review`
    with `origin/main` as the fixed point, where the sub-agents read `git diff origin/main` (two dots: the skill's
    three-dot form reads commits only; run `git add -N <new file>` first, or the diff leaves new files out), the two axes

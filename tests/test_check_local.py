@@ -164,7 +164,7 @@ def test_a_repeated_only_runs_every_check_it_names_once(tmp_path, monkeypatch):
 
 
 ALL_CHECKS = ["ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks", "osv-runtime", "osv-model-eval", "osv-cyberseceval",
-              "osv-semgrep"]
+              "osv-semgrep", "lines-worktree", "chars-worktree", "pytest-worktree"]
 
 
 def test_only_osv_runs_the_four_osv_scans(tmp_path, monkeypatch):
@@ -175,6 +175,16 @@ def test_only_osv_runs_the_four_osv_scans(tmp_path, monkeypatch):
     ran.clear()
     assert check_local.main(["--only", "osv", "--only", "osv-semgrep", "--only", "ruff", "--logs", str(tmp_path / "2")]) == 0
     assert ran == ["osv-runtime", "osv-model-eval", "osv-cyberseceval", "osv-semgrep", "ruff"]
+
+
+def test_only_worktree_runs_the_four_checks_of_the_working_tree(tmp_path, monkeypatch, capsys):
+    """Before the first commit, in seconds: ruff, and the width, control characters, mutation lists and SEAMS pointers of the
+    working tree. The summary pads every name to the longest it runs, so the last lines of the logs start in one column."""
+    ran = _recording(monkeypatch, ALL_CHECKS)
+    assert check_local.main(["--only", "worktree", "--logs", str(tmp_path)]) == 0
+    assert ran == ["ruff", "lines-worktree", "chars-worktree", "pytest-worktree"]
+    summary = [line for line in capsys.readouterr().out.splitlines() if line.startswith("ok")]
+    assert [line[:21] for line in summary] == [f"ok   {name:15} " for name in ran]
 
 
 def test_without_only_the_seven_checks_run_in_their_order_and_no_osv_scan(tmp_path, monkeypatch):
