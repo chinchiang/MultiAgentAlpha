@@ -24,11 +24,17 @@ A change that becomes a pull request goes through these steps in order. Each end
    Then commit, each commit passing. Product code in its own commit; its mutation list and `tests/SEAMS.md` beside it.
    The version, its CHANGELOG row and the demo page go in **the last commit** of the branch (it may hold nothing else):
    `scripts/renumber.py` renumbers only when the rebase stops with no commit left to apply, so a version commit in the
-   middle sends you to the hand-made fix. To change a commit you have made without `rebase -i` or `--amend`: rename the
-   branch (`git branch -m <name> <name>-old`), cut `<name>` again from `origin/main`, and rebuild the commits one by one
-   with `git checkout <name>-old -- <files>` (a file the old branch deleted is not carried: `git rm` it). Check that
-   `git diff <name>-old..HEAD` is exactly the changes you meant; then delete `<name>-old`. A branch already pushed takes
-   `git push --force-with-lease`.
+   middle sends you to the hand-made fix. To change a commit you have made without `rebase -i` or `--amend`, start from
+   a clean working tree (`git status --short` prints nothing): a fix you have not committed is committed on the branch
+   first, as a commit of its own (`git commit -am <message>`, after `git add`, or the `git add -N` above, for a new
+   file). Otherwise, after the rename, `git switch` refuses a fix to a file of the branch and leaves you on
+   `<name>-old`, and carries any other change to the rebuilt branch, where the check below does not show it. Then
+   rename the branch (`git branch -m <name> <name>-old`), cut `<name>` again from the base the old branch was cut from
+   (`git switch -c <name> $(git merge-base <name>-old origin/main)`: a later `origin/main` waits for step 6's rebase),
+   and rebuild the commits one by one with `git checkout <name>-old -- <files>`, which takes each file from the old
+   branch's last commit, the fix included (a file the old branch deleted is not carried: `git rm` it). Check that
+   `git diff <name>-old..HEAD` prints nothing, so the rebuilt branch holds what the old one did; then delete the old
+   one (`git branch -D <name>-old`). A branch already pushed takes `git push --force-with-lease origin <name>`.
    To move work you have not committed to a branch cut again from `origin/main` (the branch was cut from a stale base,
    say), do not stash it as it is: once a file is registered with `git add -N`, `git stash`, with `-u` or without,
    fails (`error: Entry '<file>' not uptodate. Cannot merge.`, exit 1), stashes nothing and leaves the changes in the
