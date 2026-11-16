@@ -29,6 +29,20 @@ A change that becomes a pull request goes through these steps in order. Each end
    with `git checkout <name>-old -- <files>` (a file the old branch deleted is not carried: `git rm` it). Check that
    `git diff <name>-old..HEAD` is exactly the changes you meant; then delete `<name>-old`. A branch already pushed takes
    `git push --force-with-lease`.
+   To move work you have not committed to a branch cut again from `origin/main` (the branch was cut from a stale base,
+   say), do not stash it as it is: once a file is registered with `git add -N`, `git stash`, with `-u` or without,
+   fails (`error: Entry '<file>' not uptodate. Cannot merge.`, exit 1), stashes nothing and leaves the changes in the
+   working tree. With every new file of the change registered with `git add -N`, record the change
+   (`git diff HEAD --binary > scratch/move.patch`), unregister the new files (`git reset -q`; they become untracked),
+   stash the work (`git stash push -u`), cut the branch again (`git fetch`, `git switch -C <name> origin/main`: `-C`
+   resets `<name>`, so it must hold no commit of yours), bring the work back (`git stash pop`) and register the new
+   files again (`git add -N`). Check that `git diff HEAD --binary | git patch-id --stable` prints what
+   `git patch-id --stable < scratch/move.patch` prints; the id leaves whitespace out, and differs when `origin/main`
+   changed lines beside the change: read `git diff HEAD` against the patch then. A pop that fails exits 1 and keeps
+   the stash (`git stash list`): a file both changed is marked `UU`, `DU` when `origin/main` deleted it, and a new file
+   `origin/main` also added keeps its version (`already exists, no checkout`; yours is
+   `git show 'stash@{0}^3:<file>'`). Resolve them, `git reset -q`, `git add -N` each new file (a `DU` file you keep is
+   one), read `git diff HEAD` against the patch, new files included, and `git stash drop` once it holds what you meant.
    Done when every finding of the review is fixed or answered in the body, and the work is committed.
 4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it, and `scripts/mutate.py
    tests/mutations/<name>.yaml --focused-only` on each file the change touches, without `AWS_PROFILE` and
