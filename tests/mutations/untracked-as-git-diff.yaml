@@ -2,37 +2,46 @@ focused: [tests/test_control_chars.py, tests/test_line_width.py]
 mutations:
   - name: an untracked symlink is read through to its target
     file: scripts/change_lines.py
+    caught_by: 'tests/test_control_chars.py::test_an_untracked_file_reads_as_git_diff_reads_it_once_added[a symlink to a file]'
     old: '"--", "/dev/null", name]'
     new: '"--", "/dev/null", str((repo / name).resolve()) if (repo / name).is_symlink() else name]'
   - name: an untracked directory is diffed as a file
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_an_untracked_nested_repository_or_link_to_a_directory_has_no_lines
     old: 'if (repo / name).is_dir():'
     new: 'if False:'
   - name: untracked files are staged to be read
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_the_working_tree_mode_leaves_the_index_and_the_status_as_they_were
     old: "    added = AddedLines()\n    for name in filter(None, names.split(\"\\0\")):"
     new: "    git_bytes([*git, \"add\", \"-N\", \"--\", *filter(None, names.split(\"\\0\"))])\n    added = AddedLines()\n    for name in filter(None, names.split(\"\\0\")):"
   - name: a file that is not UTF-8 has lines
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_the_working_tree_mode_reads_the_lines_not_committed_yet_and_no_commit_message
     old: 'lines.append((path, number, line[1:].decode("utf-8")))'
     new: 'lines.append((path, number, line[1:].decode("utf-8", "replace")))'
   - name: a line the change removes must be UTF-8 too
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_only_the_lines_a_change_adds_must_be_utf8
     old: "            if line.startswith(b\"-\"):\n                removed_left -= 1\n"
     new: "            if line.startswith(b\"-\"):\n                removed_left -= 1\n                if line.decode(\"utf-8\", \"ignore\").encode() != line:\n                    added.not_utf8.append(path or \"?\")\n"
   - name: a file that is only not UTF-8 passes
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_a_file_that_is_not_utf8_alone_fails_the_check
     old: "return 1 if summary else 0"
     new: "return 1 if hits else 0"
   - name: an untracked file is diffed as text whatever git's binary rule says
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_the_working_tree_mode_reads_the_lines_not_committed_yet_and_no_commit_message
     old: "\"--no-index\", *DIFF_FLAGS, \"--\","
     new: "\"--no-index\", *DIFF_FLAGS, \"--text\", \"--\","
   - name: a path git quotes is left quoted
     file: scripts/change_lines.py
+    caught_by: 'tests/test_control_chars.py::test_a_path_git_pads_or_quotes_is_named_as_it_is[untracked]'
     old: "    if name.startswith(b'\"'):"
     new: "    if False:"
   - name: the tab git ends a path with is kept
     file: scripts/change_lines.py
+    caught_by: 'tests/test_control_chars.py::test_a_path_git_pads_or_quotes_is_named_as_it_is[untracked]'
     old: 'name = name.split(b"\t")[0]'
     new: 'name = name'

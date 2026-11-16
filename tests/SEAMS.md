@@ -449,3 +449,14 @@ name, bucket, state, link, workflow, startedAt and completedAt. A check is a job
 `/job/<id>`, as the real ones do. The one test of an interrupted wait replaces the module's time.sleep with one that
 raises KeyboardInterrupt (`test_an_interrupted_wait_exits_130_as_gh_pr_checks_does_and_prints_no_traceback`), so
 `main` must keep sleeping through that name between two polls.
+
+## The mutation runner (`scripts/mutate.py`)
+
+`test_mutate.py` drives `scripts/mutate.py` through `main`, with the hidden `--root` pointing at a throwaway repository
+of one module and its test (`_repo`) and `--runs` at a directory of `tmp_path`, and the list written as JSON (`_list`).
+Nothing is patched: each mutation runs real pytest, as a child process, in the throwaway repository. So what the tests of where a catch failed read is pytest's own output, its failure section
+(the banner, the head of the failure, the `>` line, the traceback's last line path:line: ExceptionName, and the
+Captured lines after it), and the regular expressions of `_failure` follow that shape: a pytest that prints it
+otherwise reaches these tests first. The tests of left paths build the repository as a git repository with its files
+committed (`_git_repo`) and run real git status in it; those give no `--runs`, so the run's own directory is inside
+the root, as it is in this checkout.

@@ -48,11 +48,15 @@ A change that becomes a pull request goes through these steps in order. Each end
    tests/mutations/<name>.yaml --focused-only` on each file the change touches, without `AWS_PROFILE` and
    `GEMINI_API_KEY`. A mutation edits `src/`, so never run the two at once. Done when every check `AGENTS.md` lists is
    `ok` and every mutation is caught for the reason its name says.
-   For the mutations the change adds or edits, and only those, read the log that their entry in the `results.json` of
-   their run lists under `logs` (third paragraph of "A behaviour change commits its mutation list" in
-   `CODING_STANDARDS.md`): the test that caught each fails at the assertion its name gives, not at a `TypeError`, an
-   import error or an earlier assertion. The failing lines of a log:
-   `grep -h -E '^(E +[A-Za-z]|FAILED)' out/mutations/<UTC time of that run>/<a file under logs>`
+   For the mutations the change adds or edits, and only those, read where the test that caught each failed (third
+   paragraph of "A behaviour change commits its mutation list" in `CODING_STANDARDS.md`): it fails at the assertion its
+   name gives, not at a `TypeError`, an import error or an earlier assertion. `mutate.py` prints it on each `CAUGHT`
+   line, `at:` and the source line, and `results.json` holds it as `at` and `error`. Open the log its entry lists under
+   `logs` only for a catch that is marked (an exception other than `AssertionError`, or `(expected <caught_by>)`), one
+   with no `at:`, or one whose line is not the assertion of the mutation's name. A mutation may name the test meant to
+   catch it (`caught_by`), so that a catch by another is marked. A `LEFT <path>` line names a path git status lists
+   after a run that it did not before: once you know the run left it, and not someone working in the checkout
+   meanwhile, remove a file it added (`git status` shows `??`) and `git restore` one it changed or deleted.
    A fix made after this step goes into the commit it belongs to (rebuild as in step 3, so the version commit stays
    last) and this step runs again on the branch head; the numbers in the body are those of that run, and a fix the
    sub-agents did not see is said so in the body.

@@ -3,8 +3,8 @@ focused:
 mutations:
 - name: the copies stay after the file is restored
   file: scripts/mutate.py
-  old: "    _drop_copies(run_dir)\n    return {"
-  new: '    return {'
+  old: "    _drop_copies(run_dir)\n    at, error ="
+  new: '    at, error ='
 - name: no copies are kept before a file is mutated
   file: scripts/mutate.py
   old: '        (run_dir / kind / m["file"]).write_bytes(data)

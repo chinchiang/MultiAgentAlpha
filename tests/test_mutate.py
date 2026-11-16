@@ -73,6 +73,161 @@ def test_the_output_of_the_focused_tests_is_kept_for_each_mutation_and_listed_in
     assert "1 passed" in (run / "another_comment.focused.log").read_text(encoding="utf-8"), "a missed mutation keeps its run too"
 
 
+def test_a_mutation_caught_at_an_assertion_says_the_line_it_failed_at(tmp_path, capsys):
+    root = _repo(tmp_path)
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs")])
+    (run,) = (tmp_path / "runs").iterdir()
+    (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert (result["at"], result["error"]) == ("assert limit() == 3", "AssertionError")
+    assert capsys.readouterr().out.splitlines()[0] == "CAUGHT a wider window  <- tests/test_window.py::test_limit  at: assert limit() == 3"
+
+
+def test_a_catch_by_a_test_whose_name_fills_the_failure_head_says_the_line_it_failed_at(tmp_path):
+    """pytest pads a failure's head with underscores to its line width, and a long name leaves room for one on each
+    side; its traceback's frames are parted by a line of `_ _ _`."""
+    root = _repo(tmp_path)
+    long = "test_the_window_limit_is_three_when_the_window_is_read_from_its_module_and_nothing_else_changed"
+    (root / "tests" / "test_window.py").write_text(
+        f"from window import limit\n\n\ndef check():\n    assert limit() == 3\n\n\ndef {long}():\n    check()\n", encoding="utf-8")
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                 "--focused-only"])
+    (run,) = (tmp_path / "runs").iterdir()
+    (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert f"_ {long} _" in (run / "a_wider_window.focused.log").read_text(encoding="utf-8").splitlines()
+    assert (result["at"], result["error"]) == ("check()", "AssertionError")
+
+
+def test_what_the_failing_test_printed_is_not_read_as_its_exception(tmp_path, capsys):
+    """pytest shows a failed test's output after its traceback, under ---- Captured stdout call ----."""
+    root = _repo(tmp_path)
+    (root / "tests" / "test_window.py").write_text(
+        "from window import limit\n\n\ndef test_limit():\n    print('tests/test_door.py:12: KeyError')\n    assert limit() == 3\n",
+        encoding="utf-8")
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                 "--focused-only"])
+    (run,) = (tmp_path / "runs").iterdir()
+    (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert "Captured stdout call" in (run / "a_wider_window.focused.log").read_text(encoding="utf-8")
+    assert (result["at"], result["error"]) == ("assert limit() == 3", "AssertionError")
+
+
+def test_a_mutation_caught_by_an_error_of_the_code_under_test_is_marked_with_the_error(tmp_path, capsys):
+    """Still a catch: whether a KeyError is the fault the name says is for the reader of the line to judge."""
+    root = _repo(tmp_path)
+    (root / "src" / "window.py").write_text('SIZES = {"window": 3}\n\n\ndef limit():\n    return SIZES["window"]\n', encoding="utf-8")
+    mutations = [{"name": "the door's size", "file": "src/window.py", "old": 'SIZES["window"]', "new": 'SIZES["door"]'}]
+    code = mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                        "--focused-only"])
+    (run,) = (tmp_path / "runs").iterdir()
+    (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert (code, result["caught"], result["at"], result["error"]) == (0, True, "assert limit() == 3", "KeyError")
+    assert capsys.readouterr().out.splitlines()[0] == ("CAUGHT the door's size  <- tests/test_window.py::test_limit  "
+                                                       "at: assert limit() == 3  (KeyError)")
+
+
+def test_a_catch_by_the_whole_suite_says_where_from_its_log_and_a_failure_with_no_traceback_says_nothing(tmp_path, capsys):
+    """pytest.fail(..., pytrace=False), as tests/test_mutation_lists.py fails, prints no source line and no exception."""
+    root = _repo(tmp_path)
+    (root / "src" / "door.py").write_text("def width():\n    return 2\n\n\ndef height():\n    return 5\n", encoding="utf-8")
+    (root / "tests" / "test_door.py").write_text(
+        "import pytest\nfrom door import height, width\n\n\ndef test_width():\n    assert width() == 2\n\n\n"
+        "def test_height():\n    if height() != 5:\n        pytest.fail('the door is too high', pytrace=False)\n", encoding="utf-8")
+    mutations = [{"name": "a wider door", "file": "src/door.py", "old": "return 2", "new": "return 3"},
+                 {"name": "a higher door", "file": "src/door.py", "old": "return 5", "new": "return 6"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs")])
+    (run,) = (tmp_path / "runs").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [(r["where"], r["caught"], r["at"], r["error"]) for r in results] == [
+        ("suite", True, "assert width() == 2", "AssertionError"), ("suite", True, None, None)]
+    assert capsys.readouterr().out.splitlines()[:2] == ["CAUGHT a wider door  <- tests/test_door.py::test_width  at: assert width() == 2",
+                                                        "CAUGHT a higher door  <- tests/test_door.py::test_height"]
+
+
+def test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch(tmp_path, capsys):
+    """A test file named alone matches any of its tests, and a test named without its parameters each of them."""
+    root = _repo(tmp_path)
+    (root / "tests" / "test_window.py").write_text(
+        "import pytest\nfrom window import limit\n\n\n@pytest.mark.parametrize('n', [3])\ndef test_limit(n):\n    assert limit() == n\n",
+        encoding="utf-8")
+    (root / "tests" / "test_door.py").write_text("def test_width():\n    pass\n", encoding="utf-8")
+    named = {"its file": "tests/test_window.py", "its test": "tests/test_window.py::test_limit",
+             "its parameters": "tests/test_window.py::test_limit[3]", "other parameters": "tests/test_window.py::test_limit[4]",
+             "another test": "tests/test_door.py::test_width"}
+    mutations = [{"name": name, "file": "src/window.py", "old": "return 3", "new": f"return {k}", "caught_by": test}
+                 for k, (name, test) in enumerate(named.items(), start=4)]
+    code = mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                        "--focused-only"])
+    (run,) = (tmp_path / "runs").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [r["expected"] for r in results] == [None, None, None, "tests/test_window.py::test_limit[4]", "tests/test_door.py::test_width"]
+    caught = "  <- tests/test_window.py::test_limit[3]  at: assert limit() == n"
+    assert capsys.readouterr().out.splitlines()[:5] == [
+        f"CAUGHT its file{caught}", f"CAUGHT its test{caught}", f"CAUGHT its parameters{caught}",
+        f"CAUGHT other parameters{caught}  (expected tests/test_window.py::test_limit[4])",
+        f"CAUGHT another test{caught}  (expected tests/test_door.py::test_width)"]
+    assert code == 0
+
+
+def _git_repo(tmp_path: Path) -> Path:
+    """_repo, as a git repository with its files committed."""
+    root = _repo(tmp_path)
+    for args in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"]):
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+    return root
+
+
+def test_a_path_a_mutation_leaves_in_the_repository_is_named_with_the_mutation(tmp_path, capsys):
+    """A file in a new directory is named as itself, once, after the run that left it: a test that writes one every run
+    leaves it in the runs without a mutation. The run's own directory is not a left path."""
+    root = _git_repo(tmp_path)
+    (root / "tests" / "test_log.py").write_text(
+        "import os\n\n\ndef test_log():\n    os.makedirs('logs', exist_ok=True)\n    open('logs/run.txt', 'w').close()\n",
+        encoding="utf-8")
+    leaves = 'import os; os.makedirs("stray", exist_ok=True); open("stray/file", "w").close(); return 4'
+    mutations = [{"name": "a window that leaves a file", "file": "src/window.py", "old": "return 3", "new": leaves},
+                 {"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 5"}]
+    code = mutate.main([str(_list(tmp_path, mutations, ["tests/test_log.py", "tests/test_window.py"])), "--root", str(root),
+                        "--focused-only"])
+    (run,) = (root / "out" / "mutations").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [r["left"] for r in results] == [["stray/file"], []]
+    out = capsys.readouterr().out.splitlines()
+    assert [line for line in out if line.startswith("LEFT")] == ["LEFT logs/run.txt  (baseline)",
+                                                                 "LEFT stray/file  (a window that leaves a file)"]
+    assert code == 0, "a left path is reported, not counted against the run"
+    assert (root / "stray" / "file").is_file(), "and it is not removed"
+
+
+def test_once_git_status_fails_during_a_run_no_path_is_named_left_after_it(tmp_path, capsys):
+    """A failed read is no empty one: compared with it, every path already there would be named left."""
+    root = _git_repo(tmp_path)
+    (root / "notes.txt").write_text("already here\n", encoding="utf-8")
+    mutations = [{"name": "a window that hides .git", "file": "src/window.py", "old": "return 3",
+                  "new": 'import os; os.rename(".git", ".git-away"); return 4'},
+                 {"name": "a window that brings .git back", "file": "src/window.py", "old": "return 3",
+                  "new": 'import os; os.rename(".git-away", ".git"); return 5'}]
+    assert mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--focused-only"]) == 0
+    captured = capsys.readouterr()
+    assert [line for line in captured.out.splitlines() if line.startswith("LEFT")] == []
+    assert captured.err.splitlines() == ["left paths no longer checked: git status failed after a window that hides .git"]
+    (run,) = (root / "out" / "mutations").iterdir()
+    assert [r["left"] for r in json.loads((run / "results.json").read_text(encoding="utf-8"))] == [None, None]
+
+
+def test_a_run_that_leaves_nothing_names_nothing_and_one_outside_git_says_it_did_not_look(tmp_path, capsys):
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"}]
+    assert mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(_git_repo(tmp_path)),
+                        "--focused-only"]) == 0
+    captured = capsys.readouterr()
+    assert not [line for line in captured.out.splitlines() if line.startswith("LEFT")] and captured.err == ""
+    plain = _repo(tmp_path / "plain")
+    assert mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(plain), "--focused-only"]) == 0
+    assert capsys.readouterr().err.splitlines() == [f"left paths not checked: {plain} is not a git repository"]
+
+
 def test_a_mutation_name_with_characters_a_file_name_cannot_have_still_gets_its_logs(tmp_path):
     """Windows refuses " : ? * < > | \\ / in a file name; a name with one of them would have made every run fail there."""
     root = _repo(tmp_path)
@@ -165,6 +320,29 @@ def test_a_focused_test_that_does_not_exist_is_refused_before_any_file_is_touche
     assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
     assert "focused: no tests/test_gone.py" in capsys.readouterr().err
     assert not (tmp_path / "runs").exists()
+
+
+def test_a_caught_by_naming_a_test_that_does_not_exist_is_refused_before_any_file_is_touched(tmp_path, capsys):
+    """A test file, a test of it, or a test with its parameters names one; a file, a test or a class it lacks does not."""
+    root = _repo(tmp_path)
+    named = {"a file": "tests/test_window.py", "a test": "tests/test_window.py::test_limit",
+             "parameters": "tests/test_window.py::test_limit[wide]", "parameters holding ::": "tests/test_window.py::test_limit[a::b]",
+             "no file": "tests/test_gone.py",
+             "no test": "tests/test_window.py::test_width", "no class": "tests/test_window.py::TestWindow::test_limit"}
+    mutations = [{"name": name, "file": "src/window.py", "old": "return 3", "new": f"return {k}", "caught_by": test}
+                 for k, (name, test) in enumerate(named.items(), start=4)]
+    assert mutate.main([str(_list(tmp_path, mutations)), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
+    problems = capsys.readouterr().err.removeprefix("ERROR: ").strip().split("; ")
+    assert problems == ["no file: caught_by: no tests/test_gone.py", "no test: caught_by: no tests/test_window.py::test_width",
+                        "no class: caught_by: no tests/test_window.py::TestWindow::test_limit"]
+    assert not (tmp_path / "runs").exists()
+
+
+def test_a_caught_by_that_is_not_text_is_refused(tmp_path, capsys):
+    root = _repo(tmp_path)
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4", "caught_by": 3}]
+    assert mutate.main([str(_list(tmp_path, mutations)), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
+    assert capsys.readouterr().err.strip() == "ERROR: a wider window: caught_by: no 3"
 
 
 def test_tests_that_fail_without_a_mutation_stop_the_run_before_any_mutation(tmp_path, capsys):

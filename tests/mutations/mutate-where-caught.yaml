@@ -1,0 +1,120 @@
+focused:
+- tests/test_mutate.py
+mutations:
+- name: the source line is read from the last frame, not the test's
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_a_test_whose_name_fills_the_failure_head_says_the_line_it_failed_at
+  old: (line[1:].strip() for line in section if
+  new: (line[1:].strip() for line in reversed(section) if
+- name: the exception that ended a failure is not read
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_mutation_caught_at_an_assertion_says_the_line_it_failed_at
+  old: '    error = next((m[1] for line in reversed(section) if (m := EXCEPTION_LINE.match(line))), None)
+
+    '
+  new: '    error = None
+
+    '
+- name: a line between two frames is read as the head of another failure
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_a_test_whose_name_fills_the_failure_head_says_the_line_it_failed_at
+  old: FAILURE_HEAD = re.compile(r"^_+ .*\S.* _+$")
+  new: FAILURE_HEAD = re.compile(r"^_+ ")
+- name: an AssertionError is marked
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_mutation_caught_at_an_assertion_says_the_line_it_failed_at
+  old: if r["error"] not in (None, "AssertionError") else ""
+  new: if r["error"] is not None else ""
+- name: a catch by the whole suite is read from the focused tests' output
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_the_whole_suite_says_where_from_its_log_and_a_failure_with_no_traceback_says_nothing
+  old: code, by, out = _pytest(root, [])
+  new: code, by, _ = _pytest(root, [])
+- name: a caught_by that names no test loads
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_caught_by_naming_a_test_that_does_not_exist_is_refused_before_any_file_is_touched
+  old: if "caught_by" in m and not _names_a_test(
+  new: if False and not _names_a_test(
+- name: only the last part of a caught_by must be in its file
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_caught_by_naming_a_test_that_does_not_exist_is_refused_before_any_file_is_touched
+  old: text, re.M) for part in parts)
+  new: text, re.M) for part in parts[-1:])
+- name: a test file named alone names none of its tests
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
+  old: test == caught_by or test.startswith(caught_by + "::") or
+  new: test == caught_by or
+- name: a test named without its parameters names none of them
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
+  old: ' or ("[" not in caught_by and test.split("[")[0] == caught_by)'
+  new: ''
+- name: a caught_by with parameters names the test with any
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
+  old: ("[" not in caught_by and test.split("[")[0] == caught_by)
+  new: (test.split("[")[0] == caught_by.split("[")[0])
+- name: a catch by the test caught_by names is marked
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
+  old: and not is_named_by(by, m["caught_by"])
+  new: and is_named_by(by, m["caught_by"])
+- name: a path left before a mutation is named again after it
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_path_a_mutation_leaves_in_the_repository_is_named_with_the_mutation
+  old: '    return now, sorted(path for path in now - before'
+  new: '    return before, sorted(path for path in now - before'
+- name: the run's own directory is a left path
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_path_a_mutation_leaves_in_the_repository_is_named_with_the_mutation
+  old: path for path in now - before if not (own and path.startswith(own)))
+  new: path for path in now - before)
+- name: a new directory is named, not each file in it
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_path_a_mutation_leaves_in_the_repository_is_named_with_the_mutation
+  old: '"--porcelain", "--untracked-files=all", "--no-renames"'
+  new: '"--porcelain", "--no-renames"'
+- name: a git status that fails is read as one with nothing to list
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_once_git_status_fails_during_a_run_no_path_is_named_left_after_it
+  old: "    if cp.returncode != 0:\n        return None\n"
+  new: "    if cp.returncode != 0:\n        return set()\n"
+- name: what the runs without a mutation leave is named after the first mutation
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_path_a_mutation_leaves_in_the_repository_is_named_with_the_mutation
+  old: "    look(\"baseline\")\n"
+  new: ''
+- name: what the failing test printed is read as its traceback
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_what_the_failing_test_printed_is_not_read_as_its_exception
+  old: ' or FAILURE_HEAD.match(line) or CAPTURED.match(line):'
+  new: ' or FAILURE_HEAD.match(line):'
+- name: 'a caught_by is split at the :: its parameters hold'
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_caught_by_naming_a_test_that_does_not_exist_is_refused_before_any_file_is_touched
+  old: file, *parts = test.split("[")[0].split("::")
+  new: 'file, *parts = [part.split("[")[0] for part in test.split("::")]'
+- name: a read of git status that failed is taken for an empty one
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_once_git_status_fails_during_a_run_no_path_is_named_left_after_it
+  old: '    now = git_status(root) if before is not None else None
+
+    '
+  new: '    now = (git_status(root) or set()) if before is not None else None
+
+    '
+- name: a run that stops looking for left paths does not say so
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_once_git_status_fails_during_a_run_no_path_is_named_left_after_it
+  old: '        if looked and status is None:
+
+    '
+  new: '        if False:
+
+    '
+- name: a root outside git is not said to be
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_run_that_leaves_nothing_names_nothing_and_one_outside_git_says_it_did_not_look
+  old: '        print(f"left paths not checked: {root} is not a git repository", file=sys.stderr)'
+  new: '        pass'
