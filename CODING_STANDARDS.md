@@ -68,9 +68,11 @@ earlier assertion of the same test and proves nothing about the line it targets:
 `tests/mutations/tool-workspace-honoured.yaml` falls back to the environment's directory only when the workspace's
 does not exist, not always.
 
-A review reads where the test that caught a new mutation fails: `results.json` of the run names the test and lists the
-logs of that mutation, `<slug>.focused.log` for the focused tests and `<slug>.suite.log` for a whole-suite run (`<slug>`
-is the mutation's name made fit for a file name), and the failure is in the log of the run that caught it.
+A review reads where the test that caught a new mutation fails: `scripts/mutate.py` prints it on the mutation's
+`CAUGHT` line, the source line pytest marks and the exception when it is not an `AssertionError`, and `results.json` of
+the run holds them as `at` and `error`, beside the test and the logs of that mutation, `<slug>.focused.log` for the
+focused tests and `<slug>.suite.log` for a whole-suite run (`<slug>` is the mutation's name made fit for a file name).
+The failure in full is in the log of the run that caught it.
 
 ## Lines are wrapped by hand
 

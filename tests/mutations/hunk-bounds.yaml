@@ -2,21 +2,26 @@ focused: [tests/test_control_chars.py, tests/test_line_width.py]
 mutations:
   - name: a line inside a hunk that starts with +++ is read as a header
     file: scripts/change_lines.py
+    caught_by: 'tests/test_control_chars.py::test_an_added_line_starting_with_plus_plus_is_a_line_of_its_file_and_the_lines_after_it_are_read[untracked]'
     old: '        if removed_left or added_left:  # inside a hunk'
     new: '        if (removed_left or added_left) and not line.startswith(b"+++ "):  # inside a hunk'
   - name: a hunk ends one added line early
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_a_control_character_a_change_adds_to_a_text_file_is_named_with_its_line
     old: 'int(m[2]), int(m[3] or 1)'
     new: 'int(m[2]), int(m[3] or 1) - 1'
   - name: a hunk header without a count holds no added line
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_the_working_tree_mode_reads_the_lines_not_committed_yet_and_no_commit_message
     old: 'int(m[3] or 1)'
     new: 'int(m[3] or 0)'
   - name: a removed line is not counted, so the hunk never ends
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_only_the_lines_a_change_adds_must_be_utf8
     old: "                removed_left -= 1\n"
     new: "                pass\n"
   - name: an added line that looks like a hunk header is dropped, and the hunk runs on
     file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_an_added_line_that_looks_like_a_hunk_header_or_a_diff_line_is_a_line_of_its_file
     old: '        if removed_left or added_left:  # inside a hunk'
     new: '        if (removed_left or added_left) and not HUNK.match(line[1:]):  # inside a hunk'
