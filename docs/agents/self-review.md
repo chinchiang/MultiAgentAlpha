@@ -7,22 +7,51 @@ target.
 
 ## Starting them
 
-Each prompt begins: "Read `docs/agents/self-review.md`, the section "Both sub-agents" and the one for your axis, and
-follow them." What follows is only what belongs to this change: for the standards sub-agent, which sources below apply
-and what to look at first; for the spec sub-agent, the spec (or the decisions that were agreed) and what to verify. Start
-both together, in the foreground, and report the two results apart.
+The review of a change has a directory of its own, `scratch/self-review-<issue>/`, where `<issue>` is the issue's number
+(with no issue, the branch's name with `/` turned into `-`):
+
+```text
+scratch/self-review-<issue>/
+├── spec.md              # the main session writes it before starting the sub-agents; both only read it
+├── standards-report.md  # the main session writes each report, verbatim, as its sub-agent returns
+├── spec-report.md
+├── standards/           # the standards sub-agent's throwaway repositories and worktrees, and nothing else
+└── spec/                # the spec sub-agent's, and nothing else
+```
+
+Before starting them, make the directory, its empty `standards/` and `spec/`, and `spec.md`. `spec.md` holds the spec
+(the issue, or the decisions the owner agreed) and what to verify: the spec sub-agent reads the spec nowhere else. Each
+prompt begins:
+"Read `docs/agents/self-review.md`, the section "Both sub-agents" and the one for your axis, and follow them." Then it
+names the sub-agent's own directory by its absolute path, and what belongs to this change: for the standards
+sub-agent, which sources below apply and what to look at first; for the spec sub-agent, the absolute path of `spec.md`.
+Start both together, in the foreground.
+
+As each returns, write its report verbatim to `standards-report.md` or `spec-report.md`, and report the two results
+apart. Once both are back, empty `standards/` and `spec/` of what a sub-agent could not remove: a worktree with
+`git -C <main checkout> worktree remove --force <worktree>` (removing its directory alone leaves git's record of it),
+then the rest. The two directories stay, empty, and so do the reports and `spec.md` after the merge: the handoff or a
+retrospective points at them, and a later session reads them to know where step 3 stands.
 
 ## Both sub-agents
 
-- Change no file of the working tree and make no commit. Two commands write under `.git` and are allowed: `git add -N`
-  (it registers a new file, so the diff shows it) and `git worktree` (below). Read the change with `git diff origin/main`
-  (two dots, so the working tree counts).
+- Work in your own directory, the one your prompt names: build any throwaway repository or worktree there, and change
+  nothing outside it, not the other sub-agent's directory, not `spec.md`, not the main checkout's working tree. In the
+  main checkout, make no commit and no branch, and neither reset nor switch it. Two commands write under its `.git` and
+  are allowed: `git add -N` (it registers a new file, so the diff shows it) and `git worktree add` of a detached
+  `origin/main` (below), never with `-b`.
+- Name the repository of every git command: `git -C <absolute path> …`, the main checkout's included. Read the change
+  with `git -C <main checkout> diff origin/main` (two dots, so the working tree counts). No command relies on a `cd`
+  before it: when a `cd` fails, the commands after it run wherever the shell was.
 - Never run the whole suite or `scripts/mutate.py`: a run of the checks may be going on in the main checkout. Run single
-  test files only, with the main checkout's interpreter and its `scratch/empty-home`:
-  `HOME=<main checkout>/scratch/empty-home <main checkout>/.venv/bin/python -m pytest -p no:cacheprovider <file> -q`.
-- To try the old version of a file, `git worktree add` a copy under `scratch/` and remove it afterwards
-  (`git worktree remove`). A worktree has no `.venv` and no `scratch/`, so run its tests with the main checkout's
-  interpreter and `PYTHONPATH=<worktree>/src`, or the main checkout's own `src/` is imported.
+  test files only, with absolute paths, the main checkout's interpreter and its `scratch/empty-home`, and no bytecode
+  written into the main checkout: `PYTHONDONTWRITEBYTECODE=1 HOME=<main checkout>/scratch/empty-home
+  <main checkout>/.venv/bin/python -m pytest -p no:cacheprovider <file> -q`.
+- To try the old version of a file, `git -C <main checkout> worktree add <your directory>/<name> origin/main`. A
+  worktree has no `.venv` and no `scratch/`, so run its tests with the main checkout's interpreter and
+  `PYTHONPATH=<worktree>/src`, or the main checkout's own `src/` is imported.
+- When you are done, remove your throwaway repositories and worktrees (`git -C <main checkout> worktree remove
+  <worktree>`), and say in your report what you could not remove.
 - Report in Traditional Chinese with Taiwan usage (the owner reads it): at most 10 items in all, following the groups of
   your section, the hard findings first and then the judgement calls; each item in at most three lines (where, what,
   why), a quotation of the spec or of the hunk being one line; what does not fit goes in one sentence. Code, paths and
@@ -56,21 +85,21 @@ The smells, a copy of the list in version 1.3.1 of the `code-review` skill (each
 
 ## The spec sub-agent
 
-Does the change do what was asked, and no more? The spec is the issue, a path the prompt names, or the decisions the
-owner agreed; the prompt quotes them, for the sub-agent has no other access to them. With no spec, say "no spec available"
-for (a), (b) and (c) below, and do the checks after them.
+Does the change do what was asked, and no more? The spec is in `spec.md`, at the path the prompt names: the issue,
+or the decisions the owner agreed. When `spec.md` holds no spec, say "no spec available" for (a), (b) and (c) below,
+and do the checks after them.
 
 Report: (a) what the spec asked for that is missing or partial; (b) what the change does that was not asked for; (c) what
 looks done but is wrong. Quote the line of the spec for each.
 
 Besides what the prompt names, always check:
 
-- the change touches only the files it should (`git diff origin/main --stat`);
+- the change touches only the files it should (`git -C <main checkout> diff origin/main --stat`);
 - when the commits already exist, each one passes the tests that cover it alone; and a new test fails against the old code
-  (copy the new test file into a worktree of `origin/main`);
+  (copy the new test file into a worktree of `origin/main` in your directory);
 - every sentence the change writes about what other code does (a docstring, a standard, a CHANGELOG row, a message) is
   true: read that code, not only its docstring, and report a claim that says more than the code does;
-- when the change adds or edits a mutation list (`git diff origin/main -- tests/mutations/`), each mutation it adds or
-  edits has an `old` that occurs once in its file and a `new` that makes the fault its name says: read the code, and do
-  not run `scripts/mutate.py`. Whether the test that caught it fails at the assertion its name gives is read in step 4
-  of `pr-flow.md`, from the logs of a run of the final code.
+- when the change adds or edits a mutation list (`git -C <main checkout> diff origin/main -- tests/mutations/`), each
+  mutation it adds or edits has an `old` that occurs once in its file and a `new` that makes the fault its name says:
+  read the code, and do not run `scripts/mutate.py`. Whether the test that caught it fails at the assertion its name
+  gives is read in step 4 of `pr-flow.md`, from the logs of a run of the final code.
