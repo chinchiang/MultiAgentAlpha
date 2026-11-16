@@ -17,10 +17,10 @@ A change that becomes a pull request goes through these steps in order. Each end
    and every pointer of `tests/SEAMS.md` names something that is there. A finding costs an edit now, and a rebuild of
    the commits at step 4. mypy, semgrep, the whole suite and gitleaks wait for step 4.
    Review that tree before the first commit, so a finding costs an edit and not a rebuild: `mattpocock-skills:code-review`
-   with `origin/main` as the fixed point, where the sub-agents read `git diff origin/main` (two dots: the skill's
-   three-dot form reads commits only; run `git add -N <new file>` first, or the diff leaves new files out), the two axes
-   reported apart. What the prompts say every time is in `docs/agents/self-review.md`. A review you did not run is said
-   so in the body.
+   with `origin/main` as the fixed point, where the sub-agents read `git -C <main checkout> diff origin/main` (two
+   dots: the skill's three-dot form reads commits only; run `git add -N <new file>` first, or the diff leaves new files
+   out), the two axes reported apart. What the prompts say every time is in `docs/agents/self-review.md`. A review you
+   did not run is said so in the body.
    Then commit, each commit passing. Product code in its own commit; its mutation list and `tests/SEAMS.md` beside it.
    The version, its CHANGELOG row and the demo page go in **the last commit** of the branch (it may hold nothing else):
    `scripts/renumber.py` renumbers only when the rebase stops with no commit left to apply, so a version commit in the
@@ -49,7 +49,8 @@ A change that becomes a pull request goes through these steps in order. Each end
    `origin/main` also added keeps its version (`already exists, no checkout`; yours is
    `git show 'stash@{0}^3:<file>'`). Resolve them, `git reset -q`, `git add -N` each new file (a `DU` file you keep is
    one), read `git diff HEAD` against the patch, new files included, and `git stash drop` once it holds what you meant.
-   Done when every finding of the review is fixed or answered in the body, and the work is committed.
+   Done when `scratch/self-review-<issue>/` holds `standards-report.md` and `spec-report.md` (or the body says the review
+   was not run), every finding of the review is fixed or answered in the body, and the work is committed.
 4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it, and `scripts/mutate.py
    tests/mutations/<name>.yaml --focused-only` on each file the change touches, without `AWS_PROFILE` and
    `GEMINI_API_KEY`. A mutation edits `src/`, so never run the two at once. Done when every check `AGENTS.md` lists is
