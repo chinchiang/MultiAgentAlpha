@@ -432,3 +432,20 @@ from there, not asked of the binary) and its rules are the locked checkout linke
 finds where to write its SARIF after `--output` in the argv `scan_args` builds, and answers `--version`, which only the
 printed version line reads, with the locked version. It needs the locked tools installed, as every scan test does
 (`needs_tools`).
+
+## A stand-in gh
+
+`test_pr_checks.py` drives `scripts/pr_checks.py` through `main` with the hidden `--gh` pointing at a stand-in gh, a
+Python script the test writes into `tmp_path` (`_gh`), `--interval 0`, and `--workflows` at a directory of workflow
+files the test writes (none unless given, so the repository's own are never read). The stand-in answers by the shape
+of each call and fails loudly on any other: gh pr view with the next head, gh pr checks with the next poll (or "no
+checks reported" for a poll given as "none"), gh run view --job with that job's log (an expired log for a job given
+none), and gh api with the rulesets (each active unless the test names it disabled). Successive calls of a kind take the next answer, the last one ever after; it
+counts them in a file beside it, so one `_gh` serves one run.
+
+It does not read the `--json` fields a call asks for: every check it answers holds all of them. A field `main` stops
+asking for still reaches it here, and only a run against the real gh shows the difference; `main` asks for
+name, bucket, state, link, workflow, startedAt and completedAt. A check is a job only when its link ends
+`/job/<id>`, as the real ones do. The one test of an interrupted wait replaces the module's time.sleep with one that
+raises KeyboardInterrupt (`test_an_interrupted_wait_exits_130_as_gh_pr_checks_does_and_prints_no_traceback`), so
+`main` must keep sleeping through that name between two polls.

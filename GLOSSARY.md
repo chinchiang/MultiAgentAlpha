@@ -302,6 +302,10 @@ _Avoid_: mutation file, fault list, mutant list (a mutant is one applied mutatio
 What a branch adds over its base: the commits since the merge base of the two, or, before they are made, what the working tree adds over that merge base, its untracked files included. `scripts/change_lines.py` reads the lines a change adds as git diff shows them, for the two checks of a change, `scripts/line_width.py` and `scripts/control_chars.py`; the lines already there are not its business.
 _Avoid_: diff, patch (git's text of a change, not the change), finding (a finding is what a reviewer reports; a check's are its hits)
 
+**Result line**:
+The one line a tool's step of a pull request's CI ends on, which says whether the tool passed: its clean line ("no leaks found") when it has no hit, otherwise the summary of its hits. `scripts/pr_checks.py` reads one per step of each tool step 6 of `docs/agents/pr-flow.md` reads, and prints it `ok` only when it is the clean line.
+_Avoid_: verdict line (a verdict is a ballot role's ruling, or a model family's result), finding line (a check's are its hits)
+
 **Handoff**:
 The one living file in `scratch/` (never in git) that a session reads at its start and folds its own work into at its end: the state of the repository, the decisions, the open work, the way of working. A new session starts from it, not from the chat.
 _Avoid_: notes, summary, status file (the progress record is a review's, not a session's)

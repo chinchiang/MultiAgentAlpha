@@ -46,8 +46,18 @@ A change that becomes a pull request goes through these steps in order. Each end
    line; search it for control characters. Show what the change does before and after, and what you did not run.
 6. **Push, open the pull request, watch it.** `git fetch` first: if `origin/main` moved, rebase; if the version was
    taken, run `scripts/renumber.py`. `main` is `strict`: a branch that lacks the latest `origin/main` cannot merge, and
-   `--admin` does not get round that. Then `gh pr checks <n> --watch` in the background. Done when every required check
-   has a result you have read, in the logs where the colour is not enough (a skipped test, a scanner's own verdict).
+   `--admin` does not get round that. Then `.venv/bin/python scripts/pr_checks.py <n>` in the background. It waits until
+   at least one check is reported and none is pending, printing nothing on stdout until then, so what it prints is
+   final:
+   - each check's state, and a `LOG` line for a job whose log cannot be read;
+   - each tool's result line from the job logs (the script's docstring names the tools): `ok`, `NOT` with the step to
+     read, or `MISS` when the logs hold fewer of the tool's steps than CI runs;
+   - each pytest job's skipped tests, in full where no missing tool explains them;
+   - each workflow a pull request triggers that did not run, and the active rulesets requiring one of its checks.
+
+   Done when it exits 0. On exit 1, read each line it marks: the step a `NOT` names, the job's log for a `MISS` or a
+   `LOG`, a failed check's job, and for a required check that did not run, why it did not. When it stops because the
+   head moved, run it again. Exit 2 is gh failing: read its error.
 7. **Give the owner the merge command**, with the full 40-character head SHA, and do not run it. `git fetch` once more
    and check that `origin/main` has not moved since step 6; if it has, rebase and push again, because the branch
    would no longer be up to date and CI runs again. The ruleset R1 `update` rule keeps the state `BLOCKED` even when the
