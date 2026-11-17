@@ -6,7 +6,7 @@ focused:
 mutations:
 - name: a failed scan prints only the last lines semgrep said
   file: scripts/semgrep_ci.py
-  caught_by: tests/test_semgrep_ci.py::test_a_scan_semgrep_fails_prints_every_error_semgrep_reported
+  caught_by: tests/test_semgrep_ci.py::test_a_failed_scan_whose_sarif_is_not_shaped_as_sarif_still_says_why_it_failed
   old: '    for line in said if failed else said[-4:]:'
   new: '    for line in said[-4:]:'
 - name: a completed scan prints every line semgrep said
