@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import pins
-from .sarif import ToolResult, read_sarif, scan_complete
+from .sarif import NotShapedAsSarif, ToolResult, read_sarif, scan_complete
 
 if TYPE_CHECKING:
     from ..workspace import Workspace
@@ -287,7 +287,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, wo
                 runs.append(ToolRun(tool=tool, ran=False, results=read_sarif(sarif, tool), note="scanner_incomplete"))
                 continue
             runs.append(ToolRun(tool=tool, ran=True, results=read_sarif(sarif, tool), note=f"pinned {version}" if version else "pinned"))
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as e:
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, NotShapedAsSarif, OSError) as e:
             runs.append(ToolRun(tool=tool, ran=False, note=f"failed: {e}"))
     return runs
 
@@ -298,5 +298,10 @@ def load_prerecorded(sarif_dir: Path) -> list[ToolRun]:
     runs = []
     for p in sorted(sarif_dir.glob("*.sarif")):
         doc = json.loads(p.read_text(encoding="utf-8"))
-        runs.append(ToolRun(tool=p.stem, ran=scan_complete(doc), results=read_sarif(p, p.stem), note="prerecorded"))
+        try:
+            results = read_sarif(p, p.stem)
+        except NotShapedAsSarif as e:  # a scan that did not complete: the review goes on without its results
+            runs.append(ToolRun(tool=p.stem, ran=False, note=f"prerecorded, {e}"))
+            continue
+        runs.append(ToolRun(tool=p.stem, ran=scan_complete(doc), results=results, note="prerecorded"))
     return runs

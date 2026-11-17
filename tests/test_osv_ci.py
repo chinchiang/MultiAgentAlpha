@@ -160,7 +160,8 @@ def _incomplete(sarif: dict) -> dict:
     (_incomplete(_sarif()), 0, "incomplete scan"),
     (_incomplete(_sarif(_result("GHSA-1", "certifi", "2020.1"))), 1, "incomplete scan"),
     ("{not a SARIF document", 0, "is not JSON"),
-], ids=["no-packages", "crash", "no-sarif", "incomplete", "incomplete-with-findings", "not-json"])
+    (json.dumps({"runs": [1]}), 128, "exited 128"),  # a SARIF not shaped as SARIF has no errors to read (#344)
+], ids=["no-packages", "crash", "no-sarif", "incomplete", "incomplete-with-findings", "not-json", "crash-not-shaped"])
 def test_a_failed_scan_prints_every_line_osv_scanner_said_and_the_sarif_errors(tmp_path, sarif, exit_code, error):
     """The line that says why osv-scanner failed is rarely among its last: a failure shows every line, then each error
     notification of the SARIF it wrote."""

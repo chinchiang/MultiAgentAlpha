@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .runner import installed_manifest_entry, tool_env, tools_dir
+from .sarif import shape_problem
 
 if TYPE_CHECKING:
     from ..workspace import Workspace
@@ -99,8 +100,11 @@ def canonical_rule_id(rule_id: str) -> str:
 
 def normalize_sarif(path: Path) -> dict:
     """Rewrite a semgrep SARIF file in place: canonical rule ids, unreferenced rule descriptors removed.
-    Returns the document."""
+    Returns the document. One not shaped as SARIF (sarif.shape_problem) is left as it is, for the readers to refuse, and
+    returned as it was read."""
     doc = json.loads(path.read_text(encoding="utf-8"))
+    if shape_problem(doc) is not None:
+        return doc
     for run in doc.get("runs", []):
         used = set()
         for res in run.get("results", []):
