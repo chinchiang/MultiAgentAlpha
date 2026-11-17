@@ -93,10 +93,13 @@ exit {exit_code}
 
 
 def _run(tools: Path, *args: str, cache: Path | None = None) -> subprocess.CompletedProcess:
+    """scripts/trivy_db.py with `args`, run in the test's directory (the one holding `tools`, which each test makes
+    directly below its tmp_path), so a cache that a mutant puts below the working directory is not written into the
+    repository."""
     env = {**os.environ, "MARA_TOOLS_DIR": str(tools)}
     if cache:
         env["MARA_TRIVY_CACHE_DIR"] = str(cache)
-    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, cwd=ROOT)
+    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, env=env, cwd=tools.parent)
 
 
 def _now_iso(hours_ago: float) -> str:

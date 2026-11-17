@@ -34,6 +34,8 @@ def _sarif(*results: dict) -> str:
 
 
 def _setup(tmp_path: Path, sarif: str, hours_old: float = 2, said: tuple[str, ...] = (), exit_code: int = 0) -> tuple[Path, Path]:
+    """A fake trivy and a recorded, fresh database below `tmp_path`; the download runs there too, so a cache that a
+    mutant puts below the working directory is not written into the repository."""
     tools = tmp_path / "tools"
     _fake_trivy(tools, _now_iso(hours_old), said=said, exit_code=exit_code)
     (tools / "canned.sarif").write_text(sarif)
@@ -41,7 +43,7 @@ def _setup(tmp_path: Path, sarif: str, hours_old: float = 2, said: tuple[str, ..
     env = {**os.environ, "MARA_TOOLS_DIR": str(tools), "MARA_TRIVY_CACHE_DIR": str(cache)}
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "trivy_db.py"), "download", "--repository", "example.invalid/x/db:2",
                         "--allow-unknown-provenance"],
-                       capture_output=True, text=True, env=env, cwd=ROOT)
+                       capture_output=True, text=True, env=env, cwd=tmp_path)
     assert r.returncode == 0, r.stdout + r.stderr
     (tools / "argv.txt").unlink()
     return tools, cache
