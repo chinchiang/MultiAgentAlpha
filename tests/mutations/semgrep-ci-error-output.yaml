@@ -22,13 +22,13 @@ mutations:
 - name: the notifications printed are not the errors
   file: src/mara/tools/sarif.py
   caught_by: tests/test_semgrep_ci.py::test_a_scan_semgrep_fails_prints_every_error_semgrep_reported
-  old: '                if n.get("level") == "error":'
-  new: '                if n.get("level") == "warning":'
+  old: '        if n.get("level") == "error":'
+  new: '        if n.get("level") == "warning":'
 - name: every notification is printed whatever its level
   file: src/mara/tools/sarif.py
   caught_by: tests/test_semgrep_ci.py::test_a_scan_semgrep_fails_prints_every_error_semgrep_reported
-  old: '                if n.get("level") == "error":'
-  new: '                if True:'
+  old: '        if n.get("level") == "error":'
+  new: '        if True:'
 - name: a configuration notification is not read
   file: src/mara/tools/sarif.py
   caught_by: tests/test_semgrep_ci.py::test_a_scan_semgrep_fails_prints_every_error_semgrep_reported
@@ -37,8 +37,8 @@ mutations:
 - name: a notification is printed without the locations it names
   file: src/mara/tools/sarif.py
   caught_by: tests/test_semgrep_ci.py::test_a_scan_semgrep_fails_prints_every_error_semgrep_reported
-  old: '                    notes.append(" ".join([(n.get("message") or {}).get("text", ""), *(f"({w})" for w in where if w)]))'
-  new: '                    notes.append((n.get("message") or {}).get("text", ""))'
+  old: '            notes.append(" ".join([(n.get("message") or {}).get("text", ""), *(f"({w})" for w in where if w)]))'
+  new: '            notes.append((n.get("message") or {}).get("text", ""))'
 - name: a scan semgrep failed is judged by its SARIF alone
   file: scripts/semgrep_ci.py
   caught_by: tests/test_semgrep_ci.py::test_a_scan_fails_when_semgrep_exits_non_zero_even_with_a_complete_report

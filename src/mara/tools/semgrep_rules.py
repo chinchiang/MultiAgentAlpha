@@ -10,6 +10,10 @@ rule ids depend on where the tools happen to be installed. normalize_sarif() str
 and including the rules directory, giving the same ids the registry publishes
 (`python.flask.security.injection.tainted-sql-string`), and drops the descriptors of rules that
 produced no result (semgrep lists every loaded rule, several hundred, which dwarfs the results).
+timeouts() reads, from the same SARIF, the rules semgrep gave up on for a file, by their canonical ids.
+
+Not pure: the configuration reads the tool directory and the environment, normalize_sarif() rewrites the file it is
+given, and timeouts() reads one.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .runner import installed_manifest_entry, tool_env, tools_dir
-from .sarif import shape_problem
+from .sarif import notifications, shape_problem
 
 if TYPE_CHECKING:
     from ..workspace import Workspace
@@ -96,6 +100,22 @@ def scan_args(exe: str, configs: list[str], sarif_out: Path) -> list[str]:
 
 def canonical_rule_id(rule_id: str) -> str:
     return _PREFIX_RE.sub("", rule_id, count=1)
+
+
+_TIMEOUT_RE = re.compile(r"Timeout when running (\S+) on (.+?):\s*$")
+
+
+def timeouts(path: Path | str) -> list[tuple[str, str]]:
+    """Each timeout of the SARIF at `path`, a rule semgrep gave up on for a file, as the rule's canonical id and the
+    file, in the order it records them (sarif.notifications): a notification whose descriptor is `Timeout`, which names
+    both in its text alone. A scan that timed out still completes (scan_complete), without that rule's findings in that
+    file. An empty list when the file cannot be read, is not JSON, or is not shaped as SARIF."""
+    found = []
+    for n in notifications(path):
+        m = _TIMEOUT_RE.match((n.get("message") or {}).get("text", ""))
+        if (n.get("descriptor") or {}).get("id") == "Timeout" and m:
+            found.append((canonical_rule_id(m.group(1)), m.group(2)))
+    return found
 
 
 def normalize_sarif(path: Path) -> dict:

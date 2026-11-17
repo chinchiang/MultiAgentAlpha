@@ -73,7 +73,7 @@ RESULTS = (
     Result("gitleaks", re.compile(r"python3 scripts/gitleaks_ci\.py\b"), 1, re.compile(r"^no leaks found$"),
            "scripts/gitleaks_ci.py", "no leaks found"),
     Result("semgrep", re.compile(r"python3 scripts/semgrep_ci\.py --target \. "), 1,
-           re.compile(r"^clean: \d+ accepted finding\(s\), 0 untriaged$"), "scripts/semgrep_ci.py",
+           re.compile(r"^clean: \d+ accepted finding\(s\), 0 untriaged(; \d+ timeout\(s\) \(.+\))?$"), "scripts/semgrep_ci.py",
            "accepted finding(s), 0 untriaged"),
     Result("osv-scanner", re.compile(r"python3 scripts/osv_ci\.py --lockfile "), 4,
            re.compile(r"^no un-ignored known vulnerabilities\b"), "scripts/osv_ci.py", "no un-ignored known vulnerabilities"),

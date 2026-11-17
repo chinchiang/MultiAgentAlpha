@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from semgrep_ci import apply_triage, load_triage, locked, match_triage  # noqa: E402
 
 from mara.tools.sarif import read_sarif  # noqa: E402
-from mara.tools.semgrep_rules import canonical_rule_id, normalize_sarif, result_keys  # noqa: E402
+from mara.tools.semgrep_rules import canonical_rule_id, normalize_sarif, result_keys, timeouts  # noqa: E402
 
 needs_tools = pytest.mark.skipif(not (TOOLS / "bin" / "semgrep").exists() or not (TOOLS / "semgrep-rules").is_dir(),
                                  reason="locked semgrep + semgrep-rules not installed under .mara-tools (run scripts/install_tools.py)")
@@ -247,3 +247,61 @@ def test_exact_secret_triage_does_not_accept_changed_or_missing_snippet():
     assert match_triage("test.secret", ".gitleaks.toml", [entry], source+"modified") is None
     assert match_triage("test.secret", ".gitleaks.toml", [entry]) is None
     assert match_triage("test.secret", "other.py", [entry], source) is None
+
+
+# a timeout as semgrep records it in its SARIF: the rule and the file are in the text alone, the rule with the
+# prefix of where the rules are installed
+TAINT = "python.lang.security.audit.dangerous-subprocess-use-tainted-env-args"
+
+
+def _timeout(rule: str, file: str) -> dict:
+    return {"descriptor": {"id": "Timeout"}, "level": "warning",
+            "message": {"text": f"Timeout when running mara-tools.semgrep-rules.{rule} on {file}:\n "}}
+
+
+def _complete(*notes: dict) -> dict:
+    """A SARIF of a scan that completed with no result and these notifications."""
+    return {"runs": [{"results": [], "invocations": [{"executionSuccessful": True, "toolExecutionNotifications": list(notes)}]}]}
+
+
+def _notified(tmp_path: Path, *notes: dict) -> Path:
+    path = tmp_path / "semgrep.sarif"
+    path.write_text(json.dumps(_complete(*notes)))
+    return path
+
+
+def test_each_timeout_is_read_as_its_rule_without_the_install_prefix_and_its_file(tmp_path):
+    other = {"descriptor": {"id": "Other syntax error"}, "level": "warning",
+             "message": {"text": "Other syntax error at line scripts/count_words.py:1:\n Failure: int_of_string"}}
+    path = _notified(tmp_path, _timeout(TAINT, "tests/test_model_eval.py"), other, _timeout("python.x.y", "tests/test_model_eval.py"))
+    assert timeouts(path) == [(TAINT, "tests/test_model_eval.py"), ("python.x.y", "tests/test_model_eval.py")]
+
+
+@pytest.mark.parametrize("content", ["not JSON", json.dumps({"runs": [1]})], ids=["not-json", "not-shaped"])
+def test_a_report_that_cannot_be_read_has_no_timeouts(tmp_path, content):
+    path = tmp_path / "semgrep.sarif"
+    path.write_text(content)
+    assert timeouts(path) == [] and timeouts(tmp_path / "none.sarif") == []
+
+
+@needs_tools
+@pytest.mark.parametrize("notes, said, last", [
+    ([], [], "clean: 0 accepted finding(s), 0 untriaged"),
+    ([_timeout(TAINT, "tests/test_model_eval.py")], [f"timed out  {TAINT}  tests/test_model_eval.py"],
+     "clean: 0 accepted finding(s), 0 untriaged; 1 timeout(s) (tests/test_model_eval.py)"),
+    ([_timeout(TAINT, "a.py"), _timeout("python.x.y", "a.py"), _timeout(TAINT, "b.py")],
+     [f"timed out  {TAINT}  a.py", "timed out  python.x.y  a.py", f"timed out  {TAINT}  b.py"],
+     "clean: 0 accepted finding(s), 0 untriaged; 3 timeout(s) (a.py, b.py)"),
+], ids=["none", "one", "three-on-two-files"])
+def test_a_clean_scan_says_which_rules_timed_out_on_which_files(tmp_path, notes, said, last):
+    """A rule semgrep gave up on drops its findings in that file, so the accepted count moves: the last line says
+    how many timeouts there were and on which files, a line above it names each, and the scan still passes."""
+    tools = _tool_dir_with_a_fake_semgrep(tmp_path, 0, _complete(*notes))
+    target = tmp_path / "t"
+    target.mkdir()
+    triage = tmp_path / "triage.yaml"
+    triage.write_text("exclude: []\naccepted: []\n")
+    r = _run("--target", str(target), "--report", str(tmp_path / "c.sarif"), "--triage", str(triage), tools=tools)
+    lines = r.stdout.splitlines()
+    assert r.returncode == 0 and lines[-1] == last, r.stdout + r.stderr
+    assert [line.strip() for line in lines if line.strip().startswith("timed out")] == said

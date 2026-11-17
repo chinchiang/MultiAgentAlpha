@@ -1,0 +1,43 @@
+focused: [tests/test_semgrep_ci.py, tests/test_pr_checks.py]
+# A clean semgrep scan says which rules timed out on which files (#331): semgrep_rules.timeouts reads them from the
+# SARIF, semgrep_ci.py names each and ends its clean line with how many timeouts and where, and pr_checks.py takes that
+# line as clean. Each mutation drops one of those, or loosens the pattern. timeouts' check of the descriptor (`Timeout`)
+# has no mutation: no other notification's text matches "Timeout when running … on …", so without it the result is the
+# same. Nor has notifications' check of the shape: it is sarif-not-shaped.yaml's "error_notifications reads a
+# document not shaped as SARIF", caught first here by the CI script's not-shaped test.
+mutations:
+  - name: a timeout's rule keeps the install prefix
+    file: src/mara/tools/semgrep_rules.py
+    caught_by: tests/test_semgrep_ci.py::test_each_timeout_is_read_as_its_rule_without_the_install_prefix_and_its_file
+    old: 'found.append((canonical_rule_id(m.group(1)), m.group(2)))'
+    new: 'found.append((m.group(1), m.group(2)))'
+  - name: a report that is not JSON raises when read for timeouts
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_semgrep_ci.py::test_a_report_that_cannot_be_read_has_no_timeouts[not-json]
+    old: "    except (OSError, ValueError):\n        return []"
+    new: "    except OSError:\n        return []"
+  - name: no rule that timed out is named on a line of its own
+    file: scripts/semgrep_ci.py
+    caught_by: tests/test_semgrep_ci.py::test_a_clean_scan_says_which_rules_timed_out_on_which_files
+    old: '        print(f"  timed out  {rule}  {file}")'
+    new: '        pass'
+  - name: a file that two rules timed out on is named twice
+    file: scripts/semgrep_ci.py
+    caught_by: tests/test_semgrep_ci.py::test_a_clean_scan_says_which_rules_timed_out_on_which_files[three-on-two-files]
+    old: 'dict.fromkeys(f for _, f in gave_up)'
+    new: '(f for _, f in gave_up)'
+  - name: the clean line does not say what timed out
+    file: scripts/semgrep_ci.py
+    caught_by: tests/test_semgrep_ci.py::test_a_clean_scan_says_which_rules_timed_out_on_which_files
+    old: '0 untriaged{where}")'
+    new: '0 untriaged")'
+  - name: a clean line with timeouts is not taken as clean
+    file: scripts/pr_checks.py
+    caught_by: tests/test_pr_checks.py::test_semgrep_s_clean_line_is_clean_with_or_without_the_rules_that_timed_out
+    old: '0 untriaged(; \d+ timeout\(s\) \(.+\))?$"'
+    new: '0 untriaged$"'
+  - name: any tail of the clean line is taken as clean
+    file: scripts/pr_checks.py
+    caught_by: tests/test_pr_checks.py::test_semgrep_s_clean_line_is_clean_with_or_without_the_rules_that_timed_out
+    old: '0 untriaged(; \d+ timeout\(s\) \(.+\))?$"'
+    new: '0 untriaged(.*)$"'

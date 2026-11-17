@@ -252,6 +252,20 @@ def test_a_clean_result_line_is_what_its_script_prints(tool):
     assert entry.printed in CLEAN[tool] and entry.clean.search(CLEAN[tool])
 
 
+@pytest.mark.parametrize("line, clean", [
+    ("clean: 168 accepted finding(s), 0 untriaged", True),
+    ("clean: 167 accepted finding(s), 0 untriaged; 1 timeout(s) (tests/test_model_eval.py)", True),
+    ("clean: 166 accepted finding(s), 0 untriaged; 3 timeout(s) (a.py, b.py)", True),
+    ("clean: 166 accepted finding(s), 0 untriaged; 1 rule(s) timed out (a.py)", False),
+    ("clean: 167 accepted finding(s), 0 untriaged; nothing else", False),
+    ("UNTRIAGED: 1 finding(s) not covered by tools/semgrep-triage.yaml (fix the code, or add an entry with a reason)", False),
+], ids=["no-timeout", "one-timeout", "timeouts-on-two-files", "rules-not-timeouts", "other-tail", "untriaged"])
+def test_semgrep_s_clean_line_is_clean_with_or_without_the_rules_that_timed_out(line, clean):
+    """A scan that timed out still completes and passes: CI can time out, and its clean line is still `ok`."""
+    entry = next(r for r in pr_checks.RESULTS if r.tool == "semgrep")
+    assert bool(entry.clean.search(line)) is clean
+
+
 # a workflow a pull request triggers that did not run
 
 
