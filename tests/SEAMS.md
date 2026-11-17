@@ -423,6 +423,10 @@ scan to the next, at `scripts/calibration_run.py`, `scripts/osv_ci.py`, `scripts
 that moves is covered and the check's result does not change. A test or a script compares the untriaged count (0), not
 the accepted count.
 
+One cause, seen on each run of #345 and #346, is a timeout: semgrep gives up on that rule for
+`tests/test_model_eval.py`, so its finding there is not counted. `scripts/semgrep_ci.py`'s clean line now says so
+(`semgrep_rules.timeouts`), and a test reads that line from a SARIF it writes, not from a scan of the repository.
+
 ## A stand-in semgrep
 
 A test of what `scripts/semgrep_ci.py` prints of a scan, or of how it judges semgrep's exit code, runs it through the
@@ -485,6 +489,15 @@ name, bucket, state, link, workflow, startedAt and completedAt. A check is a job
 `/job/<id>`, as the real ones do. The one test of an interrupted wait replaces the module's time.sleep with one that
 raises KeyboardInterrupt (`test_an_interrupted_wait_exits_130_as_gh_pr_checks_does_and_prints_no_traceback`), so
 `main` must keep sleeping through that name between two polls.
+
+## The result lines `scripts/pr_checks.py` copies
+
+Two tests read the RESULTS table of `scripts/pr_checks.py` itself, not through `main`:
+`test_pr_checks.py::test_a_clean_result_line_is_what_its_script_prints` (each entry's printed text is still in its
+script and matches what CI printed), and
+`test_pr_checks.py::test_semgrep_s_clean_line_is_clean_with_or_without_the_rules_that_timed_out` (which lines the
+semgrep entry's clean pattern takes, with and without the rules that timed out). They rely on each entry's tool, clean
+pattern, script and printed text, by those names.
 
 ## The mutation runner (`scripts/mutate.py`)
 

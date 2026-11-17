@@ -178,22 +178,25 @@ def scan_complete(doc: dict) -> bool:
     return True
 
 
-def error_notifications(path: Path | str) -> list[str]:
-    """Each error-level notification of the SARIF at `path` (both kinds `scan_complete` reads), as its message and the
-    locations it names; none when the file cannot be read, is not JSON, or is not shaped as SARIF (shape_problem)."""
+def notifications(path: Path | str) -> list[dict]:
+    """Every notification of the SARIF at `path`, of both kinds `scan_complete` reads, in the order it records them;
+    none when the file cannot be read, is not JSON, or is not shaped as SARIF (shape_problem)."""
     try:
         doc = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
     if shape_problem(doc) is not None:
         return []
+    return [n for run in doc.get("runs") or [] for invocation in run.get("invocations") or [] for n in _notifications(invocation)]
+
+
+def error_notifications(path: Path | str) -> list[str]:
+    """Each error-level notification of the SARIF at `path` (notifications), as its message and the locations it names."""
     notes = []
-    for run in doc.get("runs") or []:
-        for invocation in run.get("invocations") or []:
-            for n in _notifications(invocation):
-                if n.get("level") == "error":
-                    where = [loc.get("physicalLocation", {}).get("artifactLocation", {}).get("uri", "") for loc in n.get("locations") or []]
-                    notes.append(" ".join([(n.get("message") or {}).get("text", ""), *(f"({w})" for w in where if w)]))
+    for n in notifications(path):
+        if n.get("level") == "error":
+            where = [loc.get("physicalLocation", {}).get("artifactLocation", {}).get("uri", "") for loc in n.get("locations") or []]
+            notes.append(" ".join([(n.get("message") or {}).get("text", ""), *(f"({w})" for w in where if w)]))
     return notes
 
 

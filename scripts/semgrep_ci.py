@@ -3,7 +3,10 @@
   python3 scripts/semgrep_ci.py --target . --report semgrep.sarif --triage tools/semgrep-triage.yaml
       scan the repository (minus the triage file's `exclude` directories: the seeded fixtures); every
       finding must be covered by a triage entry (rule + path glob + reason), otherwise exit 2. Covered
-      findings stay in the SARIF with a `suppressions` entry carrying the reason.
+      findings stay in the SARIF with a `suppressions` entry carrying the reason. A clean scan ends on
+      "clean: <n> accepted finding(s), 0 untriaged", followed, when semgrep gave up on a rule for a file, by
+      "; <n> timeout(s) (<files>)", a timeout being a rule semgrep gave up on for a file, each named on a line
+      above it as its rule and file: that rule's findings in that file are missing.
   python3 scripts/semgrep_ci.py --target fixtures/vuln-sample --report fixture-semgrep.sarif --expect fixtures/vuln-sample-sarif/semgrep.sarif
       scan the seeded fixture and require exactly the pre-recorded (rule, file, line) set: exit 2 on drift.
       Regenerate the recording by copying --report over the --expect file after reviewing the diff.
@@ -33,7 +36,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_manifest_entry, installed_version, tool_path, tools_dir  # noqa: E402
 from mara.tools.sarif import error_notifications, scan_complete  # noqa: E402
-from mara.tools.semgrep_rules import RULES_DIR_NAME, normalize_sarif, result_keys, rules_dir, scan_args, scan_env  # noqa: E402
+from mara.tools.semgrep_rules import RULES_DIR_NAME, normalize_sarif, result_keys, rules_dir, scan_args, scan_env, timeouts  # noqa: E402
 from mara.workspace import Workspace  # noqa: E402
 
 
@@ -189,7 +192,13 @@ def main() -> int:
         for h in untriaged:
             print("  " + h)
         return 2
-    print(f"clean: {len(accepted)} accepted finding(s), 0 untriaged")
+    # a rule semgrep gave up on drops its findings in that file, so the accepted count moves from one scan to the next:
+    # the last line says how many timeouts there were and on which files, and the scan still passes
+    gave_up = timeouts(report)
+    for rule, file in gave_up:
+        print(f"  timed out  {rule}  {file}")
+    where = f"; {len(gave_up)} timeout(s) ({', '.join(dict.fromkeys(f for _, f in gave_up))})" if gave_up else ""
+    print(f"clean: {len(accepted)} accepted finding(s), 0 untriaged{where}")
     return 0
 
 
