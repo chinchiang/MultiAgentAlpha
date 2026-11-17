@@ -22,10 +22,12 @@ def _sarif(*results: dict) -> str:
     return json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "zizmor", "version": "1.30.1"}}, "results": list(results)}]})
 
 
-def _fake_zizmor(tools: Path, version: str, sarif: str | None, crash: bool = False) -> None:
-    """A zizmor that records its argv and prints the canned SARIF to stdout (exit 0), or crashes."""
+def _fake_zizmor(tools: Path, version: str, sarif: str | None, crash: bool = False, said: tuple[str, ...] = ()) -> None:
+    """A zizmor that records its argv, writes each line of `said` to stderr, and prints the canned SARIF to stdout (exit 0),
+    or crashes: what it was given as the SARIF on stdout (nothing by default), then `crash` on stderr, exit 3."""
     (tools / "bin").mkdir(parents=True, exist_ok=True)
     (tools / "canned.sarif").write_text(sarif or "", encoding="utf-8")
+    (tools / "said.txt").write_text("".join(line + "\n" for line in said), encoding="utf-8")
     if sys.platform == "win32":
         py_script = tools / "bin" / "fake_zizmor.py"
         py_code = f"""import sys, os
@@ -34,11 +36,12 @@ args = sys.argv[1:]
 argv_path = Path({str(tools / 'argv.txt')!r})
 with open(argv_path, 'w', encoding='utf-8') as f:
     f.write('\\n'.join(args) + '\\n')
+sys.stderr.write(Path({str(tools / 'said.txt')!r}).read_text(encoding='utf-8'))
+canned = Path({str(tools / 'canned.sarif')!r}).read_text(encoding='utf-8')
+sys.stdout.write(canned)
 if {crash}:
     sys.stderr.write('crash\\n')
     sys.exit(3)
-canned = Path({str(tools / 'canned.sarif')!r}).read_text(encoding='utf-8')
-sys.stdout.write(canned)
 sys.exit(0)
 """
         py_script.write_text(py_code, encoding="utf-8")
@@ -46,7 +49,8 @@ sys.exit(0)
         cmd_script.write_text(f'@"{sys.executable}" "{py_script}" %*\n', encoding="utf-8")
     else:
         body = "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$(dirname \"$0\")/../argv.txt\"\n"
-        body += "echo 'crash' >&2; exit 3\n" if crash else "cat \"$(dirname \"$0\")/../canned.sarif\"\n"
+        body += "cat \"$(dirname \"$0\")/../said.txt\" >&2\ncat \"$(dirname \"$0\")/../canned.sarif\"\n"
+        body += "echo 'crash' >&2; exit 3\n" if crash else ""
         exe = tools / "bin" / "zizmor"
         exe.write_text(body, encoding="utf-8")
         exe.chmod(0o755)
@@ -84,6 +88,38 @@ def test_crash_or_empty_output_exits_one(tmp_path):
     _fake_zizmor(tools, locked_version(), None, crash=True)
     r = _run(tools, "--target", ".github/workflows", "--report", str(tmp_path / "z.sarif"))
     assert r.returncode == 1 and "without a SARIF" in r.stderr
+
+
+SAID = tuple(f"zizmor said {n:02}" for n in range(1, 21))  # more lines than a passing audit shows (its last 8)
+
+
+def test_a_crash_prints_every_line_zizmor_said_on_either_stream(tmp_path):
+    """The line that says why zizmor crashed is rarely among its last: a failure shows all of stderr, and stdout too."""
+    tools = tmp_path / "tools"
+    _fake_zizmor(tools, locked_version(), "partial output 1\npartial output 2\n", crash=True, said=SAID)
+    r = _run(tools, "--target", ".github/workflows", "--report", str(tmp_path / "z.sarif"))
+    assert r.returncode == 1 and "without a SARIF" in r.stderr
+    shown = [line.strip() for line in r.stdout.splitlines()]
+    assert [line for line in shown if line.startswith(("zizmor said", "partial output", "crash"))] == [
+        *SAID, "crash", "partial output 1", "partial output 2"]
+
+
+def test_output_that_is_not_json_prints_every_line_zizmor_said(tmp_path):
+    tools = tmp_path / "tools"
+    _fake_zizmor(tools, locked_version(), "thread 'main' panicked\nnot a SARIF document\n", said=SAID)
+    r = _run(tools, "--target", ".github/workflows", "--report", str(tmp_path / "z.sarif"))
+    assert r.returncode == 1 and "is not JSON" in r.stderr
+    shown = [line.strip() for line in r.stdout.splitlines()]
+    assert [line for line in shown if line.startswith(("zizmor said", "thread", "not a SARIF"))] == [
+        *SAID, "thread 'main' panicked", "not a SARIF document"]
+
+
+def test_a_clean_audit_still_shows_only_the_last_eight_lines_zizmor_said(tmp_path):
+    tools = tmp_path / "tools"
+    _fake_zizmor(tools, locked_version(), _sarif(), said=SAID)
+    r = _run(tools, "--target", ".github/workflows", "--report", str(tmp_path / "z.sarif"), "--offline")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert [line.strip() for line in r.stdout.splitlines() if line.strip().startswith("zizmor said")] == list(SAID[-8:])
 
 
 def test_missing_or_mismatched_tool_exits_two(tmp_path):

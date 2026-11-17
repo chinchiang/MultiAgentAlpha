@@ -220,15 +220,22 @@ def main() -> int:
         print("+ " + " ".join(argv))
         a.json.unlink(missing_ok=True)  # a crash that writes nothing must not leave an earlier run's JSON to be read
         r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    for line in (r.stdout + r.stderr).strip().splitlines()[-8:]:
-        print("  " + line)
+    doc: dict = {}
+    error: str | None = None  # the run's failure, or None when it left its JSON to read (a nonzero exit included)
     if not a.json.is_file():
-        print(f"ERROR: scorecard exited {r.returncode} and wrote no {a.json}", file=sys.stderr)
-        return 1
-    try:
-        doc = json.loads(a.json.read_text(encoding="utf-8"))
-    except ValueError as e:
-        print(f"ERROR: {a.json} is not JSON: {e}", file=sys.stderr)
+        error = f"scorecard exited {r.returncode} and wrote no {a.json}"
+    else:
+        try:
+            doc = json.loads(a.json.read_text(encoding="utf-8"))
+        except ValueError as e:
+            error = f"{a.json} is not JSON: {e}"
+    # scorecard ends with its last log lines: a failed run prints every line it said, for the cause is earlier; one
+    # that did not fail, its last lines
+    said = (r.stdout + r.stderr).strip().splitlines()
+    for line in said if error else said[-8:]:
+        print("  " + line)
+    if error:
+        print(f"ERROR: {error}", file=sys.stderr)
         return 1
     if r.returncode != 0:
         print(f"note: scorecard exited {r.returncode}; its JSON is used, checks it could not run are -1")

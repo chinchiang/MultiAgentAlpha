@@ -29,6 +29,12 @@ from mara.config import load_config  # noqa: E402
 from mara.workspace import Workspace, resolve  # noqa: E402
 
 
+def said(r: subprocess.CompletedProcess) -> str:
+    """Every line a child said, its stdout's then its stderr's, for a failure to show what it said before the line that
+    ends it."""
+    return "\n".join([*r.stdout.strip().splitlines(), *r.stderr.strip().splitlines()])
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--mode", choices=["mock", "live"], required=True)
@@ -60,10 +66,13 @@ def main() -> int:
     io = {"capture_output": True, "text": True, "encoding": "utf-8", "errors": "replace",
           "env": {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONPATH": pythonpath}}
     r = subprocess.run([*base, "check-config", str(config)], **io)
-    print(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr.strip()[-200:])
+    # check-config ends with its summary, after the table that says which policy failed and why: a failed check prints
+    # every line it said, on both streams; one that passed, its summary
     if r.returncode != 0:
+        print(said(r))
         print("ERROR: check-config failed; fix the policies before calibrating", file=sys.stderr)
         return 2
+    print(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr.strip()[-200:])
     samples = sorted(p for p in a.samples_dir.iterdir() if p.is_dir())
     if not samples:
         print(f"ERROR: no samples under {a.samples_dir}", file=sys.stderr)
@@ -81,7 +90,7 @@ def main() -> int:
         # exit 2 is a blocked gate in the blocking phase, still a completed review - but a usage error
         # (typer/click) is exit 2 too, and writes no report: only a fresh report.json makes it a review
         if r.returncode not in (0, 2) or not (out / "report.json").is_file():
-            print(r.stdout[-800:] + r.stderr[-800:], file=sys.stderr)
+            print(said(r), file=sys.stderr)
             print(f"ERROR: review of {s.name} failed (exit {r.returncode}{', no report written' if r.returncode in (0, 2) else ''})",
                   file=sys.stderr)
             return 1

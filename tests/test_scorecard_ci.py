@@ -34,10 +34,14 @@ DOC = {
 }
 
 
-def _fake_scorecard(tools: Path, version: str, doc: dict | None, crash: bool = False) -> Path:
+def _fake_scorecard(tools: Path, version: str, doc: dict | str | None, crash: bool = False, said: tuple[str, ...] = (),
+                    exit_code: int = 0) -> Path:
+    """A scorecard that records its argv, writes each line of `said` to stderr, then crashes (`boom`, exit 1, no JSON) or
+    copies `doc` (as JSON, or a string as it is) to its --output and exits `exit_code`."""
     (tools / "bin").mkdir(parents=True, exist_ok=True)
+    (tools / "said.txt").write_text("".join(line + "\n" for line in said), encoding="utf-8")
     if not crash:
-        (tools / "canned.json").write_text(json.dumps(doc), encoding="utf-8")
+        (tools / "canned.json").write_text(doc if isinstance(doc, str) else json.dumps(doc), encoding="utf-8")
     if sys.platform == "win32":
         py_script = tools / "bin" / "fake_scorecard.py"
         py_code = f"""import sys, os
@@ -46,6 +50,7 @@ args = sys.argv[1:]
 argv_path = Path({str(tools / 'argv.txt')!r})
 with open(argv_path, 'w', encoding='utf-8') as f:
     f.write('\\n'.join(args) + '\\n')
+sys.stderr.write(Path({str(tools / 'said.txt')!r}).read_text(encoding='utf-8'))
 if {crash}:
     sys.stderr.write('boom\\n')
     sys.exit(1)
@@ -57,7 +62,7 @@ for a in args:
 if out:
     import shutil
     shutil.copyfile(canned, out)
-sys.exit(0)
+sys.exit({exit_code})
 """
         py_script.write_text(py_code, encoding="utf-8")
         cmd_script = tools / "bin" / "scorecard.cmd"
@@ -65,13 +70,13 @@ sys.exit(0)
         exe = cmd_script
     else:
         exe = tools / "bin" / "scorecard"
-        lines = ["#!/bin/sh", "printf '%s\\n' \"$@\" > \"$(dirname \"$0\")/../argv.txt\""]
+        lines = ["#!/bin/sh", "printf '%s\\n' \"$@\" > \"$(dirname \"$0\")/../argv.txt\"", "cat \"$(dirname \"$0\")/../said.txt\" >&2"]
         if crash:
             lines.append("echo 'boom' >&2; exit 1")
         else:
             lines += ["for a in \"$@\"; do case \"$a\" in --output=*) out=\"${a#--output=}\";; "
                       "--local=*) (cd \"${a#--local=}\" && find . -type f | sort) > \"$(dirname \"$0\")/../tree.txt\";; esac; done",
-                      "cp \"$(dirname \"$0\")/../canned.json\" \"$out\""]
+                      "cp \"$(dirname \"$0\")/../canned.json\" \"$out\"", f"exit {exit_code}"]
         exe.write_text("\n".join(lines) + "\n", encoding="utf-8")
         exe.chmod(0o755)
     (tools / "manifest.json").write_text(json.dumps({"tools": {"scorecard": {"version": version}}}), encoding="utf-8")
@@ -182,6 +187,30 @@ def test_cli_refuses_missing_token_bad_repo_wrong_version_and_crash(tmp_path):
     _fake_scorecard(tools, sc.locked_version(), None, crash=True)
     r = _run(tools, "--repo", "github.com/o/r", "--json", str(tmp_path / "none.json"), "--policy", str(pol))
     assert r.returncode == 1 and "wrote no" in r.stderr
+
+
+SAID = tuple(f"scorecard said {n:02}" for n in range(1, 21))  # more lines than a run that does not fail shows (its last 8)
+
+
+@pytest.mark.parametrize("crash, doc, error", [(True, None, "wrote no"), (False, "panic: not a JSON document", "is not JSON")],
+                         ids=["no-json", "not-json"])
+def test_a_failed_run_prints_every_line_scorecard_said(tmp_path, crash, doc, error):
+    """The line that says why scorecard failed is rarely among its last: a failure shows every line it said."""
+    tools = tmp_path / "tools"
+    _fake_scorecard(tools, sc.locked_version(), doc, crash=crash, said=SAID)
+    r = _run(tools, "--repo", "github.com/o/r", "--json", str(tmp_path / "s.json"), "--policy", str(_policy(tmp_path, "enforce: {}\n")))
+    assert r.returncode == 1 and error in r.stderr, r.stdout + r.stderr
+    assert [line.strip() for line in r.stdout.splitlines() if line.strip().startswith("scorecard said")] == list(SAID)
+
+
+@pytest.mark.parametrize("exit_code", [0, 1], ids=["clean", "exit-with-json"])
+def test_a_run_with_its_json_still_shows_only_the_last_eight_lines(tmp_path, exit_code):
+    """A nonzero exit with a readable JSON is a note (checks it could not run are -1), not a failure."""
+    tools = tmp_path / "tools"
+    _fake_scorecard(tools, sc.locked_version(), DOC, said=SAID, exit_code=exit_code)
+    r = _run(tools, "--repo", "github.com/o/r", "--json", str(tmp_path / "s.json"), "--policy", str(_policy(tmp_path, "enforce: {}\n")))
+    assert "ERROR" not in r.stderr and ("note: scorecard exited 1" in r.stdout) == bool(exit_code), r.stdout + r.stderr
+    assert [line.strip() for line in r.stdout.splitlines() if line.strip().startswith("scorecard said")] == list(SAID[-8:])
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the fake scorecard lists the exported tree with sh/find")

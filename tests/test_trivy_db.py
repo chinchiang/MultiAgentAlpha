@@ -21,8 +21,11 @@ from mara.tools import trivy_db as tdb  # noqa: E402
 from mara.workspace import Workspace  # noqa: E402
 
 
-def _fake_trivy(tools: Path, updated_at: str, version: str = "0.74.0") -> None:
+def _fake_trivy(tools: Path, updated_at: str, version: str = "0.74.0", said: tuple[str, ...] = (), exit_code: int = 0) -> None:
+    """A trivy whose `image --download-db-only` writes a database dated `updated_at`, and whose scan writes each line of
+    `said` to stderr, copies canned.sarif to its --output and exits `exit_code`."""
     (tools / "bin").mkdir(parents=True, exist_ok=True)
+    (tools / "said.txt").write_text("".join(line + "\n" for line in said), encoding="utf-8")
     if sys.platform == "win32":
         py_script = tools / "bin" / "fake_trivy.py"
         py_code = f"""import sys, os
@@ -56,10 +59,11 @@ if 'download-db-only' in argv_text and not out:
     with open(os.path.join(db_dir, 'metadata.json'), 'w', encoding='utf-8') as f:
         f.write('{{"Version":2,"NextUpdate":"2099-01-01T00:00:00Z","UpdatedAt":"{updated_at}","DownloadedAt":"{updated_at}"}}')
     sys.exit(0)
+sys.stderr.write(Path({str(tools / 'said.txt')!r}).read_text(encoding='utf-8'))
 if out:
     import shutil
     shutil.copyfile(Path({str(tools / 'canned.sarif')!r}), out)
-sys.exit(0)
+sys.exit({exit_code})
 """
         py_script.write_text(py_code, encoding="utf-8")
         cmd_script = tools / "bin" / "trivy.cmd"
@@ -79,8 +83,9 @@ if grep -q -- download-db-only {tools}/argv.txt && [ -z "$out" ]; then
   printf '{{"Version":2,"NextUpdate":"2099-01-01T00:00:00Z","UpdatedAt":"{updated_at}","DownloadedAt":"{updated_at}"}}' > "$cache/db/metadata.json"
   exit 0
 fi
+cat {tools}/said.txt >&2
 [ -n "$out" ] && cp {tools}/canned.sarif "$out"
-exit 0
+exit {exit_code}
 """)
         fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     (tools / "manifest.json").write_text(json.dumps({"tools": {"trivy": {"version": version}}}))
