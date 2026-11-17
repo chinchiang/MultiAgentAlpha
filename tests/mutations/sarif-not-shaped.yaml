@@ -1,0 +1,98 @@
+focused: [tests/test_sarif_shape.py]
+# A file that is JSON but not shaped as SARIF (#344): shape_problem checks the type of each part the SARIF readers read
+# into or take as text or a number, each reader asks it first and takes such a file as a report it cannot read, and a
+# review takes it as a tool's scan that did not complete. Each mutation drops one of those checks or one of its limits
+# (a result's first location, the nulls the readers take for absent), one reader's question, or one caller's catch in
+# the tool runner. "scan_complete reads a document not shaped as SARIF" is caught by the AttributeError it raises on
+# the first such document: the reading that fails is the fault.
+mutations:
+  - name: no document is found not shaped as SARIF
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_has_no_error_notifications
+    old: '    return shape.problems[0] if shape.problems else None'
+    new: '    return None'
+  - name: error_notifications reads a document not shaped as SARIF
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_has_no_error_notifications
+    old: "    if shape_problem(doc) is not None:\n        return []"
+    new: "    if False:\n        return []"
+  - name: scan_complete reads a document not shaped as SARIF
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_is_a_scan_that_did_not_complete
+    old: '    if shape_problem(doc) is not None or not doc.get("runs"):'
+    new: '    if not doc.get("runs"):'
+  - name: read_sarif reads a document not shaped as SARIF
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_sarif_shape.py::test_reading_the_results_of_a_document_not_shaped_as_sarif_names_the_file_and_the_part
+    old: '    if (problem := shape_problem(doc)) is not None:'
+    new: '    if (problem := shape_problem(doc)) is not None and False:'
+  - name: read_sarif's refusal does not name the file
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_sarif_shape.py::test_reading_the_results_of_a_document_not_shaped_as_sarif_names_the_file_and_the_part
+    old: 'f"{path}: not shaped as SARIF ({problem})"'
+    new: 'f"not shaped as SARIF ({problem})"'
+  - name: every member that is null is taken as absent
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_sarif_shape.py::test_reading_the_results_of_a_document_not_shaped_as_sarif_names_the_file_and_the_part[runs is null]
+    old: '        if key not in obj or (nullable and obj[key] is None):'
+    new: '        if key not in obj or obj[key] is None:'
+  - name: a boolean is taken as an integer
+    file: src/mara/tools/sarif.py
+    caught_by: "tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_is_a_scan_that_did_not_complete[a result's start line is true]"
+    old: ' and not (kind is int and isinstance(value, bool)):'
+    new: ':'
+  - name: a rule's tags are not checked
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_is_a_scan_that_did_not_complete
+    old: '        shape.member(properties, "tags", list, f"{where}.properties")'
+    new: '        pass'
+  - name: a result's start line is not checked
+    file: src/mara/tools/sarif.py
+    caught_by: "tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_is_a_scan_that_did_not_complete[a result's start line is a string]"
+    old: '        shape.member(lines, "startLine", int, f"{at}.region")'
+    new: '        pass'
+  - name: a notification's uri is not checked
+    file: src/mara/tools/sarif.py
+    caught_by: "tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_has_no_error_notifications[a notification's uri is a number]"
+    old: '        shape.member(artifact, "uri", str, f"{at}.artifactLocation")'
+    new: '        pass'
+  - name: a prerecorded file not shaped as SARIF ends the review
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_sarif_shape.py::test_a_review_whose_prerecorded_sarif_is_not_shaped_as_sarif_completes_without_that_tool
+    old: '        except NotShapedAsSarif as e:  # a scan that did not complete'
+    new: '        except KeyError as e:  # a scan that did not complete'
+  - name: a prerecorded file not shaped as SARIF is a scan that completed
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_sarif_shape.py::test_a_review_whose_prerecorded_sarif_is_not_shaped_as_sarif_completes_without_that_tool
+    old: 'runs.append(ToolRun(tool=p.stem, ran=False, note=f"prerecorded, {e}"))'
+    new: 'runs.append(ToolRun(tool=p.stem, ran=True, note=f"prerecorded, {e}"))'
+  - name: a tool that wrote a file not shaped as SARIF ends run_all
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_sarif_shape.py::test_a_tool_whose_sarif_is_not_shaped_as_sarif_is_a_scan_that_did_not_complete
+    old: 'json.JSONDecodeError, NotShapedAsSarif, OSError'
+    new: 'json.JSONDecodeError, OSError'
+  - name: normalize_sarif rewrites a document not shaped as SARIF
+    file: src/mara/tools/semgrep_rules.py
+    caught_by: tests/test_sarif_shape.py::test_normalizing_a_document_not_shaped_as_sarif_leaves_the_file_as_it_is
+    old: "    if shape_problem(doc) is not None:\n        return doc"
+    new: "    if False:\n        return doc"
+  - name: a rule's name is not checked
+    file: src/mara/tools/sarif.py
+    caught_by: "tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_is_a_scan_that_did_not_complete[a rule's name is a number]"
+    old: '    for key in ("id", "name"):'
+    new: '    for key in ("id",):'
+  - name: a result's rule is not checked
+    file: src/mara/tools/sarif.py
+    caught_by: "tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_is_a_scan_that_did_not_complete[a result's rule is a string]"
+    old: '    if (rule := shape.member(result, "rule", dict, where)) is not None:'
+    new: '    if (rule := None) is not None:'
+  - name: every location of a result is checked, not only the one read
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_sarif_shape.py::test_only_a_result_s_first_location_is_checked_for_it_is_the_one_read
+    old: 'nullable=True, first_only=True)'
+    new: 'nullable=True)'
+  - name: a notification's null locations are not taken as absent
+    file: src/mara/tools/sarif.py
+    caught_by: "tests/test_sarif_shape.py::test_a_null_the_notification_readers_take_for_absent_is_still_read[a notification's locations are null]"
+    old: '            for loc, at_loc in shape.items(notification, "locations", at, nullable=True):'
+    new: '            for loc, at_loc in shape.items(notification, "locations", at):'

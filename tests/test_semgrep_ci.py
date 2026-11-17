@@ -149,6 +149,27 @@ def test_a_scan_fails_when_semgrep_exits_non_zero_even_with_a_complete_report(tm
 
 
 @needs_tools
+def test_a_failed_scan_whose_sarif_is_not_shaped_as_sarif_still_says_why_it_failed(tmp_path):
+    """Its SARIF errors cannot be read from such a file (#344): the ERROR line comes all the same, with no traceback."""
+    tools = _tool_dir_with_a_fake_semgrep(tmp_path, 2, {"runs": [1]})
+    r = _run("--target", "fixtures/vuln-sample", "--report", str(tmp_path / "c.sarif"), "--expect", "fixtures/vuln-sample-sarif/semgrep.sarif",
+             tools=tools)
+    assert r.returncode == 1 and "ERROR: semgrep exited 2; partial results cannot pass" in r.stderr, r.stdout + r.stderr
+    assert "Traceback" not in r.stderr and "fake semgrep stderr line 1" in r.stdout
+
+
+@needs_tools
+def test_a_completed_scan_whose_sarif_is_not_shaped_as_sarif_is_incomplete(tmp_path):
+    """semgrep exits 0 but writes a file not shaped as SARIF (#344): it is not normalized, and the scan is reported
+    incomplete, with no traceback."""
+    tools = _tool_dir_with_a_fake_semgrep(tmp_path, 0, {"runs": [1]})
+    r = _run("--target", "fixtures/vuln-sample", "--report", str(tmp_path / "c.sarif"), "--expect", "fixtures/vuln-sample-sarif/semgrep.sarif",
+             tools=tools)
+    assert r.returncode == 1 and "ERROR: semgrep SARIF reports an incomplete scan" in r.stderr, r.stdout + r.stderr
+    assert "Traceback" not in r.stderr
+
+
+@needs_tools
 def test_a_scan_semgrep_fails_prints_every_error_semgrep_reported(tmp_path):
     # the last lines of semgrep's stderr are its summary table and its warnings: the error that made it exit 2 is earlier,
     # or in the SARIF's notifications

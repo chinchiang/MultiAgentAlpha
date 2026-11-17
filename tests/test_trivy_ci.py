@@ -99,7 +99,11 @@ WITH_NOTE = json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name"
                                                       "invocations": [{"executionSuccessful": False, "toolExecutionNotifications": [NOTE]}]}]})
 
 
-@pytest.mark.parametrize("sarif, exit_code, error", [(WITH_NOTE, 1, "trivy exited 1"), ("", 0, "wrote no SARIF")], ids=["crash", "no-sarif"])
+@pytest.mark.parametrize("sarif, exit_code, error", [
+    (WITH_NOTE, 1, "trivy exited 1"),
+    ("", 0, "wrote no SARIF"),
+    (json.dumps({"runs": [1]}), 1, "trivy exited 1"),  # a SARIF not shaped as SARIF has no errors to read (#344)
+], ids=["crash", "no-sarif", "crash-not-shaped"])
 def test_a_failed_scan_prints_every_line_trivy_said_and_the_sarif_errors(tmp_path, sarif, exit_code, error):
     """The line that says why trivy failed is rarely among its last: a failure shows every line, then each error
     notification of the SARIF it wrote."""
@@ -109,7 +113,7 @@ def test_a_failed_scan_prints_every_line_trivy_said_and_the_sarif_errors(tmp_pat
     shown = [line.strip() for line in r.stdout.splitlines()]
     assert [line for line in shown if line.startswith("trivy said")] == list(SAID)
     notes = [line for line in shown if line.startswith("trivy error:")]
-    assert notes == (["trivy error: failed to analyze the lockfile (tools/dev-requirements.txt)"] if sarif else [])
+    assert notes == (["trivy error: failed to analyze the lockfile (tools/dev-requirements.txt)"] if sarif == WITH_NOTE else [])
 
 
 def test_a_crash_with_a_sarif_that_is_not_utf8_prints_every_line_and_says_trivy_exited(tmp_path):
