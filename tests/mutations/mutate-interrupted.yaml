@@ -3,10 +3,12 @@ focused:
 mutations:
 - name: the copies stay after the file is restored
   file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_mutation_a_test_catches_and_one_none_does_are_told_apart_and_the_source_is_restored
   old: "    _drop_copies(run_dir)\n    at, error ="
   new: '    at, error ='
 - name: no copies are kept before a file is mutated
   file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_mutant_left_by_a_killed_run_is_restored_before_the_next_run
   old: '        (run_dir / kind / m["file"]).write_bytes(data)
 
     '
@@ -15,6 +17,7 @@ mutations:
     '
 - name: a run does not look for copies a killed run left
   file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_mutant_left_by_a_killed_run_is_restored_before_the_next_run
   old: '    if why := restore_left(root, runs):
 
     '
@@ -23,6 +26,7 @@ mutations:
     '
 - name: a file edited since is restored over
   file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_file_changed_since_a_killed_run_left_it_is_not_restored_and_no_run_starts
   old: '            if mutant.is_file() and now == mutant.read_bytes():
 
     '
@@ -31,6 +35,7 @@ mutations:
     '
 - name: the copies of a run still going are taken for a leftover
   file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_the_copies_of_a_run_still_going_are_left_to_it_and_no_run_starts
   old: '        if pid.isdigit() and _alive(int(pid)):
 
     '
@@ -39,15 +44,18 @@ mutations:
     '
 - name: the copies are removed though a file was neither
   file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_file_changed_since_a_killed_run_left_it_is_not_restored_and_no_run_starts
   old: '            return (f"{rel.as_posix()} is neither'
   new: "            _drop_copies(run_dir)\n            return (f\"{rel.as_posix()} is neither"
 - name: the list is not kept in its run
   file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_mutation_a_test_catches_and_one_none_does_are_told_apart_and_the_source_is_restored
   old: '    shutil.copyfile(a.mutations, run_dir / a.mutations.name)
 
     '
   new: ''
 - name: a dead run's pid reads as alive
   file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_mutant_left_by_a_killed_run_is_restored_before_the_next_run
   old: "    except ProcessLookupError:\n        return False\n"
   new: "    except ProcessLookupError:\n        return True\n"

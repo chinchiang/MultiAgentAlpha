@@ -2,29 +2,36 @@ focused: [tests/test_invocation.py, tests/test_progress.py, tests/test_psirt.py,
 mutations:
   - name: the progress file no longer a path option
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation.py::test_the_argv_of_an_invocation_with_every_option_is_read_back_by_mara_review_as_given
     old: 'PATH_OPTIONS = ("sarif_dir", "mock_fixtures", "psirt_event", "progress_file")'
     new: 'PATH_OPTIONS = ("sarif_dir", "mock_fixtures", "psirt_event")'
   - name: a field's flag keeps its underscores
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation.py::test_the_argv_of_an_invocation_with_every_option_is_read_back_by_mara_review_as_given
     old: '    return "--" + field.replace("_", "-")'
     new: '    return "--" + field'
   - name: check_paths skips the path options
     file: src/mara/invocation.py
+    caught_by: tests/test_progress.py::test_a_progress_file_inside_the_target_is_refused
     old: '                                   **{f"{flag} {p}": p for flag, p in path_options(inv).items()}},'
     new: '                                   },'
   - name: review_args gives --config without a config
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation.py::test_the_argv_of_an_invocation_with_no_option_set_is_read_back_with_every_default
     old: "    if inv.config is not None:\n        args += [\"--config\", str(inv.config)]\n"
     new: "    args += [\"--config\", str(inv.config)]\n"
   - name: an enforced gate's exit named G-10
     file: src/mara/cli.py
+    caught_by: tests/test_misc_leftovers.py::test_report_header_says_when_fail_on_gate_enforced_the_gate
     old: '           EXIT_GATE: ""}.get(code, ", G-10")'
     new: '           EXIT_GATE: ", G-10"}.get(code, ", G-10")'
   - name: an unenforced gate's exit without G-10
     file: src/mara/cli.py
+    caught_by: tests/test_core_review_fixes_8_13.py::test_forced_gate_outside_blocking_says_it_is_enforced
     old: '           EXIT_GATE: ""}.get(code, ", G-10")'
     new: '           EXIT_GATE: ""}.get(code, "")'
   - name: the PSIRT failure not said to outrank the gate
     file: src/mara/cli.py
+    caught_by: tests/test_psirt.py::test_an_enforced_gate_with_a_failed_psirt_hand_off_names_the_exit_code_it_gets
     old: '    why = {EXIT_PSIRT: ": the PSIRT hand-off failed" + (", which outranks the gate" if report.gate_enforced else ""),'
     new: '    why = {EXIT_PSIRT: ": the PSIRT hand-off failed",'

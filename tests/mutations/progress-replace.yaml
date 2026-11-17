@@ -2,29 +2,36 @@ focused: [tests/test_progress.py, tests/test_web_procs.py]
 mutations:
   - name: a record another process holds for a moment is not tried again
     file: src/mara/progress.py
+    caught_by: tests/test_progress.py::test_a_record_another_process_holds_for_a_moment_is_still_written
     old: 'file_replace.replace(tmp, self.path)  # a reader sees'
     new: 'os.replace(tmp, self.path)  # a reader sees'
   - name: a record left running is not tried again when it is closed
     file: src/mara/progress.py
+    caught_by: tests/test_progress.py::test_a_record_left_running_is_closed_even_when_another_process_holds_it_for_a_moment
     old: '        file_replace.replace(tmp, path)'
     new: '        os.replace(tmp, path)'
   - name: a record held for good is waited for some 20 seconds
     file: src/mara/file_replace.py
+    caught_by: tests/test_progress.py::test_a_record_held_for_good_is_given_up_on_with_one_warning_and_the_review_goes_on
     old: 'REPLACE_RETRIES = 10'
     new: 'REPLACE_RETRIES = 1000'
   - name: a refusal that outlasts the retries fails the review
     file: src/mara/progress.py
+    caught_by: tests/test_progress.py::test_a_record_held_for_good_is_given_up_on_with_one_warning_and_the_review_goes_on
     old: '            except OSError as e:'
     new: '            except FileNotFoundError as e:'
   - name: the temporary file of a record not written is left behind
     file: src/mara/progress.py
+    caught_by: tests/test_progress.py::test_a_record_held_for_good_is_given_up_on_with_one_warning_and_the_review_goes_on
     old: '                    tmp.unlink(missing_ok=True)'
     new: '                    pass'
   - name: a record of a run, a job or the settings that another writer holds for a moment is not tried again
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_a_record_another_writer_holds_for_a_moment_is_still_written
     old: '        file_replace.replace(tmp, path)'
     new: '        os.replace(tmp, path)'
   - name: a record is not tried again when the move is refused
     file: src/mara/file_replace.py
+    caught_by: tests/test_progress.py::test_a_record_another_process_holds_for_a_moment_is_still_written
     old: '        except PermissionError:'
     new: '        except FileNotFoundError:'

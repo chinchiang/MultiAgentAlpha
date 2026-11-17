@@ -6,10 +6,12 @@ focused:
 mutations:
 - name: the bundle leaves the judge's chain out
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_bundle_lists_the_public_roots_then_the_targets_chain_then_the_judges
   old: '    for named in (target.ca_bundle, judge_ca_bundle):'
   new: '    for named in (target.ca_bundle,):'
 - name: the bundle is made only when the target has a chain of its own
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_line_pasted_from_plan_run_or_a_report_into_a_shell_runs_what_run_executes[plan]'
   old: |2
         if not target.ca_bundle and not judge_ca_bundle:
             return None
@@ -18,22 +20,27 @@ mutations:
             return None
 - name: the bundle lists the judge's chain before the target's
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_bundle_lists_the_public_roots_then_the_targets_chain_then_the_judges
   old: '    for named in (target.ca_bundle, judge_ca_bundle):'
   new: '    for named in (judge_ca_bundle, target.ca_bundle):'
 - name: a chain named by both the target and the judge is listed twice
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_chain_named_by_both_the_target_and_the_judge_is_in_the_bundle_once
   old: '        if named and (path := resolve_user_path(named)) not in paths:'
   new: '        if named and (path := resolve_user_path(named)):'
 - name: a chain written with a tilde is looked for as a relative path
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_tilde_path_is_the_users_home_and_names_the_same_file_as_its_absolute_spelling
   old: '        if named and (path := resolve_user_path(named)) not in paths:'
   new: '        if named and (path := Path(named)) not in paths:'
 - name: the CA file of a family with a chain of its own is written without the judge's chain
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_run_gives_every_command_of_both_tools_the_trust_of_the_judges_ca
   old: 'ca_bundles=(target.ca_bundle, judge_ca_bundle)'
   new: 'ca_bundles=(target.ca_bundle, "" if target.ca_bundle else judge_ca_bundle)'
 - name: plan and run give garak the CA file of the target only
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_family_without_a_ca_of_its_own_still_verifies_a_judge_behind_an_internal_one
   old: |2
             env, files = _tls(t, out, settings.judge_ca_bundle)
             if (options := _garak_generator_options(t)) is not None:
@@ -42,6 +49,7 @@ mutations:
             if (options := _garak_generator_options(t)) is not None:
 - name: plan and run give CyberSecEval the CA file of the target only
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_plan_prints_each_cyberseceval_command_with_the_ca_file_of_its_family
   old: |2-
             env, files = _tls(t, out, settings.judge_ca_bundle)
             for bench, argv in
@@ -50,6 +58,7 @@ mutations:
             for bench, argv in
 - name: a family gets SSL_CERT_FILE only when it has a chain of its own
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_family_without_a_ca_of_its_own_still_verifies_a_judge_behind_an_internal_one
   old: |2
         if not target.ca_bundle and not judge_ca_bundle:
             return {}, ()
@@ -58,5 +67,6 @@ mutations:
             return {}, ()
 - name: the shipped config names no chain for the judge
   file: config/mara.yaml
+  caught_by: tests/test_model_eval.py::test_the_config_names_the_ca_of_the_gateway_the_judge_sits_behind
   old: '  judge_ca_bundle: ~/.mara/inventec-ca.pem'
   new: '  judge_ca_bundle: ""'

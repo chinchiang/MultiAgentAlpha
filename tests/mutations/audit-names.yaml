@@ -6,66 +6,82 @@ focused: [tests/test_audit_names.py, tests/test_audit.py, tests/test_calibration
 # stores the default (0) through __setitem__, which refuses it too, so removing the read check there is an equivalent
 # mutant: the first draft of this list had one, it survived, and the override was removed. On 3.13 defaultdict no longer
 # calls __setitem__, and a misspelled read returned 0 (v0.13.66). The read check's mutation is caught on 3.13 or later
-# only, and survives on 3.11 and 3.12, the versions CI runs: run this list on 3.13. The cases [read] and
-# [read-per-family] of the refusal test hold the rule.
+# only, and survives on 3.12, which this checkout's .venv is: run this list with a 3.13 interpreter (a venv of
+# tools/dev-requirements-py313.txt, as CI's 3.13 job installs). The cases [read] and [read-per-family] of the refusal
+# test hold the rule, and CI's 3.13 job runs them.
 mutations:
   - name: a name the audit does not hold reads 0 through []
     file: src/mara/audit.py
+    caught_by: 'tests/test_audit_names.py::test_a_name_the_audit_does_not_hold_is_refused_on_write_and_on_read[read]'
     old: '        return super().__missing__(_held(key))'
     new: '        return super().__missing__(key)'
   - name: a name the audit does not hold reads 0
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_a_report_read_by_a_name_the_audit_does_not_hold_is_refused
     old: '    v = bias_audit.get(_held(name), 0)'
     new: '    v = bias_audit.get(name, 0)'
   - name: a name the audit does not hold is written
     file: src/mara/audit.py
+    caught_by: 'tests/test_audit_names.py::test_a_name_the_audit_does_not_hold_is_refused_on_write_and_on_read[set]'
     old: '        super().__setitem__(_held(key), value)'
     new: '        super().__setitem__(key, value)'
   - name: a value that is no number is read as it is
     file: src/mara/audit.py
+    caught_by: 'tests/test_audit_names.py::test_a_report_value_that_is_no_number_reads_zero[text]'
     old: '    return v if _number(v) else 0'
     new: '    return v'
   - name: a reason is read as a family again
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_a_reason_is_not_a_family
     old: '                and name not in REASON_COUNTS and name not in PAIR_COUNTS):'
     new: '                and name not in PAIR_COUNTS):'
   - name: by_reason keeps the whole key
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_a_reason_is_not_a_family
     old: '    return _bracketed(bias_audit, _shaped(name, REASON_COUNTS, "a count by reason"))'
     new: '    return {k: v for k, v in bias_audit.items() if k.startswith(f"{name}[")}'
   - name: a pair is cut one character short
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_a_reason_is_not_a_family
     old: '    return {k[len(name) + 1:-1]: v for k, v in bias_audit.items() if k.startswith(f"{name}[") and k.endswith("]") and _number(v)}'
     new: '    return {k[len(name) + 1:-2]: v for k, v in bias_audit.items() if k.startswith(f"{name}[") and k.endswith("]") and _number(v)}'
   - name: a pair keeps the opening bracket
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_a_reason_is_not_a_family
     old: '    return {k[len(name) + 1:-1]: v for k, v in bias_audit.items() if k.startswith(f"{name}[") and k.endswith("]") and _number(v)}'
     new: '    return {k[len(name):-1]: v for k, v in bias_audit.items() if k.startswith(f"{name}[") and k.endswith("]") and _number(v)}'
   - name: an alpha of n/a is read as 0.0
     file: src/mara/audit.py
+    caught_by: 'tests/test_audit_names.py::test_the_global_alpha_is_a_number_or_none[n/a]'
     old: '    return float(v) if _number(v) else None'
     new: '    return float(v) if _number(v) else 0.0'
   - name: a bool is a number
     file: src/mara/audit.py
+    caught_by: 'tests/test_audit_names.py::test_a_report_value_that_is_no_number_reads_zero[bool]'
     old: '    return isinstance(v, int | float) and not isinstance(v, bool)'
     new: '    return isinstance(v, int | float)'
   - name: a missing alpha is written as 0.0
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_a_missing_alpha_is_written_as_n_a
     old: '        self[Count.GLOBAL_KRIPPENDORFF_ALPHA] = "n/a" if alpha is None else alpha'
     new: '        self[Count.GLOBAL_KRIPPENDORFF_ALPHA] = 0.0 if alpha is None else alpha'
   - name: a name is written in any shape
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_a_name_is_written_in_its_own_shape_only
     old: '    if name not in shapes:'
     new: '    if False:'
   - name: an enum member is renamed
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_the_persisted_names_are_the_ones_the_reports_hold
     old: '    POSITION_FLIPS = "position_flips"'
     new: '    POSITION_FLIPS = "position_flip"'
   - name: two enum members share a name
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_the_persisted_names_are_the_ones_the_reports_hold
     old: '    UNKNOWN_CWE = "unknown_cwe"'
     new: '    UNKNOWN_CWE = "findings_raw"'
   - name: a role's retry counter is left out of its names
     file: src/mara/audit.py
+    caught_by: tests/test_audit_names.py::test_the_persisted_names_are_the_ones_the_reports_hold
     old: '        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid, self.retries)'
     new: '        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid)'

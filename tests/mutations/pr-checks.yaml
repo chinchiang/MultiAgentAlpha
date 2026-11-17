@@ -3,20 +3,24 @@ focused:
 mutations:
 - name: the seeded fixture's semgrep step is read as the change's result line
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_every_check_is_one_line_and_all_passing_exits_0
   old: scripts/semgrep_ci\.py --target \. "
   new: scripts/semgrep_ci\.py --target "
 - name: a result line is read from the step's first line, not its last
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_every_check_is_one_line_and_all_passing_exits_0
   old: for t in reversed(lines) if
   new: for t in lines if
 - name: a result line no job log holds passes
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_result_line_no_job_log_holds_is_named_and_exits_1
   old: "\"no result line in any job log\"))\n            bad += 1\n"
   new: '"no result line in any job log"))
 
     '
 - name: fewer osv-scanner steps than CI runs pass
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_fewer_osv_scans_than_ci_runs_are_named_and_exit_1
   old: '        if len(found) < result.steps:
 
     '
@@ -25,50 +29,61 @@ mutations:
     '
 - name: a result line that is not clean passes
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_result_line_that_is_not_clean_names_its_step_and_exits_1
   old: "                out.append(f\"     read the step: {step}\")\n                bad += 1\n"
   new: '                out.append(f"     read the step: {step}")
 
     '
 - name: a result line that is not clean names no step to read
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_result_line_that_is_not_clean_names_its_step_and_exits_1
   old: "                out.append(f\"     read the step: {step}\")\n                bad += 1\n"
   new: '                bad += 1
 
     '
 - name: every skip counts as a tool not installed
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_skip_no_missing_tool_explains_is_printed_whole_and_exits_1
   old: TOOL_NOT_INSTALLED = (re.compile(r"\bnot installed\b"),)
   new: TOOL_NOT_INSTALLED = (re.compile(r""),)
 - name: no skip counts as a tool not installed
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_every_check_is_one_line_and_all_passing_exits_0
   old: TOOL_NOT_INSTALLED = (re.compile(r"\bnot installed\b"),)
   new: TOOL_NOT_INSTALLED = (re.compile(r"\bnot installed at all\b"),)
 - name: a skip no missing tool explains passes
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_skip_no_missing_tool_explains_is_printed_whole_and_exits_1
   old: '*(f"  {line}" for line in other)], len(other)'
   new: '*(f"  {line}" for line in other)], 0'
 - name: the skips counted are lines, not tests
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_the_skips_counted_are_tests_not_lines
   old: sum(int(m[1]) for m in skips)
   new: len(skips)
 - name: a failed check passes
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_failed_check_exits_1
   old: bad = sum(check["bucket"] not in PASSING for check in checks) + len(unread)
   new: bad = len(unread)
 - name: a job whose log cannot be read passes
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_job_whose_log_cannot_be_read_is_named_and_the_rest_is_still_printed
   old: bad = sum(check["bucket"] not in PASSING for check in checks) + len(unread)
   new: bad = sum(check["bucket"] not in PASSING for check in checks)
 - name: a skipped check fails
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_every_check_is_one_line_and_all_passing_exits_0
   old: PASSING = ("pass", "skipping")
   new: PASSING = ("pass",)
 - name: a job whose log cannot be read stops everything
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_job_whose_log_cannot_be_read_is_named_and_the_rest_is_still_printed
   old: "                except subprocess.CalledProcessError as e:\n                    unread.append("
   new: "                except KeyError as e:\n                    unread.append("
 - name: gh failing exits 1, as a check failing does
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_gh_failing_exits_2_and_names_the_call
   old: '        return 2
 
     '
@@ -77,6 +92,7 @@ mutations:
     '
 - name: a required workflow that did not run passes
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_workflow_that_did_not_run_and_a_ruleset_requires_exits_1
   old: '        bad += bool(requiring)
 
     '
@@ -85,22 +101,27 @@ mutations:
     '
 - name: a workflow that ran is listed as not run
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_workflow_a_pull_request_triggers_that_did_not_run_is_listed_with_no_ruleset_requiring_it
   old: pull_request_workflows(args.workflows) if name not in ran]
   new: pull_request_workflows(args.workflows)]
 - name: it stops waiting at the first poll
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_while_a_check_is_pending_it_waits_and_prints_only_the_final_result
   old: "        if not pending:\n            return head, checks\n"
   new: "        if True:\n            return head, checks\n"
 - name: a head that moved while it waited exits 0
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_head_that_moves_while_it_waits_stops_it_with_exit_1
   old: "print(f\"ERROR: {waited}\", file=sys.stderr)\n            return 1\n"
   new: "print(f\"ERROR: {waited}\", file=sys.stderr)\n            return 0\n"
 - name: a pull request with no check reported yet fails at once
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_pull_request_with_no_check_reported_yet_is_waited_on
   old: 'if NO_CHECK_YET not in (e.stderr or ""):'
   new: 'if True:'
 - name: an interrupted wait exits 1
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_an_interrupted_wait_exits_130_as_gh_pr_checks_does_and_prints_no_traceback
   old: '        return 130
 
     '
@@ -109,25 +130,31 @@ mutations:
     '
 - name: a step that printed nothing is ok
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_step_that_printed_nothing_is_not_ok_and_exits_1
   old: ok = bool(line) and bool(result.clean.search(line))
   new: ok = not line or bool(result.clean.search(line))
 - name: a job that installs the tools has its skips explained by a tool not installed
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_tool_not_installed_in_a_job_that_installs_the_tools_is_printed_whole_and_exits_1
   old: tools_missing = job not in TOOLS_INSTALLED
   new: tools_missing = True
 - name: a pytest job that skips nothing prints no line
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_each_result_line_is_printed_once_with_its_job_and_the_skips_a_tool_not_installed_explains
   old: '([f"skips  [{job}]  0"] if any(runs(lines, PYTEST) for _, _, lines in log) else [])'
   new: '[]'
 - name: a ruleset not enforced requires its checks
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_ruleset_not_enforced_requires_nothing
   old: "        if ruleset.get(\"enforcement\") != \"active\":\n            continue\n"
   new: ""
 - name: the head is not read again once no check is pending
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_head_that_moved_before_the_checks_it_read_stops_it_with_exit_1
   old: "        now = head_of(gh, pr)\n        if now != head:\n            return f\"the head moved from {head} to {now}; run it again for the new head\"\n        if not pending:\n            return head, checks\n"
   new: "        if not pending:\n            return head, checks\n        now = head_of(gh, pr)\n        if now != head:\n            return f\"the head moved from {head} to {now}; run it again for the new head\"\n"
 - name: a gh that cannot be started gives a traceback
   file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_gh_that_cannot_be_started_exits_2_and_names_the_call
   old: "    except OSError as e:\n        raise subprocess.CalledProcessError(127"
   new: "    except KeyError as e:\n        raise subprocess.CalledProcessError(127"

@@ -60,10 +60,12 @@ A change that becomes a pull request goes through these steps in order. Each end
    name gives, not at a `TypeError`, an import error or an earlier assertion. `mutate.py` prints it on each `CAUGHT`
    line, `at:` and the source line, and `results.json` holds it as `at` and `error`. Open the log its entry lists under
    `logs` only for a catch that is marked (an exception other than `AssertionError`, or `(expected <caught_by>)`), one
-   with no `at:`, or one whose line is not the assertion of the mutation's name. A mutation may name the test meant to
-   catch it (`caught_by`), so that a catch by another is marked. A `LEFT <path>` line names a path git status lists
-   after a run that it did not before: once you know the run left it, and not someone working in the checkout
-   meanwhile, remove a file it added (`git status` shows `??`) and `git restore` one it changed or deleted.
+   with no `at:`, or one whose line is not the assertion of the mutation's name. Every mutation names the test meant to
+   catch it (`caught_by`; `tests/test_mutation_lists.py` fails on one that does not), so that a catch by another is
+   marked: for a mutation you add, the test you mean it for, not what a run happens to report. A `LEFT <path>` line
+   names a path git status lists after a run that it did not before: once you know the run left it, and not someone
+   working in the checkout meanwhile, remove a file it added (`git status` shows `??`) and `git restore` one it changed
+   or deleted.
    A fix made after this step goes into the commit it belongs to (rebuild as in step 3, so the version commit stays
    last) and this step runs again on the branch head; the numbers in the body are those of that run, and a fix the
    sub-agents did not see is said so in the body.

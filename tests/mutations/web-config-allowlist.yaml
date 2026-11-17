@@ -2,21 +2,26 @@ focused: [tests/test_web_server.py]
 mutations:
   - name: the predicate without .yml
     file: src/mara/web/configs.py
+    caught_by: tests/test_web_server.py::test_the_page_lists_exactly_the_configs_a_launch_accepts
     old: "SUFFIXES = (\".yaml\", \".yml\")\n"
     new: "SUFFIXES = (\".yaml\",)\n"
   - name: the predicate not resolving a symlink
     file: src/mara/web/configs.py
+    caught_by: tests/test_web_server.py::test_the_page_lists_exactly_the_configs_a_launch_accepts
     old: "        real = path.resolve()\n"
     new: "        real = path.absolute()\n"
   - name: the predicate without config/examples/
     file: src/mara/web/configs.py
+    caught_by: 'tests/test_web_server.py::test_a_launch_is_refused_as_the_command_line_would_refuse_it[body6-config_invalid]'
     old: "    return (root / \"config\").resolve(), (root / \"config\" / \"examples\").resolve()\n"
     new: "    return (root / \"config\").resolve(), (root / \"config\").resolve()\n"
   - name: the page lists every .yaml file, not what the predicate accepts
     file: src/mara/web/configs.py
+    caught_by: tests/test_web_server.py::test_the_page_lists_exactly_the_configs_a_launch_accepts
     old: "for p in sorted(d.iterdir()) if allowed(root, p)]"
     new: "for p in sorted(d.glob(\"*.yaml\")) if p.is_file()]"
   - name: a launch names any file, the predicate not asked
     file: src/mara/web/runs.py
+    caught_by: 'tests/test_web_server.py::test_a_launch_is_refused_as_the_command_line_would_refuse_it[body2-config_not_found]'
     old: "    if not configs.allowed(root, cfg_path):\n"
     new: "    if False:\n"

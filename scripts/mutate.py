@@ -5,13 +5,13 @@
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --focused-only   # the focused tests alone, never the whole suite
 
 A mutation list (GLOSSARY.md) is a YAML file in tests/mutations/, where tests/test_mutation_lists.py checks that each
-one loads:
+one loads and that each of its mutations has a caught_by:
 
   focused: [tests/test_tool_evidence.py, ...]   # run first; the whole suite runs only for a mutation they miss
   mutations:
     - name: a note counts as an alert
       file: src/mara/tools/evidence.py
-      caught_by: tests/test_tool_evidence.py::test_an_error_or_a_warning_is_a_tool_alert_and_a_note_is_not   # optional
+      caught_by: tests/test_tool_evidence.py::test_an_error_or_a_warning_is_a_tool_alert_and_a_note_is_not   # meant to catch it
       old: 'ALERT_LEVELS = ("error", "warning")'
       new: 'ALERT_LEVELS = ("error", "warning", "note")'
 
@@ -20,15 +20,16 @@ Quote every value with a ` #` in it: YAML ends an unquoted value at ` #` and rea
 
 Every `old` must occur exactly once in its file and differ from its `new`, no two mutations of a file may make the same
 mutant (one of them is a mis-aligned copy of the other), and every focused path must exist; the list is checked before
-any file is touched. A `caught_by`, where a mutation has one, names a test as pytest takes it: a test file, or a test
-of it (`file::test`, `file::Class::test`, with its parameters `[...]` or without); each part must be defined in the file
-(_names_a_test). Then the focused tests and the whole suite run once without a mutation, and must pass. A mutation is caught
-when a test fails on it (pytest exits 1): the focused tests first (all of them, or until one fails), then, if they
-pass, the whole suite. Any other exit, such as a mutant that does not import (2), is an error: nothing caught the
-mutation, and the whole suite does not run after the focused tests. Tests run with GITHUB_ACTIONS=true and without
-writing bytecode, after src/, tests/ and scripts/ are cleared of it: a mutant of the same size written within a second
-of the original would otherwise run as the original's cached bytecode. The file is restored after each mutation, and
-checked to be byte for byte what it was.
+any file is touched. A `caught_by`, where a mutation has one, names a test as pytest takes it: a test file, or a test of
+it (`file::test`, `file::Class::test`, with its parameters `[...]` or without); each part must be defined in the file
+(_names_a_test). It is optional here, so a list outside tests/mutations/ loads without it; every mutation of this
+repository's lists carries one, which tests/test_mutation_lists.py checks. Then the focused tests and the whole suite
+run once without a mutation, and must pass. A mutation is caught when a test fails on it (pytest exits 1): the focused
+tests first (all of them, or until one fails), then, if they pass, the whole suite. Any other exit, such as a mutant
+that does not import (2), is an error: nothing caught the mutation, and the whole suite does not run after the focused
+tests. Tests run with GITHUB_ACTIONS=true and without writing bytecode, after src/, tests/ and scripts/ are cleared of
+it: a mutant of the same size written within a second of the original would otherwise run as the original's cached
+bytecode. The file is restored after each mutation, and checked to be byte for byte what it was.
 For each mutation it prints CAUGHT, MISSED or ERROR and its name; a catch also names the test that caught it
 (`<- <test>`) and, from that run's output, where it failed (`at:` and the source line pytest marks with `>`), the first
 failure being the only one, since pytest stops there (-x). A catch is marked with the exception that ended the failure,

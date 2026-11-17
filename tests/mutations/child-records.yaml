@@ -5,30 +5,36 @@ focused:
 mutations:
 - name: admission asked about another kind than the one launched
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_procs.py::test_a_launch_admission_refuses_is_refused_as_busy_and_writes_nothing
   old: '            if refused := admission.refusal(tag, self.table.running_tags()):'
   new: '            if refused := admission.refusal("run", self.table.running_tags()):'
 - name: the record not written before the child starts
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_procs.py::test_a_launch_writes_the_record_before_it_starts_the_child
   old: "            argv, rec = prepare(child_id, d)\n            write_json(d / record, rec)\n"
   new: '            argv, rec = prepare(child_id, d)
 
     '
 - name: a failed start's record without the error
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_procs.py::test_a_launch_whose_child_cannot_start_leaves_its_record_failed_and_is_refused_as_spawn_failed
   old: '                rec.update(status="failed", finished_at=now(), error=type(e).__name__)'
   new: '                rec.update(status="failed", finished_at=now())'
 - name: a failed start's record left running
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_procs.py::test_a_launch_whose_child_cannot_start_leaves_its_record_failed_and_is_refused_as_spawn_failed
   old: '                rec.update(status="failed", finished_at=now(), error=type(e).__name__)'
   new: '                rec.update(finished_at=now(), error=type(e).__name__)'
 - name: a started child's pid not recorded
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_procs.py::test_a_launch_starts_the_child_prepare_gives_and_records_its_pid
   old: '            rec["pid"] = pid
 
     '
   new: ''
 - name: a record and running() read outside the lock
   file: src/mara/web/procs.py
+  caught_by: 'tests/test_web_server.py::test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code[run.json is read]'
   old: "        with self.held():\n            return read_json(path), self.running(child_id)\n"
   new: '        return read_json(path), self.running(child_id)
 

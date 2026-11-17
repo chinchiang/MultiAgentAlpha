@@ -2,57 +2,71 @@ focused: [tests/test_pipeline_workspace.py, tests/test_workspace_anchors.py, tes
 mutations:
   - name: the workspace given is ignored
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
     old: '        self.root = (Path(root) if root is not None else environment_root()).resolve()'
     new: '        self.root = environment_root().resolve()'
   - name: the ticket backlog read from MARA_HOME
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
     old: '        self.tightening = tightening(cfg, read_backlog(cfg, self.root))'
     new: '        self.tightening = tightening(cfg, read_backlog(cfg, environment_root()))'
   - name: the ML-BOM read from MARA_HOME
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_a_self_hosted_models_evidence_from_the_workspace_it_is_given
     old: '        self.ml_bom_status = status_for_config(cfg, self.root)'
     new: '        self.ml_bom_status = status_for_config(cfg, environment_root())'
   - name: the decision files read from MARA_HOME when the review scores
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
     old: '        loaded = load_decisions(self.root / "calib" / "decisions")'
     new: '        loaded = load_decisions(environment_root() / "calib" / "decisions")'
   - name: the training register read from MARA_HOME
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
     old: '        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, self.root))'
     new: '        return select(loaded.decisions, content, TrainingRequirement.from_config(self.cfg.training, Workspace.from_env().root))'
   - name: the workspace checked against the target is MARA_HOME's
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
     old: '        check_outside(target, workspace=self.workspace)'
     new: '        check_outside(target, workspace=Workspace.from_env())'
   - name: the tool directory checked against the target is read again when the review starts
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_the_tool_directory_checked_against_the_target_is_the_one_the_runner_will_use
     old: '        check_outside(target, workspace=self.workspace)'
     new: '        check_outside(target, workspace=Workspace.from_env(root=self.root))'
   - name: the calibration samples looked up in MARA_HOME
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_looks_its_calibration_samples_up_in_the_workspace_it_is_given
     old: '        answer_key = calibration_answer_key(target, self.root) if calibration_sample else None'
     new: '        answer_key = calibration_answer_key(target, Workspace.from_env().root) if calibration_sample else None'
   - name: the ML-BOM signature bundle looked up in MARA_HOME
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_a_self_hosted_models_evidence_from_the_workspace_it_is_given
     old: '            signed, why = verify_signature(self.cfg, self.root)'
     new: '            signed, why = verify_signature(self.cfg, Workspace.from_env().root)'
   - name: the model evaluations read from MARA_HOME
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_a_self_hosted_models_evidence_from_the_workspace_it_is_given
     old: 'family_eval_status(self.root, evaluated).items()}'
     new: 'family_eval_status(environment_root(), evaluated).items()}'
   - name: check_outside ignores the workspace it is given
     file: src/mara/workspace.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
     old: '    anchors = {"the MARA workspace": workspace.root, "the tool directory": workspace.tools_dir,'
     new: '    anchors = {"the MARA workspace": Workspace.from_env().root, "the tool directory": workspace.tools_dir,'
   - name: the default tool runner is given the environment's workspace
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_runs_the_tools_installed_in_the_workspace_it_is_given_not_below_mara_home
     old: "        self._run_tools = run_tools if run_tools is not None else functools.partial(run_all, workspace=self.workspace)"
     new: "        self._run_tools = run_tools if run_tools is not None else functools.partial(run_all, workspace=Workspace.from_env())"
   - name: a tool runner that is given is called with the pipeline's workspace too
     file: src/mara/pipeline.py
+    caught_by: tests/test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress
     old: "        self._run_tools = run_tools if run_tools is not None else functools.partial(run_all, workspace=self.workspace)"
     new: "        self._run_tools = functools.partial(run_tools or run_all, workspace=self.workspace)"
   - name: the workspace of the pipeline is built on MARA_HOME, not on the root it is given
     file: src/mara/pipeline.py
+    caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
     old: "        self.workspace = Workspace.from_env(root=self.root)"
     new: "        self.workspace = Workspace.from_env()"

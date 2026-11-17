@@ -2,29 +2,36 @@ focused: [tests/test_reviewer_round.py, tests/test_core_review_fixes_8_13.py, te
 mutations:
   - name: ids given in the order the reviewers answered
     file: src/mara/reviewer_round.py
+    caught_by: tests/test_reviewer_round.py::test_ids_follow_the_findings_place_not_the_order_the_reviewers_answered_in
     old: "    raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))\n"
     new: ""
   - name: ids given in reverse content order
     file: src/mara/reviewer_round.py
+    caught_by: tests/test_reviewer_round.py::test_ids_follow_the_findings_place_not_the_order_the_reviewers_answered_in
     old: '    raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title))'
     new: '    raw.sort(key=lambda f: (norm_path(f.provenance[0].file), f.provenance[0].line, f.cwe, f.dimension, f.title), reverse=True)'
   - name: dedupe compares the weakness as spelled, a rule of its own
     file: src/mara/reviewer_round.py
+    caught_by: tests/test_reviewer_round.py::test_a_finding_built_around_the_validation_is_merged_by_its_normalised_weakness
     old: '            if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
     new: '            if k.dimension == f.dimension and k_ok == f_ok and k.cwe == f.cwe and same_place(q.file, q.line, k.cwe, p.file, p.line, k.cwe):'
   - name: dedupe merges across dimensions
     file: src/mara/reviewer_round.py
+    caught_by: 'tests/test_reviewer_round.py::test_two_findings_are_merged_exactly_when_they_are_at_one_place_in_one_dimension_and_equally_verified[other5-False]'
     old: '            if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
     new: '            if k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
   - name: dedupe merges an unverified finding into a verified one
     file: src/mara/reviewer_round.py
+    caught_by: 'tests/test_reviewer_round.py::test_two_findings_are_merged_exactly_when_they_are_at_one_place_in_one_dimension_and_equally_verified[other6-False]'
     old: '            if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
     new: '            if k.dimension == f.dimension and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):'
   - name: one place is closer than NEAR_LINES
     file: src/mara/identity.py
+    caught_by: 'tests/test_reviewer_round.py::test_two_findings_are_merged_exactly_when_they_are_at_one_place_in_one_dimension_and_equally_verified[other0-True]'
     old: '            and abs(int(line_a) - int(line_b)) <= NEAR_LINES)'
     new: '            and abs(int(line_a) - int(line_b)) < NEAR_LINES)'
   - name: the reviewers are asked although source egress was blocked
     file: src/mara/reviewer_round.py
+    caught_by: tests/test_reviewer_round.py::test_no_reviewer_is_asked_when_the_secret_preflight_blocked_source_egress
     old: "    if egress_blocked:\n        progress.skip("
     new: "    if False:\n        progress.skip("

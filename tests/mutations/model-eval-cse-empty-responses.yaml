@@ -7,126 +7,147 @@ focused:
 mutations:
 - name: a blank response counts as an answer
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_response_that_holds_no_answer_counts_as_empty['''']'
   old: |2-
     (not value.strip() or value.strip().startswith(CSE_FAILED_QUERY))
   new: |2-
     value.strip().startswith(CSE_FAILED_QUERY)
 - name: a failed query counts as an answer
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_response_that_holds_no_answer_counts_as_empty[''FAIL TO QUERY'']'
   old: |2-
     (not value.strip() or value.strip().startswith(CSE_FAILED_QUERY))
   new: |2-
     not value.strip()
 - name: a null response counts as an answer
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_response_that_holds_no_answer_counts_as_empty[None]'
   old: |2-
         return value is None or (isinstance(value, str)
   new: |2-
         return (isinstance(value, str)
 - name: a failed query is told only when it is the whole text
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_response_that_holds_no_answer_counts_as_empty[''FAIL TO QUERY: boom'']'
   old: |2-
     .startswith(CSE_FAILED_QUERY)
   new: |2-
      == CSE_FAILED_QUERY
 - name: only the first field of a row is read
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_judge_that_answered_nothing_makes_the_row_empty_only_when_that_field_is_asked_for
   old: |2-
         empty = sum(1 for row in model_rows if any(_holds_no_answer(row.get(key)) for key in fields))
   new: |2-
         empty = sum(1 for row in model_rows if _holds_no_answer(row.get(fields[0])))
 - name: a row is empty only when every field is
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_judge_that_answered_nothing_makes_the_row_empty_only_when_that_field_is_asked_for
   old: |2-
         empty = sum(1 for row in model_rows if any(_holds_no_answer(row.get(key)) for key in fields))
   new: |2-
         empty = sum(1 for row in model_rows if all(_holds_no_answer(row.get(key)) for key in fields))
 - name: the rows the file lacks are not counted
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_rows_the_file_lacks_count_against_the_expected_number
   old: |2-
     "absent": max(expected - len(model_rows), 0)
   new: |2-
     "absent": 0
 - name: the empty rate leaves out the rows the file lacks
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_rows_the_file_lacks_count_against_the_expected_number
   old: |2-
     "empty_rate": (total - usable) / total}
   new: |2-
     "empty_rate": empty / total}
 - name: the empty rate is taken over the expected rows although the file has more
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_more_rows_than_expected_leave_nothing_missing
   old: |2-
     total = max(expected, len(model_rows))
   new: |2-
     total = expected
 - name: a value that is not text is read as an answer
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_response_file_that_is_not_a_list_of_rows_of_text_is_refused_with_its_path[value-not-text]'
   old: |2-
                 if not (row.get(key) is None or isinstance(row[key], str)):
   new: |2-
                 if False:
 - name: a dataset file that is not there is reported as one without rows
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_dataset_file_that_is_missing_or_holds_no_rows_is_refused_with_its_path[missing-No such file]'
   old: |2-
                 raise ValueError(f"{path}: {e.strerror}") from e
   new: |2-
                 rows = []
 - name: a dataset file without rows is accepted
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_dataset_file_that_is_missing_or_holds_no_rows_is_refused_with_its_path[empty-no rows]'
   old: |2-
             if not rows:
   new: |2-
             if False:
 - name: a dataset is one row short
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_dataset_sizes_are_the_row_counts_of_the_two_dataset_files
   old: |2-
             sizes[name] = len(rows)
   new: |2-
             sizes[name] = len(rows) - 1
 - name: the limit of empty responses is not applied
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_cyberseceval_metric_over_the_limit_of_empty_responses_is_missing_whatever_its_rate_says
   old: |2-
         empty = counted and stat["empty_rate"] > MAX_EMPTY_OUTPUT_RATE
   new: |2-
         empty = False
 - name: the limit of empty responses is reached at exactly the limit
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_cyberseceval_metric_with_exactly_the_limit_of_empty_responses_is_judged_by_its_rate
   old: |2-
     stat["empty_rate"] > MAX_EMPTY_OUTPUT_RATE
   new: |2-
     stat["empty_rate"] >= MAX_EMPTY_OUTPUT_RATE
 - name: a metric over the limit is judged by its rate all the same
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_cyberseceval_metric_over_the_limit_of_empty_responses_is_missing_whatever_its_rate_says
   old: |2-
     "status": "missing" if rate is None or not counted or empty else (
   new: |2-
     "status": "missing" if rate is None or not counted else (
 - name: a metric nobody counted the empty responses of is judged by its rate
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_cyberseceval_metric_without_a_count_of_its_empty_responses_is_missing_whatever_its_rate_says
   old: |2-
     or not counted or empty else (
   new: |2-
     or empty else (
 - name: a stat whose count is 0 is taken for one nobody counted
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_thresholds_and_verdicts
   old: |2-
     counted = stat.get("empty_rate") is not None
   new: |2-
     counted = bool(stat.get("empty_rate"))
 - name: the share of empty responses is not carried by the verdict
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_cyberseceval_metric_over_the_limit_of_empty_responses_is_missing_whatever_its_rate_says
   old: |2-
             verdict["empty_rate"] = round(stat["empty_rate"], 4)
   new: |2-
             pass
 - name: the prompt-injection cell shows the refusal metric's share
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_cyberseceval_report_shows_the_share_of_empty_responses_of_each_metric
   old: |2-
     {_empty_cell(pi)}
   new: |2-
     {_empty_cell(fr)}
 - name: a metric over the limit is given no line saying why
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_cyberseceval_report_says_why_a_metric_is_missing_for_its_empty_responses
   old: |2-
         L += ([""] + why) if why else []
         L += ["", "## 執行指令（`"
@@ -135,48 +156,56 @@ mutations:
         L += ["", "## 執行指令（`"
 - name: the line saying why counts the rows the file lacks as empty ones
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_cyberseceval_report_says_why_a_metric_is_missing_for_its_empty_responses
   old: |2-
     缺 {c.get('absent', '—')} 列
   new: |2-
     缺 {c.get('empty', '—')} 列
 - name: the rows expected are always the stat file's own count
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_counts_the_rows_a_run_lost_against_the_dataset_it_was_given
   old: |2-
     sizes[bench.dataset] if sizes else bench.rows_of(stat)
   new: |2-
     bench.rows_of(stat)
 - name: a metric without its response file keeps the verdict of its stat file
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_calls_a_metric_missing_when_its_response_file_is_not_there
   old: |2-
     return None, f"no CyberSecEval {bench.label} response file found ({bench.responses_file}), so its empty responses cannot be counted"
   new: |2-
     return stat, None
 - name: a metric whose response file cannot be read keeps the verdict of its stat file
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_calls_a_metric_missing_when_its_response_file_cannot_be_read
   old: |2-
     return None, f"CyberSecEval {bench.label} responses unreadable: {e}"
   new: |2-
     return stat, None
 - name: a run with no dataset is not said to have an unknown number of rows expected
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_without_datasets_checks_empty_responses_only_and_says_so
   old: |2-
     if sizes is None and any(
   new: |2-
     if False and any(
 - name: a run with a dataset is said to have an unknown number of rows expected
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_names_the_datasets_variable_whatever_directory_it_was_given
   old: |2-
     if sizes is None and any(
   new: |2-
     if True and any(
 - name: report never reads the datasets directory
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_cli_renders_front_matter_and_refuses_live_from_fixtures
   old: |2-
             sizes = me.cse_dataset_sizes(a.datasets) if a.datasets else None
   new: |2-
             sizes = None
 - name: a datasets directory that cannot be read is taken for none
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_refuses_a_datasets_directory_that_holds_no_dataset_files
   old: |2-
             print(f"ERROR: --datasets {e}", file=sys.stderr)
             return 2
@@ -184,18 +213,21 @@ mutations:
             sizes = None
 - name: live is allowed without a datasets directory
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_refuses_live_without_the_dataset_that_says_how_many_rows_to_expect
   old: |2-
         if a.mode == "live" and sizes is None:
   new: |2-
         if False:
 - name: the report names the datasets directory it was given
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_names_the_datasets_variable_whatever_directory_it_was_given
   old: |2-
     cfg.model_eval, a.run_dir, "$DATASETS")
   new: |2-
     cfg.model_eval, a.run_dir, a.datasets or "$DATASETS")
 - name: the rows of every model are counted
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_rows_of_another_model_do_not_make_up_for_the_empty_ones
   old: |2
             if _of_model(row.get("model"), model):
                 model_rows.append(row)
@@ -203,9 +235,11 @@ mutations:
             model_rows.append(row)
 - name: a row's model is matched as a substring of its value
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_row_is_counted_for_its_model_exactly_or_as_the_model_of_a_provider
   old: '    return isinstance(value, str) and (value == model or value.rsplit("::", 1)[-1] == model)'
   new: '    return isinstance(value, str) and model in value'
 - name: a row without a model is counted for every model
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_row_without_a_model_is_not_counted_for_any
   old: '    return isinstance(value, str) and (value == model or value.rsplit("::", 1)[-1] == model)'
   new: '    return value is None or (isinstance(value, str) and (value == model or value.rsplit("::", 1)[-1] == model))'

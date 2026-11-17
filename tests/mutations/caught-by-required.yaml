@@ -1,0 +1,25 @@
+focused: [tests/test_mutation_lists.py::test_a_mutation_without_caught_by_is_named_and_one_with_it_is_not]
+# list_problems is mutated in tests/test_mutation_lists.py itself, so the focused test is the one test of it. The whole
+# file would also run test_a_mutation_list_loads[caught-by-required], which fails on most of these mutants because the
+# list's `old` no longer occurs once the file is mutated: a failure of the list, not a catch of the mutant.
+mutations:
+  - name: a mutation without caught_by is not named
+    file: tests/test_mutation_lists.py
+    caught_by: tests/test_mutation_lists.py::test_a_mutation_without_caught_by_is_named_and_one_with_it_is_not
+    old: '    problems += [f"{m.get(''name'', m)}: no caught_by" for m in mutations if "caught_by" not in m]'
+    new: '    problems += []'
+  - name: only the first mutation is checked for caught_by
+    file: tests/test_mutation_lists.py
+    caught_by: tests/test_mutation_lists.py::test_a_mutation_without_caught_by_is_named_and_one_with_it_is_not
+    old: 'no caught_by" for m in mutations if'
+    new: 'no caught_by" for m in mutations[:1] if'
+  - name: a mutation with caught_by is named too
+    file: tests/test_mutation_lists.py
+    caught_by: tests/test_mutation_lists.py::test_a_mutation_without_caught_by_is_named_and_one_with_it_is_not
+    old: 'for m in mutations if "caught_by" not in m]'
+    new: 'for m in mutations]'
+  - name: what mutate.load refuses is dropped
+    file: tests/test_mutation_lists.py
+    caught_by: tests/test_mutation_lists.py::test_a_mutation_without_caught_by_is_named_and_one_with_it_is_not
+    old: '        problems = [str(e)]'
+    new: '        problems = []'

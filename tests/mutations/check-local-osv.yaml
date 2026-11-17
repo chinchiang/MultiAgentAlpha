@@ -2,17 +2,21 @@ focused: [tests/test_check_local.py]
 mutations:
   - name: the osv checks run by default
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_without_only_the_seven_checks_run_in_their_order_and_no_osv_scan
     old: 'for given in a.only or DEFAULT_CHECKS for'
     new: 'for given in a.only or CHECKS for'
   - name: --only osv runs one scan alone
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_the_osv_scans_are_the_four_closure_scans_ci_runs_and_report_into_the_logs
     old: 'GROUPS = {"osv": OSV_CHECKS, "worktree": WORKTREE_CHECKS}'
     new: 'GROUPS = {"osv": OSV_CHECKS[:1], "worktree": WORKTREE_CHECKS}'
   - name: an osv check scans a lock CI does not
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_the_osv_scans_are_the_four_closure_scans_ci_runs_and_report_into_the_logs
     old: '"osv-semgrep": ("--lockfile", "tools/semgrep-requirements.txt",'
     new: '"osv-semgrep": ("--lockfile", "tools/semgrep-requirements.txt", "--lockfile", "tools/dev-requirements.txt",'
   - name: an osv report is written outside the logs
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_the_osv_scans_are_the_four_closure_scans_ci_runs_and_report_into_the_logs
     old: '"--report", str(a.logs / f"{name}.sarif")'
     new: '"--report", f"{name}.sarif"'

@@ -5,21 +5,26 @@ focused: [tests/test_invocation.py, tests/test_policy.py]
 mutations:
   - name: a provider mode outside live and mock accepted
     file: src/mara/invocation.py
+    caught_by: 'tests/test_invocation.py::test_a_provider_mode_other_than_live_or_mock_is_refused_whatever_the_models[kinds0-mixed]'
     old: '    if provider_mode not in tuple(ProviderMode):'
     new: '    if False:'
   - name: check_paths takes the live default whatever the provider mode
     file: src/mara/invocation.py
+    caught_by: 'tests/test_invocation.py::test_without_a_config_the_paths_are_checked_with_the_workspaces_default_for_the_provider_mode[mock-mara.mock.yaml]'
     old: '    config = inv.config if inv.config is not None else default_config(inv.provider, root)'
     new: '    config = inv.config if inv.config is not None else default_config("live", root)'
   - name: check_paths takes the default even when a config is given
     file: src/mara/invocation.py
+    caught_by: 'tests/test_invocation.py::test_without_a_config_the_paths_are_checked_with_the_workspaces_default_for_the_provider_mode[mock-mara.mock.yaml]'
     old: '    config = inv.config if inv.config is not None else default_config(inv.provider, root)'
     new: '    config = default_config(inv.provider, root)'
   - name: P8 reads an aat of any shape
     file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
     old: '    aat = aat if isinstance(aat, dict) else {}  # a record whose test is of another shape records no passing test'
     new: '    aat = aat or {}'
   - name: P8 reads a rejection of any shape
     file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
     old: 'not (isinstance(rejection, dict) and rejection.get("passed"))'
     new: 'not (rejection or {}).get("passed")'

@@ -56,10 +56,11 @@ docs keep naming their versions.
 ## A behaviour change commits its mutation list
 
 The mutations a behaviour change's tests were checked against (`scripts/mutate.py`) are committed with the change, as
-`tests/mutations/<name>.yaml`. A change that makes a committed list stale re-aligns each `old` to the code in the same
-commit, or drops a mutation that no longer means anything; `tests/test_mutation_lists.py` goes red on a list that does
-not load. A re-aligned mutation still makes the fault its name says: a review compares each re-aligned `old`/`new`
-with the list's previous version, and a mutation that now makes another fault is renamed or re-aligned again.
+`tests/mutations/<name>.yaml`, each naming the test meant to catch it (`caught_by`). A change that makes a committed
+list stale re-aligns each `old` to the code in the same commit, or drops a mutation that no longer means anything;
+`tests/test_mutation_lists.py` goes red on a list that does not load, or that has a mutation with no `caught_by`. A
+re-aligned mutation still makes the fault its name says: a review compares each re-aligned `old`/`new` with the list's
+previous version, and a mutation that now makes another fault is renamed or re-aligned again.
 
 A mutation made to show that a test notices something that must not happen (a read of the environment, a refusal that
 is skipped) makes it happen only where that test looks, so the rest of the test still passes and it fails at the

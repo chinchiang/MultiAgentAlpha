@@ -7,22 +7,26 @@ focused:
 mutations:
 - name: the family table has no column for the empty outputs
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_garak_report_shows_the_share_of_empty_outputs_of_each_family
   old: '    L += ["| 家族 | 模型 | 通過 / 評估數 | pass rate | 空輸出率 | 判定 |", "|---|---|---:|---:|---:|---|"]'
   new: '    L += ["| 家族 | 模型 | 通過 / 評估數 | pass rate | 判定 |", "|---|---|---:|---:|---|"]'
 - name: the empty-output column shows the share of the outputs that have text
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_garak_report_shows_the_share_of_empty_outputs_of_each_family
   old: |2
                      f"| {_fmt(v.get('value'))} | {_empty_cell(g)} | {v.get('status', 'missing')} |")
   new: |2
                      f"| {_fmt(v.get('value'))} | {_percent(g.get('empty_rate') and 1 - g['empty_rate'])} | {v.get('status', 'missing')} |")
 - name: the empty-output column shows the pass rate again
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_garak_report_shows_the_share_of_empty_outputs_of_each_family
   old: |2
                      f"| {_fmt(v.get('value'))} | {_empty_cell(g)} | {v.get('status', 'missing')} |")
   new: |2
                      f"| {_fmt(v.get('value'))} | {_percent(g.get('empty_rate') and v.get('value'))} | {v.get('status', 'missing')} |")
 - name: a family over the limit is given no line saying why
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_garak_report_says_why_a_family_is_missing_for_its_empty_outputs
   old: |2
         why = [line for r in results for line in _empty_reason(r, "garak_pass_rate", "空輸出", "garak pass rate ")]
         L += ([""] + why) if why else []
@@ -31,6 +35,7 @@ mutations:
         L += []
 - name: a family missing for any reason is given the line
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_family_that_is_missing_for_another_reason_has_no_empty_output_line
   old: |2
         if "empty_rate" not in verdict:
             return []
@@ -41,22 +46,26 @@ mutations:
         return [f"- {r.target.family}: {kind} {_percent(verdict.get('empty_rate'))}{detail}，"
 - name: the line names the limit with a decimal
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_garak_report_says_why_a_family_is_missing_for_its_empty_outputs
   old: 'f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 0)}，{what}不計入（missing）"]'
   new: 'f"超過上限 {_percent(MAX_EMPTY_OUTPUT_RATE, 1)}，{what}不計入（missing）"]'
 - name: a family with nothing evaluated is not told that its outputs are empty
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_family_whose_outputs_are_all_empty_says_so_although_the_detector_scored_none_of_them
   old: |2
             if garak and (garak.get("empty_rate") or 0) > MAX_EMPTY_OUTPUT_RATE:  # every output empty: nothing was evaluated
                 out["garak_pass_rate"]["empty_rate"] = round(garak["empty_rate"], 4)
   new: ''
 - name: a family at exactly the limit of empty outputs is missing
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_family_with_exactly_the_limit_of_empty_outputs_is_not_missing_for_them
   old: '    elif garak["empty_rate"] > MAX_EMPTY_OUTPUT_RATE:'
   new: '    elif garak["empty_rate"] >= MAX_EMPTY_OUTPUT_RATE:'
 # #301: a garak result nobody counted the empty outputs of (eval rows, no attempt outputs: `empty_rate` None) is missing, and the
 # report says why
 - name: a garak result nobody counted the empty outputs of is judged on its pass rate
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_a_garak_result_without_a_count_of_its_empty_outputs_is_missing_whatever_its_pass_rate_says
   old: |2
         elif garak.get("empty_rate") is None:
             # no outputs to count the empty ones of: a result nobody counted is not one with none empty
@@ -66,11 +75,13 @@ mutations:
         elif (garak.get("empty_rate") or 0) > MAX_EMPTY_OUTPUT_RATE:
 - name: a garak report without outputs is given no note saying why
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_calls_a_garak_report_without_outputs_missing_and_says_why
   old: |2
                     if r.garak["empty_rate"] is None:
                         r.notes.append("garak report has no outputs, so its empty outputs cannot be counted")
   new: ''
 - name: every garak report with outputs is given the note
   file: scripts/model_eval.py
+  caught_by: tests/test_model_eval.py::test_report_calls_a_garak_report_without_outputs_missing_and_says_why
   old: '                if r.garak["empty_rate"] is None:'
   new: '                if r.garak["empty_rate"] is not None:'

@@ -2,5 +2,6 @@ focused: [tests/test_mutate.py]
 mutations:
   - name: scripts is not cleared of bytecode
     file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_mutation_in_scripts_runs_as_its_source_not_as_bytecode_cached_before_it
     old: 'for top in ("src", "tests", "scripts"):'
     new: 'for top in ("src", "tests"):'

@@ -2,13 +2,16 @@ focused: [tests/test_check_local.py]
 mutations:
   - name: the helper does not flush
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_a_result_line_is_flushed_before_the_next_check_starts
     old: 'print(*parts, flush=True)'
     new: 'print(*parts)'
   - name: a check's result line bypasses the helper
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_a_result_line_is_flushed_before_the_next_check_starts
     old: '_say(f"{'
     new: 'print(f"{'
   - name: the logs line bypasses the helper
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_everything_main_prints_is_flushed_when_it_returns
     old: '_say(f"logs: '
     new: 'print(f"logs: '

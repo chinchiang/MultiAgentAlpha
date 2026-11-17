@@ -2,42 +2,52 @@ focused: [tests/test_policy.py, tests/test_web_server.py]
 mutations:
   - name: a YAML syntax error is not an invalid file
     file: src/mara/config.py
+    caught_by: tests/test_policy.py::test_check_config_reports_a_yaml_syntax_error_as_an_invalid_structure
     old: 'INVALID_FILE_ERRORS = (OSError, ValueError, yaml.YAMLError)'
     new: 'INVALID_FILE_ERRORS = (OSError, ValueError)'
   - name: a path that cannot be read is not an invalid file
     file: src/mara/config.py
+    caught_by: 'tests/test_policy.py::test_a_path_that_cannot_be_read_is_an_invalid_file_not_an_exception[missing.yaml]'
     old: 'INVALID_FILE_ERRORS = (OSError, ValueError, yaml.YAMLError)'
     new: 'INVALID_FILE_ERRORS = (ValueError, yaml.YAMLError)'
   - name: an empty file is not a config with no keys
     file: src/mara/config.py
+    caught_by: tests/test_policy.py::test_an_empty_file_names_the_fields_it_lacks
     old: 'MaraConfig.model_validate(yaml.safe_load(fh) or {}, context='
     new: 'MaraConfig.model_validate(yaml.safe_load(fh), context='
   - name: an exception that is not about the file is reported as an invalid file
     file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_an_exception_that_is_not_about_the_file_is_not_reported_as_one
     old: '    except INVALID_FILE_ERRORS as e:'
     new: '    except Exception as e:'
   - name: a config passes the check whatever its policies say
     file: src/mara/policy.py
+    caught_by: 'tests/test_policy.py::test_a_config_file_passes_the_check_exactly_when_load_config_accepts_it[config/examples/violating.yaml]'
     old: '        return self.config is not None and all(r.passed for r in self.policies)'
     new: '        return self.config is not None'
   - name: the command line prints a structure error without escaping it
     file: src/mara/cli.py
+    caught_by: tests/test_policy.py::test_check_config_prints_a_structure_error_whole
     old: '{escape(check.error)}'
     new: '{check.error}'
   - name: the page lists a long structure error whole
     file: src/mara/web/env.py
+    caught_by: tests/test_web_server.py::test_the_page_lists_a_config_whose_structure_is_invalid_as_one_short_line_and_nothing_else
     old: '" ".join(check.error.split())[:600]'
     new: '" ".join(check.error.split())'
   - name: the page keeps the line breaks of a structure error
     file: src/mara/web/env.py
+    caught_by: tests/test_web_server.py::test_the_page_lists_a_config_whose_structure_is_invalid_as_one_short_line_and_nothing_else
     old: '" ".join(check.error.split())[:600]'
     new: 'check.error[:600]'
   - name: the page calls a config loadable when only its structure is valid
     file: src/mara/web/env.py
+    caught_by: tests/test_web_server.py::test_the_environment_lists_every_locked_tool_and_never_a_credential_value
     old: '"loadable": check.passed'
     new: '"loadable": check.structure_ok'
   - name: the page skips a config whose check meets a bug of the validator
     file: src/mara/web/env.py
+    caught_by: tests/test_web_server.py::test_a_bug_of_the_validator_is_an_internal_error_of_the_whole_configs_page_not_a_row
     old: 'check = check_config_file(path, Workspace(root))  # the check `mara check-config` renders too'
     new: |-
       try:

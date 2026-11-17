@@ -5,17 +5,21 @@ focused: [tests/test_web_server.py]
 mutations:
   - name: the connection is closed with the body unread
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_a_body_over_the_limit_is_answered_with_413_and_the_connection_ends_cleanly
     old: '            self._read_off_the_rest()'
     new: '            pass'
   - name: the answer is not ended before the body is read off
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_a_body_over_the_limit_is_answered_with_413_and_the_connection_ends_cleanly
     old: '            self.connection.shutdown(socket.SHUT_WR)'
     new: '            pass'
   - name: a client that stops sending is waited for as long as an idle one
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_a_client_that_stops_sending_is_let_go_of_within_a_moment
     old: '            self.connection.settimeout(LINGER_SECONDS)'
     new: '            pass'
   - name: a client that keeps sending is read off for ever
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_a_client_that_keeps_sending_is_not_read_off_for_ever
     old: '            while left > 0 and (chunk := self.connection.recv(65536)):'
     new: '            while chunk := self.connection.recv(65536):'

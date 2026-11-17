@@ -4,10 +4,12 @@ focused:
 mutations:
 - name: the job's kind not given as its tag
   file: src/mara/web/jobs.py
+  caught_by: tests/test_web_server.py::test_one_review_at_a_time_and_cancel_stops_it
   old: '        job_id, job = self.children.launch(req.kind, self.jobs_dir,'
   new: '        job_id, job = self.children.launch("job", self.jobs_dir,'
 - name: a job exiting 0 recorded failed
   file: src/mara/web/jobs.py
+  caught_by: 'tests/test_web_server.py::test_a_job_whose_exit_is_recorded_while_it_is_read_is_never_read_as_interrupted[job.json is read]'
   old: '        job.update(status="finished" if code == 0 else "failed", exit_code=code, finished_at=procs.now())
 
     '
@@ -16,6 +18,7 @@ mutations:
     '
 - name: a job registry with a table of its own, not the server's
   file: src/mara/web/server.py
+  caught_by: tests/test_web_server.py::test_one_review_at_a_time_and_cancel_stops_it
   old: '        self.jobs = JobRegistry(self.root, self.out_dir, table=self.table)
 
     '
@@ -24,6 +27,7 @@ mutations:
     '
 - name: a run registry with a table of its own, not the server's
   file: src/mara/web/server.py
+  caught_by: tests/test_web_server.py::test_one_review_at_a_time_and_cancel_stops_it
   old: '        self.runs = RunRegistry(self.root, self.out_dir, table=self.table)
 
     '

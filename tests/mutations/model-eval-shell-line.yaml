@@ -7,49 +7,61 @@ focused:
 mutations:
 - name: an argument without a placeholder is left unquoted
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '            return shlex.quote(a)'
   new: '            return a'
 - name: an argument with a placeholder is single-quoted, so the shell does not expand it
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '        if not any(p in a for p in placeholders):'
   new: '        if True:'
 - name: inside double quotes a $ that does not begin a placeholder is left live
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '            out.append("\\" + a[i] if a[i] in ''\\"`$'' else a[i])'
   new: '            out.append("\\" + a[i] if a[i] in ''\\"`'' else a[i])'
 - name: inside double quotes a backslash is left unescaped
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '            out.append("\\" + a[i] if a[i] in ''\\"`$'' else a[i])'
   new: '            out.append("\\" + a[i] if a[i] in ''"`$'' else a[i])'
 - name: inside double quotes a double quote is left unescaped
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '            out.append("\\" + a[i] if a[i] in ''\\"`$'' else a[i])'
   new: '            out.append("\\" + a[i] if a[i] in ''\\`$'' else a[i])'
 - name: inside double quotes a backtick is left unescaped
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '            out.append("\\" + a[i] if a[i] in ''\\"`$'' else a[i])'
   new: '            out.append("\\" + a[i] if a[i] in ''\\"$'' else a[i])'
 - name: the environment keeps this host's run directory
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_names_the_run_directory_as_given_in_its_environment_too
   old: '    environment = [(k, v if relative_to is None else _as_given(v, relative_to)) for k, v in inv.env.items()]'
   new: '    environment = [(k, v) for k, v in inv.env.items()]'
 - name: a garak line is shown without the key variable its key is read from
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '    env = [(k, kv.shown) for k, kv in inv.key_variables.items() if k not in in_argv] + '
   new: '    env = [] + '
 - name: a keyless endpoint is shown masked
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_an_endpoint_without_a_key_is_given_no_key_and_shown_as_no_key
   old: 'else KeyVariable("", NO_KEY)'
   new: 'else KeyVariable("", MASK)'
 - name: plan prints a CyberSecEval line with its single quotes taken out
   file: scripts/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_line_pasted_from_plan_run_or_a_report_into_a_shell_runs_what_run_executes[plan]'
   old: 'print(f"# {fam}: CyberSecEval {inv.benchmark}\n{me.shell_line(inv)}")'
   new: 'print(f"# {fam}: CyberSecEval {inv.benchmark}\n{me.shell_line(inv).replace(chr(39), '''')}")'
 - name: run prints a CyberSecEval line with its single quotes taken out
   file: scripts/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_line_pasted_from_plan_run_or_a_report_into_a_shell_runs_what_run_executes[run]'
   old: 'print(f"+ [{fam}] {inv.benchmark}: {me.shell_line(inv)}")'
   new: 'print(f"+ [{fam}] {inv.benchmark}: {me.shell_line(inv).replace(chr(39), '''')}")'
 - name: the CyberSecEval report records its lines with their single quotes taken out
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_line_pasted_from_plan_run_or_a_report_into_a_shell_runs_what_run_executes[cyberseceval report]'
   old: 'L.append(f"# {fam} {inv.benchmark}\n{shell_line(inv, relative_to)}")'
   new: 'L.append(f"# {fam} {inv.benchmark}\n{shell_line(inv, relative_to).replace(chr(39), '''')}")'

@@ -2,37 +2,46 @@ focused: [tests/test_line_width.py, tests/test_control_chars.py, tests/test_chec
 mutations:
   - name: --worktree reads the commits, not the working tree
     file: scripts/change_lines.py
+    caught_by: tests/test_line_width.py::test_the_working_tree_mode_reads_what_is_not_committed_yet_tracked_or_untracked
     old: "*DIFF_FLAGS, base if a.worktree else f\"{base}..{a.head}\","
     new: "*DIFF_FLAGS, f\"{base}..{a.head}\","
   - name: --worktree reads no untracked file
     file: scripts/change_lines.py
+    caught_by: tests/test_line_width.py::test_the_working_tree_mode_reads_what_is_not_committed_yet_tracked_or_untracked
     old: "    if a.worktree:\n        change.extend(untracked_lines("
     new: "    if False:\n        change.extend(untracked_lines("
   - name: line_width --worktree reads untracked files that are not Python
     file: scripts/change_lines.py
+    caught_by: tests/test_line_width.py::test_the_working_tree_mode_reads_what_is_not_committed_yet_tracked_or_untracked
     old: "untracked_lines(git, a.repo, *pathspec)"
     new: "untracked_lines(git, a.repo)"
   - name: an untracked file git ignores is read
     file: scripts/change_lines.py
+    caught_by: tests/test_line_width.py::test_the_working_tree_mode_reads_what_is_not_committed_yet_tracked_or_untracked
     old: '"ls-files", "--others", "--exclude-standard", "-z",'
     new: '"ls-files", "--others", "-z",'
   - name: control_chars --worktree reads the commit messages
     file: scripts/control_chars.py
+    caught_by: tests/test_control_chars.py::test_the_working_tree_mode_reads_the_lines_not_committed_yet_and_no_commit_message
     old: 'log = "" if a.worktree else subprocess.run('
     new: 'log = subprocess.run('
   - name: the worktree group leaves ruff out
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_four_checks_of_the_working_tree
     old: 'WORKTREE_CHECKS = ("ruff", "lines-worktree",'
     new: 'WORKTREE_CHECKS = ("lines-worktree",'
   - name: the worktree group runs the checks of the branch's commits
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_four_checks_of_the_working_tree
     old: '"ruff", "lines-worktree", "chars-worktree", "pytest-worktree")'
     new: '"ruff", "lines", "chars", "pytest-worktree")'
   - name: the worktree group leaves pytest-worktree out
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_four_checks_of_the_working_tree
     old: '"chars-worktree", "pytest-worktree")  #'
     new: '"chars-worktree")  #'
   - name: the summary pads every name to 8 columns
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_four_checks_of_the_working_tree
     old: 'width = max(8, *map(len, a.only))'
     new: 'width = 8'

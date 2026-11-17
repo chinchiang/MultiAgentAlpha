@@ -2,9 +2,11 @@ focused: [tests/test_mutate.py]
 mutations:
   - name: a mutation of several lines is not applied to a file with CRLF endings
     file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_mutation_of_several_lines_is_applied_to_a_file_with_crlf_endings_and_the_file_is_restored_byte_for_byte
     old: '    if "\r\n" in text:'
     new: '    if False:'
   - name: a file with CRLF endings is restored with LF endings
     file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_mutation_of_several_lines_is_applied_to_a_file_with_crlf_endings_and_the_file_is_restored_byte_for_byte
     old: '    mutant = text.replace(old, new).encode("utf-8")'
     new: "    mutant = text.replace(old, new).encode(\"utf-8\")\n    original = original.replace(b\"\\r\\n\", b\"\\n\")"

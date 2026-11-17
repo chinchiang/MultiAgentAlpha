@@ -6,18 +6,22 @@ focused: [tests/test_cli_provider_mode.py, tests/test_invocation_admit.py]
 mutations:
   - name: --provider a plain string again
     file: src/mara/cli.py
+    caught_by: tests/test_cli_provider_mode.py::test_provider_neither_live_nor_mock_is_a_usage_error_on_provider
     old: '    provider: ProviderMode = typer.Option(ProviderMode.live, "--provider"),'
     new: '    provider: str = typer.Option("live", "--provider"),'
   - name: a third provider mode accepted
     file: src/mara/invocation.py
+    caught_by: tests/test_cli_provider_mode.py::test_provider_neither_live_nor_mock_is_a_usage_error_on_provider
     old: "    live = \"live\"\n    mock = \"mock\"\n"
     new: "    live = \"live\"\n    mock = \"mock\"\n    foo = \"foo\"\n"
   - name: the live check removed
     file: src/mara/invocation.py
+    caught_by: 'tests/test_invocation_admit.py::test_a_live_review_of_a_config_with_a_mock_model_is_refused_before_the_review_starts[mock]'
     old: '    check_provider_mode((m.provider for m in cfg.models), provider_mode)'
     new: '    check_provider_mode((m.provider for m in cfg.models), provider_mode) if provider_mode != "live" else None'
   - name: the live check without its hint
     file: src/mara/cli.py
+    caught_by: tests/test_cli_provider_mode.py::test_provider_live_with_mock_models_is_a_usage_error_on_provider
     old: "        admitted = admit(inv, workspace.root)\n"
     new: |2
               try:
@@ -27,10 +31,12 @@ mutations:
                   raise typer.BadParameter(str(e), param_hint=hint) from e
   - name: the mock check removed
     file: src/mara/invocation.py
+    caught_by: tests/test_cli_provider_mode.py::test_provider_mock_with_live_models_is_a_usage_error_on_provider
     old: '    check_provider_mode((m.provider for m in cfg.models), provider_mode)'
     new: '    check_provider_mode((m.provider for m in cfg.models), provider_mode) if provider_mode != "mock" else None'
   - name: the mock check without its hint
     file: src/mara/cli.py
+    caught_by: tests/test_cli_provider_mode.py::test_provider_mock_with_live_models_is_a_usage_error_on_provider
     old: "        admitted = admit(inv, workspace.root)\n"
     new: |2
               try:
@@ -40,9 +46,11 @@ mutations:
                   raise typer.BadParameter(str(e), param_hint=hint) from e
   - name: the live check refuses only an all-mock config
     file: src/mara/invocation.py
+    caught_by: 'tests/test_invocation_admit.py::test_a_live_review_of_a_config_with_a_mock_model_is_refused_before_the_review_starts[mixed]'
     old: '    check_provider_mode((m.provider for m in cfg.models), provider_mode)'
     new: '    check_provider_mode((m.provider for m in cfg.models), provider_mode) if provider_mode != "live" or all(m.provider == "mock" for m in cfg.models) else None'
   - name: every usage error of the review invocation without its option
     file: src/mara/cli.py
+    caught_by: tests/test_cli_provider_mode.py::test_provider_live_with_mock_models_is_a_usage_error_on_provider
     old: '        raise typer.BadParameter(str(e), param_hint=e.param) from e'
     new: '        raise typer.BadParameter(str(e)) from e'
