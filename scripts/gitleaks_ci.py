@@ -110,8 +110,10 @@ def main() -> int:
                 f"--log-opts={log_opts}", str(source)]
     print("+ " + " ".join(argv))
     r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    tail = (r.stdout + r.stderr).strip().splitlines()[-6:]
-    for line in tail:
+    # gitleaks ends with its summary: a crash prints every line it said, for the cause is earlier; a completed scan
+    # (exit 0, or 2 for leaks found), its last lines
+    said = (r.stdout + r.stderr).strip().splitlines()
+    for line in said if r.returncode not in (0, 2) else said[-6:]:
         print("  " + line)
     if r.returncode == 2:
         hits = summarize(report)

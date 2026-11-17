@@ -433,6 +433,29 @@ finds where to write its SARIF after `--output` in the argv `scan_args` builds, 
 printed version line reads, with the locked version. It needs the locked tools installed, as every scan test does
 (`needs_tools`).
 
+## What a CI script prints of its tool's output
+
+A test of what a CI script prints of its tool's output, when the tool fails and when it does not, runs the script
+through the command line with a stand-in tool in a tool directory of the test's own, each written by a helper of the
+script's tests that takes `said`, the lines the stand-in writes to stderr: `_fake_zizmor` (`test_zizmor_ci.py`),
+`_tools` (`test_osv_ci.py`), `_fake_trivy` (`test_trivy_db.py`, which `test_trivy_ci.py` imports; `_setup` passes `said`
+and `exit_code` on) and `_fake_scorecard` (`test_scorecard_ci.py`). Each records in its manifest the version its test
+gives, or a default written out that equals the lock today (osv-scanner 2.5.1, trivy 0.74.0), so the pin check passes; a
+relock of either tool changes that default too. The tests of gitleaks itself run the locked binary and are skipped
+without it, so `test_gitleaks_ci_output.py` has a stand-in of its own, `_fake_gitleaks`, a Python script behind an sh
+(or .cmd) wrapper that answers `version` with the locked version. Each line a stand-in says begins in a way no line of
+the script's own begins (`zizmor said`, `osv-scanner said`), so a test picks out the lines the script printed of it by
+that beginning, and compares them, in order, with what the stand-in said; beside them, it reads the script's own lines
+it is about (the `ERROR:` line, a SARIF's error notifications).
+
+`test_calibration_run.py` loads `scripts/calibration_run.py` as a module and drives its `main`. The children it starts
+run this checkout's mara on the same config `main` has already loaded with every policy checked, so a real
+`check-config` cannot fail on a config that got that far, and no sample makes a mock review fail with enough output. The
+tests replace the module's `subprocess` name (`_children`) with a namespace whose `run` answers by the command in the
+argv, `check-config` or `review`: the module calls the run of subprocess through that name, so the patch reaches it and
+leaves the `subprocess` of every other module alone. A rename of the import (`from subprocess import run`) leaves the
+real one in place.
+
 ## A stand-in gh
 
 `test_pr_checks.py` drives `scripts/pr_checks.py` through `main` with the hidden `--gh` pointing at a stand-in gh, a

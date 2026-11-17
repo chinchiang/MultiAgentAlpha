@@ -1,0 +1,117 @@
+focused: [tests/test_zizmor_ci.py, tests/test_osv_ci.py, tests/test_trivy_ci.py, tests/test_scorecard_ci.py,
+          tests/test_gitleaks_ci_output.py, tests/test_calibration_run.py]
+# A CI script that is about to report one of its tool's failures prints every line the tool said (and, for a SARIF it
+# reads, the SARIF's error notifications); a run that does not fail prints the last lines, as before (#315). Each
+# mutation puts back one truncation, drops one case from a script's failure (it passes, or ends in a traceback), decodes
+# what a crash left before it is reported, or prints everything on a pass.
+mutations:
+  - name: a zizmor crash shows its last eight lines only
+    file: scripts/zizmor_ci.py
+    caught_by: tests/test_zizmor_ci.py::test_a_crash_prints_every_line_zizmor_said_on_either_stream
+    old: '    for line in [*r.stderr.strip().splitlines(), *r.stdout.strip().splitlines()] if error else'
+    new: '    for line in r.stderr.strip().splitlines()[-8:] if error else'
+  - name: zizmor output that is not JSON passes
+    file: scripts/zizmor_ci.py
+    caught_by: tests/test_zizmor_ci.py::test_output_that_is_not_json_prints_every_line_zizmor_said
+    old: '            error = f"zizmor output is not JSON: {e}"'
+    new: '            error = None'
+  - name: a clean zizmor audit shows every line
+    file: scripts/zizmor_ci.py
+    caught_by: tests/test_zizmor_ci.py::test_a_clean_audit_still_shows_only_the_last_eight_lines_zizmor_said
+    old: 'if error else r.stderr.strip().splitlines()[-8:]:'
+    new: 'if error else r.stderr.strip().splitlines():'
+  - name: a failed osv scan shows its last eight lines only
+    file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_a_failed_scan_prints_every_line_osv_scanner_said_and_the_sarif_errors
+    old: '    for line in said if error else said[-8:]:'
+    new: '    for line in said[-8:]:'
+  - name: an incomplete osv scan passes
+    file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_a_failed_scan_prints_every_line_osv_scanner_said_and_the_sarif_errors[incomplete]
+    old: '            error = None if scan_complete(doc) else "OSV SARIF reports an incomplete scan"'
+    new: '            error = None'
+  - name: a SARIF that is not JSON ends osv_ci in a traceback
+    file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_a_failed_scan_prints_every_line_osv_scanner_said_and_the_sarif_errors[not-json]
+    old: '            error = f"osv-scanner wrote a SARIF that is not JSON: {e}"'
+    new: '            raise'
+  - name: a failed osv scan does not print its SARIF's errors
+    file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_a_failed_scan_prints_every_line_osv_scanner_said_and_the_sarif_errors[no-packages]
+    old: '    for note in error_notifications(report) if error else []:'
+    new: '    for note in []:'
+  - name: an osv scan that found advisories shows every line
+    file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_a_scan_that_does_not_fail_still_shows_only_the_last_eight_lines[findings]
+    old: '    for line in said if error else said[-8:]:'
+    new: '    for line in said if error or r.returncode else said[-8:]:'
+  - name: a failed trivy scan shows its last six lines only
+    file: scripts/trivy_ci.py
+    caught_by: tests/test_trivy_ci.py::test_a_failed_scan_prints_every_line_trivy_said_and_the_sarif_errors
+    old: '    for line in said if failed else said[-6:]:'
+    new: '    for line in said[-6:]:'
+  - name: a trivy crash that wrote a SARIF is not a failure to show
+    file: scripts/trivy_ci.py
+    caught_by: tests/test_trivy_ci.py::test_a_failed_scan_prints_every_line_trivy_said_and_the_sarif_errors[crash]
+    old: '    failed = r.returncode != 0 or not wrote'
+    new: '    failed = not wrote'
+  - name: a failed trivy scan does not print its SARIF's errors
+    file: scripts/trivy_ci.py
+    caught_by: tests/test_trivy_ci.py::test_a_failed_scan_prints_every_line_trivy_said_and_the_sarif_errors[crash]
+    old: '    for note in error_notifications(report) if failed else []:'
+    new: '    for note in []:'
+  - name: whether trivy wrote a SARIF is read as UTF-8
+    file: scripts/trivy_ci.py
+    caught_by: tests/test_trivy_ci.py::test_a_crash_with_a_sarif_that_is_not_utf8_prints_every_line_and_says_trivy_exited
+    old: 'bool(report.read_bytes().strip())'
+    new: 'bool(report.read_text(encoding="utf-8").strip())'
+  - name: a trivy scan with findings shows every line
+    file: scripts/trivy_ci.py
+    caught_by: tests/test_trivy_ci.py::test_a_scan_that_does_not_fail_still_shows_only_the_last_six_lines
+    old: '    for line in said if failed else said[-6:]:'
+    new: '    for line in said:'
+  - name: a scorecard run with no JSON shows its last eight lines only
+    file: scripts/scorecard_ci.py
+    caught_by: tests/test_scorecard_ci.py::test_a_failed_run_prints_every_line_scorecard_said[no-json]
+    old: '    for line in said if error else said[-8:]:'
+    new: '    for line in said[-8:]:'
+  - name: a scorecard JSON that is not JSON passes
+    file: scripts/scorecard_ci.py
+    caught_by: tests/test_scorecard_ci.py::test_a_failed_run_prints_every_line_scorecard_said[not-json]
+    old: '            error = f"{a.json} is not JSON: {e}"'
+    new: '            error = None'
+  - name: a scorecard exit with its JSON is a failure to show
+    file: scripts/scorecard_ci.py
+    caught_by: tests/test_scorecard_ci.py::test_a_run_with_its_json_still_shows_only_the_last_eight_lines[exit-with-json]
+    old: '    for line in said if error else said[-8:]:'
+    new: '    for line in said if error or r.returncode else said[-8:]:'
+  - name: a gitleaks crash shows its last six lines only
+    file: scripts/gitleaks_ci.py
+    caught_by: tests/test_gitleaks_ci_output.py::test_a_crash_prints_every_line_gitleaks_said
+    old: '    for line in said if r.returncode not in (0, 2) else said[-6:]:'
+    new: '    for line in said[-6:]:'
+  - name: leaks found are a gitleaks failure to show
+    file: scripts/gitleaks_ci.py
+    caught_by: tests/test_gitleaks_ci_output.py::test_a_completed_scan_still_shows_only_the_last_six_lines[leaks]
+    old: '    for line in said if r.returncode not in (0, 2) else said[-6:]:'
+    new: '    for line in said if r.returncode != 0 else said[-6:]:'
+  - name: a failed config check shows its last line only
+    file: scripts/calibration_run.py
+    caught_by: tests/test_calibration_run.py::test_a_failed_config_check_prints_every_line_it_said
+    old: '        print(said(r))'
+    new: '        print(r.stdout.strip().splitlines()[-1])'
+  - name: what a child said on stderr is not shown
+    file: scripts/calibration_run.py
+    caught_by: tests/test_calibration_run.py::test_a_failed_config_check_prints_every_line_it_said
+    old: '    return "\n".join([*r.stdout.strip().splitlines(), *r.stderr.strip().splitlines()])'
+    new: '    return "\n".join(r.stdout.strip().splitlines())'
+  - name: a config check that passes shows every line
+    file: scripts/calibration_run.py
+    caught_by: tests/test_calibration_run.py::test_a_config_check_that_passes_still_prints_its_last_line_alone
+    old: '    print(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr.strip()[-200:])'
+    new: '    print(said(r))'
+  - name: a failed review of a sample shows its last 800 characters only
+    file: scripts/calibration_run.py
+    caught_by: tests/test_calibration_run.py::test_a_failed_review_of_a_sample_prints_every_line_it_said
+    old: '            print(said(r), file=sys.stderr)'
+    new: '            print(r.stdout[-800:] + r.stderr[-800:], file=sys.stderr)'

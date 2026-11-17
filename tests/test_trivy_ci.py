@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "trivy_ci.py"
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -31,9 +33,9 @@ def _sarif(*results: dict) -> str:
     return json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Trivy", "version": "0.74.0"}}, "results": list(results)}]})
 
 
-def _setup(tmp_path: Path, sarif: str, hours_old: float = 2) -> tuple[Path, Path]:
+def _setup(tmp_path: Path, sarif: str, hours_old: float = 2, said: tuple[str, ...] = (), exit_code: int = 0) -> tuple[Path, Path]:
     tools = tmp_path / "tools"
-    _fake_trivy(tools, _now_iso(hours_old))
+    _fake_trivy(tools, _now_iso(hours_old), said=said, exit_code=exit_code)
     (tools / "canned.sarif").write_text(sarif)
     cache = tmp_path / "cache"
     env = {**os.environ, "MARA_TOOLS_DIR": str(tools), "MARA_TRIVY_CACHE_DIR": str(cache)}
@@ -87,6 +89,44 @@ def test_stale_or_missing_database_blocks_the_scan(tmp_path):
     assert r.returncode == 2 and "older than the 48 h limit" in r.stdout and "trivy Version" not in r.stdout, "no scan with a stale database"
     r = _run(tools, tmp_path / "nowhere", "--target", ".", "--report", str(tmp_path / "r.sarif"))
     assert r.returncode == 2 and "no database" in r.stdout
+
+
+SAID = tuple(f"trivy said {n:02}" for n in range(1, 21))  # more lines than a scan that does not fail shows (its last 6)
+# an error notification of the SARIF trivy writes, when a scan of a file fails
+NOTE = {"level": "error", "message": {"text": "failed to analyze the lockfile"},
+        "locations": [{"physicalLocation": {"artifactLocation": {"uri": "tools/dev-requirements.txt"}}}]}
+WITH_NOTE = json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Trivy"}}, "results": [],
+                                                      "invocations": [{"executionSuccessful": False, "toolExecutionNotifications": [NOTE]}]}]})
+
+
+@pytest.mark.parametrize("sarif, exit_code, error", [(WITH_NOTE, 1, "trivy exited 1"), ("", 0, "wrote no SARIF")], ids=["crash", "no-sarif"])
+def test_a_failed_scan_prints_every_line_trivy_said_and_the_sarif_errors(tmp_path, sarif, exit_code, error):
+    """The line that says why trivy failed is rarely among its last: a failure shows every line, then each error
+    notification of the SARIF it wrote."""
+    tools, cache = _setup(tmp_path, sarif, said=SAID, exit_code=exit_code)
+    r = _run(tools, cache, "--target", ".", "--report", str(tmp_path / "r.sarif"))
+    assert r.returncode == 1 and error in r.stderr, r.stdout + r.stderr
+    shown = [line.strip() for line in r.stdout.splitlines()]
+    assert [line for line in shown if line.startswith("trivy said")] == list(SAID)
+    notes = [line for line in shown if line.startswith("trivy error:")]
+    assert notes == (["trivy error: failed to analyze the lockfile (tools/dev-requirements.txt)"] if sarif else [])
+
+
+def test_a_crash_with_a_sarif_that_is_not_utf8_prints_every_line_and_says_trivy_exited(tmp_path):
+    """Whether trivy wrote a SARIF is read without decoding it, so a crash that left bytes of another encoding is still
+    the crash it reports."""
+    tools, cache = _setup(tmp_path, "", said=SAID, exit_code=1)
+    (tools / "canned.sarif").write_bytes(b"\xff\xfe not UTF-8\n")
+    r = _run(tools, cache, "--target", ".", "--report", str(tmp_path / "r.sarif"))
+    assert r.returncode == 1 and "trivy exited 1" in r.stderr, r.stdout + r.stderr
+    assert [line.strip() for line in r.stdout.splitlines() if line.strip().startswith("trivy said")] == list(SAID)
+
+
+def test_a_scan_that_does_not_fail_still_shows_only_the_last_six_lines(tmp_path):
+    tools, cache = _setup(tmp_path, _sarif(_res("DS-0001", MISCONF, "Dockerfile")), said=SAID)
+    r = _run(tools, cache, "--target", ".", "--report", str(tmp_path / "r.sarif"))
+    assert r.returncode == 2 and "FINDINGS: 1" in r.stdout, r.stdout + r.stderr
+    assert [line.strip() for line in r.stdout.splitlines() if line.strip().startswith("trivy said")] == list(SAID[-6:])
 
 
 def test_runner_scans_offline_with_the_recorded_database_and_skips_without_it(tmp_path, monkeypatch):

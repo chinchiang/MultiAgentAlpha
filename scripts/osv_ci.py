@@ -31,7 +31,7 @@ import ignore_expiry  # noqa: E402
 
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import installed_version, tool_path, tools_dir  # noqa: E402
-from mara.tools.sarif import scan_complete  # noqa: E402
+from mara.tools.sarif import error_notifications, scan_complete  # noqa: E402
 from mara.workspace import Workspace  # noqa: E402
 
 # osv-scanner exit codes (cmd/osv-scanner): 1 vulnerabilities found, 127 no package sources found, 128 general error,
@@ -132,20 +132,30 @@ def main() -> int:
         argv += ["-r", str(a.target)]
     print("+ " + " ".join(argv))
     r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    for line in (r.stderr + r.stdout).strip().splitlines()[-8:]:
-        print("  " + line)
+    doc: dict = {}
+    error: str | None = None  # the scan's failure, or None when it did not fail (advisories found or none)
     if r.returncode == EXIT_NO_PACKAGES:
-        print("ERROR: osv-scanner found no package sources to scan (exit 127)", file=sys.stderr)
-        return 1
-    if r.returncode not in EXIT_VULNS and r.returncode != 0:
-        print(f"ERROR: osv-scanner exited {r.returncode} (crash or scan errors, not a clean result)", file=sys.stderr)
-        return 1
-    if not report.is_file() or not report.read_text(encoding="utf-8").strip():
-        print(f"ERROR: osv-scanner exited {r.returncode} but wrote no SARIF", file=sys.stderr)
-        return 1
-    doc = json.loads(report.read_text(encoding="utf-8"))
-    if not scan_complete(doc):
-        print("ERROR: OSV SARIF reports an incomplete scan", file=sys.stderr)
+        error = "osv-scanner found no package sources to scan (exit 127)"
+    elif r.returncode not in EXIT_VULNS and r.returncode != 0:
+        error = f"osv-scanner exited {r.returncode} (crash or scan errors, not a clean result)"
+    elif not report.is_file() or not report.read_bytes().strip():
+        error = f"osv-scanner exited {r.returncode} but wrote no SARIF"
+    else:
+        try:
+            doc = json.loads(report.read_text(encoding="utf-8"))
+        except ValueError as e:
+            error = f"osv-scanner wrote a SARIF that is not JSON: {e}"
+        else:
+            error = None if scan_complete(doc) else "OSV SARIF reports an incomplete scan"
+    # osv-scanner ends with its summary: a failed scan prints every line it said, for the cause is earlier, and the
+    # errors its SARIF records; a scan that did not fail, its last lines
+    said = (r.stderr + r.stdout).strip().splitlines()
+    for line in said if error else said[-8:]:
+        print("  " + line)
+    for note in error_notifications(report) if error else []:
+        print("  osv-scanner error: " + note)
+    if error:
+        print(f"ERROR: {error}", file=sys.stderr)
         return 1
     rows = summarize(doc)
     live = [x for x in rows if not x["suppressed"]]

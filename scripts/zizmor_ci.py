@@ -75,15 +75,21 @@ def main() -> int:
     argv.append(str(a.target))
     print("+ " + " ".join(argv))
     r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    for line in r.stderr.strip().splitlines()[-8:]:
-        print("  " + line)
+    doc: dict = {}
+    error: str | None = None  # the audit's failure, or None when it wrote its SARIF (findings or none)
     if r.returncode != 0 or not r.stdout.strip():
-        print(f"ERROR: zizmor exited {r.returncode} without a SARIF document (crash, not a clean audit)", file=sys.stderr)
-        return 1
-    try:
-        doc = json.loads(r.stdout)
-    except ValueError as e:
-        print(f"ERROR: zizmor output is not JSON: {e}", file=sys.stderr)
+        error = f"zizmor exited {r.returncode} without a SARIF document (crash, not a clean audit)"
+    else:
+        try:
+            doc = json.loads(r.stdout)
+        except ValueError as e:
+            error = f"zizmor output is not JSON: {e}"
+    # zizmor ends with its last warnings: a failed audit prints every line it said, on both streams, for the cause is
+    # earlier; a completed one, the last lines of stderr
+    for line in [*r.stderr.strip().splitlines(), *r.stdout.strip().splitlines()] if error else r.stderr.strip().splitlines()[-8:]:
+        print("  " + line)
+    if error:
+        print(f"ERROR: {error}", file=sys.stderr)
         return 1
     a.report.parent.mkdir(parents=True, exist_ok=True)
     a.report.write_text(r.stdout, encoding="utf-8")

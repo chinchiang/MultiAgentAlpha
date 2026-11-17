@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "osv_ci.py"
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -39,10 +41,13 @@ def _result(vid: str, pkg: str, ver: str, suppressed: bool = False, table_only: 
     return r
 
 
-def _tools(tmp_path: Path, sarif: dict, exit_code: int, version: str = "2.5.1") -> Path:
+def _tools(tmp_path: Path, sarif: dict | str | None, exit_code: int, version: str = "2.5.1", said: tuple[str, ...] = ()) -> Path:
+    """A fake osv-scanner that writes each line of `said` to stderr, copies `sarif` to its --output-file (as JSON, a
+    string as it is, an empty file when it is None) and exits `exit_code`."""
     tools = tmp_path / "tools"
     (tools / "bin").mkdir(parents=True)
-    (tools / "canned.sarif").write_text(json.dumps(sarif))
+    (tools / "canned.sarif").write_text("" if sarif is None else sarif if isinstance(sarif, str) else json.dumps(sarif))
+    (tools / "said.txt").write_text("".join(line + "\n" for line in said), encoding="utf-8")
     if sys.platform == "win32":
         py_script = tools / "bin" / "fake_osv.py"
         py_code = f"""import sys, os, shutil
@@ -54,6 +59,7 @@ if args and args[0] == '--version':
 argv_path = Path({str(tools / 'argv.txt')!r})
 with open(argv_path, 'w', encoding='utf-8') as f:
     f.write(' '.join(args) + '\\n')
+sys.stderr.write(Path({str(tools / 'said.txt')!r}).read_text(encoding='utf-8'))
 out = ''
 i = 0
 while i < len(args):
@@ -72,7 +78,7 @@ sys.exit({exit_code})
     else:
         fake = tools / "bin" / "osv-scanner"
         fake.write_text("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'osv-scanner version: 2.5.1'; exit 0; fi\n"
-                        f"echo \"$@\" > {tools}/argv.txt\n"
+                        f"echo \"$@\" > {tools}/argv.txt\ncat {tools}/said.txt >&2\n"
                         "out=''\nwhile [ $# -gt 0 ]; do if [ \"$1\" = --output-file ]; then out=$2; fi; shift; done\n"
                         f"[ -n \"$out\" ] && cp {tools}/canned.sarif \"$out\"\nexit {exit_code}\n")
         fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
@@ -134,6 +140,46 @@ def test_crashes_no_packages_and_version_drift_are_never_green(tmp_path):
     tools = _tools(tmp_path / "d", _sarif(), exit_code=0)
     r = _run(tools, "--lockfile", "tools/nonexistent.txt", "--report", str(tmp_path / "e.sarif"))
     assert r.returncode == 2 and "not found" in r.stderr
+
+
+SAID = tuple(f"osv-scanner said {n:02}" for n in range(1, 21))  # more lines than a scan that does not fail shows (its last 8)
+# an error notification osv-scanner records when a scan of a package source fails
+NOTE = {"level": "error", "message": {"text": "could not read the lockfile"},
+        "locations": [{"physicalLocation": {"artifactLocation": {"uri": "tools/bootstrap-requirements.txt"}}}]}
+
+
+def _incomplete(sarif: dict) -> dict:
+    sarif["runs"][0]["invocations"] = [{"executionSuccessful": True, "toolExecutionNotifications": [NOTE]}]
+    return sarif
+
+
+@pytest.mark.parametrize("sarif, exit_code, error", [
+    (_incomplete(_sarif()), 127, "no package sources"),
+    (_incomplete(_sarif()), 128, "exited 128"),
+    (None, 0, "wrote no SARIF"),
+    (_incomplete(_sarif()), 0, "incomplete scan"),
+    (_incomplete(_sarif(_result("GHSA-1", "certifi", "2020.1"))), 1, "incomplete scan"),
+    ("{not a SARIF document", 0, "is not JSON"),
+], ids=["no-packages", "crash", "no-sarif", "incomplete", "incomplete-with-findings", "not-json"])
+def test_a_failed_scan_prints_every_line_osv_scanner_said_and_the_sarif_errors(tmp_path, sarif, exit_code, error):
+    """The line that says why osv-scanner failed is rarely among its last: a failure shows every line, then each error
+    notification of the SARIF it wrote."""
+    tools = _tools(tmp_path, sarif, exit_code=exit_code, said=SAID)
+    r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--report", str(tmp_path / "o.sarif"))
+    assert r.returncode == 1 and error in r.stderr, r.stdout + r.stderr
+    shown = [line.strip() for line in r.stdout.splitlines()]
+    assert [line for line in shown if line.startswith("osv-scanner said")] == list(SAID)
+    notes = [line for line in shown if line.startswith("osv-scanner error:")]
+    assert notes == ([] if not isinstance(sarif, dict) else ["osv-scanner error: could not read the lockfile (tools/bootstrap-requirements.txt)"])
+
+
+@pytest.mark.parametrize("sarif, exit_code", [(_sarif(), 0), (_sarif(_result("GHSA-1", "certifi", "2020.1")), 1)], ids=["clean", "findings"])
+def test_a_scan_that_does_not_fail_still_shows_only_the_last_eight_lines(tmp_path, sarif, exit_code):
+    """Exit 1 is osv-scanner's result (advisories found), not a failure of the scan."""
+    tools = _tools(tmp_path, sarif, exit_code=exit_code, said=SAID)
+    r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--report", str(tmp_path / "o.sarif"))
+    assert r.returncode == 2 * exit_code, r.stdout + r.stderr
+    assert [line.strip() for line in r.stdout.splitlines() if line.strip().startswith("osv-scanner said")] == list(SAID[-8:])
 
 
 def test_runner_does_not_count_a_failed_osv_scan_as_a_clean_one(tmp_path):

@@ -31,6 +31,7 @@ import ignore_expiry  # noqa: E402
 from trivy_db import PinError, load_config, pinned_trivy  # noqa: E402
 
 from mara.tools import trivy_db as tdb  # noqa: E402
+from mara.tools.sarif import error_notifications  # noqa: E402
 from mara.workspace import Workspace  # noqa: E402
 
 # result.message.text: "Package: requests Installed Version: 2.19.0 Vulnerability CVE-2018-18074 Severity: HIGH ..."
@@ -102,12 +103,19 @@ def main() -> int:
     argv.append(str(a.target))
     print("+ " + " ".join(argv))
     r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    for line in (r.stderr + r.stdout).strip().splitlines()[-6:]:
+    wrote = report.is_file() and bool(report.read_bytes().strip())  # undecoded: a crash may leave bytes of any encoding
+    # trivy ends with its last warnings: a failed scan prints every line it said, for the cause is earlier, and the
+    # errors its SARIF records; a completed one, its last lines
+    failed = r.returncode != 0 or not wrote
+    said = (r.stderr + r.stdout).strip().splitlines()
+    for line in said if failed else said[-6:]:
         print("  " + line)
+    for note in error_notifications(report) if failed else []:
+        print("  trivy error: " + note)
     if r.returncode != 0:
         print(f"ERROR: trivy exited {r.returncode} (crash, not a clean scan)", file=sys.stderr)
         return 1
-    if not report.is_file() or not report.read_text(encoding="utf-8").strip():
+    if not wrote:
         print("ERROR: trivy wrote no SARIF", file=sys.stderr)
         return 1
     rows = summarize(json.loads(report.read_text(encoding="utf-8")))
