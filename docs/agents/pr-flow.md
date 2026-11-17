@@ -8,6 +8,14 @@ A change that becomes a pull request goes through these steps in order. Each end
    for the reason you meant: read the failure message, not only the exit code. A change of documents or tests only has
    no red stage: say so in the body, and say which assertions you proved sensitive some other way (a test that fails
    on a made-up bad input, a hand-made bad copy of the file).
+   A test written after the fix, or green the moment it is written, is shown red on the base's code in a worktree of
+   `origin/main` under `scratch/` (`git worktree add scratch/<dir> origin/main`), with the new and changed test files
+   copied in, run with the main checkout's interpreter, `PYTHONPATH=<worktree>/src` and `HOME=scratch/empty-home`, and
+   the worktree removed after (`git worktree remove --force`). Neither `git stash` (its stack is shared by every
+   worktree of the checkout) nor the base's files written over the main checkout's (a run of the checks may be reading
+   them). A test that fails without reaching the part it is about is not red for the reason you meant: a `DID NOT RAISE`
+   because an `or` with a value on its left never reads the right (`hint or name`), say. Change the test until it
+   reaches that part.
 3. **Make it green, review it, then commit it.** Green in the working tree, nothing committed yet: the code, its
    `tests/mutations/<name>.yaml` and `tests/SEAMS.md`, and, when the change takes a version, the version, its CHANGELOG
    row and the demo page. Run `scripts/check_local.py --only worktree` beside the tests (seconds): ruff; the width of
@@ -49,8 +57,9 @@ A change that becomes a pull request goes through these steps in order. Each end
    `origin/main` also added keeps its version (`already exists, no checkout`; yours is
    `git show 'stash@{0}^3:<file>'`). Resolve them, `git reset -q`, `git add -N` each new file (a `DU` file you keep is
    one), read `git diff HEAD` against the patch, new files included, and `git stash drop` once it holds what you meant.
-   Done when `scratch/self-review-<issue>/` holds `standards-report.md` and `spec-report.md` (or the body says the review
-   was not run), every finding of the review is fixed or answered in the body, and the work is committed.
+   Done when `scratch/self-review-<issue>/` holds `standards-report.md` and `spec-report.md`, and
+   `standards-report-2.md` and `spec-report-2.md` after a second review (`docs/agents/self-review.md`), or the body says
+   the review was not run; every finding of the review is fixed or answered in the body; and the work is committed.
 4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it, and `scripts/mutate.py
    tests/mutations/<name>.yaml --focused-only` on each file the change touches, without `AWS_PROFILE` and
    `GEMINI_API_KEY`. A mutation edits `src/`, so never run the two at once. Done when every check `AGENTS.md` lists is
@@ -62,15 +71,23 @@ A change that becomes a pull request goes through these steps in order. Each end
    `logs` only for a catch that is marked (an exception other than `AssertionError`, or `(expected <caught_by>)`), one
    with no `at:`, or one whose line is not the assertion of the mutation's name. Every mutation names the test meant to
    catch it (`caught_by`; `tests/test_mutation_lists.py` fails on one that does not), so that a catch by another is
-   marked: for a mutation you add, the test you mean it for, not what a run happens to report. A `LEFT <path>` line
-   names a path git status lists after a run that it did not before: once you know the run left it, and not someone
-   working in the checkout meanwhile, remove a file it added (`git status` shows `??`) and `git restore` one it changed
-   or deleted.
+   marked: for a mutation you add, the test you mean it for, not what a run happens to report. When a mutation breaks a
+   check that several cases of a parametrized test hold, name the test without its parameters: pytest stops at the first
+   case that fails, the first of those cases in its parameters, and naming another marks the catch `(expected …)`. A
+   `LEFT <path>` line names a path git status lists after a run that it did not before: once you know the run left it,
+   and not someone working in the checkout meanwhile, remove a file it added (`git status` shows `??`) and `git restore`
+   one it changed or deleted.
    A fix made after this step goes into the commit it belongs to (rebuild as in step 3, so the version commit stays
    last) and this step runs again on the branch head; the numbers in the body are those of that run, and a fix the
    sub-agents did not see is said so in the body.
 5. **Write the body** to `scratch/pr-body-<name>.md` (`mattpocock-skills:pr`), in English, ending with the attribution
    line; search it for control characters. Show what the change does before and after, and what you did not run.
+   What it says the change does, and so do the commit messages and the CHANGELOG row, is against `origin/main`, not
+   against a version of your own that a review saw: a fault only that version had is not one the change fixes. A fact
+   you verified names the commit it was verified on, and facts verified on different commits are written apart (a fault
+   reproduced on the commit the issue was triaged on, and the new tests red on the base the branch was cut from). What
+   you did not run includes the code no job of CI runs: the `win32` branches of the tests' stand-in tools, since CI runs
+   no Windows job.
 6. **Push, open the pull request, watch it.** `git fetch` first: if `origin/main` moved, rebase; if the version was
    taken, run `scripts/renumber.py`. `main` is `strict`: a branch that lacks the latest `origin/main` cannot merge, and
    `--admin` does not get round that. Then `.venv/bin/python scripts/pr_checks.py <n>` in the background. It waits until
@@ -85,6 +102,10 @@ A change that becomes a pull request goes through these steps in order. Each end
    Done when it exits 0. On exit 1, read each line it marks: the step a `NOT` names, the job's log for a `MISS` or a
    `LOG`, a failed check's job, and for a required check that did not run, why it did not. When it stops because the
    head moved, run it again. Exit 2 is gh failing: read its error.
+   When semgrep's accepted count differs from `main`'s or from your local run, find out why before the body states a
+   number: download the job's SARIF (`gh run download <run> -n l0-sarif`), compare it finding by finding (rule, file,
+   line) with the other, and read its `Timeout` notifications (`toolExecutionNotifications`): a rule that timed out on a
+   file drops that rule's findings there, and `semgrep_ci.py` does not say so yet (#331).
 7. **Give the owner the merge command**, with the full 40-character head SHA, and do not run it. `git fetch` once more
    and check that `origin/main` has not moved since step 6; if it has, rebase and push again, because the branch
    would no longer be up to date and CI runs again. The ruleset R1 `update` rule keeps the state `BLOCKED` even when the
