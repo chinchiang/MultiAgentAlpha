@@ -2,29 +2,36 @@ focused: [tests/test_invocation_admit.py]
 mutations:
   - name: the progress record starts before the paths are checked
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_a_config_inside_the_target_is_refused_before_it_is_read_and_no_record_is_started
     old: "    config_path = check_paths(inv, root)\n    record = Progress(inv.progress_file)"
     new: "    record = Progress(inv.progress_file)\n    config_path = check_paths(inv, root)"
   - name: the config is read before the paths are checked
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_an_invocation_every_check_passes_is_admitted_with_its_config_loaded
     old: "    config_path = check_paths(inv, root)\n"
     new: "    load(inv.config or default_config(inv.provider, root), inv.provider)\n    config_path = check_paths(inv, root)\n"
   - name: the base is checked before the config
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_a_base_git_cannot_diff_against_is_refused_last
     old: "        config = load(config_path, inv.provider, Workspace(root))\n"
     new: "        if inv.base:\n            check_base(inv.target, inv.base)\n        config = load(config_path, inv.provider, Workspace(root))\n"
   - name: a calibration sample is one of the environment's workspace
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_a_calibration_sample_is_one_of_the_workspace_admit_is_given_not_of_the_environment
     old: 'check_calibration_sample(inv.target, root)'
     new: 'check_calibration_sample(inv.target, Workspace.from_env().root)'
   - name: a usage error after the paths leaves the record running
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_a_usage_error_after_the_paths_leaves_the_record_failed_with_its_kind
     old: "        record.finish(ok=False, error=e.kind if isinstance(e, InvocationError) else type(e).__name__)\n"
     new: ""
   - name: the record names a usage error by its exception, not its kind
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_a_usage_error_after_the_paths_leaves_the_record_failed_with_its_kind
     old: 'error=e.kind if isinstance(e, InvocationError) else type(e).__name__'
     new: 'error=type(e).__name__'
   - name: only a usage error leaves the record failed
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_any_other_exception_after_the_paths_leaves_the_record_failed_with_its_name
     old: '    except BaseException as e:'
     new: '    except InvocationError as e:'

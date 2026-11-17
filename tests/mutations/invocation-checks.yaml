@@ -2,33 +2,41 @@ focused: [tests/test_invocation_checks.py, tests/test_invocation_admit.py, tests
 mutations:
   - name: a base git cannot find a merge base for is accepted
     file: src/mara/context/repo_map.py
+    caught_by: 'tests/test_invocation_checks.py::test_a_base_git_cannot_diff_against_head_is_a_usage_error_on_base[unknown]'
     old: '    if merge_base is None or merge_base.returncode != 0:'
     new: '    if merge_base is None:'
   - name: the syntax rule is not applied before git is asked
     file: src/mara/context/repo_map.py
+    caught_by: 'tests/test_invocation_checks.py::test_a_base_git_cannot_diff_against_head_is_a_usage_error_on_base[space-git-accepts]'
     old: "    if problem := base_ref_syntax_error(base):\n        raise ValueError(problem)\n    merge_base = _run_git("
     new: "    merge_base = _run_git("
   - name: a target that is not a calibration sample is a usage error on --base
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_checks.py::test_a_target_that_is_not_a_labelled_sample_is_a_usage_error_on_calibration_sample
     old: '        raise InvocationError(f"needs a target below {samples}, got {target}", param="--calibration-sample", kind="bad_calibration_sample")'
     new: '        raise InvocationError(f"needs a target below {samples}, got {target}", param="--base", kind="bad_calibration_sample")'
   - name: the pipeline does not check the base itself
     file: src/mara/pipeline.py
+    caught_by: tests/test_invocation_checks.py::test_the_pipeline_refuses_a_base_it_cannot_diff_against_before_it_makes_its_output_directory
     old: "        if base_ref:  # an empty one is no base; a refused one leaves no output directory behind\n            check_base(target, base_ref)\n"
     new: ""
   - name: the pipeline checks an empty base
     file: src/mara/pipeline.py
+    caught_by: tests/test_invocation_checks.py::test_the_pipeline_reads_an_empty_base_as_no_base
     old: '        if base_ref:  # an empty one is no base; a refused one leaves no output directory behind'
     new: '        if base_ref is not None:  # an empty one is no base; a refused one leaves no output directory behind'
   - name: admit checks an empty base
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_checks.py::test_an_empty_base_is_no_base_as_the_pipeline_always_read_it
     old: '        if inv.base:  # an empty --base is no base'
     new: '        if inv.base is not None:  # an empty --base is no base'
   - name: admit does not check the base
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_a_base_git_cannot_diff_against_is_refused_last
     old: "        if inv.base:  # an empty --base is no base\n            check_base(inv.target, inv.base)\n"
     new: ""
   - name: admit does not check the calibration sample
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_a_calibration_sample_is_one_of_the_workspace_admit_is_given_not_of_the_environment
     old: "        if inv.calibration_sample:\n            check_calibration_sample(inv.target, root)\n"
     new: ""

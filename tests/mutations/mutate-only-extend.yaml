@@ -2,5 +2,6 @@ focused: [tests/test_mutate.py]
 mutations:
   - name: a repeated --only keeps the last
     file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_repeated_only_runs_every_name_it_gives
     old: 'ap.add_argument("--only", action="extend", nargs="+",'
     new: 'ap.add_argument("--only", nargs="+",'

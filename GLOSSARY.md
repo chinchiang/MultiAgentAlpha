@@ -295,7 +295,7 @@ A place where a test reaches into the code: a name it patches or a value it read
 _Avoid_: hook, mock point (a seam is the place, a mock is only one thing a test puts there)
 
 **Mutation list**:
-The file `tests/mutations/<name>.yaml`: the faults a behaviour change's tests were checked against, each an `old` text of the code and the `new` text that makes the fault its name says, and optionally the test meant to catch it (`caught_by`). `scripts/mutate.py` applies them one by one; the tests must fail on every one (the mutation is caught).
+The file `tests/mutations/<name>.yaml`: the faults a behaviour change's tests were checked against, each an `old` text of the code and the `new` text that makes the fault its name says, and the test meant to catch it (`caught_by`; `tests/test_mutation_lists.py` fails on a mutation without one). `scripts/mutate.py` applies them one by one; the tests must fail on every one (the mutation is caught).
 _Avoid_: mutation file, fault list, mutant list (a mutant is one applied mutation)
 
 **Marked catch**:

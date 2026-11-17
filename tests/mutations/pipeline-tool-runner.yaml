@@ -2,37 +2,46 @@ focused: [tests/test_tool_evidence.py, tests/test_security_regressions.py, tests
 mutations:
   - name: the main run calls run_all, not the runner given
     file: src/mara/pipeline.py
+    caught_by: 'tests/test_tool_evidence.py::test_a_review_takes_its_tool_runs_from_the_runner_it_is_given[no pre-recorded SARIF]'
     old: 'tool_runs = self._run_tools(target, self.out_dir / "tools")'
     new: 'tool_runs = run_all(target, self.out_dir / "tools", workspace=Workspace.from_env())'
   - name: the secret preflight calls run_all, not the runner given
     file: src/mara/pipeline.py
+    caught_by: tests/test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress
     old: 'preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])'
     new: 'preflight = run_all(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"], workspace=Workspace.from_env())'
   - name: the secret preflight runs every tool
     file: src/mara/pipeline.py
+    caught_by: tests/test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress
     old: 'preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])'
     new: 'preflight = self._run_tools(target, self.out_dir / "live-secret-preflight")'
   - name: no secret preflight in live mode with pre-recorded SARIF
     file: src/mara/pipeline.py
+    caught_by: tests/test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress
     old: 'if provider_mode == "live" and sarif_dir:'
     new: 'if False:'
   - name: the secret preflight in mock mode too
     file: src/mara/pipeline.py
+    caught_by: 'tests/test_tool_evidence.py::test_a_review_takes_its_tool_runs_from_the_runner_it_is_given[pre-recorded SARIF, mock mode]'
     old: 'if provider_mode == "live" and sarif_dir:'
     new: 'if sarif_dir:'
   - name: the pre-recorded gitleaks kept beside the live one
     file: src/mara/pipeline.py
+    caught_by: tests/test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress
     old: 'tool_runs = [r for r in tool_runs if r.tool != "gitleaks"] + preflight'
     new: 'tool_runs = tool_runs + preflight'
   - name: pre-recorded SARIF ignored, the tools always run
     file: src/mara/pipeline.py
+    caught_by: 'tests/test_tool_evidence.py::test_a_review_takes_its_tool_runs_from_the_runner_it_is_given[pre-recorded SARIF, mock mode]'
     old: 'if sarif_dir and sarif_dir.is_dir():'
     new: 'if False:'
   - name: the secret preflight writes into out/tools
     file: src/mara/pipeline.py
+    caught_by: tests/test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress
     old: 'preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])'
     new: 'preflight = self._run_tools(target, self.out_dir / "tools", enabled=["gitleaks"])'
   - name: the secret preflight scans another directory than the target
     file: src/mara/pipeline.py
+    caught_by: tests/test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress
     old: 'preflight = self._run_tools(target, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])'
     new: 'preflight = self._run_tools(self.out_dir, self.out_dir / "live-secret-preflight", enabled=["gitleaks"])'

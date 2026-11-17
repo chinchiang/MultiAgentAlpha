@@ -3,21 +3,26 @@ focused: [tests/test_finder_families.py, tests/test_jury_quorum.py, tests/test_r
 mutations:
   - name: the ballot round judges a finding without finders as found by no family
     file: src/mara/ballot_round.py
+    caught_by: tests/test_finder_families.py::test_the_ballot_round_refuses_a_finding_without_finders_before_asking_any_model
     old: "    finders = finders_of(findings)\n    rounds"
     new: "    finders = {f.id: set(f.finder_families) for f in findings}\n    rounds"
   - name: the jury scores a finding without finders as found by no family
     file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_families.py::test_the_jury_refuses_to_score_a_finding_without_finders
     old: "    finders = finders_of(findings)\n    by_finding"
     new: "    finders = {f.id: set(f.finder_families) for f in findings}\n    by_finding"
   - name: the finders are read from the source family, not the finder families
     file: src/mara/bias/diversity.py
+    caught_by: tests/test_jury_quorum.py::test_with_too_few_independent_seats_the_finders_families_judge_at_a_discount_and_the_quorum_still_fails
     old: '    return {f.id: set(f.finder_families) for f in findings}'
     new: '    return {f.id: {f.source_family} for f in findings}'
   - name: deduplication keeps only the first finder of merged findings
     file: src/mara/reviewer_round.py
+    caught_by: 'tests/test_reviewer_round.py::test_two_findings_are_merged_exactly_when_they_are_at_one_place_in_one_dimension_and_equally_verified[other0-True]'
     old: '            finders[match.id].add(f.source_family)'
     new: '            pass'
   - name: G-2's findings are found by one of the judge families
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_check.py::test_verdicts_on_this_repository
     old: '    finder = next(f for f in ModelFamily if f not in judges and f not in (ModelFamily.MOCK, ModelFamily.TOOL))'
     new: '    finder = sorted(judges, key=lambda x: x.value)[0]'

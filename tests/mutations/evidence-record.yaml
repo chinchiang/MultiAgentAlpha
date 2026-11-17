@@ -6,133 +6,166 @@ focused:
 mutations:
 - name: a record stands for ninety-one days
   file: src/mara/evidence.py
+  caught_by: tests/test_evidence_record.py::test_a_record_stands_for_ninety_days
   old: MAX_AGE_DAYS = 90
   new: MAX_AGE_DAYS = 91
 - name: a record ninety days old is stale
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_standing_reports_what_keeps_a_record_from_standing[ninety-days-old-still-stands]'
   old: 'elif age > MAX_AGE_DAYS:'
   new: 'elif age >= MAX_AGE_DAYS:'
 - name: a record dated in the future stands
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_standing_reports_what_keeps_a_record_from_standing[dated-tomorrow-is-in-the-future]'
   old: 'if age < 0:'
   new: 'if False:'
 - name: a mode written in capitals is live
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_standing_reports_what_keeps_a_record_from_standing[the-mode-is-lower-case-live-and-nothing-else]'
   old: 'if header.mode != LIVE:'
   new: 'if (header.mode or '''').lower() != LIVE:'
 - name: a record is live whatever its mode
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_standing_reports_what_keeps_a_record_from_standing[mock-is-not-live]'
   old: 'if header.mode != LIVE:'
   new: 'if False:'
 - name: no family is ever asked for
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_standing_reports_what_keeps_a_record_from_standing[a-family-not-covered-is-named]'
   old: 'if families is not None:'
   new: 'if False:'
 - name: a record that names no families is an error
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_standing_reports_what_keeps_a_record_from_standing[a-record-that-names-no-families-covers-none]'
   old: covered = set(header.families or ())
   new: covered = set(header.families)
 - name: the families missing are named in alphabetical order
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_standing_reports_what_keeps_a_record_from_standing[missing-families-keep-the-order-asked-for-not-the-alphabet]'
   old: missing = tuple(f for f in families if f not in covered)
   new: missing = tuple(sorted(f for f in families if f not in covered))
 - name: the families of a header are written as they come
   file: src/mara/evidence.py
+  caught_by: tests/test_evidence_record.py::test_the_families_of_a_header_are_written_as_a_sorted_list
   old: 'return {"date": date, "mode": mode, "families": sorted(families)}'
   new: 'return {"date": date, "mode": mode, "families": list(families)}'
 - name: the families of a header are written as family
   file: src/mara/evidence.py
+  caught_by: tests/test_evidence_record.py::test_the_fields_of_a_header_come_in_the_order_date_mode_families
   old: 'return {"date": date, "mode": mode, "families": sorted(families)}'
   new: 'return {"date": date, "mode": mode, "family": sorted(families)}'
 - name: a mode no run has is written
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_a_mode_no_run_has_is_refused_when_it_is_written[Live]'
   old: 'if mode not in MODES:'
   new: 'if False:'
 - name: a date that is not YYYY-MM-DD is read as a date
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_a_date_that_is_not_one_reads_as_no_date[20261008_1]'
   old: 'if not isinstance(value, str) or not _ISO_DATE.fullmatch(value):'
   new: 'if not isinstance(value, str):'
 - name: a date that is not a date is an error
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_a_date_that_is_not_one_reads_as_no_date[2026-13-01]'
   old: '    except ValueError:'
   new: '    except KeyError:'
 - name: a mode that is not text is the mode
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_a_mode_that_is_not_text_reads_as_no_mode[5]'
   old: return value if isinstance(value, str) else None
   new: return value
 - name: families that are not strings are kept
   file: src/mara/evidence.py
+  caught_by: 'tests/test_evidence_record.py::test_families_read_as_the_strings_of_a_list_and_as_none_otherwise[families0-read0]'
   old: return tuple(f for f in value if isinstance(f, str)) if isinstance(value, list | tuple) else None
   new: return tuple(value) if isinstance(value, list | tuple) else None
 - name: policy P8 reads the clock, not the today it is given
   file: src/mara/policy.py
+  caught_by: tests/test_policy.py::test_p8_reads_the_age_of_the_record_against_the_today_it_is_given
   old: today = today or dt.date.today()
   new: today = dt.date.today()
 - name: policy P8 hears nothing of what keeps a record from standing
   file: src/mara/policy.py
+  caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
   old: problems = standing(header, today)
   new: problems = []
 - name: policy P8 lets a mock record through
   file: src/mara/policy.py
+  caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
   old: '        if isinstance(problem, NotLive):'
   new: '        if False and isinstance(problem, NotLive):'
 - name: policy P8 lets a stale record through
   file: src/mara/policy.py
+  caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
   old: '        if isinstance(problem, Stale):'
   new: '        if False and isinstance(problem, Stale):'
 - name: policy P8 lets a record dated in the future through
   file: src/mara/policy.py
+  caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
   old: '        if isinstance(problem, Future):'
   new: '        if False and isinstance(problem, Future):'
 - name: policy P8 lets a record with no date through
   file: src/mara/policy.py
+  caught_by: 'tests/test_policy.py::test_p8_says_the_first_thing_that_is_wrong_in_the_order_it_always_has[a-date-that-is-not-one]'
   old: '        if isinstance(problem, NoDate):'
   new: '        if False and isinstance(problem, NoDate):'
 - name: check G-8 hears nothing of the families a report misses
   file: scripts/governance_check.py
+  caught_by: tests/test_evidence_record.py::test_the_evaluation_reports_the_script_writes_stand_for_check_g8
   old: missing = next((x.families for x in found if isinstance(x, MissingFamilies)), ())
   new: missing = ()
 - name: check G-8 says the families before the mode
   file: scripts/governance_check.py
+  caught_by: tests/test_governance_config.py::test_g8_and_g9_say_the_mode_before_the_families_and_the_families_before_the_live_providers
   old: "        if not_live:\n            problems.append(f\"`docs/{p.name}`（{d}）mode 為 {not_live.mode or '未標示'}，不是 live\")\n        elif missing:\n            problems.append(f\"`docs/{p.name}`（{d}）未涵蓋家族 {list(missing)}\")\n"
   new: "        if missing:\n            problems.append(f\"`docs/{p.name}`（{d}）未涵蓋家族 {list(missing)}\")\n        elif not_live:\n            problems.append(f\"`docs/{p.name}`（{d}）mode 為 {not_live.mode or '未標示'}，不是 live\")\n"
 - name: check G-8 opens a report before it looks at its date
   file: scripts/governance_check.py
+  caught_by: tests/test_governance_check.py::test_g8_and_g9_never_open_a_report_that_is_too_old_or_too_new_to_count
   old: "        date_problem = _date_problem(d, today)\n        if isinstance(date_problem, Future):\n            # a report dated"
   new: "        read_front_matter(p)\n        date_problem = _date_problem(d, today)\n        if isinstance(date_problem, Future):\n            # a report dated"
 - name: check G-9 hears nothing of the families a report misses
   file: scripts/governance_check.py
+  caught_by: tests/test_governance_config.py::test_g8_and_g9_ask_live_reports_to_cover_the_production_families_and_need_not_the_policies
   old: missing = next((list(x.families) for x in found if isinstance(x, MissingFamilies)), [])
   new: missing = []
 - name: check G-9 does not ask for the live providers
   file: scripts/governance_check.py
+  caught_by: tests/test_governance_check.py::test_g9_asks_a_calibration_report_to_have_run_on_live_providers
   old: 'if missing or "live" not in (meta.get("provider_modes") or ["live"]):'
   new: 'if missing:'
 - name: check G-9 lists a stale report among the refused
   file: scripts/governance_check.py
+  caught_by: 'tests/test_governance_check.py::test_g8_and_g9_say_one_thing_about_a_report_and_in_the_order_they_always_have[stale]'
   old: "        if isinstance(date_problem, Stale):\n            continue\n"
   new: "        if isinstance(date_problem, Stale):\n            rejected.append(f\"`docs/{p.name}`（{d}，過期）\")\n            continue\n"
 - name: the latest json calls the test something else
   file: scripts/calibrate.py
+  caught_by: tests/test_evidence_record.py::test_the_latest_json_of_a_calibration_puts_the_header_first
   old: '"aat": aat, "global_alpha": alpha}'
   new: '"aat_result": aat, "global_alpha": alpha}'
 - name: the latest json carries no header
   file: scripts/calibrate.py
+  caught_by: tests/test_evidence_record.py::test_the_latest_json_of_a_calibration_puts_the_header_first
   old: 'return {**header_fields(date, mode, families), "aat": aat, "global_alpha": alpha}'
   new: 'return {"aat": aat, "global_alpha": alpha}'
 - name: a calibration writes its latest json by hand
   file: scripts/calibrate.py
+  caught_by: tests/test_evidence_record.py::test_a_live_calibration_leaves_a_latest_json_and_a_report_that_say_what_it_covered
   old: json.dumps(latest_record(date, args.mode, families, aat, alpha), ensure_ascii=False, indent=2)
   new: 'json.dumps({"date": date, "mode": args.mode, "aat": aat, "global_alpha": alpha}, ensure_ascii=False, indent=2)'
 - name: a calibration report writes its header by hand
   file: scripts/calibrate.py
+  caught_by: tests/test_evidence_record.py::test_a_calibration_report_puts_the_header_first_in_its_front_matter
   old: '    meta = {"report": "calibration", **header_fields(date, mode, families),'
   new: '    meta = {"report": "calibration", "date": date, "mode": mode, "families": list(families),'
 - name: an evaluation report leaves out its mode
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_evidence_record.py::test_an_evaluation_report_puts_the_header_first_in_its_front_matter[garak]'
   old: '**header_fields(summary["date"], summary["mode"], families),'
   new: '"date": summary["date"], "families": families,'
 - name: an evaluation report writes its families as they come
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_evidence_record.py::test_an_evaluation_report_puts_the_header_first_in_its_front_matter[garak]'
   old: '**header_fields(summary["date"], summary["mode"], families),'
   new: '"date": summary["date"], "mode": summary["mode"], "families": families,'

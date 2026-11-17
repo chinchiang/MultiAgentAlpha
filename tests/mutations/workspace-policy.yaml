@@ -2,33 +2,41 @@ focused: [tests/test_policy.py, tests/test_ml_bom.py, tests/test_invocation_admi
 mutations:
   - name: P7 reads the ML-BOM and bundle of the environment's workspace
     file: src/mara/policy.py
+    caught_by: tests/test_ml_bom.py::test_policy_p7_reads_the_ml_bom_and_bundle_of_the_workspace_it_is_given_not_of_the_environment
     old: "    base = workspace.root\n"
     new: "    base = Workspace.from_env().root\n"
   - name: P8 reads the Evidence record of the environment's workspace
     file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
     old: "resolve(AAT_EVIDENCE, workspace.root)"
     new: "resolve(AAT_EVIDENCE)"
   - name: P8 judges the record at today's date whatever date it is given
     file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p8_reads_the_age_of_the_record_against_the_today_it_is_given
     old: "    today = today or dt.date.today()\n"
     new: "    today = dt.date.today()\n"
   - name: load_config runs neither P7 nor P8
     file: src/mara/config.py
+    caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
     old: "        _refuse_violations(workspace_policies(cfg, workspace, today))\n"
     new: "        pass\n"
   - name: load_config runs P7 and P8 against the environment's workspace
     file: src/mara/config.py
+    caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
     old: "        _refuse_violations(workspace_policies(cfg, workspace, today))\n"
     new: "        from .workspace import Workspace\n\n        _refuse_violations(workspace_policies(cfg, Workspace.from_env(), today))\n"
   - name: admit loads the config against the environment's workspace
     file: src/mara/invocation.py
+    caught_by: tests/test_invocation_admit.py::test_the_config_is_loaded_under_the_policies_of_the_workspace_admit_is_given_not_of_the_environment
     old: "        config = load(config_path, inv.provider, Workspace(root))\n"
     new: "        config = load(config_path, inv.provider, Workspace.from_env())\n"
   - name: check_config_file reports P7 and P8 of the environment's workspace
     file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_environment
     old: "tuple(evaluate_policies(cfg, workspace))"
     new: "tuple(evaluate_policies(cfg, Workspace.from_env()))"
   - name: the environment page lists the policies of the environment's workspace
     file: src/mara/web/env.py
+    caught_by: tests/test_panel.py::test_the_environment_page_lists_policies_as_the_workspace_it_is_given_holds_evidence_for_them
     old: "check_config_file(path, Workspace(root))"
     new: "check_config_file(path, Workspace.from_env())"

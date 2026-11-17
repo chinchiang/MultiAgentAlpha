@@ -4,22 +4,27 @@ focused: [tests/test_context_increment.py, tests/test_pipeline_mock.py, tests/te
 mutations:
   - name: the changed files are counted as the related ones
     file: src/mara/pipeline.py
+    caught_by: tests/test_context_increment.py::test_an_incremental_review_counts_its_changed_and_its_related_files_in_the_bias_audit
     old: '            self.audit.set(Count.BUNDLE_FILES_CHANGED, len(changed))'
     new: '            self.audit.set(Count.BUNDLE_FILES_CHANGED, len(related))'
   - name: the related files are counted as the changed ones
     file: src/mara/pipeline.py
+    caught_by: tests/test_context_increment.py::test_an_incremental_review_counts_its_changed_and_its_related_files_in_the_bias_audit
     old: '            self.audit.set(Count.BUNDLE_FILES_RELATED, len(related))'
     new: '            self.audit.set(Count.BUNDLE_FILES_RELATED, len(changed))'
   - name: the changed files are not counted
     file: src/mara/pipeline.py
+    caught_by: tests/test_context_increment.py::test_an_incremental_review_counts_its_changed_and_its_related_files_in_the_bias_audit
     old: '            self.audit.set(Count.BUNDLE_FILES_CHANGED, len(changed))'
     new: '            pass'
   - name: the related files are not counted
     file: src/mara/pipeline.py
+    caught_by: tests/test_context_increment.py::test_an_incremental_review_counts_its_changed_and_its_related_files_in_the_bias_audit
     old: '            self.audit.set(Count.BUNDLE_FILES_RELATED, len(related))'
     new: '            pass'
   - name: a review of the whole target counts zero changed files
     file: src/mara/pipeline.py
+    caught_by: tests/test_context_increment.py::test_a_review_of_the_whole_target_counts_no_increment
     old: 'ctx = build_context(target)'
     new: |-
       ctx = build_context(target)

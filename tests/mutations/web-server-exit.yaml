@@ -2,70 +2,87 @@ focused: [tests/test_web_procs.py, tests/test_web_server.py]
 mutations:
   - name: close shuts serving down unconditionally
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_closing_a_server_that_never_served_returns
     old: "        if self._serving:\n            self.shutdown()\n"
     new: "        if True:\n            self.shutdown()\n"
   - name: close never shuts serving down
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_closing_a_serving_server_stops_serving_and_its_children
     old: "        if self._serving:\n            self.shutdown()\n"
     new: "        if False:\n            self.shutdown()\n"
   - name: close stops no child
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_closing_a_serving_server_stops_serving_and_its_children
     old: "        self.table.shutdown()\n        self.server_close()\n"
     new: "        self.server_close()\n"
   - name: close does not close the socket
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_closing_a_serving_server_stops_serving_and_its_children
     old: "        self.table.shutdown()\n        self.server_close()\n"
     new: "        self.table.shutdown()\n"
   - name: the table stops its children one by one
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_a_table_stops_every_running_child_at_once
     old: "        _stop_all([c.proc for c in to_stop], grace)\n"
     new: "        for c in to_stop:\n            _stop_all([c.proc], grace)\n"
   - name: a stop only kills, never terminates
     file: src/mara/web/procs.py
+    caught_by: 'tests/test_web_procs.py::test_while_a_child_is_being_stopped_whether_it_runs_is_answered_at_once[stop]'
     old: "    for p in running:\n        terminate(p)\n"
     new: "    for p in running:\n        pass\n"
   - name: a stop kills no child after the grace
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_stopping_a_child_still_running_after_the_grace_kills_it
     old: "    for p in to_kill:\n        kill(p)\n"
     new: "    for p in to_kill:\n        pass\n"
   - name: the table stops the children of its first registry only
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_a_table_stops_every_running_child_at_once
     old: "            to_stop = [c for c in self._children.values() if c.proc"
     new: "            to_stop = [c for (n, _), c in self._children.items() if n == next(iter(self._children))[0] and c.proc"
   - name: the table does not wait for the waiters
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_shutting_down_waits_for_the_exit_of_a_child_that_exited_by_itself_and_does_not_record_it_stopped
     old: "            w.join(timeout=WAITER_JOIN_SECONDS)\n"
     new: "            pass\n"
   - name: the table does not mark the children it stops
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_shutting_down_stops_every_running_child_its_exit_recorded_as_stopped
     old: "            for c in to_stop:\n                c.stopped = True\n"
     new: ""
   - name: the table waits only for the waiters of children it stops
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_shutting_down_waits_for_the_exit_of_a_child_that_exited_by_itself_and_does_not_record_it_stopped
     old: "            waiters = [c.waiter for c in self._children.values() if c.waiter.is_alive()]\n"
     new: "            waiters = [c.waiter for c in self._children.values() if c.proc is not None and c.proc.poll() is None]\n"
   - name: the table stops the children inside the lock
     file: src/mara/web/procs.py
+    caught_by: 'tests/test_web_procs.py::test_while_a_child_is_being_stopped_whether_it_runs_is_answered_at_once[shutdown]'
     old: "                c.stopped = True\n        _stop_all([c.proc for c in to_stop], grace)\n"
     new: "                c.stopped = True\n            _stop_all([c.proc for c in to_stop], grace)\n"
   - name: a cancel never kills after the grace
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_stopping_a_child_still_running_after_the_grace_kills_it
     old: "    _stop_all([proc], grace)\n"
     new: "    terminate(proc)\n    _wait_until([proc], time.monotonic() + grace)\n"
   - name: G1 one grace deadline per child, not one for all
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_children_still_running_after_the_grace_share_one_deadline
     old: "    _wait_until(running, time.monotonic() + grace)\n"
     new: "    for p in running:\n        _wait_until([p], time.monotonic() + grace)\n"
   - name: G9 every child killed after the grace, running or not
     file: src/mara/web/procs.py
+    caught_by: tests/test_web_procs.py::test_only_the_children_still_running_after_the_grace_are_killed
     old: "    to_kill = [p for p in running if p.poll() is None]\n"
     new: "    to_kill = list(running)\n"
   - name: G6 close stops the children before it stops serving
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_closing_a_server_stops_serving_then_its_children_then_closes_its_socket
     old: "        if self._serving:\n            self.shutdown()\n        self.table.shutdown()\n"
     new: "        self.table.shutdown()\n        if self._serving:\n            self.shutdown()\n"
   - name: G7 close closes the socket before stopping the children
     file: src/mara/web/server.py
+    caught_by: tests/test_web_server.py::test_closing_a_server_stops_serving_then_its_children_then_closes_its_socket
     old: "        self.table.shutdown()\n        self.server_close()\n"
     new: "        self.server_close()\n        self.table.shutdown()\n"
 # Equivalent, so not listed (the Spec reviewer's G2, G3, G8 on #166; scratch/design-web-stop-sequence.md):

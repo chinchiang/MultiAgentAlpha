@@ -2,62 +2,77 @@ focused: [tests/test_governance_config.py, tests/test_governance_check.py, tests
 mutations:
   - name: G-7 reads the repository's default BOM, not the one the config names
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g7_judges_the_ml_bom_the_config_names_not_any_bom_in_sbom
     old: '    bom = Path(ml.path) if Path(ml.path).is_absolute() else root / ml.path'
     new: '    bom = root / "sbom" / "ml-bom.cdx.json"'
   - name: G-7 counts every model not mocked as self-hosted
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g7_judges_the_ml_bom_the_config_names_not_any_bom_in_sbom
     old: '    self_hosted = [(m.name, m.model) for m in self_hosted_models(cfg)]'
     new: '    self_hosted = [(m.name, m.model) for m in cfg.models if m.provider != "mock"]'
   - name: G-7 refuses a config that violates P7 instead of reporting it
     file: scripts/governance_check.py
+    caught_by: tests/test_ml_bom.py::test_repository_bom_is_pending_but_valid_and_governance_g7_says_why
     old: |1-
          cfg = load_config(config_path, _workspace(workspace), enforce_policies=False)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it
     new: '    cfg = load_config(config_path, _workspace(workspace))  # G-7 reports the ML-BOM, P7 among it, rather than refusing it'
   - name: G-7 does not look for the signature bundle
     file: scripts/governance_check.py
+    caught_by: tests/test_ml_bom.py::test_repository_bom_is_pending_but_valid_and_governance_g7_says_why
     old: '        if ml.require_signature and not (ml.bundle.strip() and bundle.exists()):'
     new: '        if False:'
   - name: load_config enforces the policies whatever it is asked
     file: src/mara/config.py
+    caught_by: tests/test_governance_config.py::test_g8_and_g9_ask_live_reports_to_cover_the_production_families_and_need_not_the_policies
     old: 'context=None if enforce_policies else {"skip_policies": True})'
     new: 'context=None)'
   - name: G-11 needs a human_queue block the review does not
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g11_reads_a_config_without_a_human_queue_block_by_the_defaults_the_review_uses
     old: '    if hq.enabled and hq.ticketing == "github_issues":'
     new: '    if hq.enabled and hq.ticketing == "github_issues" and "human_queue" in _raw_config(config_path):'
   - name: G-12 admits tier C
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g12_refuses_a_trigger_scope_wider_than_policy_p6_allows
     old: '    if not set(tiers) <= set(PSIRT_ALLOWED_TIERS) or not set(sevs) <= set(PSIRT_ALLOWED_SEVERITIES):'
     new: '    if not set(tiers) <= set(PSIRT_ALLOWED_TIERS) | {"C"} or not set(sevs) <= set(PSIRT_ALLOWED_SEVERITIES):'
   - name: G-12 refuses High, which P6 allows
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g12_refuses_a_trigger_scope_wider_than_policy_p6_allows
     old: '    if not set(tiers) <= set(PSIRT_ALLOWED_TIERS) or not set(sevs) <= set(PSIRT_ALLOWED_SEVERITIES):'
     new: '    if not set(tiers) <= set(PSIRT_ALLOWED_TIERS) or not set(sevs) <= {"Critical"}:'
   - name: G-13 asks for every role whatever the config requires
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g13_asks_for_the_roles_the_config_requires_or_by_default_every_role
     old: '    roles = tuple(tr.required_roles or ROLES)'
     new: '    roles = ROLES'
   - name: G-13 ignores the config's training block
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g13_asks_for_the_roles_the_config_requires_or_by_default_every_role
     old: '    tr = _block(config_path, "training", TrainingConfig) if config_path else TrainingConfig()'
     new: '    tr = TrainingConfig()'
   - name: G-8 and G-9 read the families from the raw YAML again
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g8_and_g9_refuse_a_config_the_review_refuses_rather_than_ask_for_a_family_no_report_can_cover
     old: '    return sorted(production_families(load_config(config_path, _workspace(workspace), enforce_policies=False)))'
     new: '    return sorted({m.get("family", "?") for m in _raw_config(config_path).get("models", []) if m.get("provider") != "mock"})'
   - name: G-8 and G-9 refuse a config that violates a policy instead of reporting the reports
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g8_and_g9_ask_live_reports_to_cover_the_production_families_and_need_not_the_policies
     old: '    return sorted(production_families(load_config(config_path, _workspace(workspace), enforce_policies=False)))'
     new: '    return sorted(production_families(load_config(config_path, _workspace(workspace))))'
   - name: the production families count the mock models
     file: src/mara/govdocs.py
+    caught_by: tests/test_governance_config.py::test_g8_and_g9_ask_live_reports_to_cover_the_production_families_and_need_not_the_policies
     old: '        if m.provider != "mock" and f not in fams:'
     new: '        if f not in fams:'
   - name: G-8 asks the reports to cover no family
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g8_and_g9_refuse_a_config_the_review_refuses_rather_than_ask_for_a_family_no_report_can_cover
     old: "    families = _production_families(config_path, workspace) if config_path else []\n    ev_g, pr_g"
     new: "    families = []\n    ev_g, pr_g"
   - name: G-9 asks the calibration report to cover no family
     file: scripts/governance_check.py
+    caught_by: tests/test_governance_config.py::test_g8_and_g9_refuse_a_config_the_review_refuses_rather_than_ask_for_a_family_no_report_can_cover
     old: "    families = _production_families(config_path, workspace) if config_path else []\n    files = _dated_files"
     new: "    families = []\n    files = _dated_files"

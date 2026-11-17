@@ -2,5 +2,6 @@ focused: [tests/test_relock_requirements.py]
 mutations:
   - name: the build system pins a setuptools the build closure does not hold
     file: pyproject.toml
+    caught_by: tests/test_relock_requirements.py::test_the_build_system_requires_the_build_closures_pins
     old: 'requires = ["setuptools==84.1.0", "wheel==0.48.0"]'
     new: 'requires = ["setuptools==84.0.0", "wheel==0.48.0"]'

@@ -7,17 +7,21 @@ focused:
 mutations:
 - name: a CyberSecEval line is shown without its CA file
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '    environment = [(k, v if relative_to is None else _as_given(v, relative_to)) for k, v in inv.env.items()]'
   new: '    environment = [(k, v if relative_to is None else _as_given(v, relative_to)) for k, v in inv.env.items() if inv.tool == "garak"]'
 - name: a CA file is shown before a line that has none
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '    environment = [(k, v if relative_to is None else _as_given(v, relative_to)) for k, v in inv.env.items()]'
   new: '    environment = [(k, v if relative_to is None else _as_given(v, relative_to)) for k, v in inv.env.items()] or [("SSL_CERT_FILE", "ca.pem")]'
 - name: another CA file is shown than the one run gives the command line
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '    environment = [(k, v if relative_to is None else _as_given(v, relative_to)) for k, v in inv.env.items()]'
   new: '    environment = [(k, (v if relative_to is None else _as_given(v, relative_to)) + "x") for k, v in inv.env.items()]'
 - name: a CyberSecEval line shows the process variables of its keys before it
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_shell_line_of_an_evaluation_invocation_quotes_each_argument_and_keeps_its_placeholders_live
   old: '    in_argv = {name for name in inv.key_variables if any("{" + name + "}" in a for a in inv.argv)}'
   new: '    in_argv = set()'

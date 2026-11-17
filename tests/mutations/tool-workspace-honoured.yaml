@@ -6,9 +6,11 @@ focused: [tests/test_tools_csp.py, tests/test_install_tools.py, tests/test_trivy
 mutations:
   - name: a tool directory that does not exist is the environment's
     file: src/mara/tools/runner.py
+    caught_by: tests/test_tools_csp.py::test_run_csp_eval_refuses_missing_package_or_node
     old: '    return workspace.tools_dir.resolve()'
     new: '    return (workspace.tools_dir if workspace.tools_dir.exists() else __import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env().tools_dir).resolve()'
   - name: a trivy cache that does not exist is the environment's
     file: src/mara/tools/trivy_db.py
+    caught_by: tests/test_trivy_ci.py::test_runner_scans_offline_with_the_recorded_database_and_skips_without_it
     old: '    return workspace.trivy_cache.resolve()'
     new: '    return (workspace.trivy_cache if workspace.trivy_cache.exists() else __import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env().trivy_cache).resolve()'

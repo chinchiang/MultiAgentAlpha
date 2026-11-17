@@ -2,13 +2,16 @@ focused: [tests/test_check_local.py]
 mutations:
   - name: a repeated --only keeps the last
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_a_repeated_only_runs_every_check_it_names_once
     old: 'ap.add_argument("--only", action="extend", nargs="+",'
     new: 'ap.add_argument("--only", nargs="+",'
   - name: no --only runs no check
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_without_only_the_seven_checks_run_in_their_order_and_no_osv_scan
     old: 'for given in a.only or DEFAULT_CHECKS for'
     new: 'for given in a.only or () for'
   - name: a repeated check runs twice
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_a_repeated_only_runs_every_check_it_names_once
     old: 'a.only = list(dict.fromkeys(name for given in a.only or DEFAULT_CHECKS for name in GROUPS.get(given, (given,))))'
     new: 'a.only = list(name for given in a.only or DEFAULT_CHECKS for name in GROUPS.get(given, (given,)))'

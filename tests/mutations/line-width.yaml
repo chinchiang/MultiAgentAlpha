@@ -2,21 +2,26 @@ focused: [tests/test_line_width.py]
 mutations:
   - name: an added line is read in the locale's encoding
     file: scripts/change_lines.py
+    caught_by: tests/test_line_width.py::test_a_change_with_text_beyond_ascii_is_read_as_utf8_whatever_the_locale
     old: 'lines.append((path, number, line[1:].decode("utf-8")))'
     new: 'lines.append((path, number, line[1:].decode(__import__("locale").getpreferredencoding(False))))'
   - name: a diff line is split at every line boundary splitlines knows
     file: scripts/change_lines.py
+    caught_by: 'tests/test_line_width.py::test_a_line_is_split_at_newlines_only[0xc]'
     old: 'for line in diff.split(b"\n"):'
     new: 'for line in (s.encode("utf-8", "surrogateescape") for s in diff.decode("utf-8", "surrogateescape").splitlines()):'
   - name: the error names git's arguments by a fixed position
     file: scripts/change_lines.py
+    caught_by: tests/test_line_width.py::test_a_base_git_does_not_know_is_an_error
     old: "e.cmd[n:n + 2]"
     new: "e.cmd[3:5]"
   - name: an added line is numbered from 0
     file: scripts/change_lines.py
+    caught_by: tests/test_line_width.py::test_only_the_wide_lines_a_change_adds_to_python_files_are_reported
     old: "int(m[2]), int(m[3] or 1)"
     new: "int(m[2]) - 1, int(m[3] or 1)"
   - name: a path is read in the locale's encoding
     file: scripts/change_lines.py
+    caught_by: tests/test_line_width.py::test_a_python_file_whose_name_is_beyond_ascii_is_checked_too
     old: 'return name[len(b"b/"):].decode("utf-8", "replace")'
     new: 'return name[len(b"b/"):].decode(__import__("locale").getpreferredencoding(False), "replace")'

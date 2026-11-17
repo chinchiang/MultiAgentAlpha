@@ -4,16 +4,19 @@ focused:
 mutations:
 - name: the table is never closed
   file: src/mara/web/procs.py
+  caught_by: 'tests/test_web_server.py::test_no_run_or_job_starts_once_the_server_exit_began[run]'
   old: '            self.closed = True
 
     '
   new: ''
 - name: the table is closed only once its children are stopped and their exits recorded
   file: src/mara/web/procs.py
+  caught_by: 'tests/test_web_server.py::test_no_run_or_job_starts_once_the_server_exit_began[run]'
   old: "        with self.lock:\n            self.closed = True\n            waiters = [c.waiter for c in self._children.values() if c.waiter.is_alive()]\n            to_stop = [c for c in self._children.values() if c.proc is not None and c.proc.poll() is None]\n            for c in to_stop:\n                c.stopped = True\n        _stop_all([c.proc for c in to_stop], grace)\n        for w in waiters:\n            w.join(timeout=WAITER_JOIN_SECONDS)\n"
   new: "        with self.lock:\n            waiters = [c.waiter for c in self._children.values() if c.waiter.is_alive()]\n            to_stop = [c for c in self._children.values() if c.proc is not None and c.proc.poll() is None]\n            for c in to_stop:\n                c.stopped = True\n        _stop_all([c.proc for c in to_stop], grace)\n        for w in waiters:\n            w.join(timeout=WAITER_JOIN_SECONDS)\n        self.closed = True\n"
 - name: a run is launched whether the table is closed or not
   file: src/mara/web/procs.py
+  caught_by: 'tests/test_web_server.py::test_no_run_or_job_starts_once_the_server_exit_began[run]'
   old: '            if self.table.closed:  # the server exit took the children: before anything is written
 
     '
@@ -22,5 +25,6 @@ mutations:
     '
 - name: a run's directory is made before the closed table refuses it
   file: src/mara/web/procs.py
+  caught_by: 'tests/test_web_server.py::test_no_run_or_job_starts_once_the_server_exit_began[run]'
   old: "            if self.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n            if refused := admission.refusal(tag, self.table.running_tags()):\n                raise LaunchError(\"busy\", refused, status=409)\n            child_id = new_id()\n            d = parent / child_id\n            d.mkdir(parents=True)\n"
   new: "            if refused := admission.refusal(tag, self.table.running_tags()):\n                raise LaunchError(\"busy\", refused, status=409)\n            child_id = new_id()\n            d = parent / child_id\n            d.mkdir(parents=True)\n            if self.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"

@@ -460,3 +460,7 @@ Captured lines after it), and the regular expressions of `_failure` follow that 
 otherwise reaches these tests first. The tests of left paths build the repository as a git repository with its files
 committed (`_git_repo`) and run real git status in it; those give no `--runs`, so the run's own directory is inside
 the root, as it is in this checkout.
+
+`test_mutation_lists.py` calls the `load` of `scripts/mutate.py` on lists it writes into `tmp_path`, and compares the
+problems `list_problems` returns, the text `load` gives included (`` `old` occurs 0 times in <file> ``), word for word:
+a change of that text reaches it.

@@ -12,62 +12,77 @@ focused:
 mutations:
 - name: from_env ignores MARA_TOOLS_DIR
   file: src/mara/workspace.py
+  caught_by: tests/test_workspace.py::test_a_workspace_from_the_environment_takes_its_tool_directory_and_trivy_cache_from_the_variables
   old: '        tools = (base / (os.environ.get("MARA_TOOLS_DIR") or ".mara-tools")).resolve()'
   new: '        tools = (base / ".mara-tools").resolve()'
 - name: from_env ignores MARA_TRIVY_CACHE_DIR
   file: src/mara/workspace.py
+  caught_by: tests/test_workspace.py::test_a_workspace_from_the_environment_takes_its_tool_directory_and_trivy_cache_from_the_variables
   old: '        cache = os.environ.get("MARA_TRIVY_CACHE_DIR")'
   new: '        cache = None'
 - name: from_env ignores the root it is given
   file: src/mara/workspace.py
+  caught_by: tests/test_workspace.py::test_a_workspace_from_the_environment_at_a_given_root_ignores_MARA_HOME_and_keeps_the_other_variables
   old: '        base = Path(root).resolve() if root is not None else Path(os.environ.get("MARA_HOME") or ".").resolve()'
   new: '        base = Path(os.environ.get("MARA_HOME") or ".").resolve()'
 - name: a workspace derives its tool directory from the working directory, not its root
   file: src/mara/workspace.py
+  caught_by: tests/test_workspace.py::test_a_workspace_derives_its_tool_directory_and_trivy_cache_from_its_root_and_reads_no_environment
   old: '        tools = tools_dir if tools_dir is not None else root / ".mara-tools"'
   new: '        tools = tools_dir if tools_dir is not None else Path(".mara-tools").resolve()'
 - name: a workspace derives its trivy cache beside its tool directory, not below it
   file: src/mara/workspace.py
+  caught_by: tests/test_workspace.py::test_a_workspace_derives_its_tool_directory_and_trivy_cache_from_its_root_and_reads_no_environment
   old: '        object.__setattr__(self, "trivy_cache", trivy_cache if trivy_cache is not None else tools / "trivy-cache")'
   new: '        object.__setattr__(self, "trivy_cache", trivy_cache if trivy_cache is not None else root / "trivy-cache")'
 - name: check_outside judges the environment's tool directory
   file: src/mara/workspace.py
+  caught_by: 'tests/test_workspace_anchors.py::test_check_outside_refuses_a_target_that_holds_an_anchor_of_the_workspace_it_is_given[tools_dir-tool directory]'
   old: '"the tool directory": workspace.tools_dir,'
   new: '"the tool directory": Workspace.from_env().tools_dir,'
 - name: check_outside judges the environment's trivy cache
   file: src/mara/workspace.py
+  caught_by: 'tests/test_workspace_anchors.py::test_check_outside_refuses_a_target_that_holds_an_anchor_of_the_workspace_it_is_given[trivy_cache-trivy]'
   old: '"the trivy database": workspace.trivy_cache, **(extra or {})}'
   new: '"the trivy database": Workspace.from_env().trivy_cache, **(extra or {})}'
 - name: tools_dir ignores the workspace it is given
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_no_tool_subprocess_sees_the_reviews_secrets
   old: "    return workspace.tools_dir.resolve()\n"
   new: "    return __import__(\"mara.workspace\", fromlist=[\"Workspace\"]).Workspace.from_env().tools_dir.resolve()\n"
 - name: tool_path looks in the environment's tool directory
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_the_tool_directory_and_a_tool_are_those_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: '    base = tools_dir(workspace=workspace) / "bin" / tool'
   new: '    base = tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / "bin" / tool'
 - name: the manifest is read from the environment's tool directory
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_no_tool_subprocess_sees_the_reviews_secrets
   old: '    manifest = tools_dir(workspace=workspace) / "manifest.json"'
   new: '    manifest = tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / "manifest.json"'
 - name: run_all finds the tool in the environment's tool directory
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_run_all_finds_a_tool_and_its_manifest_in_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: '        exe_path = tool_path(tool, workspace=workspace)'
   new: '        exe_path = tool_path(tool, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())'
 - name: run_all reads the installed version from the environment's manifest
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_no_tool_subprocess_sees_the_reviews_secrets
   old: '        version = installed_version(tool, workspace=workspace)'
   new: '        version = installed_version(tool, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())'
 - name: run_all names the environment's directory for a tool not installed
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_run_all_finds_a_tool_and_its_manifest_in_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: NOT_INSTALLED.format(bin_dir=tools_dir(workspace=workspace) / "bin")
   new: NOT_INSTALLED.format(bin_dir=tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / "bin")
 - name: run_all reads the version lock of the environment's root
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_run_all_reads_the_version_lock_of_the_workspace_given_not_of_the_environments_root
   old: workspace.root / pins.LOCK
   new: __import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env().root / pins.LOCK
 - name: run_all scans with trivy against the environment's cache
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_run_alls_trivy_scan_uses_the_trivy_cache_of_the_workspace_given_not_of_MARA_TRIVY_CACHE_DIR
   old: '                cache = tdb.cache_dir(workspace=workspace)
 
     '
@@ -76,6 +91,7 @@ mutations:
     '
 - name: run_all scans with semgrep against the environment's rules
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_run_alls_semgrep_scan_uses_the_rules_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: '                configs = default_configs(workspace=workspace)
 
     '
@@ -84,6 +100,7 @@ mutations:
     '
 - name: run_all grades CSPs with the environment's driver
   file: src/mara/tools/runner.py
+  caught_by: tests/test_tool_env.py::test_run_alls_csp_evaluator_step_uses_the_driver_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: '                cp = run_csp_eval(target, sarif, version=version, workspace=workspace)
 
     '
@@ -92,73 +109,91 @@ mutations:
     '
 - name: cache_dir ignores the workspace it is given
   file: src/mara/tools/trivy_db.py
+  caught_by: tests/test_tool_env.py::test_run_alls_trivy_scan_uses_the_trivy_cache_of_the_workspace_given_not_of_MARA_TRIVY_CACHE_DIR
   old: "    return workspace.trivy_cache.resolve()"
   new: "    return Workspace.from_env().trivy_cache.resolve()"
 - name: the CSP driver is looked for in the environment's tool directory
   file: src/mara/tools/csp_eval.py
+  caught_by: tests/test_tool_env.py::test_the_csp_driver_is_that_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: '    p = tools_dir(workspace=workspace) / PACKAGE_DIR / DRIVER_NAME'
   new: '    p = tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / PACKAGE_DIR / DRIVER_NAME'
 - name: a missing CSP driver is reported under the environment's tool directory
   file: src/mara/tools/csp_eval.py
+  caught_by: tests/test_tool_env.py::test_run_alls_csp_evaluator_step_uses_the_driver_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: missing under {tools_dir(workspace=workspace)}"
   new: missing under {tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())}"
 - name: the rules directory is below the environment's tool directory
   file: src/mara/tools/semgrep_rules.py
+  caught_by: tests/test_tool_env.py::test_the_semgrep_rules_directory_is_below_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: '    return tools_dir(workspace=workspace) / RULES_DIR_NAME'
   new: '    return tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) / RULES_DIR_NAME'
 - name: the installed rules are read from the environment's manifest
   file: src/mara/tools/semgrep_rules.py
+  caught_by: tests/test_tool_env.py::test_run_alls_semgrep_scan_uses_the_rules_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=workspace) or {}'
   new: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) or {}'
 - name: the page lists the tools of the environment's root, not of the root it lists
   file: src/mara/web/env.py
+  caught_by: tests/test_panel.py::test_the_tools_the_page_lists_are_those_installed_in_the_workspace_it_lists_not_below_mara_home
   old: '    ws = Workspace.from_env(root=root)  #'
   new: '    ws = Workspace.from_env()  #'
 - name: the page reads an explicit cache or the environment's, never the workspace's
   file: src/mara/web/env.py
+  caught_by: tests/test_panel.py::test_the_trivy_cache_the_page_lists_is_that_of_the_workspace_given_and_an_explicit_cache_still_wins
   old: '    cache = cache or trivy_db.cache_dir(workspace=workspace)'
   new: '    cache = cache or trivy_db.cache_dir(workspace=Workspace.from_env())'
 - name: the environment page shows the environment's trivy cache
   file: src/mara/web/env.py
+  caught_by: tests/test_panel.py::test_the_environment_page_takes_its_tool_directory_and_trivy_cache_from_the_workspace_it_lists
   old: '        "trivy_db": trivy(workspace=Workspace.from_env(root=root)),'
   new: '        "trivy_db": trivy(workspace=Workspace.from_env()),'
 - name: check_paths judges the environment's workspace
   file: src/mara/invocation.py
+  caught_by: tests/test_panel.py::test_characterization_a_run_record_holds_each_model_with_its_host_and_key_name_and_the_five_roles
   old: '                      workspace=Workspace.from_env(root=root))'
   new: '                      )'
 - name: from_env puts a relative MARA_TRIVY_CACHE_DIR below the working directory
   file: src/mara/workspace.py
+  caught_by: tests/test_workspace.py::test_a_relative_MARA_TRIVY_CACHE_DIR_is_below_the_root_not_the_working_directory
   old: (base / cache).resolve() if cache else None
   new: Path(cache).resolve() if cache else None
 - name: cache_dir sits in the working directory, reading no variable
   file: src/mara/tools/trivy_db.py
+  caught_by: tests/test_tool_env.py::test_run_alls_trivy_scan_uses_the_trivy_cache_of_the_workspace_given_not_of_MARA_TRIVY_CACHE_DIR
   old: '    return workspace.trivy_cache.resolve()'
   new: '    return Path("trivy-cache").resolve()'
 - name: a child keeps the MARA_HOME it inherits
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_procs.py::test_a_child_is_given_the_three_anchors_of_the_servers_workspace_as_absolute_paths_over_what_it_inherits
   old: '"MARA_HOME": str(ws.root), '
   new: ''
 - name: a child keeps the MARA_TOOLS_DIR it inherits
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_procs.py::test_a_child_is_given_the_three_anchors_of_the_servers_workspace_as_absolute_paths_over_what_it_inherits
   old: '"MARA_TOOLS_DIR": str(ws.tools_dir), '
   new: ''
 - name: a child keeps the MARA_TRIVY_CACHE_DIR it inherits
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_procs.py::test_a_child_is_given_the_three_anchors_of_the_servers_workspace_as_absolute_paths_over_what_it_inherits
   old: ', "MARA_TRIVY_CACHE_DIR": str(ws.trivy_cache)})'
   new: '})'
 - name: a child is given the anchors of the environment's workspace, not of the server's
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_procs.py::test_a_child_is_given_the_three_anchors_of_the_servers_workspace_as_absolute_paths_over_what_it_inherits
   old: ws = Workspace.from_env(root=root)
   new: ws = Workspace.from_env()
 - name: an admitted invocation remembers the working directory, not the root it was admitted against
   file: src/mara/invocation.py
+  caught_by: tests/test_invocation_admit.py::test_an_admitted_invocation_remembers_the_root_it_was_admitted_against
   old: progress=record, root=root)
   new: progress=record, root=Path.cwd())
 - name: the command line admits the invocation against the working directory
   file: src/mara/cli.py
+  caught_by: tests/test_security_regressions.py::test_review_defaults_resolve_in_the_workspace_and_no_config_or_output_lies_in_the_target
   old: '        admitted = admit(inv, workspace.root)'
   new: '        admitted = admit(inv, Path.cwd())'
 - name: the command line does not hand the pipeline the root it admitted the invocation against
   file: src/mara/cli.py
+  caught_by: tests/test_security_regressions.py::test_the_command_line_hands_the_pipeline_the_root_it_admitted_the_invocation_against
   old: '                    root=admitted.root)'
   new: '                    )'

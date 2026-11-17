@@ -6,9 +6,11 @@ focused:
 mutations:
 - name: semgrep-core runs on Eio's Linux backend
   file: src/mara/tools/semgrep_rules.py
+  caught_by: tests/test_tool_env.py::test_semgrep_scan_env_is_the_allowlist_plus_its_own_switches
   old: '    eio = {"EIO_BACKEND": "posix"} if sys.platform == "linux" else {}'
   new: '    eio = {}'
 - name: semgrep-core is given the posix backend on every platform
   file: src/mara/tools/semgrep_rules.py
+  caught_by: tests/test_tool_env.py::test_semgrep_scan_env_is_the_allowlist_plus_its_own_switches
   old: '    eio = {"EIO_BACKEND": "posix"} if sys.platform == "linux" else {}'
   new: '    eio = {"EIO_BACKEND": "posix"}'

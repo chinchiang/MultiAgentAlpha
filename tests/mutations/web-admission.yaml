@@ -2,41 +2,51 @@ focused: [tests/test_web_admission.py]
 mutations:
   - name: a run admitted while a run runs
     file: src/mara/web/admission.py
+    caught_by: 'tests/test_web_admission.py::test_a_launch_is_refused_while_a_kind_it_excludes_runs[run-running0-a review is already running; wait for it or cancel it]'
     old: "    if kind == \"run\" and \"run\" in running:\n"
     new: "    if False:\n"
   - name: a run admitted while a job replacing the tools runs
     file: src/mara/web/admission.py
+    caught_by: 'tests/test_web_admission.py::test_a_launch_is_refused_while_a_kind_it_excludes_runs[run-running2-an environment job is replacing the tools or the trivy database; wait for it]'
     old: "    if kind == \"run\" and CHANGES_TOOLS & set(running):\n"
     new: "    if False:\n"
   - name: a run refused while any job runs
     file: src/mara/web/admission.py
+    caught_by: 'tests/test_web_admission.py::test_a_job_replacing_no_tools_and_a_run_are_admitted_beside_each_other[run-running0]'
     old: "    if kind == \"run\" and CHANGES_TOOLS & set(running):\n"
     new: "    if kind == \"run\" and set(running) - {\"run\"}:\n"
   - name: a job admitted while a job runs
     file: src/mara/web/admission.py
+    caught_by: 'tests/test_web_admission.py::test_a_launch_is_refused_while_a_kind_it_excludes_runs[install_tools-running4-an environment job is already running]'
     old: "    if kind != \"run\" and set(running) - {\"run\"}:\n"
     new: "    if False:\n"
   - name: a job refused while a run runs
     file: src/mara/web/admission.py
+    caught_by: 'tests/test_web_admission.py::test_a_launch_is_refused_while_a_kind_it_excludes_runs[install_tools-running8-a review is running with the installed tools; wait for it or cancel it]'
     old: "    if kind != \"run\" and set(running) - {\"run\"}:\n"
     new: "    if kind != \"run\" and running:\n"
   - name: a job replacing the tools admitted while a run runs
     file: src/mara/web/admission.py
+    caught_by: 'tests/test_web_admission.py::test_a_launch_is_refused_while_a_kind_it_excludes_runs[install_tools-running8-a review is running with the installed tools; wait for it or cancel it]'
     old: "    if kind in CHANGES_TOOLS and \"run\" in running:\n"
     new: "    if False:\n"
   - name: every job refused while a run runs
     file: src/mara/web/admission.py
+    caught_by: 'tests/test_web_admission.py::test_a_job_replacing_no_tools_and_a_run_are_admitted_beside_each_other[trivy_db_status-running2]'
     old: "    if kind in CHANGES_TOOLS and \"run\" in running:\n"
     new: "    if kind != \"run\" and \"run\" in running:\n"
   - name: a job replacing the tools told of the run before the job
     file: src/mara/web/admission.py
+    caught_by: tests/test_web_admission.py::test_where_two_refusals_apply_a_job_replacing_the_tools_is_told_of_the_job_first
     old: "    if kind != \"run\" and set(running) - {\"run\"}:\n        return \"an environment job is already running\"\n    if kind in CHANGES_TOOLS and \"run\" in running:\n        return \"a review is running with the installed tools; wait for it or cancel it\"\n"
     new: "    if kind in CHANGES_TOOLS and \"run\" in running:\n        return \"a review is running with the installed tools; wait for it or cancel it\"\n    if kind != \"run\" and set(running) - {\"run\"}:\n        return \"an environment job is already running\"\n"
   - name: the two run messages swapped
     file: src/mara/web/admission.py
+    caught_by: 'tests/test_web_admission.py::test_a_launch_is_refused_while_a_kind_it_excludes_runs[run-running0-a review is already running; wait for it or cancel it]'
     old: "        return \"a review is already running; wait for it or cancel it\"\n    if kind == \"run\" and CHANGES_TOOLS & set(running):\n        return \"an environment job is replacing the tools or the trivy database; wait for it\"\n"
     new: "        return \"an environment job is replacing the tools or the trivy database; wait for it\"\n    if kind == \"run\" and CHANGES_TOOLS & set(running):\n        return \"a review is already running; wait for it or cancel it\"\n"
   - name: a tool-replacing kind dropped from CHANGES_TOOLS
     file: src/mara/web/admission.py
+    caught_by: 'tests/test_web_admission.py::test_a_launch_is_refused_while_a_kind_it_excludes_runs[run-running3-an environment job is replacing the tools or the trivy database; wait for it]'
     old: "CHANGES_TOOLS = frozenset({\"install_tools\", \"trivy_db_download\"})"
     new: "CHANGES_TOOLS = frozenset({\"install_tools\"})"

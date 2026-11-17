@@ -6,22 +6,27 @@ focused:
 mutations:
 - name: the CA file path stays relative to the working directory
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_plan_names_the_ca_file_by_an_absolute_path_whatever_out_is
   old: '    path = out_dir / f"ca-{target.slug}.pem"'
   new: '    path = Path(os.path.relpath(out_dir)) / f"ca-{target.slug}.pem"'
 - name: the CA file path is made absolute under the home directory
   file: src/mara/model_eval.py
+  caught_by: 'tests/test_model_eval.py::test_a_line_pasted_from_plan_run_or_a_report_into_a_shell_runs_what_run_executes[plan]'
   old: '    path = out_dir / f"ca-{target.slug}.pem"'
   new: '    path = Path.home() / os.path.relpath(out_dir) / f"ca-{target.slug}.pem"'
 - name: the CA file path drops the family slug
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_reports_record_the_ca_file_by_the_run_directory_as_given_and_never_this_hosts_path
   old: '    path = out_dir / f"ca-{target.slug}.pem"'
   new: '    path = out_dir / "ca.pem"'
 - name: run names another file than the one it wrote
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_reports_record_the_ca_file_by_the_run_directory_as_given_and_never_this_hosts_path
   old: '    return {"SSL_CERT_FILE": str(path)},'
   new: '    return {"SSL_CERT_FILE": str(path.with_name("other.pem"))},'
 - name: run does not write the CA file
   file: src/mara/model_eval.py
+  caught_by: tests/test_model_eval.py::test_the_ca_file_run_sets_is_written_where_its_absolute_path_says
   old: |2
             f.path.write_text(_file_text(f), encoding="utf-8")
   new: |2

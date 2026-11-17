@@ -2,25 +2,31 @@ focused: [tests/test_relock_requirements.py]
 mutations:
   - name: a model-eval floor below the release its comment says fixes it
     file: tools/model-eval-requirements.in
+    caught_by: tests/test_relock_requirements.py::test_each_model_eval_floor_is_at_the_release_its_comment_says_fixes_it
     old: 'filelock>=4.2.1  # GHSA-567q-5qvw-pf92'
     new: 'filelock>=4.2.0  # GHSA-567q-5qvw-pf92'
   - name: a model-eval floor above the version the lockfile pins
     file: tools/model-eval-requirements.in
+    caught_by: tests/test_relock_requirements.py::test_the_model_eval_lockfile_pins_every_floor_or_later
     old: 'filelock>=4.2.1  # GHSA-567q-5qvw-pf92'
     new: 'filelock>=99.0  # GHSA-567q-5qvw-pf92'
   - name: the CyberSecEval pillow floor lowered below the release that fixes its advisories
     file: tools/cyberseceval-requirements.in
+    caught_by: tests/test_relock_requirements.py::test_the_cyberseceval_closure_keeps_the_floors_that_fix_its_advisories
     old: 'pillow>=13.0.0  # upstream pin'
     new: 'pillow>=12.0.0  # upstream pin'
   - name: the CyberSecEval pypdf floor dropped
     file: tools/cyberseceval-requirements.in
+    caught_by: tests/test_relock_requirements.py::test_the_cyberseceval_closure_keeps_the_floors_that_fix_its_advisories
     old: 'pypdf>=6.21.4,<7  # upstream pin'
     new: 'pypdf<7  # upstream pin'
   - name: a CyberSecEval floor above the version the lockfile pins
     file: tools/cyberseceval-requirements.in
+    caught_by: tests/test_relock_requirements.py::test_the_cyberseceval_closure_keeps_the_floors_that_fix_its_advisories
     old: 'paramiko>=5.0.0  # GHSA-r374-rxx8-8654'
     new: 'paramiko>=9.0.0  # GHSA-r374-rxx8-8654'
   - name: the CyberSecEval lockfile moves setuptools to the release without pkg_resources
     file: tools/cyberseceval-requirements.txt
+    caught_by: tests/test_relock_requirements.py::test_the_cyberseceval_closure_keeps_the_floors_that_fix_its_advisories
     old: 'setuptools==81.0.0 \'
     new: 'setuptools==82.0.0 \'

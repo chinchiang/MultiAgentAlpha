@@ -2,57 +2,71 @@ focused: [tests/test_advisory_facts.py, tests/test_osv_ci.py]
 mutations:
   - name: the interval check off by one at the fixed end
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_the_fix_is_the_one_that_fixes_every_advisory_read_across_every_interval
     old: 'pinned < end if kind == "fixed"'
     new: 'pinned <= end if kind == "fixed"'
   - name: the last affected release itself taken as unaffected
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_a_requirement_inside_an_extra_the_closure_does_not_install_is_no_dependent
     old: 'else pinned <= end):'
     new: 'else pinned < end):'
   - name: an advisory naming only its last affected release ignored
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_a_requirement_inside_an_extra_the_closure_does_not_install_is_no_dependent
     old: '                elif ("fixed" in event or "last_affected" in event) and introduced is not None:'
     new: '                elif "fixed" in event and introduced is not None:'
   - name: a fix not above a last affected release still proposed
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_without_a_release_that_clears_every_advisory_it_says_so
     old: ' and all(max(fixed) > v for v in last) else None'
     new: ' else None'
   - name: only a range's first interval read
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_the_fix_is_the_one_that_fixes_every_advisory_read_across_every_interval
     old: '                    introduced = None'
     new: '                    break'
   - name: the lowest fix taken instead of the one that fixes all
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_the_fix_is_the_one_that_fixes_every_advisory_read_across_every_interval
     old: '        target = max(fixed) if fixed and all(ends)'
     new: '        target = min(fixed) if fixed and all(ends)'
   - name: a requirement inside an extra counted as a dependent
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_a_requirement_inside_an_extra_the_closure_does_not_install_is_no_dependent
     old: '        if req.marker is None or "extra" not in str(req.marker):'
     new: '        if True:'
   - name: every dependent said to accept the fix
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_a_dependent_that_pins_the_affected_version_refuses_the_fix
     old: '                    accepts = target is None or req.specifier.contains(target, prereleases=True)'
     new: '                    accepts = True'
   - name: the first wheel taken whatever its platform
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_the_fixs_wheel_for_the_pinned_platform_and_its_sha256
     old: '        if (tags is None and u["packagetype"] == "sdist") or (tags is not None and _tags(u["filename"]) == tags):'
     new: '        if True:'
   - name: a requirement change shown one way only
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_what_the_fixs_own_requirements_change
     old: '            change = " ".join([*(f"- {t}" for t in sorted(before - after)), *(f"+ {t}" for t in sorted(after - before))])'
     new: '            change = " ".join(f"+ {t}" for t in sorted(after - before))'
   - name: a package missing from the lockfile not refused
     file: scripts/advisory_facts.py
+    caught_by: tests/test_advisory_facts.py::test_a_package_the_lockfile_does_not_pin_is_a_usage_error
     old: '    if missing := [p for p in packages if canonicalize_name(p) not in pins]:'
     new: '    if missing := []:'
   - name: osv_ci names no command for one lockfile
     file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_a_failing_lockfile_scan_names_the_command_that_gathers_the_facts
     old: '        hits = live if len(lockfiles) == 1 else'
     new: '        hits = [] if len(lockfiles) == 1 else'
   - name: osv_ci gives every lockfile every finding
     file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_with_several_lockfiles_each_command_names_only_the_packages_found_in_it
     old: 'else [x for x in live if x["uri"].endswith("/" + lf)]'
     new: 'else live'
   - name: the network adapter opens any URL
     file: scripts/advisory_facts.py
+    caught_by: 'tests/test_advisory_facts.py::test_the_network_adapter_reads_only_osv_dev_and_pypi_over_https[https://example.com/pypi/mcp/1.29.0/json]'
     old: '    if not url.startswith(ALLOWED):'
     new: '    if False:'

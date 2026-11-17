@@ -2,21 +2,26 @@ focused: [tests/test_check_local.py]
 mutations:
   - name: semgrep left out of the default checks
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_without_only_the_seven_checks_run_in_their_order_and_no_osv_scan
     old: 'DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks")'
     new: 'DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "pytest", "gitleaks")'
   - name: semgrep run after the suite
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_without_only_the_seven_checks_run_in_their_order_and_no_osv_scan
     old: 'DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks")'
     new: 'DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "pytest", "semgrep", "gitleaks")'
   - name: semgrep against another triage file
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_the_semgrep_check_is_l0s_repository_scan_reporting_into_the_logs
     old: '"--triage", "tools/semgrep-triage.yaml"], {}, None),'
     new: '"--triage", "tools/semgrep-triage.yml"], {}, None),'
   - name: semgrep's SARIF outside the logs
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_the_semgrep_check_is_l0s_repository_scan_reporting_into_the_logs
     old: '                           str(a.logs / "semgrep.sarif"), "--triage"'
     new: '                           "semgrep.sarif", "--triage"'
   - name: semgrep scanning the seeded fixture instead of the repository
     file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_the_semgrep_check_is_l0s_repository_scan_reporting_into_the_logs
     old: '"semgrep_ci.py"), "--target", ".", "--report",'
     new: '"semgrep_ci.py"), "--target", "fixtures/vuln-sample", "--report",'

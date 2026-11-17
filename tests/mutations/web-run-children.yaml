@@ -4,14 +4,17 @@ focused:
 mutations:
 - name: run.json read outside the lock
   file: src/mara/web/procs.py
+  caught_by: 'tests/test_web_server.py::test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code[run.json is read]'
   old: "        with self.held():\n            return read_json(path), self.running(child_id)\n"
   new: "        rec = read_json(path)\n        with self.held():\n            return rec, self.running(child_id)\n"
 - name: whether the run runs asked outside the lock
   file: src/mara/web/procs.py
+  caught_by: 'tests/test_web_server.py::test_a_run_whose_exit_is_recorded_while_it_is_read_is_never_read_finished_without_its_exit_code[running() is asked]'
   old: "        with self.held():\n            return read_json(path), self.running(child_id)\n"
   new: "        with self.held():\n            rec = read_json(path)\n        return rec, self.running(child_id)\n"
 - name: a stopped run not recorded cancelled
   file: src/mara/web/runs.py
+  caught_by: tests/test_web_server.py::test_one_review_at_a_time_and_cancel_stops_it
   old: '        status = "cancelled" if stopped else "finished" if finished else "failed"
 
     '
@@ -20,6 +23,7 @@ mutations:
     '
 - name: cancelling a run whose child exited by itself answers as if it stopped it
   file: src/mara/web/runs.py
+  caught_by: tests/test_web_server.py::test_one_review_at_a_time_and_cancel_stops_it
   old: '        if self.children.stop(run_id) != "stopped":
 
     '
@@ -28,6 +32,7 @@ mutations:
     '
 - name: busy ignores a run whose exit is not recorded yet
   file: src/mara/web/runs.py
+  caught_by: tests/test_web_server.py::test_server_exit_cancels_a_running_run
   old: '        return self.children.any_running()
 
     '
@@ -36,10 +41,12 @@ mutations:
     '
 - name: a run admitted outside the lock it starts under
   file: src/mara/web/procs.py
+  caught_by: 'tests/test_web_server.py::test_a_review_and_a_job_replacing_the_tools_launched_at_once_one_is_refused[review]'
   old: "        with self.held():\n            if self.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n            if refused := admission.refusal(tag, self.table.running_tags()):\n                raise LaunchError(\"busy\", refused, status=409)\n"
   new: "        if refused := admission.refusal(tag, self.table.running_tags()):\n            raise LaunchError(\"busy\", refused, status=409)\n        with self.held():\n            if self.table.closed:  # the server exit took the children: before anything is written\n                raise LaunchError(\"stopping\", \"the server is stopping: no review or job is started\", status=503)\n"
 - name: a run launched without asking for admission
   file: src/mara/web/procs.py
+  caught_by: tests/test_web_server.py::test_one_review_at_a_time_and_cancel_stops_it
   old: '            if refused := admission.refusal(tag, self.table.running_tags()):
 
     '
@@ -48,5 +55,6 @@ mutations:
     '
 - name: a run's child not tagged as a run
   file: src/mara/web/runs.py
+  caught_by: tests/test_web_server.py::test_one_review_at_a_time_and_cancel_stops_it
   old: '        run_id, manifest = self.children.launch("run", self.runs_dir,'
   new: '        run_id, manifest = self.children.launch("review", self.runs_dir,'

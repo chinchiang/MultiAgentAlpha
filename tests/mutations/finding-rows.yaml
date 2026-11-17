@@ -6,37 +6,46 @@ focused: [tests/test_finding_rows.py, tests/test_psirt.py, tests/test_sarif_fina
 mutations:
   - name: the skeptic's lookup holds the red team's notes
     file: src/mara/schemas.py
+    caught_by: 'tests/test_finding_rows.py::test_a_lookup_of_a_report_holds_each_row_under_its_finding_and_no_key_for_a_finding_without_one[skeptic_by_id-skeptic]'
     old: '        return {v.finding_id: v for v in self.skeptic}'
     new: '        return {n.finding_id: n for n in self.redteam}'
   - name: the votes are not grouped under their finding
     file: src/mara/schemas.py
+    caught_by: tests/test_finding_rows.py::test_the_votes_of_a_report_are_grouped_under_their_finding_in_the_order_they_were_cast
     old: '            out.setdefault(v.finding_id, []).append(v)'
     new: '            out[v.finding_id] = [v]'
   - name: the consensus lookup holds copies of the rows
     file: src/mara/schemas.py
+    caught_by: 'tests/test_finding_rows.py::test_a_lookup_of_a_report_holds_each_row_under_its_finding_and_no_key_for_a_finding_without_one[consensus_by_id-consensus]'
     old: '        return {c.finding_id: c for c in self.consensus}'
     new: '        return {c.finding_id: c.model_copy() for c in self.consensus}'
   - name: the human queue lookup is remembered
     file: src/mara/schemas.py
+    caught_by: tests/test_finding_rows.py::test_a_lookup_follows_the_lists_of_the_report_as_they_are_now
     old: 'return {i.finding_id: i for i in self.human_queue}'
     new: 'return self.__dict__.setdefault("_queue", {i.finding_id: i for i in self.human_queue})'
   - name: a scoring's lookup holds copies of the rows
     file: src/mara/scoring/jury.py
+    caught_by: tests/test_finding_rows.py::test_the_consensus_rows_of_a_scoring_are_found_by_finding_and_are_the_rows_the_decisions_are_recorded_on
     old: '        return {c.finding_id: c for c in self.rows}'
     new: '        return {c.finding_id: c.model_copy() for c in self.rows}'
   - name: the page gives a finding with no ruling the CVSS severity None again
     file: src/mara/web/views.py
+    caught_by: tests/test_finding_rows.py::test_the_page_shows_no_severity_for_a_finding_without_a_consensus_row
     old: '"severity": c.cvss4_severity if c else None,  # no ruling is no severity, not the CVSS severity "None"'
     new: '"severity": c.cvss4_severity if c else "None",'
   - name: the SARIF report fails on a finding with no consensus row
     file: src/mara/report/sarif_out.py
+    caught_by: tests/test_finding_rows.py::test_characterization_the_sarif_report_emits_nothing_for_a_finding_without_a_consensus_row
     old: '        c = cons.get(f.id)'
     new: '        c = cons[f.id]'
   - name: the Markdown report fails on a finding with no consensus row
     file: src/mara/report/markdown_out.py
+    caught_by: tests/test_finding_rows.py::test_characterization_the_markdown_report_leaves_out_a_finding_without_a_consensus_row
     old: 'accepted = [f for f in r.findings if cons.get(f.id) and cons[f.id].final_outcome == "accepted"]'
     new: 'accepted = [f for f in r.findings if cons[f.id].final_outcome == "accepted"]'
   - name: the PSIRT selection fails on a finding with no consensus row
     file: src/mara/report/psirt_out.py
+    caught_by: tests/test_finding_rows.py::test_characterization_the_psirt_selection_skips_a_finding_without_a_consensus_row
     old: 'if c and c.final_outcome == "accepted"'
     new: 'if c.final_outcome == "accepted"'
