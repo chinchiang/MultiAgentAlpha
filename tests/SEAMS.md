@@ -184,6 +184,11 @@ code that writes it, so it changes with that code:
   process runs (a relative cache was below the working directory until v0.13.73). A test starts by removing the three from
   the environment, and for a relative cache puts the working directory somewhere else than the root.
   `test_workspace.py`, `test_trivy_db.py::test_the_trivy_cache_the_environment_names_follows_one_rule_wherever_the_process_runs`.
+- `scripts/trivy_db.py` finds the repository from its own path, not the working directory, so the two helpers that run
+  it, `_setup` (`test_trivy_ci.py`) and `_run` (`test_trivy_db.py`), run it in the test's `tmp_path` (`_run`: the
+  parent of the `tools` it is given, which each test makes directly below `tmp_path`). A mutant whose trivy cache is
+  below the working directory (`workspace-tools.yaml`) then writes it there, not into the repository. `_run` of
+  `test_trivy_ci.py` stays in the repository root: its tests scan `--target .`.
 - `Workspace(root)`: tests pass `Workspace(tmp_path)` to `mara.config.load_config` (`load_config(path, workspace,
   today=...)`), `mara.policy.evaluate_policies` and `mara.policy.workspace_policies`. Policy P7 (`mara.policy.p7_ml_bom`)
   reads the ML-BOM and its signature bundle, P8 (`mara.policy.p8_unsupervised_reject`) `calib/latest.json`, below that
