@@ -15,6 +15,8 @@ scratch/self-review-<issue>/
 ├── spec.md              # the main session writes it before starting the sub-agents; both only read it
 ├── standards-report.md  # the main session writes each report, verbatim, as its sub-agent returns
 ├── spec-report.md
+├── standards-report-2.md # this and spec-report-2.md, after a second review (below)
+├── spec-report-2.md
 ├── standards/           # the standards sub-agent's throwaway repositories and worktrees, and nothing else
 └── spec/                # the spec sub-agent's, and nothing else
 ```
@@ -32,6 +34,11 @@ apart. Once both are back, empty `standards/` and `spec/` of what a sub-agent co
 `git -C <main checkout> worktree remove --force <worktree>` (removing its directory alone leaves git's record of it),
 then the rest. The two directories stay, empty, and so do the reports and `spec.md` after the merge: the handoff or a
 retrospective points at them, and a later session reads them to know where step 3 stands.
+
+When the way the change does its work is replaced after a review (not a fix of a finding, another approach), review it
+again. Add the decisions to `spec.md` and say there what the second review verifies; keep the first review's reports,
+and write the new ones as `standards-report-2.md` and `spec-report-2.md`. Each prompt names its axis's first report, and
+each sub-agent says which of its items still hold.
 
 ## Both sub-agents
 
@@ -95,6 +102,8 @@ looks done but is wrong. Quote the line of the spec for each.
 Besides what the prompt names, always check:
 
 - the change touches only the files it should (`git -C <main checkout> diff origin/main --stat`);
+- the change reaches every reader of what it changes (a format, a file, the result of a function), not only those
+  the spec names: find the call sites with `git -C <main checkout> grep`, read each, and report one left as it was;
 - when the commits already exist, each one passes the tests that cover it alone; and a new test fails against the old code
   (copy the new test file into a worktree of `origin/main` in your directory);
 - every sentence the change writes about what other code does (a docstring, a standard, a CHANGELOG row, a message) is
