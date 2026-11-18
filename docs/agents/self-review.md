@@ -26,7 +26,8 @@ Before starting them, make the directory, its empty `standards/` and `spec/`, an
 prompt begins:
 "Read `docs/agents/self-review.md`, the section "Both sub-agents" and the one for your axis, and follow them." Then it
 names the sub-agent's own directory by its absolute path, and what belongs to this change: for the standards
-sub-agent, which sources below apply and what to look at first; for the spec sub-agent, the absolute path of `spec.md`.
+sub-agent, which sources below apply and what to look at first; for the spec sub-agent, the absolute path of `spec.md`,
+and the output of step 3's run of each mutation list the change adds or edits.
 Start both together, in the foreground.
 
 As each returns, write its report verbatim to `standards-report.md` or `spec-report.md`, and report the two results
@@ -110,5 +111,7 @@ Besides what the prompt names, always check:
   true: read that code, not only its docstring, and report a claim that says more than the code does;
 - when the change adds or edits a mutation list (`git -C <main checkout> diff origin/main -- tests/mutations/`), each
   mutation it adds or edits has an `old` that occurs once in its file and a `new` that makes the fault its name says:
-  read the code, and do not run `scripts/mutate.py`. Whether the test that caught it fails at the assertion its name
-  gives is read in step 4 of `pr-flow.md`, from the logs of a run of the final code.
+  read the code, and do not run `scripts/mutate.py`. Where the test that caught it failed is in the run step 3 of
+  `pr-flow.md` makes before the review: read it there when the prompt names its output, and report a catch by a test
+  other than its `caught_by`, or one that does not fail at the assertion its name gives. Step 4 reads it again, from
+  a run of the final code.

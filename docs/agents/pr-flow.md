@@ -28,6 +28,11 @@ A change that becomes a pull request goes through these steps in order. Each end
    files included and those git ignores left out; and `pytest-worktree`, which checks that every mutation list loads
    and every pointer of `tests/SEAMS.md` names something that is there. A finding costs an edit now, and a rebuild of
    the commits at step 4. mypy, semgrep, the whole suite and gitleaks wait for step 4.
+   Then run each mutation list the change adds or edits once, `scripts/mutate.py <list> --focused-only` without
+   `AWS_PROFILE` and `GEMINI_API_KEY`, one after the other and after `--only worktree` has ended (a mutation edits the
+   files the checks read), and read each `CAUGHT` line as step 4 says: where it failed, and its mark. A `caught_by` that
+   another test beats, or a name that is not the fault its `new` makes, is fixed now, before the review, and not by a
+   rebuild after step 4. The lists the change touches but does not add or edit wait for step 4.
    Review that tree before the first commit, so a finding costs an edit and not a rebuild: `mattpocock-skills:code-review`
    with `origin/main` as the fixed point, where the sub-agents read `git -C <main checkout> diff origin/main` (two
    dots: the skill's three-dot form reads commits only; run `git add -N <new file>` first, or the diff leaves new files
@@ -63,7 +68,9 @@ A change that becomes a pull request goes through these steps in order. Each end
    one), read `git diff HEAD` against the patch, new files included, and `git stash drop` once it holds what you meant.
    Done when `scratch/self-review-<issue>/` holds `standards-report.md` and `spec-report.md`, and
    `standards-report-2.md` and `spec-report-2.md` after a second review (`docs/agents/self-review.md`), or the body says
-   the review was not run; every finding of the review is fixed or answered in the body; and the work is committed.
+   the review was not run; each mutation of the lists the change adds or edits was caught by its `caught_by` at the
+   assertion its name gives in the run above; every finding of the review is fixed or answered in the body; and the
+   work is committed.
 4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it; then
    `scripts/mutate.py --lists-for origin/main`, which prints each mutation list the change (committed or not, untracked
    files included) touches: the list itself, the file of one of its mutations, or one of its focused test files; and
