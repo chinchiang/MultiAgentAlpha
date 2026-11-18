@@ -1,0 +1,16 @@
+focused: [tests/test_mutate.py]
+# mutate.load says when an `old` occurs nowhere only because single quotes kept its \n (#364): _quoted_newline gives the
+# hint when reading each backslash-n as a newline makes the `old` occur once, and no other time. Each mutation drops the
+# hint or gives it where it does not apply. Its check that the `old` holds a backslash-n has no mutation: without it, an
+# `old` with none is unchanged by the replace and still occurs nowhere, so the hint is not given either way.
+mutations:
+  - name: an old held back by single quotes gets no hint
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_an_old_held_back_by_single_quotes_says_to_use_double_quotes_and_no_other_does
+    old: "{m['file']}{_quoted_newline(m['old'], text)}\""
+    new: "{m['file']}\""
+  - name: an old with a backslash-n that matches neither way gets the hint
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_an_old_held_back_by_single_quotes_says_to_use_double_quotes_and_no_other_does
+    old: " or text.count(old.replace(\"\\\\n\", \"\\n\")) != 1:"
+    new: ":"
