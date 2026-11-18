@@ -18,12 +18,8 @@ mutations:
 - name: a run does not look for copies a killed run left
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_mutant_left_by_a_killed_run_is_restored_before_the_next_run
-  old: '    if why := restore_left(root, runs):
-
-    '
-  new: '    if why := "":
-
-    '
+  old: "    runs = a.runs or root / \"out\" / \"mutations\"\n    if why := restore_left(root, runs):\n"
+  new: "    runs = a.runs or root / \"out\" / \"mutations\"\n    if why := \"\":\n"
 - name: a file edited since is restored over
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_file_changed_since_a_killed_run_left_it_is_not_restored_and_no_run_starts
@@ -50,10 +46,8 @@ mutations:
 - name: the list is not kept in its run
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_mutation_a_test_catches_and_one_none_does_are_told_apart_and_the_source_is_restored
-  old: '    shutil.copyfile(a.mutations, run_dir / a.mutations.name)
-
-    '
-  new: ''
+  old: "    shutil.copyfile(path, run_dir / path.name)\n"
+  new: ""
 - name: a dead run's pid reads as alive
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_mutant_left_by_a_killed_run_is_restored_before_the_next_run

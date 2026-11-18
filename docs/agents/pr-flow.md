@@ -72,13 +72,15 @@ A change that becomes a pull request goes through these steps in order. Each end
    assertion its name gives in the run above; every finding of the review is fixed or answered in the body; and the
    work is committed.
 4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it; then
-   `scripts/mutate.py --lists-for origin/main`, which prints each mutation list the change (committed or not, untracked
-   files included) touches: the list itself, the file of one of its mutations, or one of its focused test files; and
-   `scripts/mutate.py <list> --focused-only` on each list it prints, without `AWS_PROFILE` and `GEMINI_API_KEY`. A
-   mutation edits `src/`, so never run two of these at once. Done when every check `AGENTS.md` lists is `ok` and every
-   mutation of those lists is caught for the reason its name says.
-   Of every other mutation of those lists, read each marked catch and each `LEFT` line: a test the change adds or edits
-   can catch an old mutation before its `caught_by` does.
+   `scripts/mutate.py --base origin/main`, without `AWS_PROFILE` and `GEMINI_API_KEY`. It runs, focused and one after
+   the other, each mutation list the change (committed or not, untracked files included) touches: the list itself, the
+   file of one of its mutations, or one of its focused test files (`--lists-for origin/main` prints them and runs
+   nothing). It ends on a `summary`: each list's last line, then the marked catches, the catches with no `at:` and
+   the `LEFT` lines of all of them. Re-run one list alone with `scripts/mutate.py <list> --focused-only`. A mutation
+   edits `src/`, so never run two of these at once. Done when every check `AGENTS.md` lists is `ok` and every mutation
+   of those lists is caught for the reason its name says.
+   Of every other mutation of those lists, read each marked catch and each `LEFT` line the summary gathers: a test the
+   change adds or edits can catch an old mutation before its `caught_by` does.
    For the mutations the change adds or edits, read where the test that caught each failed (third paragraph of "A
    behaviour change commits its mutation list" in `CODING_STANDARDS.md`): it fails at the assertion its name gives, not
    at a `TypeError`, an import error or an earlier assertion. `mutate.py` prints it on each `CAUGHT` line, `at:` and the
