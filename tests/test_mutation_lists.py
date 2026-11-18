@@ -1,6 +1,7 @@
-"""tests/mutations/: every mutation list loads and names, for each mutation, the test meant to catch it (`caught_by`), and
-no two lists make the same mutant (shared_mutants), so a change that makes an `old` stale, adds a mutation without its
-test, or copies a mutant another list holds, goes red in the commit that makes it."""
+"""tests/mutations/: every mutation list loads and names, for each mutation, the test meant to catch it (`caught_by`), no
+two lists make the same mutant (shared_mutants), and a list that mutates this file focuses on a node of it
+(self_focused), so a change that makes an `old` stale, adds a mutation without its test, copies a mutant another list
+holds, or writes a list its own load test would catch first, goes red in the commit that makes it."""
 
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import mutate  # noqa: E402
 
 LISTS = sorted((ROOT / "tests" / "mutations").glob("*.yaml"))
+THIS = "tests/test_mutation_lists.py"
 
 
 def test_mutation_lists_are_found():
@@ -48,6 +50,18 @@ def shared_mutants(paths: list[Path], root: Path) -> str:
         for m in mutations:
             makers.setdefault(mutate.mutant(root, m), []).append(f"{path.relative_to(root).as_posix()}: {m['name']}")
     return "; ".join(f"{' and '.join(names)} make the same mutant of {file}" for (file, _), names in makers.items() if len(names) > 1)
+
+
+def self_focused(paths: list[Path], root: Path) -> str:
+    """Each of `paths` that mutates this file (a mutation's `file` is THIS) and focuses on all of it (a focused entry is
+    THIS, not a node of it), as its path relative to `root`; empty when none does. Read as YAML, not loaded."""
+    found = []
+    for path in paths:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        mutations, focused = data.get("mutations") or [], data.get("focused") or []
+        if any(isinstance(m, dict) and m.get("file") == THIS for m in mutations) and THIS in focused:
+            found.append(path.relative_to(root).as_posix())
+    return ", ".join(found)
 
 
 @pytest.mark.parametrize("path", LISTS, ids=[p.stem for p in LISTS])
@@ -109,3 +123,27 @@ def test_two_lists_that_make_one_mutant_are_named_and_two_that_differ_are_not(tm
         "wider.yaml: a wider window and four.yaml: a limit of four make the same mutant of src/window.py"
     assert shared_mutants([wider, narrower], tmp_path) == ""
     assert shared_mutants([wider, stale], tmp_path) == ""  # stale.yaml does not load: test_a_mutation_list_loads says so
+
+
+def test_a_list_that_mutates_this_file_focuses_on_a_node_of_it():
+    found = self_focused(LISTS, ROOT)
+    if found:
+        pytest.fail(f"{found} mutate {THIS} and focus on all of it. With a mutant applied the file no longer holds the "
+                    f"list's own `old`, so test_a_mutation_list_loads[<list>] fails first on every mutation: a failure of "
+                    f"the list, not a catch. Focus on the node of the test meant ({THIS}::<test>), as "
+                    f"tests/mutations/caught-by-required.yaml does", pytrace=False)
+
+
+def test_a_list_that_mutates_this_file_and_focuses_on_all_of_it_is_named(tmp_path):
+    """A list focused on a node of this file, or one whose mutations change another file, is not."""
+    def write(name: str, file: str, focused: str) -> Path:
+        path = tmp_path / name
+        mutation = {"name": name, "file": file, "caught_by": focused, "old": "a", "new": "b"}
+        path.write_text(json.dumps({"focused": [focused], "mutations": [mutation]}), encoding="utf-8")
+        return path
+
+    whole = write("whole.yaml", THIS, THIS)
+    node = write("node.yaml", THIS, f"{THIS}::test_limit")
+    other = write("other.yaml", "src/window.py", THIS)
+    assert self_focused([whole, node, other], tmp_path) == "whole.yaml"
+    assert self_focused([node, other], tmp_path) == ""

@@ -524,3 +524,5 @@ a change of that text reaches it.
 `shared_mutants` there compares the mutants of several lists by the `mutant(root, m)` of `scripts/mutate.py`, which
 returns the mutation's file and the file's text with `old` replaced once by `new`, the comparison `load` makes within
 one list; it relies on `load` returning `(focused, mutations)` and raising ValueError for a list that does not load.
+`self_focused` reads each list as YAML (its `mutations`' `file` and its `focused` entries) and names one that mutates
+`tests/test_mutation_lists.py` and focuses on all of it.

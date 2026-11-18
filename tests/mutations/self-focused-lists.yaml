@@ -1,0 +1,15 @@
+focused: [tests/test_mutation_lists.py::test_a_list_that_mutates_this_file_and_focuses_on_all_of_it_is_named]
+# A list that mutates tests/test_mutation_lists.py focuses on a node of it (#362): self_focused names one that focuses on
+# the whole file. Each mutation names a list it should not, by dropping one of the two conditions. self_focused is in
+# tests/test_mutation_lists.py itself, so this list focuses on the node of its one test, as it says lists must.
+mutations:
+  - name: a list focused on a node of the file is named too
+    file: tests/test_mutation_lists.py
+    caught_by: tests/test_mutation_lists.py::test_a_list_that_mutates_this_file_and_focuses_on_all_of_it_is_named
+    old: " and THIS in focused:"
+    new: ":"
+  - name: a list that mutates another file is named too
+    file: tests/test_mutation_lists.py
+    caught_by: tests/test_mutation_lists.py::test_a_list_that_mutates_this_file_and_focuses_on_all_of_it_is_named
+    old: "if any(isinstance(m, dict) and m.get(\"file\") == THIS for m in mutations) and "
+    new: "if "

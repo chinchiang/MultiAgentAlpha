@@ -62,7 +62,9 @@ list stale re-aligns each `old` to the code in the same commit, or drops a mutat
 re-aligned mutation still makes the fault its name says: a review compares each re-aligned `old`/`new` with the list's
 previous version, and a mutation that now makes another fault is renamed or re-aligned again. Each mutant is in one
 list: `tests/test_mutation_lists.py` goes red when two lists make the same one, and the copy is dropped from the list
-that added it later.
+that added it later. A list that mutates `tests/test_mutation_lists.py` focuses on the node of the test it means
+(`tests/test_mutation_lists.py::<test>`), not the whole file, which that file checks too: with the mutant applied the
+file no longer holds the list's own `old`, so the list's own load test fails first on every mutation.
 
 A mutation made to show that a test notices something that must not happen (a read of the environment, a refusal that
 is skipped) makes it happen only where that test looks, so the rest of the test still passes and it fails at the
