@@ -109,6 +109,25 @@ def test_a_requires_python_that_is_not_a_specifier_does_not_load_and_one_that_is
                         "requires-python: 3.13 is not a version specifier (`>=3.13`)", ""]
 
 
+def test_an_error_that_is_no_exception_name_or_is_assertion_error_does_not_load_and_a_dotted_name_does(tmp_path):
+    """A mutation's `error` is an exception's name as a traceback's last line gives it; AssertionError is what a catch is
+    meant to end in when it names none, so naming it says nothing."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "src" / "window.py").write_text("LIMIT = 3\n", encoding="utf-8")
+    (tmp_path / "tests" / "test_window.py").write_text("def test_limit():\n    pass\n", encoding="utf-8")
+    path = tmp_path / "window.yaml"
+    problems = []
+    for error in ("not a name", "AssertionError", 3, "json.decoder.JSONDecodeError"):
+        mutation = {"name": "a wider window", "file": "src/window.py", "old": "LIMIT = 3", "new": "LIMIT = 4", "error": error,
+                    "caught_by": "tests/test_window.py::test_limit"}
+        path.write_text(json.dumps({"mutations": [mutation]}), encoding="utf-8")
+        problems.append(list_problems(path, tmp_path))
+    assert problems == ["a wider window: error: 'not a name' is not an exception's name",
+                        "a wider window: error: AssertionError is what a catch ends in when error is not given",
+                        "a wider window: error: 3 is not an exception's name", ""]
+
+
 def test_no_two_mutation_lists_make_the_same_mutant():
     shared = shared_mutants(LISTS, ROOT)
     if shared:

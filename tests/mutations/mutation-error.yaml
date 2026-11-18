@@ -1,0 +1,53 @@
+focused: [tests/test_mutate.py, tests/test_mutation_lists.py::test_an_error_that_is_no_exception_name_or_is_assertion_error_does_not_load_and_a_dotted_name_does]
+# a mutation names the exception its catch is meant to end in (`error`, #372): error_mark leaves a catch that ends in
+# it unmarked and marks one that ends in another, `(<exception>, not <error>)`, a miss never; --base gathers by that
+# mark; load refuses an `error` that is no exception's name, or is AssertionError. Each mutation drops one of those.
+# The node, not all of tests/test_mutation_lists.py: with a mutant of scripts/mutate.py applied, that file's load of
+# this list fails first on every mutation, its `old` no longer being there.
+mutations:
+  - name: a catch that ends in the error it names is marked
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one_that_ends_in_another_is
+    old: '    if not r["caught"] or error == declared or (declared'
+    new: '    if not r["caught"] or (declared'
+  - name: a miss is marked
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one_that_ends_in_another_is
+    old: '    if not r["caught"] or error == declared'
+    new: '    if error == declared'
+  - name: a catch that ends in another error than it names is not marked
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one_that_ends_in_another_is
+    old: "    return f\"{error or 'no exception'}, not {declared}\" if declared is not None else error"
+    new: "    return \"\" if declared is not None else error"
+  - name: the mark does not say which error was named
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one_that_ends_in_another_is
+    old: "f\"{error or 'no exception'}, not {declared}\""
+    new: "f\"{error or 'no exception'}\""
+  - name: no exception read is marked as None
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one_that_ends_in_another_is
+    old: "{error or 'no exception'}, not"
+    new: "{error}, not"
+  - name: --base gathers a catch by the exception alone
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_base_gathers_a_catch_marked_for_another_error_than_its_mutation_names_and_not_one_that_ends_in_it
+    old: "            if r[\"caught\"] and (mark or r[\"expected\"]):\n"
+    new: "            if r[\"caught\"] and (r[\"error\"] not in (None, \"AssertionError\") or r[\"expected\"]):\n"
+  - name: an error that only begins with an exception's name loads
+    file: scripts/mutate.py
+    caught_by: tests/test_mutation_lists.py::test_an_error_that_is_no_exception_name_or_is_assertion_error_does_not_load_and_a_dotted_name_does
+    old: 're.fullmatch(EXCEPTION_NAME, m["error"])'
+    new: 're.match(EXCEPTION_NAME, m["error"])'
+  - name: an error that names AssertionError loads
+    file: scripts/mutate.py
+    caught_by: tests/test_mutation_lists.py::test_an_error_that_is_no_exception_name_or_is_assertion_error_does_not_load_and_a_dotted_name_does
+    old: '        elif "error" in m and m["error"] == "AssertionError":'
+    new: '        elif False:'
+  - name: an error that is not text reaches the name check
+    file: scripts/mutate.py
+    caught_by: tests/test_mutation_lists.py::test_an_error_that_is_no_exception_name_or_is_assertion_error_does_not_load_and_a_dotted_name_does
+    error: TypeError
+    old: 'not (isinstance(m["error"], str) and re.fullmatch'
+    new: 'not (re.fullmatch'

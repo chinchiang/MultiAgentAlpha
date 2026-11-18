@@ -23,8 +23,8 @@ mutations:
 - name: an AssertionError is marked
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_mutation_caught_at_an_assertion_says_the_line_it_failed_at
-  old: if r["error"] not in (None, "AssertionError") else ""
-  new: if r["error"] is not None else ""
+  old: (declared is None and error in (None, "AssertionError"))
+  new: (declared is None and error is None)
 - name: a catch by the whole suite is read from the focused tests' output
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_catch_by_the_whole_suite_says_where_from_its_log_and_a_failure_with_no_traceback_says_nothing

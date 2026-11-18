@@ -3,6 +3,7 @@ mutations:
   - name: the focused tests' output is not kept
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_the_output_of_the_focused_tests_is_kept_for_each_mutation_and_listed_in_the_results
+    error: FileNotFoundError
     old: '            (run_dir / f"{slug}.focused.log").write_text(out, encoding="utf-8")'
     new: '            pass'
   - name: a log is written but not listed in the results
