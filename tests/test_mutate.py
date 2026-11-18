@@ -174,9 +174,13 @@ def test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_stil
 def _git_repo(tmp_path: Path) -> Path:
     """_repo, as a git repository with its files committed."""
     root = _repo(tmp_path)
-    for args in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"]):
-        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+    for args in (["init", "-q"], ["add", "."], ["commit", "-qm", "base"]):
+        _git(root, *args)
     return root
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=root, check=True, capture_output=True)
 
 
 def test_a_path_a_mutation_leaves_in_the_repository_is_named_with_the_mutation(tmp_path, capsys):
@@ -488,3 +492,90 @@ def test_the_copies_of_a_run_still_going_are_left_to_it_and_no_run_starts(tmp_pa
     assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
     assert f"the run {run} is still going (pid {os.getpid()})" in capsys.readouterr().err
     assert (root / "src" / "window.py").read_text(encoding="utf-8") == mutant
+
+
+# --lists-for: the lists a change touches
+
+
+def _touching_repo(tmp_path: Path) -> Path:
+    """_git_repo with more modules, their tests and one list per way a change can touch a list, committed and tagged
+    `base`."""
+    root = _git_repo(tmp_path)
+    for name in ("door", "wall", "gone"):
+        (root / "src" / f"{name}.py").write_text(f"{name.upper()} = 1\n", encoding="utf-8")
+        (root / "tests" / f"test_{name}.py").write_text(f"def test_{name}():\n    pass\n", encoding="utf-8")
+    lists = {"a-file-committed": ("src/window.py", "tests/test_wall.py"),
+             "b-focused-test": ("src/wall.py", "tests/test_door.py::test_door"),
+             "c-itself": ("src/wall.py", "tests/test_wall.py"),
+             "d-file-untracked": ("src/new.py", "tests/test_wall.py"),
+             "e-file-deleted": ("src/gone.py", "tests/test_wall.py"),
+             "f-untouched": ("src/wall.py", "tests/test_wall.py")}
+    (root / "tests" / "mutations").mkdir()
+    for name, (file, focused) in lists.items():
+        mutation = {"name": name, "file": file, "caught_by": focused, "old": "1", "new": "2"}
+        (root / "tests" / "mutations" / f"{name}.yaml").write_text(json.dumps({"focused": [focused], "mutations": [mutation]}),
+                                                                    encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "lists")
+    _git(root, "tag", "base")
+    return root
+
+
+def test_lists_for_names_each_list_a_change_touches_and_no_other(tmp_path, capsys):
+    """A list is touched when the change, committed or not, untracked files included, changes the file of one of its
+    mutations (also by deleting it), one of its focused test files (also named with `::`), or the list itself."""
+    root = _touching_repo(tmp_path)
+    (root / "src" / "window.py").write_text(SOURCE.replace("return 3", "return 4"), encoding="utf-8")
+    _git(root, "commit", "-qam", "a wider window")  # committed
+    (root / "tests" / "test_door.py").write_text("def test_door():\n    assert True\n", encoding="utf-8")  # not committed
+    with (root / "tests" / "mutations" / "c-itself.yaml").open("a", encoding="utf-8") as f:
+        f.write("\n")
+    (root / "src" / "new.py").write_text("NEW = 1\n", encoding="utf-8")  # untracked
+    (root / "src" / "gone.py").unlink()  # its lines only removed
+    assert mutate.main(["--lists-for", "base", "--root", str(root)]) == 0
+    assert capsys.readouterr().out.splitlines() == [f"tests/mutations/{name}.yaml" for name in
+                                                    ("a-file-committed", "b-focused-test", "c-itself", "d-file-untracked",
+                                                     "e-file-deleted")]
+
+
+def test_lists_for_prints_nothing_when_the_change_touches_no_list(tmp_path, capsys):
+    root = _touching_repo(tmp_path)
+    (root / "README.md").write_text("a file no list names\n", encoding="utf-8")
+    assert mutate.main(["--lists-for", "base", "--root", str(root)]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_a_list_or_lists_for_is_given_and_lists_for_alone_runs_no_mutation(tmp_path, capsys):
+    root = _touching_repo(tmp_path)
+    path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 5"}])
+    for argv, said in (([str(path), "--lists-for", "base"], "give a list, or --lists-for BASE"),
+                       ([], "give a list, or --lists-for BASE"),
+                       (["--lists-for", "base", "--focused-only"], "--lists-for runs no mutation"),
+                       (["--lists-for", "base", "--only", "a wider window"], "--lists-for runs no mutation")):
+        with pytest.raises(SystemExit) as stop:
+            mutate.main([*argv, "--root", str(root)])
+        assert stop.value.code == 2 and said in capsys.readouterr().err, argv
+    assert not (root / "out").exists(), "no run starts"
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+
+
+def test_lists_for_names_a_list_that_is_not_yaml_and_reads_one_that_is_not_a_mapping_as_naming_only_itself(tmp_path, capsys):
+    """A list that is not YAML is named whatever the change, so its run says what is wrong with it; one that is YAML but
+    holds no mapping names no file but itself."""
+    root = _touching_repo(tmp_path)
+    (root / "tests" / "mutations" / "g-not-yaml.yaml").write_text("focused: [unclosed\n", encoding="utf-8")
+    (root / "tests" / "mutations" / "h-a-sequence.yaml").write_text("- src/wall.py\n", encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "two odd lists")
+    _git(root, "tag", "-f", "base")
+    (root / "src" / "wall.py").write_text("WALL = 2\n", encoding="utf-8")
+    assert mutate.main(["--lists-for", "base", "--root", str(root)]) == 0
+    assert capsys.readouterr().out.splitlines() == [f"tests/mutations/{name}.yaml" for name in
+                                                    ("b-focused-test", "c-itself", "f-untouched", "g-not-yaml")]  # each mutates src/wall.py
+
+
+def test_lists_for_a_base_git_does_not_know_says_what_git_said(tmp_path, capsys):
+    root = _touching_repo(tmp_path)
+    assert mutate.main(["--lists-for", "no-such-base", "--root", str(root)]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("ERROR: git merge-base no-such-base HEAD: ") and "no-such-base" in err[len("ERROR: git merge-base"):]
