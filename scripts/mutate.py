@@ -18,6 +18,13 @@ one loads, that each of its mutations has a caught_by, and that no two lists mak
       old: 'ALERT_LEVELS = ("error", "warning")'
       new: 'ALERT_LEVELS = ("error", "warning", "note")'
 
+A list whose mutations only a later Python catches says the Python it needs, a specifier as pyproject.toml's
+requires-python is: `requires-python: ">=3.13"`. Run alone under an interpreter the specifier does not take (the one
+that runs mutate.py, which runs pytest), the list is refused, `ERROR: <list> needs Python <specifier>, this is
+<version>`, exit 2, before any file is touched; run it with one it takes (for >=3.13, a venv of
+tools/dev-requirements-py313.txt, as CI's 3.13 job installs). A pre-release is compared as PEP 440 orders it:
+3.14.0rc1 is taken by >=3.13, and not by >=3.14.
+
 Quote every value with a ` #` in it: YAML ends an unquoted value at ` #` and reads the rest as a comment, so
 `name: the PR #141 rule` loads as "the PR".
 Write a value of several lines in double quotes: in single quotes YAML keeps `\\n` as a backslash and an `n`, so the
@@ -67,14 +74,16 @@ base of BASE and HEAD, committed or not, and each untracked file git does not ig
 when the change holds the list itself, the file of one of its mutations or one of its focused test files.
 With --base BASE it runs each of those lists, one after the other, as --focused-only runs one (run_mutation_list: its own run
 directory, results.json and lines, after a `== <list>` line), every one loaded first, so a list that does not load, or
-names no focused tests, stops the run before any mutation is applied. Then it prints `summary`: each list's last line
-after its name, and, across all of them, the marked catches, the catches with no `at:` and the LEFT lines, each after
-its list (run_base). It exits 0 when every list caught all, 1 when a mutation was missed or an error, 2 when a list was
-refused (none runs) or a baseline failed (the other lists still run); a change that touches no list is said so, exit 0.
+names no focused tests, stops the run before any mutation is applied. A list whose requires-python this interpreter does
+not take is not run. Then it prints `summary`: each list's last line after its name (`SKIP <list>: needs Python
+<specifier>, this is <version>` for one not run), and, across all of them, the marked catches, the catches with no
+`at:` and the LEFT lines, each after its list (run_base). It exits 0 when every list caught all, 1 when a mutation was
+missed or an error, 2 when a list was refused (none runs) or a baseline failed (the other lists still run), whatever
+the lists it skipped; a change that touches no list is said so, exit 0.
 With --focused-only the whole suite never runs, for checking the tests of one module: the baseline is the focused
 tests, and a mutation they miss is missed.
 Exit 0 when every mutation was caught, 1 when one was missed or was an error, 2 when the list is wrong (or names no
-focused tests for --focused-only) or the tests fail without a mutation.
+focused tests for --focused-only), needs another Python, or the tests fail without a mutation.
 
 GLOSSARY.md terms: Mutation list, Left path, Marked catch, Change. Not pure: it edits the files it mutates and runs pytest and
 git in the root.
@@ -86,6 +95,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -94,6 +104,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
 
 ROOT = Path(__file__).resolve().parents[1]
 BANNER = re.compile(r"^=+ (?:FAILURES|ERRORS) =+$")  # where pytest's output starts telling its failures
@@ -131,14 +142,29 @@ def _quoted_newline(old: str, text: str | None) -> str:
     return " (YAML keeps \\n as written in single quotes: write the value in double quotes)"
 
 
-def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
-    """(the focused tests, the mutations) of a list, every focused path checked to exist, every `old` to occur exactly
-    once and to differ from its `new`, no two mutations of a file to make the same mutant, and every `caught_by` to name
-    a test (_names_a_test); ValueError otherwise."""
+def _is_specifier(value: object) -> bool:
+    """Whether `value` is a version specifier as pyproject.toml's requires-python is (`>=3.13`, `>=3.11,<3.14`)."""
+    if not isinstance(value, str):
+        return False
+    try:
+        SpecifierSet(value)
+    except InvalidSpecifier:
+        return False
+    return True
+
+
+def load(path: Path, root: Path) -> tuple[list[str], list[dict], str | None]:
+    """(the focused tests, the mutations, its requires-python or None) of a list, every focused path checked to exist, a
+    requires-python to be a specifier (_is_specifier), every `old` to occur exactly once and to differ from its `new`, no
+    two mutations of a file to make the same mutant, and every `caught_by` to name a test (_names_a_test); ValueError
+    otherwise."""
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     focused = list(data.get("focused") or [])
     mutations = data.get("mutations") or []
+    requires_python = data.get("requires-python")
     problems = [f"focused: no {t}" for t in focused if not isinstance(t, str) or not (root / t.split("::")[0]).exists()]
+    if requires_python is not None and not _is_specifier(requires_python):
+        problems.append(f"requires-python: {requires_python!r} is not a version specifier (`>=3.13`)")
     mutants: dict[tuple[str, str], list[str]] = {}  # (file, its text once mutated): the mutations that make it
     for m in mutations:
         missing = [k for k in ("name", "file", "old", "new") if not isinstance(m.get(k), str)]
@@ -161,7 +187,17 @@ def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
     problems += [f"{n}: named twice" for n in sorted({n for n in names if names.count(n) > 1})]
     if problems:
         raise ValueError("; ".join(problems))
-    return focused, mutations
+    return focused, mutations, requires_python
+
+
+def needs_python(requires_python: str | None) -> str:
+    """Why this interpreter cannot run a list that needs `requires_python`, a specifier as pyproject.toml's
+    (`>=3.13`); empty when it can, or when the list needs none. A pre-release is compared as PEP 440 orders it: 3.14.0rc1
+    is taken by >=3.13, and not by >=3.14."""
+    version = platform.python_version()
+    if requires_python is None or SpecifierSet(requires_python).contains(version, prereleases=True):
+        return ""
+    return f"needs Python {requires_python}, this is {version}"
 
 
 def _clear_bytecode(root: Path) -> None:
@@ -427,10 +463,11 @@ def run_mutation_list(path: Path, focused: list[str], mutations: list[dict], roo
 
 def run_base(base: str, root: Path, runs: Path) -> int:
     """Restore what a killed run left (restore_left), then run, focused and one after the other, each list lists_for(base,
-    root) names, every one loaded before any runs, then print a summary: each list's last line, and the marked catches,
+    root) names, every one loaded before any runs; a list whose requires-python this interpreter does not take
+    (needs_python) is loaded too, and not run. Then print a summary: each list's last line or why it was skipped, and the marked catches,
     the catches with no `at:` and the LEFT lines of all of them, each after its list. 0 every list caught all; 1 one
     missed or an error; 2 restore_left or git refused, or a list does not load or names no focused tests (none runs),
-    or a baseline failed (the others still run)."""
+    or a baseline failed (the others still run). A skipped list does not change it."""
     if why := restore_left(root, runs):  # first: a mutant a killed run left would read as part of the change
         print(f"ERROR: {why}", file=sys.stderr)
         return 2
@@ -445,30 +482,34 @@ def run_base(base: str, root: Path, runs: Path) -> int:
     loaded, refused = [], []
     for name in names:
         try:
-            focused, mutations = load(root / name, root)
+            focused, mutations, requires_python = load(root / name, root)
         except ValueError as e:
             refused.append(f"ERROR: {name}: {e}")
             continue
         if not focused:
             refused.append(f"ERROR: {name}: --base runs the focused tests alone, and the list names none")
             continue
-        loaded.append((name, focused, mutations))
+        loaded.append((name, focused, mutations, needs_python(requires_python)))
     if refused:
         print("\n".join(refused), file=sys.stderr)
         return 2
-    done = []
-    for name, focused, mutations in loaded:
+    done: list[tuple[str, MutationListRun | None, str]] = []  # (the list, its run or None when skipped, why it was skipped)
+    for name, focused, mutations, why in loaded:
+        if why:
+            done.append((name, None, why))
+            continue
         print(f"== {name}", flush=True)
-        done.append((name, run_mutation_list(root / name, focused, mutations, root, runs, whole_suite=False)))
+        done.append((name, run_mutation_list(root / name, focused, mutations, root, runs, whole_suite=False), ""))
+    ran = [(name, run) for name, run, _ in done if run is not None]
     print("\nsummary")
-    for name, run in done:
-        print(f"{name}: {run.last}")
+    for name, run, why in done:
+        print(f"{name}: {run.last}" if run is not None else f"SKIP {name}: {why}")
     sections = (("marked:", lambda run: run.marked), ("caught with no at:", lambda run: run.unplaced), ("left:", lambda run: run.left))
     for title, part in sections:
-        lines = [f"{name}: {line}" for name, run in done for line in part(run)]
+        lines = [f"{name}: {line}" for name, run in ran for line in part(run)]
         if lines:
             print(title, *lines, sep="\n")
-    codes = {run.code for _, run in done}
+    codes = {run.code for _, run in ran}
     return 2 if 2 in codes else 1 if 1 in codes else 0
 
 
@@ -506,9 +547,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {why}", file=sys.stderr)
         return 2
     try:
-        focused, mutations = load(a.mutations, root)
+        focused, mutations, requires_python = load(a.mutations, root)
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    if why := needs_python(requires_python):
+        print(f"ERROR: {a.mutations} {why}", file=sys.stderr)
         return 2
     if a.focused_only and not focused:
         print("ERROR: --focused-only needs focused tests, and the list names none", file=sys.stderr)

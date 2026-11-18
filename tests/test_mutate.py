@@ -420,6 +420,23 @@ def test_focused_only_without_focused_tests_is_refused(tmp_path, capsys):
     assert not (tmp_path / "runs").exists()
 
 
+def test_a_list_this_python_does_not_satisfy_is_refused_before_any_file_is_touched_and_one_it_satisfies_runs(tmp_path, capsys):
+    """`<3` no interpreter that runs this satisfies, and `>=3` every one does; the version is the one sys.version opens with."""
+    root = _repo(tmp_path)
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"}]
+    path = _list(tmp_path, mutations, ["tests/test_window.py"])
+    data = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**data, "requires-python": "<3"}), encoding="utf-8")
+    refused = mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")])
+    err = capsys.readouterr().err
+    untouched = (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE and not (tmp_path / "runs").exists()
+    path.write_text(json.dumps({**data, "requires-python": ">=3"}), encoding="utf-8")
+    run = mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")])
+    assert refused == 2 and err == f"ERROR: {path} needs Python <3, this is {sys.version.split()[0]}\n"
+    assert run == 0 and "1 of 1 caught" in capsys.readouterr().out
+    assert untouched, "the refused list touched no file and made no run directory"
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="SIGKILL to a process group")
 def test_a_mutant_left_by_a_killed_run_is_restored_before_the_next_run(tmp_path, capsys):
     """Killed, a run never reaches the finally that restores the file: the next one restores it from the run's copy."""
@@ -687,6 +704,21 @@ def test_base_goes_on_past_a_list_whose_baseline_fails_and_exits_2(tmp_path, cap
     summary = capsys.readouterr().out.split("\nsummary\n")[1].splitlines()
     assert summary[0].startswith("tests/mutations/b-door.yaml: ERROR: the focused tests exit 1 without a mutation")
     assert summary[1].startswith("tests/mutations/c-wall.yaml: 1 of 1 caught; ")
+
+
+def test_base_skips_a_list_this_python_does_not_satisfy_says_so_in_the_summary_and_the_skip_fails_nothing(tmp_path, capsys):
+    root = _base_repo(tmp_path)
+    path = root / "tests" / "mutations" / "b-door.yaml"
+    path.write_text(json.dumps({**json.loads(path.read_text(encoding="utf-8")), "requires-python": "<3"}), encoding="utf-8")
+    (root / "src" / "wall.py").write_text("WALL = 1  # a change\n", encoding="utf-8")
+    code = mutate.main(["--base", "base", "--root", str(root)])
+    out = capsys.readouterr().out
+    assert [line for line in out.splitlines() if line.startswith("== ")] == ["== tests/mutations/c-wall.yaml"]
+    assert len(list((root / "out" / "mutations").iterdir())) == 1, "the skipped list made no run directory"
+    summary = out.split("\nsummary\n")[1].splitlines()
+    assert summary[0] == f"SKIP tests/mutations/b-door.yaml: needs Python <3, this is {sys.version.split()[0]}"
+    assert summary[1].startswith("tests/mutations/c-wall.yaml: 1 of 1 caught; ") and len(summary) == 2
+    assert code == 0, "b-door.yaml, which misses its mutation, did not run, and a skip fails nothing"
 
 
 def test_base_takes_no_list_and_neither_lists_for_nor_only_nor_focused_only(tmp_path, capsys):

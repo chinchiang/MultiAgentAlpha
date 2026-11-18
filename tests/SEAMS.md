@@ -519,12 +519,15 @@ The tests of `--lists-for` build on `_git_repo` a repository with a list per way
 through `main`; they read what it prints, one list per line. The tests of `--base` build their own repository whose
 lists load (`_base_repo`: a catch whose `caught_by` names another test, one with no traceback, a miss, a test that
 leaves a file), run real pytest and git through `main`, and read the lines after `summary`, by position.
+The tests of `requires-python` run under whatever interpreter runs the suite, so they give the specifiers `<3`, which
+none takes, and `>=3`, which every one does, and read the version the refusal names from the start of sys.version.
 
 `test_mutation_lists.py` calls the `load` of `scripts/mutate.py` on lists it writes into `tmp_path`, and compares the
 problems `list_problems` returns, the text `load` gives included (`` `old` occurs 0 times in <file> ``), word for word:
 a change of that text reaches it.
 `shared_mutants` there compares the mutants of several lists by the `mutant(root, m)` of `scripts/mutate.py`, which
 returns the mutation's file and the file's text with `old` replaced once by `new`, the comparison `load` makes within
-one list; it relies on `load` returning `(focused, mutations)` and raising ValueError for a list that does not load.
+one list; it relies on `load` returning `(focused, mutations, requires_python)` and raising ValueError for a list
+that does not load.
 `self_focused` reads each list as YAML (its `mutations`' `file` and its `focused` entries) and names one that mutates
 `tests/test_mutation_lists.py` and focuses on all of it.
