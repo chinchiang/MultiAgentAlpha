@@ -135,7 +135,6 @@ A change that becomes a pull request goes through these steps in order. Each end
    the owner to send it again, and look once per message. When it does, switch to main, fast-forward, delete the
    branch once `git merge-base --is-ancestor` says it is in main, and update the handoff.
 
-Versions are fixed at merge time, not when the branch is cut. A change of tests, documents, the text of an old row, or
-a pure refactor takes no new version and no CHANGELOG row. A fix to `scripts/` or product code bumps the patch number,
-adds one row, and rebuilds the demo page with `scripts/build_workbench_demo.py`. The rules in full: `docs/CHANGELOG.md`,
-"版本規則".
+Versions are fixed at merge time, not when the branch is cut. Whether a change takes a version, and which, is in
+`docs/CHANGELOG.md`, "版本規則". A change that takes one bumps `mara.__version__`, adds its row and rebuilds the demo page
+with `scripts/build_workbench_demo.py`, all in the branch's last commit (step 3).
