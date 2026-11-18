@@ -1,0 +1,42 @@
+focused: [tests/test_mutate.py, tests/test_mutation_lists.py::test_a_requires_python_that_is_not_a_specifier_does_not_load_and_one_that_is_does]
+# a list says the Python it needs (requires-python, #369): load refuses a value that is no specifier, a list run alone
+# under an interpreter the specifier does not take is refused before any file is touched, and --base skips it, says so
+# in its summary and does not fail for it. Each mutation drops one of those.
+# The node, not all of tests/test_mutation_lists.py: with a mutant of scripts/mutate.py applied, that file's load of
+# this list fails first on every mutation, its `old` no longer being there.
+mutations:
+  - name: a list run alone under a Python it does not take runs
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_list_this_python_does_not_satisfy_is_refused_before_any_file_is_touched_and_one_it_satisfies_runs
+    old: "    if why := needs_python(requires_python):\n        print(f\"ERROR: {a.mutations} {why}\", file=sys.stderr)\n        return 2\n"
+    new: ""
+  - name: a list is refused under a Python it takes as well
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_list_this_python_does_not_satisfy_is_refused_before_any_file_is_touched_and_one_it_satisfies_runs
+    old: "    if requires_python is None or SpecifierSet(requires_python).contains(version, prereleases=True):\n"
+    new: "    if requires_python is None:\n"
+  - name: the refusal names the minor version only
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_list_this_python_does_not_satisfy_is_refused_before_any_file_is_touched_and_one_it_satisfies_runs
+    old: "    version = platform.python_version()\n"
+    new: "    version = \".\".join(platform.python_version_tuple()[:2])\n"
+  - name: --base runs a list it should skip
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_base_skips_a_list_this_python_does_not_satisfy_says_so_in_the_summary_and_the_skip_fails_nothing
+    old: "        if why:\n            done.append((name, None, why))\n"
+    new: "        if False:\n            done.append((name, None, why))\n"
+  - name: a skipped list has no summary line
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_base_skips_a_list_this_python_does_not_satisfy_says_so_in_the_summary_and_the_skip_fails_nothing
+    old: "        print(f\"{name}: {run.last}\" if run is not None else f\"SKIP {name}: {why}\")\n"
+    new: "        if run is not None:\n            print(f\"{name}: {run.last}\")\n"
+  - name: a skip fails the run
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_base_skips_a_list_this_python_does_not_satisfy_says_so_in_the_summary_and_the_skip_fails_nothing
+    old: "    codes = {run.code for _, run in ran}\n"
+    new: "    codes = {run.code for _, run in ran} | ({2} if len(ran) < len(done) else set())\n"
+  - name: a requires-python that is no specifier loads
+    file: scripts/mutate.py
+    caught_by: tests/test_mutation_lists.py::test_a_requires_python_that_is_not_a_specifier_does_not_load_and_one_that_is_does
+    old: "    if requires_python is not None and not _is_specifier(requires_python):\n"
+    new: "    if False:\n"

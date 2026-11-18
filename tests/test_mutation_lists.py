@@ -44,7 +44,7 @@ def shared_mutants(paths: list[Path], root: Path) -> str:
     makers: dict[tuple[str, str], list[str]] = {}
     for path in paths:
         try:
-            _, mutations = mutate.load(path, root)
+            _, mutations, _ = mutate.load(path, root)
         except ValueError:
             continue
         for m in mutations:
@@ -93,6 +93,20 @@ def test_a_mutation_without_caught_by_is_named_and_one_with_it_is_not(tmp_path):
     stale = {**named, "old": "LIMIT = 9"}
     path.write_text(json.dumps({"focused": ["tests/test_window.py"], "mutations": [stale, unnamed[0]]}), encoding="utf-8")
     assert list_problems(path, tmp_path) == "a wider window: `old` occurs 0 times in src/window.py; a narrower window: no caught_by"
+
+
+def test_a_requires_python_that_is_not_a_specifier_does_not_load_and_one_that_is_does(tmp_path):
+    """A list may say the Python it needs as pyproject.toml's requires-python does; `3.13+`, and 3.13 as a YAML number,
+    are not specifiers."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "window.py").write_text("LIMIT = 3\n", encoding="utf-8")
+    path = tmp_path / "window.yaml"
+    problems = []
+    for needs in ("3.13+", 3.13, ">=3.13"):
+        path.write_text(json.dumps({"mutations": [], "requires-python": needs}), encoding="utf-8")
+        problems.append(list_problems(path, tmp_path))
+    assert problems == ["requires-python: '3.13+' is not a version specifier (`>=3.13`)",
+                        "requires-python: 3.13 is not a version specifier (`>=3.13`)", ""]
 
 
 def test_no_two_mutation_lists_make_the_same_mutant():

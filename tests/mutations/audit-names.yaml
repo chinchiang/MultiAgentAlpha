@@ -5,10 +5,10 @@ focused: [tests/test_audit_names.py, tests/test_audit.py, tests/test_calibration
 # A read of a key not there goes through Audit.__missing__, which refuses a name not held. On Python 3.12 defaultdict
 # stores the default (0) through __setitem__, which refuses it too, so removing the read check there is an equivalent
 # mutant: the first draft of this list had one, it survived, and the override was removed. On 3.13 defaultdict no longer
-# calls __setitem__, and a misspelled read returned 0 (v0.13.66). The read check's mutation is caught on 3.13 or later
-# only, and survives on 3.12, which this checkout's .venv is: run this list with a 3.13 interpreter (a venv of
-# tools/dev-requirements-py313.txt, as CI's 3.13 job installs). The cases [read] and [read-per-family] of the refusal
-# test hold the rule, and CI's 3.13 job runs them.
+# calls __setitem__, and a misspelled read returned 0 (v0.13.66). So the read check's mutation is caught on 3.13 or later
+# only, which requires-python says. The cases [read] and [read-per-family] of the refusal test hold the rule, and CI's
+# 3.13 job runs them.
+requires-python: ">=3.13"
 mutations:
   - name: a name the audit does not hold reads 0 through []
     file: src/mara/audit.py

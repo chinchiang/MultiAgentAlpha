@@ -37,8 +37,8 @@ mutations:
   - name: only the first list runs
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks
-    old: "    for name, focused, mutations in loaded:\n"
-    new: "    for name, focused, mutations in loaded[:1]:\n"
+    old: "    for name, focused, mutations, why in loaded:\n"
+    new: "    for name, focused, mutations, why in loaded[:1]:\n"
   - name: a marked catch is not gathered
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks

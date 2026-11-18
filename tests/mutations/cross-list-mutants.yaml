@@ -20,5 +20,5 @@ mutations:
   - name: a list that does not load is compared too
     file: tests/test_mutation_lists.py
     caught_by: tests/test_mutation_lists.py::test_two_lists_that_make_one_mutant_are_named_and_two_that_differ_are_not
-    old: "            _, mutations = mutate.load(path, root)\n"
+    old: "            _, mutations, _ = mutate.load(path, root)\n"
     new: "            mutations = yaml.safe_load(path.read_text(encoding=\"utf-8\"))[\"mutations\"]\n"
