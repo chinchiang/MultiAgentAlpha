@@ -5,7 +5,7 @@
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --focused-only   # the focused tests alone, never the whole suite
 
 A mutation list (GLOSSARY.md) is a YAML file in tests/mutations/, where tests/test_mutation_lists.py checks that each
-one loads and that each of its mutations has a caught_by:
+one loads, that each of its mutations has a caught_by, and that no two lists make the same mutant (mutant):
 
   focused: [tests/test_tool_evidence.py, ...]   # run first; the whole suite runs only for a mutation they miss
   mutations:
@@ -23,7 +23,8 @@ mutant (one of them is a mis-aligned copy of the other), and every focused path 
 any file is touched. A `caught_by`, where a mutation has one, names a test as pytest takes it: a test file, or a test of
 it (`file::test`, `file::Class::test`, with its parameters `[...]` or without); each part must be defined in the file
 (_names_a_test). It is optional here, so a list outside tests/mutations/ loads without it; every mutation of this
-repository's lists carries one, which tests/test_mutation_lists.py checks. Then the focused tests and the whole suite
+repository's lists carries one, which tests/test_mutation_lists.py checks, as it checks that no mutant is made by two
+lists. Then the focused tests and the whole suite
 run once without a mutation, and must pass. A mutation is caught when a test fails on it (pytest exits 1): the focused
 tests first (all of them, or until one fails), then, if they pass, the whole suite. Any other exit, such as a mutant
 that does not import (2), is an error: nothing caught the mutation, and the whole suite does not run after the focused
@@ -99,6 +100,13 @@ def _names_a_test(root: Path, test: object) -> bool:
     return all(re.search(rf"^\s*(?:async\s+)?(?:def|class)\s+{re.escape(part)}\b", text, re.M) for part in parts)
 
 
+def mutant(root: Path, m: dict) -> tuple[str, str]:
+    """The mutant `m` makes, as two mutations are compared: its file and the file's text with `old` replaced once by
+    `new`. Two mutations make the same mutant when these are equal, whatever their `old` and `new` say. It is read for a
+    mutation whose `old` occurs once in its file (load checks that first); for any other the text is not a mutant."""
+    return m["file"], (root / m["file"]).read_text(encoding="utf-8").replace(m["old"], m["new"], 1)
+
+
 def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
     """(the focused tests, the mutations) of a list, every focused path checked to exist, every `old` to occur exactly
     once and to differ from its `new`, no two mutations of a file to make the same mutant, and every `caught_by` to name
@@ -120,7 +128,7 @@ def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
         elif m["new"] == m["old"]:
             problems.append(f"{m['name']}: new is old, so the file is unchanged")
         else:
-            mutants.setdefault((m["file"], text.replace(m["old"], m["new"], 1)), []).append(m["name"])
+            mutants.setdefault(mutant(root, m), []).append(m["name"])
         if "caught_by" in m and not _names_a_test(root, m["caught_by"]):
             problems.append(f"{m['name']}: caught_by: no {m['caught_by']}")
     problems += [f"{', '.join(same)}: the same mutant of {file}" for (file, _), same in mutants.items() if len(same) > 1]

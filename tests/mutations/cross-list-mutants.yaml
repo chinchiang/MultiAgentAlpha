@@ -1,0 +1,24 @@
+focused: [tests/test_mutation_lists.py::test_two_lists_that_make_one_mutant_are_named_and_two_that_differ_are_not]
+# No two mutation lists make the same mutant (#355): shared_mutants in tests/test_mutation_lists.py compares the
+# mutants of every list that loads, by mutate.mutant, the comparison mutate.load makes within one list. Each mutation
+# breaks one part of it: two lists sharing a mutant are not named, mutations are compared by their old and new instead
+# of the mutant, or a list that does not load is compared too. How mutate.mutant compares is mutated in
+# mutate-load-refusals.yaml. shared_mutants is mutated in tests/test_mutation_lists.py itself, so the focused test is
+# the one test of it: the whole file would also run test_a_mutation_list_loads[cross-list-mutants], which fails on each
+# of these mutants because the mutant no longer holds this list's `old` (as caught-by-required.yaml says of its own).
+mutations:
+  - name: two lists that make one mutant are not named
+    file: tests/test_mutation_lists.py
+    caught_by: tests/test_mutation_lists.py::test_two_lists_that_make_one_mutant_are_named_and_two_that_differ_are_not
+    old: "for (file, _), names in makers.items() if len(names) > 1)"
+    new: "for (file, _), names in makers.items() if len(names) > 2)"
+  - name: two mutations are compared by their old and new, not by the mutant they make
+    file: tests/test_mutation_lists.py
+    caught_by: tests/test_mutation_lists.py::test_two_lists_that_make_one_mutant_are_named_and_two_that_differ_are_not
+    old: "makers.setdefault(mutate.mutant(root, m), [])"
+    new: "makers.setdefault((m[\"file\"], m[\"old\"] + m[\"new\"]), [])"
+  - name: a list that does not load is compared too
+    file: tests/test_mutation_lists.py
+    caught_by: tests/test_mutation_lists.py::test_two_lists_that_make_one_mutant_are_named_and_two_that_differ_are_not
+    old: "            _, mutations = mutate.load(path, root)\n"
+    new: "            mutations = yaml.safe_load(path.read_text(encoding=\"utf-8\"))[\"mutations\"]\n"
