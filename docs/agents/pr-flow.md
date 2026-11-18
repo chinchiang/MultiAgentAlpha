@@ -10,8 +10,12 @@ A change that becomes a pull request goes through these steps in order. Each end
    on a made-up bad input, a hand-made bad copy of the file).
    A test written after the fix, or green the moment it is written, is shown red on the base's code in a worktree of
    `origin/main` under `scratch/` (`git worktree add scratch/<dir> origin/main`), with the new and changed test files
-   copied in, run with the main checkout's interpreter, `PYTHONPATH=<worktree>/src` and `HOME=scratch/empty-home`, and
-   the worktree removed after (`git worktree remove --force`). Neither `git stash` (its stack is shared by every
+   copied in and the main checkout's tools linked in (`ln -s "$PWD/.mara-tools" scratch/<dir>/.mara-tools`, from the
+   main checkout), run with the main checkout's interpreter, `PYTHONPATH=<worktree>/src` and `HOME=scratch/empty-home`,
+   and the worktree removed after (`git worktree remove --force`, which removes the link and leaves the main checkout's
+   `.mara-tools` as it is). Git ignores `.mara-tools`, so a worktree has none, and a test that needs a tool looks for it
+   below the repository it sits in and skips: a run that skips more than the same test files skip in the main checkout
+   has not shown those tests red. Neither `git stash` (its stack is shared by every
    worktree of the checkout) nor the base's files written over the main checkout's (a run of the checks may be reading
    them). A test that fails without reaching the part it is about is not red for the reason you meant: a `DID NOT RAISE`
    because an `or` with a value on its left never reads the right (`hint or name`), say. Change the test until it
