@@ -1,8 +1,10 @@
-"""Mutation checks: apply each mutation of a list to the source, run the tests that should catch it, and restore it.
+"""Mutation checks: apply each mutation of a list to the source, run the tests that should catch it, and restore it; or
+name the lists a change touches (--lists-for).
 
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml                  # every mutation of the list
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --only "a name" --only "another"  # some of them, by name
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --focused-only   # the focused tests alone, never the whole suite
+  .venv/bin/python scripts/mutate.py --lists-for origin/main   # the lists the change touches, one per line; runs nothing
 
 A mutation list (GLOSSARY.md) is a YAML file in tests/mutations/, where tests/test_mutation_lists.py checks that each
 one loads, that each of its mutations has a caught_by, and that no two lists make the same mutant (mutant):
@@ -56,12 +58,16 @@ them once the file is restored. A run killed in between (SIGKILL, SIGTERM, the e
 every run first looks for such copies: a file still holding the mutant is restored from original/, one holding the
 original again needs nothing, and one holding neither (edited since) is left as it is, and no run starts until it is
 sorted out by hand; nor while the run whose copies they are is still going.
+With --lists-for BASE it runs nothing and prints, one per line, each list of tests/mutations/ the change since BASE
+touches (lists_for): the change (GLOSSARY.md) is every path the working tree changes, adds or deletes over the merge
+base of BASE and HEAD, committed or not, and each untracked file git does not ignore (changed_paths); a list is touched
+when the change holds the list itself, the file of one of its mutations or one of its focused test files.
 With --focused-only the whole suite never runs, for checking the tests of one module: the baseline is the focused
 tests, and a mutation they miss is missed.
 Exit 0 when every mutation was caught, 1 when one was missed or was an error, 2 when the list is wrong (or names no
 focused tests for --focused-only) or the tests fail without a mutation.
 
-GLOSSARY.md terms: Mutation list, Left path, Marked catch. Not pure: it edits the files it mutates and runs pytest and
+GLOSSARY.md terms: Mutation list, Left path, Marked catch, Change. Not pure: it edits the files it mutates and runs pytest and
 git in the root.
 """
 
@@ -175,6 +181,45 @@ def _failure(out: str) -> tuple[str | None, str | None]:
     at = next((line[1:].strip() for line in section if line.startswith(">")), None)
     error = next((m[1] for line in reversed(section) if (m := EXCEPTION_LINE.match(line))), None)
     return at, error
+
+
+def changed_paths(base: str, root: Path) -> set[str]:
+    """The paths of the change since the merge base of `base` and HEAD in `root`, relative to it: each file the working
+    tree changes, adds or deletes over that merge base, committed or not (a rename as the path it deleted and the one it
+    added, --no-renames), and each untracked file git does not ignore. ValueError, naming the git command and what it
+    said, when git fails."""
+    def git(*args: str) -> str:
+        cp = subprocess.run(["git", *args], cwd=root, capture_output=True)  # -z: each path as it is named, unquoted
+        if cp.returncode != 0:
+            raise ValueError(f"git {' '.join(args)}: {cp.stderr.decode('utf-8', 'replace').strip()}")
+        return cp.stdout.decode("utf-8", "replace")
+
+    merge_base = git("merge-base", base, "HEAD").strip()
+    names = git("diff", "--name-only", "--no-renames", "-z", merge_base) + git("ls-files", "--others", "--exclude-standard", "-z")
+    return {name for name in names.split("\0") if name}
+
+
+def lists_for(base: str, root: Path) -> list[str]:
+    """The mutation lists of tests/mutations/ in `root` the change since `base` touches (changed_paths), sorted, each as
+    its path relative to `root`: a list is touched when the change holds the list itself, the file of one of its mutations, or one of its
+    focused test files (the part of the entry before `::`). A list is read as YAML and not loaded (load), so one whose
+    `old` the change made stale is still named; one that is not YAML is named, for its run to say what is wrong."""
+    changed = changed_paths(base, root)
+    touched = []
+    for path in sorted((root / "tests" / "mutations").glob("*.yaml")):
+        name = path.relative_to(root).as_posix()
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            touched.append(name)
+            continue
+        data = data if isinstance(data, dict) else {}
+        mutations, focused = data.get("mutations") or [], data.get("focused") or []
+        reads = {name, *(m["file"] for m in mutations if isinstance(m, dict) and isinstance(m.get("file"), str)),
+                 *(t.split("::")[0] for t in focused if isinstance(t, str))}
+        if reads & changed:
+            touched.append(name)
+    return touched
 
 
 def git_status(root: Path) -> set[str] | None:
@@ -296,13 +341,27 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("mutations", type=Path, help="the YAML list")
+    ap.add_argument("mutations", type=Path, nargs="?", help="the YAML list")
+    ap.add_argument("--lists-for", metavar="BASE", help="print the lists the change since BASE touches, and run nothing")
     ap.add_argument("--only", action="extend", nargs="+", default=None, help="the names of the mutations to run; repeats")
     ap.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)  # a repository other than this one (tests)
     ap.add_argument("--runs", type=Path, default=None, help="default: <root>/out/mutations")
     ap.add_argument("--focused-only", action="store_true", help="run the focused tests alone, never the whole suite")
     a = ap.parse_args(argv)
+    if (a.mutations is None) == (a.lists_for is None):
+        ap.error("give a list, or --lists-for BASE")
+    if a.lists_for is not None and (a.only or a.focused_only):
+        ap.error("--lists-for runs no mutation: --only and --focused-only do not apply")
     root = a.root.resolve()
+    if a.lists_for is not None:
+        try:
+            touched = lists_for(a.lists_for, root)
+        except ValueError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 2
+        for name in touched:
+            print(name)
+        return 0
     runs = a.runs or root / "out" / "mutations"
     if why := restore_left(root, runs):
         print(f"ERROR: {why}", file=sys.stderr)

@@ -1,0 +1,55 @@
+focused: [tests/test_mutate.py]
+# scripts/mutate.py --lists-for BASE prints the mutation lists the change since BASE touches (#356): changed_paths reads
+# the change from git, committed or not, untracked files included; lists_for names a list that holds one of those paths
+# as itself, a mutation's file or a focused test file. Each mutation drops one of those, or one of main's refusals.
+mutations:
+  - name: the untracked files are not part of the change
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_lists_for_names_each_list_a_change_touches_and_no_other
+    old: ' + git("ls-files", "--others", "--exclude-standard", "-z")'
+    new: ''
+  - name: a tracked file changed and not committed is not part of the change
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_lists_for_names_each_list_a_change_touches_and_no_other
+    old: 'names = git("diff", "--name-only", "--no-renames", "-z", merge_base)'
+    new: 'names = git("diff", "--name-only", "--no-renames", "-z", merge_base, "HEAD")'
+  - name: a focused test named with its test is not matched to its file
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_lists_for_names_each_list_a_change_touches_and_no_other
+    old: '*(t.split("::")[0] for t in focused if isinstance(t, str))'
+    new: '*(t for t in focused if isinstance(t, str))'
+  - name: a list is not touched by a change to itself
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_lists_for_names_each_list_a_change_touches_and_no_other
+    old: '        reads = {name, *(m["file"]'
+    new: '        reads = {*(m["file"]'
+  - name: a list is not touched through the file of a mutation
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_lists_for_names_each_list_a_change_touches_and_no_other
+    old: '        reads = {name, *(m["file"] for m in mutations if isinstance(m, dict) and isinstance(m.get("file"), str)),'
+    new: '        reads = {name,'
+  - name: every list is named whatever the change touches
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_lists_for_names_each_list_a_change_touches_and_no_other
+    old: '        if reads & changed:'
+    new: '        if True:'
+  - name: a list given beside --lists-for is ignored, not refused
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_list_or_lists_for_is_given_and_lists_for_alone_runs_no_mutation
+    old: '    if (a.mutations is None) == (a.lists_for is None):'
+    new: '    if a.mutations is None and a.lists_for is None:'
+  - name: a failure of git is taken for a change that touches no list
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_lists_for_a_base_git_does_not_know_says_what_git_said
+    old: "        if cp.returncode != 0:\n            raise ValueError"
+    new: "        if False:\n            raise ValueError"
+  - name: a list that is not YAML is not named
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_lists_for_names_a_list_that_is_not_yaml_and_reads_one_that_is_not_a_mapping_as_naming_only_itself
+    old: "        except yaml.YAMLError:\n            touched.append(name)\n"
+    new: "        except yaml.YAMLError:\n"
+  - name: a list that is not a mapping is read as one
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_lists_for_names_a_list_that_is_not_yaml_and_reads_one_that_is_not_a_mapping_as_naming_only_itself
+    old: "        data = data if isinstance(data, dict) else {}\n"
+    new: ""
