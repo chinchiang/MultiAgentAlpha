@@ -548,8 +548,8 @@ def test_lists_for_prints_nothing_when_the_change_touches_no_list(tmp_path, caps
 def test_a_list_or_lists_for_is_given_and_lists_for_alone_runs_no_mutation(tmp_path, capsys):
     root = _touching_repo(tmp_path)
     path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 5"}])
-    for argv, said in (([str(path), "--lists-for", "base"], "give a list, or --lists-for BASE"),
-                       ([], "give a list, or --lists-for BASE"),
+    for argv, said in (([str(path), "--lists-for", "base"], "give a list, --lists-for BASE or --base BASE"),
+                       ([], "give a list, --lists-for BASE or --base BASE"),
                        (["--lists-for", "base", "--focused-only"], "--lists-for runs no mutation"),
                        (["--lists-for", "base", "--only", "a wider window"], "--lists-for runs no mutation")):
         with pytest.raises(SystemExit) as stop:
@@ -598,3 +598,125 @@ def test_an_old_held_back_by_single_quotes_says_to_use_double_quotes_and_no_othe
                         "one line: `old` occurs 0 times in src/window.py",
                         "two wrong lines: `old` occurs 0 times in src/window.py"]
     assert not (tmp_path / "runs").exists()
+
+
+# --base: run every list a change touches, and sum them up
+
+
+def _base_repo(tmp_path: Path) -> Path:
+    """_git_repo with two more tests of window.py, a door module and its test, and three lists that load, committed and
+    tagged `base`: a-window.yaml (two mutations of window.py: one caught where its caught_by does not name the catching
+    test, one caught by a failure with no traceback), b-door.yaml (one mutation of door.py its test misses; the test
+    leaves stray.txt each run) and c-wall.yaml (a mutation of wall.py)."""
+    root = _git_repo(tmp_path)
+    (root / "tests" / "test_window.py").write_text(
+        "import pytest\nfrom window import limit\n\n\ndef test_limit():\n    assert limit() != 5\n\n\n"
+        "def test_not_two():\n    if limit() == 2:\n        pytest.fail('two', pytrace=False)\n", encoding="utf-8")
+    (root / "src" / "door.py").write_text("DOOR = 1\n", encoding="utf-8")
+    (root / "tests" / "test_door.py").write_text("import door\n\n\ndef test_door():\n    open('stray.txt', 'w').close()\n",
+                                                 encoding="utf-8")
+    (root / "src" / "wall.py").write_text("WALL = 1\n", encoding="utf-8")
+    (root / "tests" / "test_wall.py").write_text("from wall import WALL\n\n\ndef test_wall():\n    assert WALL == 1\n",
+                                                 encoding="utf-8")
+    lists = {"a-window": ("tests/test_window.py",
+                          [("a wider window", "src/window.py", "return 3", "return 5", "tests/test_door.py::test_door"),
+                           ("a narrower window", "src/window.py", "return 3", "return 2", "tests/test_window.py::test_not_two")]),
+             "b-door": ("tests/test_door.py", [("another door", "src/door.py", "DOOR = 1", "DOOR = 2", "tests/test_door.py::test_door")]),
+             "c-wall": ("tests/test_wall.py", [("another wall", "src/wall.py", "WALL = 1", "WALL = 2", "tests/test_wall.py::test_wall")])}
+    (root / "tests" / "mutations").mkdir()
+    for name, (focused, made) in lists.items():
+        mutations = [{"name": n, "file": f, "old": o, "new": w, "caught_by": c} for n, f, o, w, c in made]
+        (root / "tests" / "mutations" / f"{name}.yaml").write_text(json.dumps({"focused": [focused], "mutations": mutations}),
+                                                                    encoding="utf-8")
+    (root / ".gitignore").write_text("out/\n", encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "lists")
+    _git(root, "tag", "base")
+    return root
+
+
+def test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks(tmp_path, capsys):
+    """The lists are those --lists-for names; each runs as it does alone with --focused-only, and the summary gives each
+    list's result line, then the marked catches, the catches with no `at:` and the left paths of all of them."""
+    root = _base_repo(tmp_path)
+    (root / "src" / "window.py").write_text(SOURCE + "# a change\n", encoding="utf-8")
+    (root / "tests" / "test_door.py").write_text(
+        (root / "tests" / "test_door.py").read_text(encoding="utf-8") + "# a change\n", encoding="utf-8")
+    assert mutate.main(["--lists-for", "base", "--root", str(root)]) == 0
+    listed = capsys.readouterr().out.splitlines()
+    code = mutate.main(["--base", "base", "--root", str(root)])
+    out = capsys.readouterr().out
+    assert [line.removeprefix("== ") for line in out.splitlines() if line.startswith("== ")] == listed, "as --lists-for names"
+    runs = sorted((root / "out" / "mutations").iterdir())
+    assert len(runs) == 2 and all((run / "results.json").is_file() for run in runs)
+    assert not any((run / "baseline.suite.log").exists() for run in runs), "focused: the whole suite never runs"
+    summary = out[out.index("\nsummary\n") + 1:].splitlines()
+    a, b = (f"tests/mutations/{name}.yaml" for name in ("a-window", "b-door"))
+    assert summary[1].startswith(f"{a}: 2 of 2 caught; ") and summary[2].startswith(f"{b}: 0 of 1 caught; ")
+    assert summary[3] == "marked:" and summary[4].startswith(f"{a}: CAUGHT a wider window  <- tests/test_window.py::test_limit")
+    assert summary[4].endswith("  (expected tests/test_door.py::test_door)")
+    assert summary[5:7] == ["caught with no at:",
+                            f"{a}: CAUGHT a narrower window  <- tests/test_window.py::test_not_two"]
+    assert summary[7:] == ["left:", f"{b}: LEFT stray.txt  (baseline)"]
+    assert code == 1, "b-door.yaml missed its mutation"
+
+
+def test_base_refuses_a_list_that_does_not_load_before_any_file_is_touched(tmp_path, capsys):
+    root = _base_repo(tmp_path)
+    (root / "src" / "door.py").write_text("DOOR = 3\n", encoding="utf-8")  # b-door.yaml's old is now stale
+    (root / "src" / "window.py").write_text(SOURCE + "# a change\n", encoding="utf-8")
+    assert mutate.main(["--base", "base", "--root", str(root)]) == 2
+    err = capsys.readouterr().err
+    assert "ERROR: tests/mutations/b-door.yaml: another door: `old` occurs 0 times in src/door.py" in err
+    assert not (root / "out").exists(), "no list runs"
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE + "# a change\n"
+
+
+def test_base_says_so_when_the_change_touches_no_list(tmp_path, capsys):
+    root = _base_repo(tmp_path)
+    assert mutate.main(["--base", "base", "--root", str(root)]) == 0
+    assert capsys.readouterr().out == "the change since base touches no mutation list\n"
+    assert not (root / "out").exists()
+
+
+def test_base_goes_on_past_a_list_whose_baseline_fails_and_exits_2(tmp_path, capsys):
+    root = _base_repo(tmp_path)
+    (root / "tests" / "test_door.py").write_text("def test_door():\n    assert False\n", encoding="utf-8")
+    (root / "src" / "wall.py").write_text("WALL = 1  # a change\n", encoding="utf-8")
+    assert mutate.main(["--base", "base", "--root", str(root)]) == 2
+    summary = capsys.readouterr().out.split("\nsummary\n")[1].splitlines()
+    assert summary[0].startswith("tests/mutations/b-door.yaml: ERROR: the focused tests exit 1 without a mutation")
+    assert summary[1].startswith("tests/mutations/c-wall.yaml: 1 of 1 caught; ")
+
+
+def test_base_takes_no_list_and_neither_lists_for_nor_only_nor_focused_only(tmp_path, capsys):
+    root = _base_repo(tmp_path)
+    for argv in (["tests/mutations/a-window.yaml", "--base", "base"], ["--base", "base", "--lists-for", "base"],
+                 ["--base", "base", "--only", "a wider window"], ["--base", "base", "--focused-only"]):
+        with pytest.raises(SystemExit) as stop:
+            mutate.main([*argv, "--root", str(root)])
+        assert stop.value.code == 2 and "--base runs every list the change touches" in capsys.readouterr().err, argv
+    assert not (root / "out").exists()
+
+
+def test_base_refuses_a_list_with_no_focused_tests_before_any_file_is_touched(tmp_path, capsys):
+    root = _base_repo(tmp_path)
+    path = root / "tests" / "mutations" / "c-wall.yaml"
+    path.write_text(json.dumps({**json.loads(path.read_text(encoding="utf-8")), "focused": []}), encoding="utf-8")
+    assert mutate.main(["--base", "base", "--root", str(root)]) == 2
+    assert "ERROR: tests/mutations/c-wall.yaml: --base runs the focused tests alone, and the list names none" in capsys.readouterr().err
+    assert not (root / "out").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="mutate._alive takes every run for alive on Windows, where os.kill ends it")
+def test_base_restores_what_a_killed_run_left_before_it_reads_the_change(tmp_path, capsys):
+    """A mutant a killed run left in src/window.py is not part of the change: a-window.yaml is not run."""
+    root = _base_repo(tmp_path)
+    _left(tmp_path, root, SOURCE.replace("return 3", "return 4"), _gone_pid())
+    (root / "tests" / "test_door.py").write_text(
+        (root / "tests" / "test_door.py").read_text(encoding="utf-8") + "# a change\n", encoding="utf-8")
+    code = mutate.main(["--base", "base", "--root", str(root), "--runs", str(tmp_path / "runs")])
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+    out = capsys.readouterr().out
+    assert "== tests/mutations/b-door.yaml" in out and "a-window" not in out
+    assert code == 1  # b-door.yaml misses its mutation

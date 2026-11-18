@@ -516,7 +516,9 @@ committed (`_git_repo`) and run real git status in it; those give no `--runs`, s
 the root, as it is in this checkout.
 The tests of `--lists-for` build on `_git_repo` a repository with a list per way a change touches one, committed and tagged
 `base` (`_touching_repo`), change it the way each list's name says, and run real git (merge-base, diff, ls-files)
-through `main`; they read what it prints, one list per line.
+through `main`; they read what it prints, one list per line. The tests of `--base` build their own repository whose
+lists load (`_base_repo`: a catch whose `caught_by` names another test, one with no traceback, a miss, a test that
+leaves a file), run real pytest and git through `main`, and read the lines after `summary`, by position.
 
 `test_mutation_lists.py` calls the `load` of `scripts/mutate.py` on lists it writes into `tmp_path`, and compares the
 problems `list_problems` returns, the text `load` gives included (`` `old` occurs 0 times in <file> ``), word for word:

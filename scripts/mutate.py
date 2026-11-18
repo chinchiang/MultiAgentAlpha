@@ -1,10 +1,11 @@
 """Mutation checks: apply each mutation of a list to the source, run the tests that should catch it, and restore it; or
-name the lists a change touches (--lists-for).
+name the lists a change touches (--lists-for), or run each of them and sum them up (--base).
 
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml                  # every mutation of the list
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --only "a name" --only "another"  # some of them, by name
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --focused-only   # the focused tests alone, never the whole suite
   .venv/bin/python scripts/mutate.py --lists-for origin/main   # the lists the change touches, one per line; runs nothing
+  .venv/bin/python scripts/mutate.py --base origin/main        # run each of them, focused, and sum them up
 
 A mutation list (GLOSSARY.md) is a YAML file in tests/mutations/, where tests/test_mutation_lists.py checks that each
 one loads, that each of its mutations has a caught_by, and that no two lists make the same mutant (mutant):
@@ -64,6 +65,12 @@ With --lists-for BASE it runs nothing and prints, one per line, each list of tes
 touches (lists_for): the change (GLOSSARY.md) is every path the working tree changes, adds or deletes over the merge
 base of BASE and HEAD, committed or not, and each untracked file git does not ignore (changed_paths); a list is touched
 when the change holds the list itself, the file of one of its mutations or one of its focused test files.
+With --base BASE it runs each of those lists, one after the other, as --focused-only runs one (run_mutation_list: its own run
+directory, results.json and lines, after a `== <list>` line), every one loaded first, so a list that does not load, or
+names no focused tests, stops the run before any mutation is applied. Then it prints `summary`: each list's last line
+after its name, and, across all of them, the marked catches, the catches with no `at:` and the LEFT lines, each after
+its list (run_base). It exits 0 when every list caught all, 1 when a mutation was missed or an error, 2 when a list was
+refused (none runs) or a baseline failed (the other lists still run); a change that touches no list is said so, exit 0.
 With --focused-only the whole suite never runs, for checking the tests of one module: the baseline is the focused
 tests, and a mutation they miss is missed.
 Exit 0 when every mutation was caught, 1 when one was missed or was an error, 2 when the list is wrong (or names no
@@ -83,6 +90,7 @@ import re
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -350,17 +358,137 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite
             "at": at, "error": error, "expected": expected}
 
 
+@dataclass
+class MutationListRun:
+    """What a run of one list gives a run of many (--base): its exit code (0 every mutation caught, 1 one missed or an
+    error, 2 its baseline failed), its last line (`<caught> of <total> caught; <results.json>`, or the error that stopped
+    it), and its marked catches, its catches with no `at:` and its LEFT lines, each as it printed them."""
+    code: int
+    last: str
+    marked: list[str] = field(default_factory=list)
+    unplaced: list[str] = field(default_factory=list)
+    left: list[str] = field(default_factory=list)
+
+
+def run_mutation_list(path: Path, focused: list[str], mutations: list[dict], root: Path, runs: Path, *, whole_suite: bool) -> MutationListRun:
+    """Run the mutations of the list at `path` (load gave `focused` and `mutations`) in a run directory of its own under
+    `runs`, printing a line per mutation, its LEFT lines and its last line, and writing its results.json; the run a
+    list given alone and each list of --base both make."""
+    run_dir = runs / dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    run_dir.mkdir(parents=True)
+    (run_dir / "pid").write_text(str(os.getpid()), encoding="utf-8")
+    shutil.copyfile(path, run_dir / path.name)
+    status = git_status(root)
+    if status is None:
+        print(f"left paths not checked: {root} is not a git repository", file=sys.stderr)
+    why = baseline(focused, root, run_dir, whole_suite=whole_suite)
+    if why:
+        print(f"ERROR: {why}", file=sys.stderr)
+        return MutationListRun(2, f"ERROR: {why}")
+    left_lines: list[str] = []
+
+    def look(after: str) -> list[str] | None:
+        """The paths left since git status was last read, each named on a LEFT line `after` the run that left it."""
+        nonlocal status
+        looked = status is not None
+        status, left = left_since(status, root, run_dir)
+        if looked and status is None:
+            print(f"left paths no longer checked: git status failed after {after}", file=sys.stderr)
+        left_lines.extend(f"LEFT {path}  ({after})" for path in left or [])
+        return left
+
+    look("baseline")
+    results = []
+    marked: list[str] = []
+    unplaced: list[str] = []
+    for m in mutations:
+        r = check(m, focused, root, run_dir, whole_suite=whole_suite)
+        r["left"] = look(r["mutation"])
+        results.append(r)
+        if r["exit"] not in (0, 1):
+            print(f"ERROR {r['mutation']}  (pytest exit {r['exit']}, {r['where']})", flush=True)
+        else:
+            line = (("CAUGHT " if r["caught"] else "MISSED ") + r["mutation"] + (f"  <- {r['by']}" if r["by"] else f"  ({r['where']})")
+                    + (f"  at: {r['at']}" if r["at"] else "") + (f"  ({r['error']})" if r["error"] not in (None, "AssertionError") else "")
+                    + (f"  (expected {r['expected']})" if r["expected"] else ""))
+            print(line, flush=True)
+            if r["caught"] and (r["error"] not in (None, "AssertionError") or r["expected"]):
+                marked.append(line)
+            if r["caught"] and not r["at"]:
+                unplaced.append(line)
+        (run_dir / "results.json").write_text(json.dumps(results, indent=1) + "\n", encoding="utf-8")
+    for line in left_lines:
+        print(line)
+    caught = sum(r["caught"] for r in results)
+    last = f"{caught} of {len(results)} caught; {run_dir / 'results.json'}"
+    print(last)
+    return MutationListRun(0 if caught == len(results) else 1, last, marked, unplaced, left_lines)
+
+
+def run_base(base: str, root: Path, runs: Path) -> int:
+    """Restore what a killed run left (restore_left), then run, focused and one after the other, each list lists_for(base,
+    root) names, every one loaded before any runs, then print a summary: each list's last line, and the marked catches,
+    the catches with no `at:` and the LEFT lines of all of them, each after its list. 0 every list caught all; 1 one
+    missed or an error; 2 restore_left or git refused, or a list does not load or names no focused tests (none runs),
+    or a baseline failed (the others still run)."""
+    if why := restore_left(root, runs):  # first: a mutant a killed run left would read as part of the change
+        print(f"ERROR: {why}", file=sys.stderr)
+        return 2
+    try:
+        names = lists_for(base, root)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    if not names:
+        print(f"the change since {base} touches no mutation list")
+        return 0
+    loaded, refused = [], []
+    for name in names:
+        try:
+            focused, mutations = load(root / name, root)
+        except ValueError as e:
+            refused.append(f"ERROR: {name}: {e}")
+            continue
+        if not focused:
+            refused.append(f"ERROR: {name}: --base runs the focused tests alone, and the list names none")
+            continue
+        loaded.append((name, focused, mutations))
+    if refused:
+        print("\n".join(refused), file=sys.stderr)
+        return 2
+    done = []
+    for name, focused, mutations in loaded:
+        print(f"== {name}", flush=True)
+        done.append((name, run_mutation_list(root / name, focused, mutations, root, runs, whole_suite=False)))
+    print("\nsummary")
+    for name, run in done:
+        print(f"{name}: {run.last}")
+    sections = (("marked:", lambda run: run.marked), ("caught with no at:", lambda run: run.unplaced), ("left:", lambda run: run.left))
+    for title, part in sections:
+        lines = [f"{name}: {line}" for name, run in done for line in part(run)]
+        if lines:
+            print(title, *lines, sep="\n")
+    codes = {run.code for _, run in done}
+    return 2 if 2 in codes else 1 if 1 in codes else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("mutations", type=Path, nargs="?", help="the YAML list")
     ap.add_argument("--lists-for", metavar="BASE", help="print the lists the change since BASE touches, and run nothing")
+    ap.add_argument("--base", metavar="BASE", help="run, focused, every list the change since BASE touches, and sum them up")
     ap.add_argument("--only", action="extend", nargs="+", default=None, help="the names of the mutations to run; repeats")
     ap.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)  # a repository other than this one (tests)
     ap.add_argument("--runs", type=Path, default=None, help="default: <root>/out/mutations")
     ap.add_argument("--focused-only", action="store_true", help="run the focused tests alone, never the whole suite")
     a = ap.parse_args(argv)
+    if a.base is not None and (a.mutations is not None or a.lists_for is not None or a.only or a.focused_only):
+        ap.error("--base runs every list the change touches, focused: give no list, --lists-for, --only or --focused-only")
+    if a.base is not None:
+        root = a.root.resolve()
+        return run_base(a.base, root, a.runs or root / "out" / "mutations")
     if (a.mutations is None) == (a.lists_for is None):
-        ap.error("give a list, or --lists-for BASE")
+        ap.error("give a list, --lists-for BASE or --base BASE")
     if a.lists_for is not None and (a.only or a.focused_only):
         ap.error("--lists-for runs no mutation: --only and --focused-only do not apply")
     root = a.root.resolve()
@@ -391,47 +519,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: no mutation named {', '.join(unknown)}", file=sys.stderr)
             return 2
         mutations = [m for m in mutations if m["name"] in a.only]
-    run_dir = runs / dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    run_dir.mkdir(parents=True)
-    (run_dir / "pid").write_text(str(os.getpid()), encoding="utf-8")
-    shutil.copyfile(a.mutations, run_dir / a.mutations.name)
-    status = git_status(root)
-    if status is None:
-        print(f"left paths not checked: {root} is not a git repository", file=sys.stderr)
-    why = baseline(focused, root, run_dir, whole_suite=not a.focused_only)
-    if why:
-        print(f"ERROR: {why}", file=sys.stderr)
-        return 2
-    left_lines: list[str] = []
-
-    def look(after: str) -> list[str] | None:
-        """The paths left since git status was last read, each named on a LEFT line `after` the run that left it."""
-        nonlocal status
-        looked = status is not None
-        status, left = left_since(status, root, run_dir)
-        if looked and status is None:
-            print(f"left paths no longer checked: git status failed after {after}", file=sys.stderr)
-        left_lines.extend(f"LEFT {path}  ({after})" for path in left or [])
-        return left
-
-    look("baseline")
-    results = []
-    for m in mutations:
-        r = check(m, focused, root, run_dir, whole_suite=not a.focused_only)
-        r["left"] = look(r["mutation"])
-        results.append(r)
-        if r["exit"] not in (0, 1):
-            print(f"ERROR {r['mutation']}  (pytest exit {r['exit']}, {r['where']})", flush=True)
-        else:
-            print(("CAUGHT " if r["caught"] else "MISSED ") + r["mutation"] + (f"  <- {r['by']}" if r["by"] else f"  ({r['where']})")
-                  + (f"  at: {r['at']}" if r["at"] else "") + (f"  ({r['error']})" if r["error"] not in (None, "AssertionError") else "")
-                  + (f"  (expected {r['expected']})" if r["expected"] else ""), flush=True)
-        (run_dir / "results.json").write_text(json.dumps(results, indent=1) + "\n", encoding="utf-8")
-    for line in left_lines:
-        print(line)
-    caught = sum(r["caught"] for r in results)
-    print(f"{caught} of {len(results)} caught; {run_dir / 'results.json'}")
-    return 0 if caught == len(results) else 1
+    return run_mutation_list(a.mutations, focused, mutations, root, runs, whole_suite=not a.focused_only).code
 
 
 if __name__ == "__main__":
