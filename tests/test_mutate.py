@@ -579,3 +579,22 @@ def test_lists_for_a_base_git_does_not_know_says_what_git_said(tmp_path, capsys)
     assert mutate.main(["--lists-for", "no-such-base", "--root", str(root)]) == 2
     err = capsys.readouterr().err
     assert err.startswith("ERROR: git merge-base no-such-base HEAD: ") and "no-such-base" in err[len("ERROR: git merge-base"):]
+
+
+def test_an_old_held_back_by_single_quotes_says_to_use_double_quotes_and_no_other_does(tmp_path, capsys):
+    r"""In single quotes YAML keeps `\n` as a backslash and an `n`, so an `old` of several lines written there never
+    matches; the refusal says so only when reading each `\n` as a newline makes it match once."""
+    root = _repo(tmp_path)
+    path = tmp_path / "quoted.yaml"
+    path.write_text("mutations:\n"
+                    "  - {name: two lines, file: src/window.py, old: 'def limit():\\n    return 3', new: 'def limit():\\n    return 4'}\n"
+                    "  - {name: one line, file: src/window.py, old: 'return 9', new: 'return 4'}\n"
+                    "  - {name: two wrong lines, file: src/window.py, old: 'def limit():\\n    return 9', new: 'x'}\n",
+                    encoding="utf-8")
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
+    problems = capsys.readouterr().err.removeprefix("ERROR: ").strip().split("; ")
+    hint = " (YAML keeps \\n as written in single quotes: write the value in double quotes)"
+    assert problems == ["two lines: `old` occurs 0 times in src/window.py" + hint,
+                        "one line: `old` occurs 0 times in src/window.py",
+                        "two wrong lines: `old` occurs 0 times in src/window.py"]
+    assert not (tmp_path / "runs").exists()

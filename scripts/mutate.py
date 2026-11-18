@@ -19,6 +19,8 @@ one loads, that each of its mutations has a caught_by, and that no two lists mak
 
 Quote every value with a ` #` in it: YAML ends an unquoted value at ` #` and reads the rest as a comment, so
 `name: the PR #141 rule` loads as "the PR".
+Write a value of several lines in double quotes: in single quotes YAML keeps `\\n` as a backslash and an `n`, so the
+`old` never matches, and load says so (_quoted_newline).
 
 Every `old` must occur exactly once in its file and differ from its `new`, no two mutations of a file may make the same
 mutant (one of them is a mis-aligned copy of the other), and every focused path must exist; the list is checked before
@@ -113,6 +115,14 @@ def mutant(root: Path, m: dict) -> tuple[str, str]:
     return m["file"], (root / m["file"]).read_text(encoding="utf-8").replace(m["old"], m["new"], 1)
 
 
+def _quoted_newline(old: str, text: str | None) -> str:
+    """The hint for an `old` that occurs nowhere in `text` only because it holds a backslash and an `n` that YAML kept
+    as written (single quotes), and occurs once with each read as a newline; empty for any other."""
+    if text is None or "\\n" not in old or text.count(old) or text.count(old.replace("\\n", "\n")) != 1:
+        return ""
+    return " (YAML keeps \\n as written in single quotes: write the value in double quotes)"
+
+
 def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
     """(the focused tests, the mutations) of a list, every focused path checked to exist, every `old` to occur exactly
     once and to differ from its `new`, no two mutations of a file to make the same mutant, and every `caught_by` to name
@@ -130,7 +140,8 @@ def load(path: Path, root: Path) -> tuple[list[str], list[dict]]:
         text = (root / m["file"]).read_text(encoding="utf-8") if (root / m["file"]).is_file() else None
         n = text.count(m["old"]) if text is not None else -1
         if n != 1:
-            problems.append(f"{m['name']}: `old` occurs {n} times in {m['file']}" if n >= 0 else f"{m['name']}: no file {m['file']}")
+            problems.append(f"{m['name']}: `old` occurs {n} times in {m['file']}{_quoted_newline(m['old'], text)}" if n >= 0
+                            else f"{m['name']}: no file {m['file']}")
         elif m["new"] == m["old"]:
             problems.append(f"{m['name']}: new is old, so the file is unchanged")
         else:
