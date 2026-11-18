@@ -42,7 +42,8 @@ ADR it follows (left out when the change follows none), numbers its parts (1), (
 changed, whether the workbench demo was recaptured, and ends with whether the report body changed ("報告正文未變", or
 "報告正文變更：" and what changed). 查證狀態 carries the counts `scripts/check_citations.py` gives; when the report body did not
 change, the evidence and word counts repeat the previous row's. `mara.__version__` equals the newest row's version,
-and the newest row has its demo sentence and its last sentence (`tests/test_version.py`). A pure refactor adds no row.
+and the newest row has its demo sentence and its last sentence (`tests/test_version.py`). Which changes add no row is
+in "## 版本規則".
 
 ## A doc names no version Dependabot bumps
 
