@@ -1,5 +1,6 @@
-"""tests/mutations/: every mutation list loads and names, for each mutation, the test meant to catch it (`caught_by`), so
-a change that makes an `old` stale, or adds a mutation without its test, goes red in the commit that makes it."""
+"""tests/mutations/: every mutation list loads and names, for each mutation, the test meant to catch it (`caught_by`), and
+no two lists make the same mutant (shared_mutants), so a change that makes an `old` stale, adds a mutation without its
+test, or copies a mutant another list holds, goes red in the commit that makes it."""
 
 from __future__ import annotations
 
@@ -34,6 +35,21 @@ def list_problems(path: Path, root: Path) -> str:
     return "; ".join(problems)
 
 
+def shared_mutants(paths: list[Path], root: Path) -> str:
+    """Each mutant that two of `paths` make (`mutate.mutant`, the comparison `mutate.load` makes within one list),
+    naming each list and mutation that makes it; empty when no two lists share one. A list that does not load is left to
+    test_a_mutation_list_loads."""
+    makers: dict[tuple[str, str], list[str]] = {}
+    for path in paths:
+        try:
+            _, mutations = mutate.load(path, root)
+        except ValueError:
+            continue
+        for m in mutations:
+            makers.setdefault(mutate.mutant(root, m), []).append(f"{path.relative_to(root).as_posix()}: {m['name']}")
+    return "; ".join(f"{' and '.join(names)} make the same mutant of {file}" for (file, _), names in makers.items() if len(names) > 1)
+
+
 @pytest.mark.parametrize("path", LISTS, ids=[p.stem for p in LISTS])
 def test_a_mutation_list_loads(path):
     problems = list_problems(path, ROOT)
@@ -63,3 +79,33 @@ def test_a_mutation_without_caught_by_is_named_and_one_with_it_is_not(tmp_path):
     stale = {**named, "old": "LIMIT = 9"}
     path.write_text(json.dumps({"focused": ["tests/test_window.py"], "mutations": [stale, unnamed[0]]}), encoding="utf-8")
     assert list_problems(path, tmp_path) == "a wider window: `old` occurs 0 times in src/window.py; a narrower window: no caught_by"
+
+
+def test_no_two_mutation_lists_make_the_same_mutant():
+    shared = shared_mutants(LISTS, ROOT)
+    if shared:
+        pytest.fail(f"{shared}. Keep each mutant in one list: drop it from the list that added it later", pytrace=False)
+
+
+def test_two_lists_that_make_one_mutant_are_named_and_two_that_differ_are_not(tmp_path):
+    """Two mutations make one mutant when the file they make is the same, however their `old` and `new` are written."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "src" / "window.py").write_text("LIMIT = 3\nWIDTH = 2\n", encoding="utf-8")
+    (tmp_path / "tests" / "test_window.py").write_text("def test_limit():\n    pass\n", encoding="utf-8")
+
+    def write(name: str, *mutations: dict) -> Path:
+        path = tmp_path / name
+        made = [{"file": "src/window.py", "caught_by": "tests/test_window.py::test_limit", **m} for m in mutations]
+        path.write_text(json.dumps({"focused": ["tests/test_window.py"], "mutations": made}), encoding="utf-8")
+        return path
+
+    wider = write("wider.yaml", {"name": "a wider window", "old": "LIMIT = 3", "new": "LIMIT = 4"})
+    four = write("four.yaml", {"name": "a limit of four", "old": "= 3\n", "new": "= 4\n"})
+    narrower = write("narrower.yaml", {"name": "a narrower window", "old": "WIDTH = 2", "new": "WIDTH = 1"})
+    stale = write("stale.yaml", {"name": "a wider window again", "old": "LIMIT = 3", "new": "LIMIT = 4"},
+                  {"name": "a stale one", "old": "LIMIT = 9", "new": "LIMIT = 4"})
+    assert shared_mutants([wider, four, narrower], tmp_path) == \
+        "wider.yaml: a wider window and four.yaml: a limit of four make the same mutant of src/window.py"
+    assert shared_mutants([wider, narrower], tmp_path) == ""
+    assert shared_mutants([wider, stale], tmp_path) == ""  # stale.yaml does not load: test_a_mutation_list_loads says so

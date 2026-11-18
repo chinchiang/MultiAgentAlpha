@@ -295,8 +295,12 @@ A place where a test reaches into the code: a name it patches or a value it read
 _Avoid_: hook, mock point (a seam is the place, a mock is only one thing a test puts there)
 
 **Mutation list**:
-The file `tests/mutations/<name>.yaml`: the faults a behaviour change's tests were checked against, each an `old` text of the code and the `new` text that makes the fault its name says, and the test meant to catch it (`caught_by`; `tests/test_mutation_lists.py` fails on a mutation without one). `scripts/mutate.py` applies them one by one; the tests must fail on every one (the mutation is caught).
+The file `tests/mutations/<name>.yaml`: the faults a behaviour change's tests were checked against, each an `old` text of the code and the `new` text that makes the fault its name says, and the test meant to catch it (`caught_by`; `tests/test_mutation_lists.py` fails on a mutation without one, and on two lists that make the same mutant). `scripts/mutate.py` applies them one by one; the tests must fail on every one (the mutation is caught).
 _Avoid_: mutation file, fault list, mutant list (a mutant is one applied mutation)
+
+**Mutant**:
+A file as one mutation makes it: the mutation's file and its text with `old` replaced once by `new` (`mutant` in `scripts/mutate.py`). Two mutations make the same mutant when both are equal, however their `old` and `new` are written; `scripts/mutate.py` refuses two in one list, and `tests/test_mutation_lists.py` two in different lists.
+_Avoid_: variant, mutated copy
 
 **Marked catch**:
 A mutation `scripts/mutate.py` counts as caught whose `CAUGHT` line it marks for a human to read: the failure ended in an exception other than an `AssertionError` (`(KeyError)`), or a test other than the one its `caught_by` names caught it (`(expected <caught_by>)`). It is still a catch; whether it is the fault the mutation's name says is for the reader to judge.

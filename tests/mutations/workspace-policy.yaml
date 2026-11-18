@@ -10,11 +10,6 @@ mutations:
     caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
     old: "resolve(AAT_EVIDENCE, workspace.root)"
     new: "resolve(AAT_EVIDENCE)"
-  - name: P8 judges the record at today's date whatever date it is given
-    file: src/mara/policy.py
-    caught_by: tests/test_policy.py::test_p8_reads_the_age_of_the_record_against_the_today_it_is_given
-    old: "    today = today or dt.date.today()\n"
-    new: "    today = dt.date.today()\n"
   - name: load_config runs neither P7 nor P8
     file: src/mara/config.py
     caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat

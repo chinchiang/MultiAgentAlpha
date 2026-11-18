@@ -518,3 +518,6 @@ the root, as it is in this checkout.
 `test_mutation_lists.py` calls the `load` of `scripts/mutate.py` on lists it writes into `tmp_path`, and compares the
 problems `list_problems` returns, the text `load` gives included (`` `old` occurs 0 times in <file> ``), word for word:
 a change of that text reaches it.
+`shared_mutants` there compares the mutants of several lists by the `mutant(root, m)` of `scripts/mutate.py`, which
+returns the mutation's file and the file's text with `old` replaced once by `new`, the comparison `load` makes within
+one list; it relies on `load` returning `(focused, mutations)` and raising ValueError for a list that does not load.

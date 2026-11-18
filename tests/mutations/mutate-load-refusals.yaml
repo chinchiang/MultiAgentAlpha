@@ -13,10 +13,10 @@ mutations:
   - name: the same mutant compared across files
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_a_list_with_a_mutation_that_changes_nothing_or_two_that_make_the_same_mutant_is_refused
-    old: "mutants.setdefault((m[\"file\"], text.replace("
-    new: "mutants.setdefault((\"\", text.replace("
+    old: "    return m[\"file\"], (root / m[\"file\"]).read_text("
+    new: "    return \"\", (root / m[\"file\"]).read_text("
   - name: the same mutant compared by new alone, not by the file it makes
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_a_list_with_a_mutation_that_changes_nothing_or_two_that_make_the_same_mutant_is_refused
-    old: "text.replace(m[\"old\"], m[\"new\"], 1)), []).append"
-    new: "m[\"new\"]), []).append"
+    old: "    return m[\"file\"], (root / m[\"file\"]).read_text(encoding=\"utf-8\").replace(m[\"old\"], m[\"new\"], 1)\n"
+    new: "    return m[\"file\"], m[\"new\"]\n"

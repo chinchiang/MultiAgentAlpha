@@ -36,8 +36,8 @@ Run only when named, before the first commit of a change (docs/agents/pr-flow.md
   lines-worktree  scripts/line_width.py --worktree: the lines the working tree adds to Python files over the merge base
                   with --base, committed or not and its untracked files included, are within 150 columns
   chars-worktree  scripts/control_chars.py --worktree: the same lines hold no control character
-  pytest-worktree tests/test_mutation_lists.py and tests/test_seams.py: every mutation list loads, and every pointer of
-                  tests/SEAMS.md names something that is there
+  pytest-worktree tests/test_mutation_lists.py and tests/test_seams.py: every mutation list loads, no two lists make
+                  the same mutant, and every pointer of tests/SEAMS.md names something that is there
 Not run here: the whole suite on CPython 3.12 and 3.13, the other repository scanners (trivy, zizmor, csp-evaluator, and
 osv-scanner on the seeded fixture), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
 When a check that reads the branch's commits (lines, chars, gitleaks) ran and the working tree has changes git status lists,
