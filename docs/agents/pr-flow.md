@@ -88,8 +88,9 @@ A change that becomes a pull request goes through these steps in order. Each end
    behaviour change commits its mutation list" in `CODING_STANDARDS.md`): it fails at the assertion its name gives, not
    at a `TypeError`, an import error or an earlier assertion. `mutate.py` prints it on each `CAUGHT` line, `at:` and the
    source line, and `results.json` holds it as `at` and `error`. Open the log its entry lists under `logs` only for a
-   catch that is marked (an exception other than `AssertionError`, or `(expected <caught_by>)`), one with no `at:`, or
-   one whose line is not the assertion of the mutation's name. Every mutation names the test meant to catch it
+   catch that is marked (an exception other than the one its `error:` names, `AssertionError` when it names none, or
+   no exception read when it names one; or `(expected <caught_by>)`), one with no `at:`, or one whose line is not the
+   assertion of the mutation's name. When to write an `error:` is in the same paragraph of `CODING_STANDARDS.md`. Every mutation names the test meant to catch it
    (`caught_by`; `tests/test_mutation_lists.py` fails on one that does not), so that a catch by another is marked: for a
    mutation you add, the test you mean it for, not what a run happens to report. When a mutation breaks a check that
    several cases of a parametrized test hold, name the test without its parameters: pytest stops at the first case that

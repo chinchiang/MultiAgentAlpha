@@ -128,6 +128,35 @@ def test_a_mutation_caught_by_an_error_of_the_code_under_test_is_marked_with_the
                                                        "at: assert limit() == 3  (KeyError)")
 
 
+def test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one_that_ends_in_another_is(tmp_path, capsys):
+    """A mutation's `error` is the exception its catch is meant to end in; AssertionError, or no exception read, is another.
+    A miss has no mark."""
+    root = _repo(tmp_path)
+    (root / "src" / "window.py").write_text('SIZES = {"window": 3}\n\n\ndef limit():\n    return SIZES["window"]\n', encoding="utf-8")
+    (root / "tests" / "test_window.py").write_text(
+        "import pytest\nfrom window import limit\n\n\ndef test_limit():\n    if limit() == 2:\n        pytest.fail('two', pytrace=False)\n"
+        "    assert limit() == 3\n", encoding="utf-8")
+    made = [("the door's size", 'SIZES["window"]', 'SIZES["door"]', "KeyError"),
+            ("the wall's sizes", '{"window": 3}', '{"wall": 3}', "FileNotFoundError"),
+            ("a wider window", '{"window": 3}', '{"window": 4}', "KeyError"),
+            ("a narrower window", '{"window": 3}', '{"window": 2}', "KeyError"),
+            ("another blank line", "\n\n\ndef limit", "\n\n\n\ndef limit", "KeyError")]
+    mutations = [{"name": n, "file": "src/window.py", "old": o, "new": w, "error": e} for n, o, w, e in made]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                 "--focused-only"])
+    by = "  <- tests/test_window.py::test_limit"
+    assert capsys.readouterr().out.splitlines()[:5] == [
+        f"CAUGHT the door's size{by}  at: if limit() == 2:",
+        f"CAUGHT the wall's sizes{by}  at: if limit() == 2:  (KeyError, not FileNotFoundError)",
+        f"CAUGHT a wider window{by}  at: assert limit() == 3  (AssertionError, not KeyError)",
+        f"CAUGHT a narrower window{by}  (no exception, not KeyError)",
+        "MISSED another blank line  (focused)"]
+    (run,) = (tmp_path / "runs").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [(r["error"], r["declared_error"]) for r in results] == [("KeyError", "KeyError"), ("KeyError", "FileNotFoundError"),
+                                                                    ("AssertionError", "KeyError"), (None, "KeyError"), (None, "KeyError")]
+
+
 def test_a_catch_by_the_whole_suite_says_where_from_its_log_and_a_failure_with_no_traceback_says_nothing(tmp_path, capsys):
     """pytest.fail(..., pytrace=False), as tests/test_mutation_lists.py fails, prints no source line and no exception."""
     root = _repo(tmp_path)
@@ -719,6 +748,21 @@ def test_base_skips_a_list_this_python_does_not_satisfy_says_so_in_the_summary_a
     assert summary[0] == f"SKIP tests/mutations/b-door.yaml: needs Python <3, this is {sys.version.split()[0]}"
     assert summary[1].startswith("tests/mutations/c-wall.yaml: 1 of 1 caught; ") and len(summary) == 2
     assert code == 0, "b-door.yaml, which misses its mutation, did not run, and a skip fails nothing"
+
+
+def test_base_gathers_a_catch_marked_for_another_error_than_its_mutation_names_and_not_one_that_ends_in_it(tmp_path, capsys):
+    root = _base_repo(tmp_path)
+    (root / "src" / "wall.py").write_text("WALL = {'w': 1}\n", encoding="utf-8")
+    (root / "tests" / "test_wall.py").write_text("from wall import WALL\n\n\ndef test_wall():\n    assert WALL['w'] == 1\n", encoding="utf-8")
+    made = [("another wall", "{'v': 1}"), ("a wider wall", "{'w': 2}")]
+    mutations = [{"name": n, "file": "src/wall.py", "old": "{'w': 1}", "new": w, "error": "KeyError"} for n, w in made]
+    (root / "tests" / "mutations" / "c-wall.yaml").write_text(json.dumps({"focused": ["tests/test_wall.py"], "mutations": mutations}),
+                                                               encoding="utf-8")
+    assert mutate.main(["--base", "base", "--root", str(root)]) == 0
+    summary = capsys.readouterr().out.split("\nsummary\n")[1].splitlines()
+    assert summary[0].startswith("tests/mutations/c-wall.yaml: 2 of 2 caught; ")
+    assert summary[1:] == ["marked:", "tests/mutations/c-wall.yaml: CAUGHT a wider wall  <- tests/test_wall.py::test_wall  "
+                                      "at: assert WALL['w'] == 1  (AssertionError, not KeyError)"]
 
 
 def test_base_takes_no_list_and_neither_lists_for_nor_only_nor_focused_only(tmp_path, capsys):

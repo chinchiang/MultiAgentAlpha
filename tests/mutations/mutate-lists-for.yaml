@@ -36,6 +36,7 @@ mutations:
   - name: a list given beside --lists-for is ignored, not refused
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_a_list_or_lists_for_is_given_and_lists_for_alone_runs_no_mutation
+    error: Failed
     old: '    if (a.mutations is None) == (a.lists_for is None):'
     new: '    if a.mutations is None and a.lists_for is None:'
   - name: a failure of git is taken for a change that touches no list
@@ -51,5 +52,6 @@ mutations:
   - name: a list that is not a mapping is read as one
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_lists_for_names_a_list_that_is_not_yaml_and_reads_one_that_is_not_a_mapping_as_naming_only_itself
+    error: AttributeError
     old: "        data = data if isinstance(data, dict) else {}\n"
     new: ""

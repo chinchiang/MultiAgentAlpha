@@ -42,7 +42,7 @@ mutations:
   - name: a marked catch is not gathered
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks
-    old: "            if r[\"caught\"] and (r[\"error\"] not in (None, \"AssertionError\") or r[\"expected\"]):\n"
+    old: "            if r[\"caught\"] and (mark or r[\"expected\"]):\n"
     new: "            if False:\n"
   - name: a catch with no at is not gathered
     file: scripts/mutate.py
@@ -67,5 +67,6 @@ mutations:
   - name: --only is taken beside --base
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_takes_no_list_and_neither_lists_for_nor_only_nor_focused_only
+    error: Failed
     old: "a.lists_for is not None or a.only or a.focused_only):"
     new: "a.lists_for is not None or a.focused_only):"

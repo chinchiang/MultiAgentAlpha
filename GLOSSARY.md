@@ -295,7 +295,7 @@ A place where a test reaches into the code: a name it patches or a value it read
 _Avoid_: hook, mock point (a seam is the place, a mock is only one thing a test puts there)
 
 **Mutation list**:
-The file `tests/mutations/<name>.yaml`: the faults a behaviour change's tests were checked against, each an `old` text of the code and the `new` text that makes the fault its name says, and the test meant to catch it (`caught_by`; `tests/test_mutation_lists.py` fails on a mutation without one, and on two lists that make the same mutant). `scripts/mutate.py` applies them one by one; the tests must fail on every one (the mutation is caught). A list whose mutations only a later Python catches says the Python it needs (`requires-python: ">=3.13"`, a specifier as `pyproject.toml`'s); `scripts/mutate.py` refuses to run it alone under another, and skips it under `--base`: run it with an interpreter it takes (a venv of `tools/dev-requirements-py313.txt` for `>=3.13`, as CI's 3.13 job installs).
+The file `tests/mutations/<name>.yaml`: the faults a behaviour change's tests were checked against, each an `old` text of the code and the `new` text that makes the fault its name says, and the test meant to catch it (`caught_by`; `tests/test_mutation_lists.py` fails on a mutation without one, and on two lists that make the same mutant), and, when its catch is meant to end in an exception other than an `AssertionError`, that exception (`error: FileNotFoundError`). `scripts/mutate.py` applies them one by one; the tests must fail on every one (the mutation is caught). A list whose mutations only a later Python catches says the Python it needs (`requires-python: ">=3.13"`, a specifier as `pyproject.toml`'s); `scripts/mutate.py` refuses to run it alone under another, and skips it under `--base`: run it with an interpreter it takes (a venv of `tools/dev-requirements-py313.txt` for `>=3.13`, as CI's 3.13 job installs).
 _Avoid_: mutation file, fault list, mutant list (a mutant is one applied mutation)
 
 **Mutant**:
@@ -303,7 +303,7 @@ A file as one mutation makes it: the mutation's file and its text with `old` rep
 _Avoid_: variant, mutated copy
 
 **Marked catch**:
-A mutation `scripts/mutate.py` counts as caught whose `CAUGHT` line it marks for a human to read: the failure ended in an exception other than an `AssertionError` (`(KeyError)`), or a test other than the one its `caught_by` names caught it (`(expected <caught_by>)`). It is still a catch; whether it is the fault the mutation's name says is for the reader to judge.
+A mutation `scripts/mutate.py` counts as caught whose `CAUGHT` line it marks for a human to read, for one of two reasons. The failure did not end in the exception the mutation names (`error:`), or, when it names none, it ended in an exception other than an `AssertionError`: the mark is `(KeyError)`, and, when it names one, `(KeyError, not FileNotFoundError)`, or `(no exception, not FileNotFoundError)` when no exception was read. Or a test other than the one its `caught_by` names caught it: `(expected <caught_by>)`. It is still a catch; whether it is the fault the mutation's name says is for the reader to judge.
 _Avoid_: false catch, bad catch (the script does not judge it)
 
 **Left path**:
