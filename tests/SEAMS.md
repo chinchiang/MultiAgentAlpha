@@ -535,7 +535,9 @@ Its tests of `main` run it in the test's process with the hidden `--repo` of `sc
 repository of its own (`_repo`: a main with two lists, a test file and the code they name, and a branch `change`), run
 real git, and read the lines it prints, by position; `_counts` also checks that `git status` is the same after the run.
 One test runs it on this checkout's history, the merge of #335 (`c8ff6ab`), and skips where the checkout lacks that
-commit (a shallow clone): a change of how the script counts that leaves 21 and 11 there reaches it.
+commit (a shallow clone): a change of how the script counts that leaves 21 and 11 there reaches it. In CI it runs in
+the three pytest jobs of `.github/workflows/mara-review.yml` (`tests + mock review`, `tests (CPython 3.12)`,
+`tests (CPython 3.13)`), each checking out with `fetch-depth: 0`; it skips on a shallow clone elsewhere.
 
 ## The mutation runner (`scripts/mutate.py`)
 
