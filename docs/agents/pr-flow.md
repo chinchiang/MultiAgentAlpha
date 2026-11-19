@@ -43,8 +43,10 @@ A change that becomes a pull request goes through these steps in order. Each end
    The version, its CHANGELOG row and the demo page go in **the version commit** (`GLOSSARY.md`), the branch's last
    commit, which may hold nothing else and which `scripts/version_commit.py` makes (its docstring gives its arguments
    and what it refuses): `scripts/renumber.py` renumbers only when the rebase stops with no commit left to apply, so a
-   version commit in the middle sends you to the hand-made fix. To change a commit you have made without `rebase -i`
-   or `--amend`, start from
+   version commit in the middle sends you to the hand-made fix. The counts of tests and mutations its row states are
+   what `scripts/change_counts.py --base origin/main` prints once the change is done (`--worktree` before the commits),
+   its `changed` split by hand into what the change did (its docstring says why).
+   To change a commit you have made without `rebase -i` or `--amend`, start from
    a clean working tree (`git status --short` prints nothing): a fix you have not committed is committed on the branch
    first, as a commit of its own (`git commit -am <message>`, after `git add`, or the `git add -N` above, for a new
    file). Otherwise, after the rename, `git switch` refuses a fix to a file of the branch and leaves you on

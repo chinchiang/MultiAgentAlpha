@@ -305,7 +305,9 @@ with the hidden `--repo` pointing at a throwaway repository the test builds and 
 what it printed with `capsys`, and never patch anything: the script runs real git. Both scripts read the change
 through `scripts/change_lines.py` (its arguments, the merge base, the diff and the untracked files, the error a git
 failure prints, and the ending: each file not UTF-8 and the summary), so a change to that module reaches both test
-files, and either may be the one that catches a mutation of it.
+files, and either may be the one that catches a mutation of it. `scripts/change_counts.py` takes its arguments, the
+prefix of its git commands and the error a git failure prints, so a change of those reaches `test_change_counts.py`
+too.
 
 Three tests run a script as check_local and CI do, as a child process. Two run `scripts/line_width.py` in a locale
 that is not UTF-8 (`_run_in_a_locale_that_is_not_utf8`):
@@ -521,6 +523,19 @@ is today's, as the script takes it.
 `rebuild_demo` running the builder of the root it is given, in that root, and raising CalledProcessError when the
 builder fails. `scripts/renumber.py` imports those names by name, so a test that patched one would patch it in
 `renumber`, where it is looked up; none does.
+
+## The counts of a change (`scripts/change_counts.py`)
+
+`test_change_counts.py` imports `scripts/change_counts.py` as a module (`import change_counts`, never
+`from change_counts import test_functions`, which pytest would collect as a test) and calls `test_functions`,
+`mutation_list` and `compare` on texts it writes, comparing what they return word for word; it relies on
+`test_functions` returning a dict of name to source, `mutation_list` a pair (mutations by name, the other keys),
+`compare` a triple (added, changed, removed), and both readers returning empty for None.
+Its tests of `main` run it in the test's process with the hidden `--repo` of `scripts/change_lines.py` pointing at a git
+repository of its own (`_repo`: a main with two lists, a test file and the code they name, and a branch `change`), run
+real git, and read the lines it prints, by position; `_counts` also checks that `git status` is the same after the run.
+One test runs it on this checkout's history, the merge of #335 (`c8ff6ab`), and skips where the checkout lacks that
+commit (a shallow clone): a change of how the script counts that leaves 21 and 11 there reaches it.
 
 ## The mutation runner (`scripts/mutate.py`)
 
