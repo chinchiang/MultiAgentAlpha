@@ -302,6 +302,10 @@ _Avoid_: mutation file, fault list, mutant list (a mutant is one applied mutatio
 A file as one mutation makes it: the mutation's file and its text with `old` replaced once by `new` (`mutant` in `scripts/mutate.py`). Two mutations make the same mutant when both are equal, however their `old` and `new` are written; `scripts/mutate.py` refuses two in one list, and `tests/test_mutation_lists.py` two in different lists.
 _Avoid_: variant, mutated copy
 
+**Stale mutation**:
+A mutation whose `old` does not occur exactly once in its file, or whose file is gone: the code moved or changed under it (`stale` in `scripts/mutate.py`, whose words `load` gives). A list that holds one does not load. `scripts/mutate.py <list> --realign` moves one whose `old` now occurs once in exactly one other file to that file, rewriting its `file:` line alone, and lists every other for a human, as it lists a move that would make the same mutant as another mutation; an `old` whose text changed is re-aligned by hand.
+_Avoid_: outdated mutation, broken mutation (a stale mutation is one that no longer points at its code, which may still hold the fault it names)
+
 **Marked catch**:
 A mutation `scripts/mutate.py` counts as caught whose `CAUGHT` line it marks for a human to read, for one of two reasons. The failure did not end in the exception the mutation names (`error:`), or, when it names none, it ended in an exception other than an `AssertionError`: the mark is `(KeyError)`, and, when it names one, `(KeyError, not FileNotFoundError)`, or `(no exception, not FileNotFoundError)` when no exception was read. Or a test other than the one its `caught_by` names caught it: `(expected <caught_by>)`. It is still a catch; whether it is the fault the mutation's name says is for the reader to judge.
 _Avoid_: false catch, bad catch (the script does not judge it)
