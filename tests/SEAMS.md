@@ -504,6 +504,24 @@ script and matches what CI printed), and
 semgrep entry's clean pattern takes, with and without the rules that timed out). They rely on each entry's tool, clean
 pattern, script and printed text, by those names.
 
+## The version commit (`scripts/version_commit.py`, `scripts/renumber.py`)
+
+`test_renumber.py` and `test_version_commit.py` run `scripts/renumber.py` and `scripts/version_commit.py` as child
+processes in a repository of their own (`_repo`), so nothing is patched: what they read is the repository after the run
+(its files, `git log`, `git status`) and what the script prints on stderr for a refusal or a failed step. Each
+repository holds stand-ins the scripts run from its own `scripts/` and `tests/`: a demo builder that writes the version
+into the page's version chip (DEMO_BUILDER, the same in both), and, for `test_version_commit.py`, a
+`scripts/check_citations.py` and a `scripts/count_words.py` that print lines shaped as the real ones print them
+(CITATIONS and WORDS there), whose shape the regular expressions of `scripts/version_commit.py` read, and two test files
+for the version and the demo. A change of what the real counting scripts print reaches these tests only when it is
+copied into the stand-ins. `test_version_commit.py` makes `origin/main` with `git update-ref`, and the date of the row
+is today's, as the script takes it.
+`test_version_files.py` imports `scripts/version_files.py` and calls `next_version`, `with_row_version`, `version_of`,
+`with_version` and `rebuild_demo` directly; it relies on `version_of` returning None for a text with no version, and on
+`rebuild_demo` running the builder of the root it is given, in that root, and raising CalledProcessError when the
+builder fails. `scripts/renumber.py` imports those names by name, so a test that patched one would patch it in
+`renumber`, where it is looked up; none does.
+
 ## The mutation runner (`scripts/mutate.py`)
 
 `test_mutate.py` drives `scripts/mutate.py` through `main`, with the hidden `--root` pointing at a throwaway repository

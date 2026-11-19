@@ -11,13 +11,17 @@ finishes the rebase and makes the first sentence's closing ", v<old>" in the com
 the old version are left for a human. git's output is read, and the message written back, as UTF-8 whatever the locale's
 encoding.
 
-The commit that holds the version is the branch's last (docs/agents/pr-flow.md, step 3): a rebase that stops on an
-earlier one still has commits to apply, and is refused.
+The version commit (GLOSSARY.md) is the branch's last (docs/agents/pr-flow.md, step 3): a rebase that stops on an
+earlier one still has commits to apply, and is refused. What it computes about the version commit (the next version, a
+row's version, __version__, the demo rebuild) is in scripts/version_files.py, which scripts/version_commit.py shares.
 
 It refuses, changing nothing, outside a rebase (git leaves REBASE_HEAD behind when one ends, so the rebase's state
 directory decides), with more commits still to apply, with a conflict in any other file, without a CHANGELOG conflict,
 and when any other file would change otherwise than the branch's commit did (main already holding part of it, say).
 Exit 0 once the rebase is finished, 2 when it refuses.
+
+GLOSSARY.md terms: Version commit. Not pure: it writes the version commit's three files, runs the demo builder and git,
+and finishes the rebase.
 """
 
 from __future__ import annotations
@@ -29,11 +33,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-CHANGELOG = "docs/CHANGELOG.md"
-VERSION_FILE = "src/mara/__init__.py"
-DEMO = "docs/workbench/index.html"
-VERSION_RE = re.compile(r'^__version__ = "(\d+\.\d+\.\d+)"$', re.M)
-ROW_RE = re.compile(r"^(\| \d{4}-\d{2}-\d{2} \| v)(\d+\.\d+\.\d+)( \|)", re.M)
+from version_files import CHANGELOG, DEMO, ROW_RE, VERSION_FILE, next_version, rebuild_demo, version_of, with_row_version, with_version
+
 CONFLICT_RE = re.compile(r"^<<<<<<< [^\n]*\n(.*?)^=======\n(.*?)^>>>>>>> [^\n]*\n", re.M | re.S)
 
 
@@ -46,15 +47,9 @@ class Refusal(Exception):
 
 
 def _version(text: str) -> str:
-    m = VERSION_RE.search(text)
-    if m is None:
+    if (version := version_of(text)) is None:
         raise Refusal(f"no __version__ in {VERSION_FILE}")
-    return m.group(1)
-
-
-def _next(version: str) -> str:
-    major, minor, patch = (int(n) for n in version.split("."))
-    return f"{major}.{minor}.{patch + 1}"
+    return version
 
 
 def _changelog(text: str, target: str) -> str:
@@ -65,7 +60,7 @@ def _changelog(text: str, target: str) -> str:
     main_rows, branch_rows = blocks[0].group(1), blocks[0].group(2)
     if len(ROW_RE.findall(branch_rows)) != 1 or branch_rows.count("\n") != 1:
         raise Refusal(f"{CHANGELOG}: the branch's side of the conflict is not one row")
-    branch_row = ROW_RE.sub(lambda m: m.group(1) + target + m.group(3), branch_rows, count=1)
+    branch_row = with_row_version(branch_rows, target)
     return text[:blocks[0].start()] + branch_row + main_rows + text[blocks[0].end():]
 
 
@@ -111,7 +106,7 @@ def renumber(target: str | None) -> None:
     if left := _commits_left():
         raise Refusal(
             f"the rebase has {left} more commit(s) to apply after the one it stopped on; renumber.py needs that one to be "
-            "the branch's last: abort the rebase, move the commit that holds the version to the end, and rebase again")
+            "the branch's last: abort the rebase, move the version commit to the end, and rebase again")
     conflicted = set(_git("diff", "--name-only", "--diff-filter=U").stdout.split())
     if others := sorted(conflicted - {CHANGELOG, VERSION_FILE, DEMO}):
         raise Refusal(f"conflicts outside the version's files, resolve them by hand first: {', '.join(others)}")
@@ -121,13 +116,13 @@ def renumber(target: str | None) -> None:
         raise Refusal(f"these files change otherwise than the branch's commit did, check them by hand: {', '.join(drifted)}")
     old = _version(_git("show", f"REBASE_HEAD:{VERSION_FILE}").stdout)
     main_version_file = _git("show", f"HEAD:{VERSION_FILE}").stdout
-    target = target or _next(_version(main_version_file))
+    target = target or next_version(_version(main_version_file))
 
     (root / CHANGELOG).write_text(_changelog((root / CHANGELOG).read_text(encoding="utf-8"), target), encoding="utf-8")
-    (root / VERSION_FILE).write_text(VERSION_RE.sub(f'__version__ = "{target}"', main_version_file), encoding="utf-8")
+    (root / VERSION_FILE).write_text(with_version(main_version_file, target), encoding="utf-8")
     if DEMO in conflicted:  # the builder re-assembles the page it reads: give it main's (in a rebase, "ours")
         _git("checkout", "--ours", DEMO)
-    subprocess.run([sys.executable, str(root / "scripts" / "build_workbench_demo.py")], check=True)
+    rebuild_demo(root)
     _git("add", CHANGELOG, VERSION_FILE, DEMO)
 
     message = _git("log", "-1", "--format=%B", "REBASE_HEAD").stdout

@@ -1,0 +1,101 @@
+focused: [tests/test_version_files.py, tests/test_version_commit.py]
+# version_commit.py and version_files.py (#330). Each mutation breaks one part of it: what version_files computes,
+# what version_commit refuses, what it writes into the row and the commit, and which failures stop it. The next
+# version, and what renumber.py does with version_files, are mutated in renumber.yaml.
+mutations:
+  - name: "a row keeps its old version"
+    file: scripts/version_files.py
+    caught_by: tests/test_version_files.py::test_a_row_takes_another_version_and_keeps_every_other_cell
+    old: "    return ROW_RE.sub(lambda m: m.group(1) + version + m.group(3), row, count=1)\n"
+    new: "    return row\n"
+  - name: "version_of reads no version"
+    file: scripts/version_files.py
+    caught_by: tests/test_version_files.py::test_the_version_is_read_from_and_written_into_the_version_file
+    old: "    return m.group(1) if m else None\n"
+    new: "    return None\n"
+  - name: "with_version leaves the version as it was"
+    file: scripts/version_files.py
+    caught_by: tests/test_version_files.py::test_the_version_is_read_from_and_written_into_the_version_file
+    old: "    return VERSION_RE.sub(f'__version__ = \"{version}\"', text)\n"
+    new: "    return text\n"
+  - name: "a demo builder that fails is not raised"
+    file: scripts/version_files.py
+    caught_by: tests/test_version_files.py::test_the_demo_is_rebuilt_by_the_builder_of_the_root_given_and_a_builder_that_fails_raises
+    error: Failed
+    old: "cwd=root, check=True)"
+    new: "cwd=root, check=False)"
+  - name: "--to ignored"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_version_the_newest_row_already_holds_is_refused_with_nothing_changed
+    old: "    target = to or next_version(main_version)\n"
+    new: "    target = next_version(main_version)\n"
+  - name: "a working tree that changes another file is not refused"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_working_tree_that_changes_another_file_or_holds_an_untracked_one_is_refused_with_nothing_changed
+    old: "    if others:\n"
+    new: "    if False:\n"
+  - name: "an untracked file is not looked at"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_working_tree_that_changes_another_file_or_holds_an_untracked_one_is_refused_with_nothing_changed
+    old: "\"--porcelain\", \"--untracked-files=all\""
+    new: "\"--porcelain\", \"--untracked-files=no\""
+  - name: "a version the newest row holds is not refused"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_version_the_newest_row_already_holds_is_refused_with_nothing_changed
+    old: "    if newest and newest.group(2) == target:\n"
+    new: "    if False:\n"
+  - name: "a row file of several lines is taken"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_row_file_that_is_not_one_line_of_two_cells_is_refused_with_nothing_changed
+    old: "    if len(lines) != 1 or \" | \" not in lines[0]:\n"
+    new: "    if not lines or \" | \" not in lines[0]:\n"
+  - name: "the 附錄A entries and the ids cited swapped"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_it_commits_the_next_version_its_row_counted_now_and_the_demo_with_the_message_and_trailers_given
+    old: "f\"附錄A {cited.group(1)} 條，引用 {cited.group(2)} 個編號；"
+    new: "f\"附錄A {cited.group(2)} 條，引用 {cited.group(1)} 個編號；"
+  - name: "the evidence markers in another order"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_it_commits_the_next_version_its_row_counted_now_and_the_demo_with_the_message_and_trailers_given
+    old: "LEVELS = (\"已證實\", \"廠商主張\", \"第三方評論\", \"尚未證實\")"
+    new: "LEVELS = (\"已證實\", \"廠商主張\", \"尚未證實\", \"第三方評論\")"
+  - name: "the row goes below the newest"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_it_commits_the_next_version_its_row_counted_now_and_the_demo_with_the_message_and_trailers_given
+    old: "        at = newest.start() if newest else len(changelog)\n"
+    new: "        at = len(changelog)\n"
+  - name: "a demo builder that fails is not a failed step"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_demo_builder_that_fails_stops_it_at_the_demo_page_before_the_tests
+    old: "            raise StepFailed(f\"scripts/build_workbench_demo.py exit {e.returncode}\") from e\n"
+    new: "            pass\n"
+  - name: "the version and demo tests are not run"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_row_that_does_not_say_whether_the_demo_was_recaptured_fails_at_the_tests_and_is_not_committed
+    old: "        _run(root, \"-m\", \"pytest\", \"-q\", \"-p\", \"no:cacheprovider\", *TESTS)\n"
+    new: "        pass\n"
+  - name: "the trailers are not written"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_it_commits_the_next_version_its_row_counted_now_and_the_demo_with_the_message_and_trailers_given
+    old: "(\"\\n\" + \"\\n\".join(trailers) + \"\\n\" if trailers else \"\")"
+    new: "\"\""
+  - name: "a refusal exits 1"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_working_tree_that_changes_another_file_or_holds_an_untracked_one_is_refused_with_nothing_changed
+    old: "        return 2 if isinstance(e, Refusal) else 1\n"
+    new: "        return 1\n"
+  - name: "check_citations.py exiting 1 is not a failed step"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_counting_script_that_fails_or_prints_no_count_to_read_stops_it_at_the_row
+    old: "citations, words = _run(root, \"scripts/check_citations.py\"), "
+    new: "citations, words = subprocess.run([sys.executable, \"scripts/check_citations.py\"], cwd=root, capture_output=True, encoding=\"utf-8\").stdout, "
+  - name: "markers that cannot be read end in a traceback"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_counting_script_that_fails_or_prints_no_count_to_read_stops_it_at_the_row
+    old: "except (ValueError, SyntaxError) as e:"
+    new: "except SyntaxError as e:"
+  - name: "a row file that cannot be read ends in a traceback"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_row_file_that_cannot_be_read_is_refused_with_nothing_changed
+    old: "    except (OSError, UnicodeDecodeError) as e:\n        raise Refusal("
+    new: "    except UnicodeDecodeError as e:\n        raise Refusal("
