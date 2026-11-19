@@ -222,8 +222,8 @@ def test_a_file_whose_changes_differ_after_the_rebase_is_reported_before_anythin
 
 
 def test_a_rebase_with_more_commits_to_apply_is_refused(tmp_path):
-    """The commit that holds the version is the branch's last; with more to apply, --continue could stop again and the
-    amend would reword the wrong one. The message says what to do: abort, move that commit to the end, rebase again."""
+    """The version commit is the branch's last; with more to apply, --continue could stop again and the amend would
+    reword the wrong one. The message says what to do: abort, move that commit to the end, rebase again."""
     repo = _repo(tmp_path)
     _git(repo, "switch", "-q", "-c", "branch")
     _release(repo, "0.13.26", "| 2026-10-28 | v0.13.26 | 分支。報告正文未變 | t | 0 |\n", "branch, v0.13.26")

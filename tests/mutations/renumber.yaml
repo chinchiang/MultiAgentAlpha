@@ -28,18 +28,18 @@ mutations:
   - name: the branch's row keeps its old version
     file: scripts/renumber.py
     caught_by: tests/test_renumber.py::test_a_collision_on_the_changelog_alone_takes_the_next_version_and_finishes_the_rebase
-    old: '    branch_row = ROW_RE.sub(lambda m: m.group(1) + target + m.group(3), branch_rows, count=1)'
+    old: '    branch_row = with_row_version(branch_rows, target)'
     new: '    branch_row = branch_rows'
   - name: the default not main's version plus one
-    file: scripts/renumber.py
+    file: scripts/version_files.py
     caught_by: tests/test_renumber.py::test_a_collision_on_the_changelog_alone_takes_the_next_version_and_finishes_the_rebase
     old: '    return f"{major}.{minor}.{patch + 1}"'
     new: '    return f"{major}.{minor}.{patch + 2}"'
   - name: --to ignored
     file: scripts/renumber.py
     caught_by: tests/test_renumber.py::test_a_collision_on_the_version_and_the_demo_too_takes_the_version_asked_for
-    old: '    target = target or _next(_version(main_version_file))'
-    new: '    target = _next(_version(main_version_file))'
+    old: '    target = target or next_version(_version(main_version_file))'
+    new: '    target = next_version(_version(main_version_file))'
   - name: the conflicted demo not taken from main
     file: scripts/renumber.py
     caught_by: tests/test_renumber.py::test_a_collision_on_the_version_and_the_demo_too_takes_the_version_asked_for
