@@ -1,0 +1,97 @@
+focused: [tests/test_change_counts.py]
+# change_counts.py (#343). Each mutation breaks one part of it: which functions are tests and what their source
+# is, how two sides are compared, what a list gives, what a list's line and the totals say, and which change
+# is read, and what stops it.
+mutations:
+  - name: "a method of any class is a test"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_a_test_function_is_a_test_at_module_level_or_in_a_test_class_with_its_decorators
+    old: "if isinstance(node, ast.ClassDef) and node.name.startswith(\"Test\"):"
+    new: "if isinstance(node, ast.ClassDef):"
+  - name: "a helper is a test"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_a_test_function_is_a_test_at_module_level_or_in_a_test_class_with_its_decorators
+    old: "isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(\"test\")"
+    new: "isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))"
+  - name: "the tests of a file in another order"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_a_test_function_is_a_test_at_module_level_or_in_a_test_class_with_its_decorators
+    old: "            found[node.name] = source(node)\n"
+    new: "            found = {node.name: source(node), **found}\n"
+  - name: "a method's body keeps its indentation"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_a_test_function_is_a_test_at_module_level_or_in_a_test_class_with_its_decorators
+    old: "return textwrap.dedent(\"\".join(lines[start - 1:node.end_lineno])).rstrip(\"\\n\")"
+    new: "return \"\".join(lines[start - 1:node.end_lineno]).lstrip().rstrip(\"\\n\")"
+  - name: "a test's decorators are left out of its source"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_a_test_function_is_a_test_at_module_level_or_in_a_test_class_with_its_decorators
+    old: "start = min([node.lineno, *(d.lineno for d in node.decorator_list)])"
+    new: "start = node.lineno"
+  - name: "a key on both sides with another value is not changed"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_two_sides_are_compared_by_key_and_a_key_on_both_with_another_value_is_changed
+    old: "sum(before[k] != after[k] for k in before.keys() & after.keys())"
+    new: "0"
+  - name: "added and removed swapped"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_two_sides_are_compared_by_key_and_a_key_on_both_with_another_value_is_changed
+    old: "return (len(after.keys() - before.keys()),"
+    new: "return (len(before.keys() - after.keys()),"
+  - name: "the other keys of a list hold its mutations too"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_a_list_gives_its_mutations_by_name_and_its_other_keys
+    old: "return mutations, {k: v for k, v in data.items() if k != \"mutations\"}"
+    new: "return mutations, dict(data)"
+  - name: "an edit of a list-level key is not named"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_the_mutations_and_tests_a_change_adds_changes_and_removes_are_counted_per_file_and_in_all
+    old: "\"\".join(f\"; {k} changed\" for k in edited)"
+    new: "\"\""
+  - name: "a list added or deleted names its keys changed"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_the_mutations_and_tests_a_change_adds_changes_and_removes_are_counted_per_file_and_in_all
+    old: "both = base_text is not None and change_text is not None"
+    new: "both = True"
+  - name: "the merge base's side read after the change"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_the_mutations_and_tests_a_change_adds_changes_and_removes_are_counted_per_file_and_in_all
+    old: "base_text, change_text = _text(a, base, path), _text(a, after, path)"
+    new: "base_text, change_text = _text(a, after, path), _text(a, after, path)"
+  - name: "a file in the working tree that is not UTF-8 is an error"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_a_file_that_is_not_utf8_is_read_alike_on_both_sides
+    old: "read_text(encoding=\"utf-8\", errors=\"replace\")"
+    new: "read_text(encoding=\"utf-8\")"
+  - name: "a list that is not YAML ends in a traceback"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_a_file_that_is_not_yaml_or_not_python_or_a_base_git_does_not_know_is_an_error_with_no_count
+    error: ParserError
+    old: "    except yaml.YAMLError as e:\n        raise ValueError(f\"not YAML:"
+    new: "    except ValueError as e:\n        raise ValueError(f\"not YAML:"
+  - name: "a git failure ends in a traceback"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_a_file_that_is_not_yaml_or_not_python_or_a_base_git_does_not_know_is_an_error_with_no_count
+    error: CalledProcessError
+    old: "    except subprocess.CalledProcessError as e:\n        return git_error(e, a)"
+    new: "    except OSError as e:\n        return git_error(e, a)"
+  - name: "the totals take the last file's counts"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_the_mutations_and_tests_a_change_adds_changes_and_removes_are_counted_per_file_and_in_all
+    old: "totals[kind] = [t + c for t, c in zip(totals[kind], counts, strict=True)]"
+    new: "totals[kind] = list(counts)"
+  - name: "--worktree reads no untracked file"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_worktree_counts_what_is_not_committed_an_untracked_test_file_included
+    old: "        names += _git(a, \"ls-files\", \"--others\", \"--exclude-standard\", \"-z\")\n"
+    new: "        pass\n"
+  - name: "--worktree reads the commits"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_worktree_counts_what_is_not_committed_an_untracked_test_file_included
+    old: "after = None if a.worktree else a.head"
+    new: "after = a.head"
+  - name: "a test file in a directory under tests/ is not one"
+    file: scripts/change_counts.py
+    caught_by: tests/test_change_counts.py::test_worktree_counts_what_is_not_committed_an_untracked_test_file_included
+    old: "fnmatch.fnmatch(path.rsplit(\"/\", 1)[-1], \"test_*.py\")"
+    new: "fnmatch.fnmatch(path, \"tests/test_*.py\") and path.count(\"/\") == 1"
