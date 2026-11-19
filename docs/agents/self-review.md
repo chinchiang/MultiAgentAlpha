@@ -106,7 +106,8 @@ Besides what the prompt names, always check:
 - the change reaches every reader of what it changes (a format, a file, the result of a function), not only those
   the spec names: find the call sites with `git -C <main checkout> grep`, read each, and report one left as it was;
 - when the commits already exist, each one passes the tests that cover it alone; and a new test fails against the old code
-  (copy the new test file into a worktree of `origin/main` in your directory);
+  (copy the new test file into a worktree of `origin/main` in your directory), unless it tests a module or a script the
+  base does not have: its mutations show it sensitive instead (`pr-flow.md` step 2);
 - every sentence the change writes about what other code does (a docstring, a standard, a CHANGELOG row, a message) is
   true: read that code, not only its docstring, and report a claim that says more than the code does;
 - when the change adds or edits a mutation list (`git -C <main checkout> diff origin/main -- tests/mutations/`), each

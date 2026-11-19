@@ -19,7 +19,10 @@ A change that becomes a pull request goes through these steps in order. Each end
    worktree of the checkout) nor the base's files written over the main checkout's (a run of the checks may be reading
    them). A test that fails without reaching the part it is about is not red for the reason you meant: a `DID NOT RAISE`
    because an `or` with a value on its left never reads the right (`hint or name`), say. Change the test until it
-   reaches that part.
+   reaches that part. A test of a module or a script the base does not have fails there on its import or on the
+   missing file (`ModuleNotFoundError`, `No such file or directory`), which shows nothing of what it checks: such a
+   test is shown sensitive by its mutations, each caught by it at the assertion its name gives (step 3), and the body
+   says so.
 3. **Make it green, review it, then commit it.** Green in the working tree, nothing committed yet: the code, its
    `tests/mutations/<name>.yaml` and `tests/SEAMS.md`, and, when the change takes a version, the version, its CHANGELOG
    row and the demo page. Run `scripts/check_local.py --only worktree` beside the tests (seconds): ruff; the width of
@@ -136,8 +139,9 @@ A change that becomes a pull request goes through these steps in order. Each end
    When semgrep's accepted count differs from `main`'s or from your local run, find out why before the body states a
    number. A rule that timed out on a file drops that rule's findings there: `semgrep_ci.py`'s clean line ends with how
    many timeouts there were and on which files, and a line above it names each timeout's rule and file. When no timeout
-   explains the difference, download the job's SARIF (`gh run download <run> -n l0-sarif`) and compare it finding by
-   finding (rule, file, line) with the other.
+   explains the difference, download the job's SARIF (`gh run download <run> -n l0-sarif`) and compare its
+   `semgrep.sarif`, the scan of this repository with its accepted findings, finding by finding (rule, file, line) with
+   the other: `fixture-semgrep.sarif` beside it is the scan of the seeded fixture.
 7. **Give the owner the merge command**, with the full 40-character head SHA, and do not run it. `git fetch` once more
    and check that `origin/main` has not moved since step 6; if it has, rebase and push again, because the branch
    would no longer be up to date and CI runs again. The ruleset R1 `update` rule keeps the state `BLOCKED` even when the
