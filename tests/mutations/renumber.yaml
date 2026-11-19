@@ -60,3 +60,13 @@ mutations:
     caught_by: tests/test_renumber.py::test_a_commit_message_beyond_ascii_is_written_back_as_utf8_whatever_the_locale
     old: 'input=renamed, encoding="utf-8", check=True)'
     new: 'input=renamed, text=True, check=True)'
+  - name: an opening v<old> is left in the subject
+    file: scripts/renumber.py
+    caught_by: tests/test_renumber.py::test_a_version_commit_whose_subject_begins_with_its_version_is_renamed_there
+    old: '    first = re.sub(rf"^v{re.escape(old)}:", f"v{new}:", first, count=1)'
+    new: '    first = first'
+  - name: a v<old> anywhere in the subject is renamed as if it opened it
+    file: scripts/renumber.py
+    caught_by: tests/test_renumber.py::test_the_subject_takes_the_new_version_where_it_opens_or_closes_it_and_nowhere_else
+    old: 'rf"^v{re.escape(old)}:"'
+    new: 'rf"v{re.escape(old)}:"'

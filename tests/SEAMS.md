@@ -509,18 +509,21 @@ pattern, script and printed text, by those names.
 ## The version commit (`scripts/version_commit.py`, `scripts/renumber.py`)
 
 `test_renumber.py` and `test_version_commit.py` run `scripts/renumber.py` and `scripts/version_commit.py` as child
-processes in a repository of their own (`_repo`), so nothing is patched: what they read is the repository after the run
-(its files, `git log`, `git status`) and what the script prints on stderr for a refusal or a failed step. Each
-repository holds stand-ins the scripts run from its own `scripts/` and `tests/`: a demo builder that writes the version
-into the page's version chip (DEMO_BUILDER, the same in both), and, for `test_version_commit.py`, a
-`scripts/check_citations.py` and a `scripts/count_words.py` that print lines shaped as the real ones print them
-(CITATIONS and WORDS there), whose shape the regular expressions of `scripts/version_commit.py` read, and two test files
-for the version and the demo. A change of what the real counting scripts print reaches these tests only when it is
-copied into the stand-ins. `test_version_commit.py` makes `origin/main` with `git update-ref`, and the date of the row
-is today's, as the script takes it. Its test of a git with no committer identity runs the script in an environment of
-its own (`_no_identity`: no `GIT_*`, `EMAIL*` or XDG_CONFIG_HOME of the test's process, a HOME with no git config,
-no system config, user.useConfigOnly, `LC_ALL=C`, and the user unset in the repository), so git finds no identity and
-makes no address up from the host's name; it compares the last line git says, in English. Its test of a commit step that fails installs a `pre-commit` hook in the repository that exits 1.
+processes in a repository of their own (`_repo`), but for the test of `_subject` below, so nothing is patched: what they
+read is the repository after the run (its files, `git log`, `git status`) and what the script prints on stderr for a
+refusal or a failed step. Each repository holds stand-ins the scripts run from its own `scripts/` and `tests/`: a demo
+builder that writes the version into the page's version chip (DEMO_BUILDER, the same in both), and, for
+`test_version_commit.py`, a `scripts/check_citations.py` and a `scripts/count_words.py` that print lines shaped as the
+real ones print them (CITATIONS and WORDS there), whose shape the regular expressions of `scripts/version_commit.py`
+read, and two test files for the version and the demo. A change of what the real counting scripts print reaches these
+tests only when it is copied into the stand-ins. `test_version_commit.py` makes `origin/main` with `git update-ref`, and
+the date of the row is today's, as the script takes it. Its test of a git with no committer identity runs the script in
+an environment of its own (`_no_identity`: no `GIT_*`, `EMAIL*` or XDG_CONFIG_HOME of the test's process, a HOME with no
+git config, no system config, user.useConfigOnly, `LC_ALL=C`, and the user unset in the repository), so git finds no
+identity and makes no address up from the host's name; it compares the last line git says, in English. Its test of a
+commit step that fails installs a `pre-commit` hook in the repository that exits 1. `test_renumber.py` also imports
+`_subject` from `scripts/renumber.py` and calls it with a message, the old version and the new one, comparing the
+message it returns word for word; a rename or a change of its arguments reaches that test.
 `test_version_files.py` imports `scripts/version_files.py` and calls `next_version`, `with_row_version`, `version_of`,
 `with_version` and `rebuild_demo` directly; it relies on `version_of` returning None for a text with no version, and on
 `rebuild_demo` running the builder of the root it is given, in that root, and raising CalledProcessError when the

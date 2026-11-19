@@ -1,6 +1,7 @@
 """scripts/renumber.py, run where a rebase stopped on a version collision ("## 版本規則" in docs/CHANGELOG.md): it takes
 the next version, keeps both CHANGELOG rows with the branch's on top, re-assembles the demo, checks that every other
-file changes as the branch's commit did, and finishes the rebase. Each test builds a repository of its own."""
+file changes as the branch's commit did, and finishes the rebase. Each test builds a repository of its own, but the one
+of _subject, which calls it with a message alone."""
 
 from __future__ import annotations
 
@@ -12,6 +13,8 @@ from tests.locale_env import not_utf8_env
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "renumber.py"
+sys.path.insert(0, str(ROOT / "scripts"))
+from renumber import _subject  # noqa: E402
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -239,3 +242,29 @@ def test_a_rebase_with_more_commits_to_apply_is_refused(tmp_path):
     assert res.returncode == 2, res.stdout + res.stderr
     assert "last" in res.stderr and "abort" in res.stderr
     assert _rebasing(repo) and (repo / "docs/CHANGELOG.md").read_text(encoding="utf-8") == changelog
+
+
+def test_a_version_commit_whose_subject_begins_with_its_version_is_renamed_there(tmp_path):
+    """scripts/version_commit.py writes `v<version>: CHANGELOG row and demo page for <what>`: the subject names the new
+    version after the renumber, and the rest of the message stays as it was."""
+    repo = _repo(tmp_path)
+    _collide_on_the_changelog(repo, {"src/mara/feature.py": "LIMIT = 4\n"},
+                              "v0.13.26: CHANGELOG row and demo page for a wider limit\n\nCo-Authored-By: A <a@example.invalid>")
+
+    res = _renumber(repo)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert _git(repo, "log", "-1", "--format=%B").stdout.rstrip("\n") == (
+        "v0.13.27: CHANGELOG row and demo page for a wider limit\n\nCo-Authored-By: A <a@example.invalid>")
+
+
+def test_the_subject_takes_the_new_version_where_it_opens_or_closes_it_and_nowhere_else():
+    """`_subject` (scripts/renumber.py) renames an opening `v<old>:` and a first sentence's closing `, v<old>`; a version
+    elsewhere, another version, and the body stay as they were."""
+    for message, renamed in (
+            ("v0.13.26: CHANGELOG row and demo page for x\n\nbody, v0.13.26", "v0.13.27: CHANGELOG row and demo page for x\n\nbody, v0.13.26"),
+            ("a fix, v0.13.26. more", "a fix, v0.13.27. more"),
+            ("v0.13.26: a fix, v0.13.26", "v0.13.27: a fix, v0.13.27"),
+            ("v0.13.26 : spaced", "v0.13.26 : spaced"),
+            ("v0.13.260: another version", "v0.13.260: another version"),
+            ("see v0.13.26: in the middle", "see v0.13.26: in the middle")):
+        assert _subject(message, "0.13.26", "0.13.27") == renamed, message

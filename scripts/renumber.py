@@ -7,9 +7,10 @@
 It resolves the conflicts the version alone causes: the CHANGELOG keeps both sides' rows, the branch's on top with the
 new version; src/mara/__init__.py is main's with the new version; the demo is main's, re-assembled by
 scripts/build_workbench_demo.py, which reads mara from this working tree (run it here, not in another worktree). Then it
-finishes the rebase and makes the first sentence's closing ", v<old>" in the commit message ", v<new>"; other mentions of
-the old version are left for a human. git's output is read, and the message written back, as UTF-8 whatever the locale's
-encoding.
+finishes the rebase and renumbers the commit message's subject: an opening "v<old>:", as scripts/version_commit.py
+writes it, becomes "v<new>:", and the first ", v<old>" of its first line that a period or the line's end follows
+becomes ", v<new>" (_subject); other mentions of the old version are left for a human. git's output is read, and the
+message written back, as UTF-8 whatever the locale's encoding.
 
 The version commit (GLOSSARY.md) is the branch's last (docs/agents/pr-flow.md, step 3): a rebase that stops on an
 earlier one still has commits to apply, and is refused. What it computes about the version commit (the next version, a
@@ -79,8 +80,11 @@ def _drifted() -> list[str]:
 
 
 def _subject(message: str, old: str, new: str) -> str:
-    """The commit message with its first sentence's closing ", v<old>" made ", v<new>"."""
+    """The commit message with its subject renumbered: an opening "v<old>:", as scripts/version_commit.py writes it,
+    made "v<new>:", and the first ", v<old>" of its first line that a period or the line's end follows made ", v<new>";
+    the rest of the message as it was."""
     first, sep, rest = message.partition("\n")
+    first = re.sub(rf"^v{re.escape(old)}:", f"v{new}:", first, count=1)
     return re.sub(rf", v{re.escape(old)}(?=\.|$)", f", v{new}", first, count=1) + sep + rest
 
 

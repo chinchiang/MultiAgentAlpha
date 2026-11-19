@@ -28,8 +28,7 @@ committer identity in the repository (git var GIT_COMMITTER_IDENT fails, as with
 the last line of what git said that is not blank (`no message` when there is none); a working tree that changes, or
 holds an untracked file in, anything but the three files; an origin/main whose src/mara/__init__.py gives no
 __version__; and a newest CHANGELOG row that already holds the version it would take. scripts/renumber.py takes a new
-version for this commit when another pull request took its version first; it does not rewrite this command's subject,
-which keeps the old version (#379).
+version for this commit when another pull request took its version first, its subject's opening version included.
 
 GLOSSARY.md terms: Version commit. Not pure: it edits the three files, runs the scripts, the tests and git in the
 repository it is run in, and commits.
