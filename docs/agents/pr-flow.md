@@ -54,19 +54,26 @@ A change that becomes a pull request goes through these steps in order. Each end
    `git diff <name>-old..HEAD` prints nothing, so the rebuilt branch holds what the old one did; then delete the old
    one (`git branch -D <name>-old`). A branch already pushed takes `git push --force-with-lease origin <name>`.
    To move work you have not committed to a branch cut again from `origin/main` (the branch was cut from a stale base,
-   say), do not stash it as it is: once a file is registered with `git add -N`, `git stash`, with `-u` or without,
-   fails (`error: Entry '<file>' not uptodate. Cannot merge.`, exit 1), stashes nothing and leaves the changes in the
-   working tree. With every new file of the change registered with `git add -N`, record the change
-   (`git diff HEAD --binary > scratch/move.patch`), unregister the new files (`git reset -q`; they become untracked),
-   stash the work (`git stash push -u`), cut the branch again (`git fetch`, `git switch -C <name> origin/main`: `-C`
-   resets `<name>`, so it must hold no commit of yours), bring the work back (`git stash pop`) and register the new
-   files again (`git add -N`). Check that `git diff HEAD --binary | git patch-id --stable` prints what
+   say), carry it in a patch, as step 2 keeps away from the stash, whose stack every worktree and session shares.
+   With every new file of the change registered with `git add -N`, record the change
+   (`git diff HEAD --binary > scratch/move.patch`) and check that the patch holds all of it
+   (`git apply -R --check scratch/move.patch` exits 0) before anything is discarded: `git reset --hard -q` discards the work, and deletes a file registered with
+   `git add -N` from the disk too, so from there the patch is its only copy. Cut the branch again (`git fetch`,
+   `git switch -C <name> origin/main`: `-C` resets `<name>`, so it must hold no commit of yours), bring the work back
+   (`git apply --3way scratch/move.patch`), unregister what it staged (`git reset -q`) and register the new files again
+   (`git add -N`). Check that `git diff HEAD --binary | git patch-id --stable` prints what
    `git patch-id --stable < scratch/move.patch` prints; the id leaves whitespace out, and differs when `origin/main`
-   changed lines beside the change: read `git diff HEAD` against the patch then. A pop that fails exits 1 and keeps
-   the stash (`git stash list`): a file both changed is marked `UU`, `DU` when `origin/main` deleted it, and a new file
-   `origin/main` also added keeps its version (`already exists, no checkout`; yours is
-   `git show 'stash@{0}^3:<file>'`). Resolve them, `git reset -q`, `git add -N` each new file (a `DU` file you keep is
-   one), read `git diff HEAD` against the patch, new files included, and `git stash drop` once it holds what you meant.
+   changed lines beside the change: read `git diff HEAD` against the patch then. An apply that fails exits 1:
+   - a file both changed is marked `UU`, and a new file `origin/main` also added with other content `AA`, each with
+     conflict markers; one it added with the same content applies, and shows no change;
+   - a file of the change that `origin/main` deleted stops the whole apply before any file is written
+     (`error: <file>: does not exist in index`). Apply the rest
+     (`git apply --3way --exclude=<file> scratch/move.patch`). To keep the file, write its old version back from the
+     blob the `index <old>..` line of its part of the patch names (`git show <old> > <file>`, `git add <file>`) and
+     apply that part (`git apply --3way --include=<file> scratch/move.patch`); it is then one of the new files.
+
+   Resolve them, `git reset -q`, `git add -N` each new file, and read `git diff HEAD` against the patch, new files
+   included.
    Done when `scratch/self-review-<issue>/` holds `standards-report.md` and `spec-report.md`, and
    `standards-report-2.md` and `spec-report-2.md` after a second review (`docs/agents/self-review.md`), or the body says
    the review was not run; each mutation of the lists the change adds or edits was caught by its `caught_by` at the
