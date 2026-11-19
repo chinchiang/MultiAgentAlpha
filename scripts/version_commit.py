@@ -21,11 +21,15 @@ command.
 
 A step that fails stops it, exit 1, naming the step: a script, the tests or git that exits otherwise than 0, a count
 that cannot be read from what the counting scripts print, a file that cannot be written. The files changed so far are
-left as they are, and nothing is committed. It refuses, changing nothing, exit 2: a --row file that cannot be read, or
-is not one line holding ` | `; a working tree that changes, or holds an untracked file in, anything but the three
-files; an origin/main whose src/mara/__init__.py gives no __version__; and a newest CHANGELOG row that already holds the
-version it would take. scripts/renumber.py takes a new version for this commit when another pull request took its
-version first; it does not rewrite this command's subject, which keeps the old version (#379).
+left as they are, and nothing is committed; when the commit step fails, git add may have staged them, and the message
+ends with the command that brings them back to HEAD (git restore --staged --worktree --source=HEAD -- <the three>). It
+refuses, changing nothing, exit 2: a --row file that cannot be read, or is not one line holding ` | `; git with no
+committer identity in the repository (git var GIT_COMMITTER_IDENT fails, as with a HOME that holds no git config), with
+the last line of what git said that is not blank (`no message` when there is none); a working tree that changes, or
+holds an untracked file in, anything but the three files; an origin/main whose src/mara/__init__.py gives no
+__version__; and a newest CHANGELOG row that already holds the version it would take. scripts/renumber.py takes a new
+version for this commit when another pull request took its version first; it does not rewrite this command's subject,
+which keeps the old version (#379).
 
 GLOSSARY.md terms: Version commit. Not pure: it edits the three files, runs the scripts, the tests and git in the
 repository it is run in, and commits.
@@ -109,6 +113,10 @@ def version_commit(row_file: Path, what: str, to: str | None, trailers: list[str
     """Make the version commit (the module's docstring says how); the version it took."""
     root = Path(_git(Path.cwd(), "rev-parse", "--show-toplevel").stdout.strip())
     summary, author = _row(row_file)
+    ident = _git(root, "var", "GIT_COMMITTER_IDENT")
+    if ident.returncode != 0:  # git commit, the last step, would fail after every other step had changed the files
+        said = [line for line in ident.stderr.splitlines() if line.strip()]
+        raise Refusal(f"git has no committer identity in {root} (is HOME the real one?): {said[-1] if said else 'no message'}")
     others = sorted(line[3:] for line in _git(root, "status", "--porcelain", "--untracked-files=all", "--no-renames").stdout.splitlines()
                     if line[3:] not in VERSION_COMMIT_FILES)
     if others:
@@ -143,7 +151,9 @@ def version_commit(row_file: Path, what: str, to: str | None, trailers: list[str
     except OSError as e:
         raise StepFailed(f"{step} failed, and the files changed so far are left as they are: {e}") from e
     except StepFailed as e:
-        raise StepFailed(f"{step} failed, and the files changed so far are left as they are: {e}") from e
+        restore_hint = (f"; to bring them back to HEAD: git restore --staged --worktree --source=HEAD -- {' '.join(VERSION_COMMIT_FILES)}"
+                        if step == "the commit" else "")  # git add may have staged them
+        raise StepFailed(f"{step} failed, and the files changed so far are left as they are: {e}{restore_hint}") from e
     return target
 
 

@@ -79,6 +79,16 @@ mutations:
     caught_by: tests/test_version_commit.py::test_it_commits_the_next_version_its_row_counted_now_and_the_demo_with_the_message_and_trailers_given
     old: "(\"\\n\" + \"\\n\".join(trailers) + \"\\n\" if trailers else \"\")"
     new: "\"\""
+  - name: "git with no committer identity is not refused"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_git_with_no_committer_identity_is_refused_before_anything_changes
+    old: "    if ident.returncode != 0:  # git commit"
+    new: "    if False:  # git commit"
+  - name: "a commit step that fails gives no restore command"
+    file: scripts/version_commit.py
+    caught_by: tests/test_version_commit.py::test_a_commit_step_that_fails_gives_the_command_that_brings_the_three_files_back
+    old: "if step == \"the commit\" else \"\")"
+    new: "if False else \"\")"
   - name: "a refusal exits 1"
     file: scripts/version_commit.py
     caught_by: tests/test_version_commit.py::test_a_working_tree_that_changes_another_file_or_holds_an_untracked_one_is_refused_with_nothing_changed
