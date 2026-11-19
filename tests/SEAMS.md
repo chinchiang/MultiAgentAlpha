@@ -521,6 +521,13 @@ lists load (`_base_repo`: a catch whose `caught_by` names another test, one with
 leaves a file), run real pytest and git through `main`, and read the lines after `summary`, by position.
 The tests of `requires-python` run under whatever interpreter runs the suite, so they give the specifiers `<3`, which
 none takes, and `>=3`, which every one does, and read the version the refusal names from the start of sys.version.
+The tests of `--realign` build on `_git_repo` a repository with a list under `tests/mutations/` written by hand
+(`_realign_repo`; most give it MOVED_LIST, in single quotes, double quotes and a block, with comments, or a variant of
+it), committed; they move or delete the code with real git or by writing files left untracked, run `main`, and compare
+the list's text, byte for byte, with the list they gave, changed in the `file:` lines they expect moved alone, and what
+it prints, line by line. The test of a stale mutation calls `stale(root, m)` with a mapping of `file` and `old` alone,
+and compares the text it returns, the words `load` gives after `<name>: `, word for word; it relies on `stale` returning
+an empty string for a mutation that is not stale.
 
 `test_mutation_lists.py` calls the `load` of `scripts/mutate.py` on lists it writes into `tmp_path`, and compares the
 problems `list_problems` returns, the text `load` gives included (`` `old` occurs 0 times in <file> ``), word for word:

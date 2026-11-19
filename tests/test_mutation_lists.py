@@ -69,7 +69,8 @@ def test_a_mutation_list_loads(path):
     problems = list_problems(path, ROOT)
     if problems:
         pytest.fail(f"{path.relative_to(ROOT)} is not a valid mutation list: {problems}. Re-align each `old` to the code it "
-                    f"mutates, or drop a mutation that no longer means anything; give a mutation with no caught_by the test "
+                    f"mutates (`scripts/mutate.py {path.relative_to(ROOT)} --realign` moves those whose `old` moved to "
+                    f"another file unchanged), or drop a mutation that no longer means anything; give a mutation with no caught_by the test "
                     f"you mean to catch it (the CAUGHT line of `scripts/mutate.py {path.relative_to(ROOT)} --focused-only` "
                     f"shows which test catches it now, to compare with)", pytrace=False)
 

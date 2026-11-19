@@ -1,0 +1,98 @@
+focused: [tests/test_mutate.py]
+# --realign (#329) and stale, which load and --realign both ask. Each mutation breaks one part of it: what stale
+# counts as stale, load asking it, which moves are made and which are left, where it searches, how the list is
+# written back, what it restores first, and a list it refuses. The hint stale gives for single quotes is
+# mutated in mutate-quoted-newline.yaml.
+mutations:
+  - name: "an old that occurs twice in its file is not stale"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_wrong_list_is_refused_before_any_file_is_touched
+    old: "times in {m['file']}{_quoted_newline(m['old'], text)}\" if n != 1 else \"\""
+    new: "times in {m['file']}{_quoted_newline(m['old'], text)}\" if n == 0 else \"\""
+  - name: "load takes a stale mutation"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_wrong_list_is_refused_before_any_file_is_touched
+    old: "            problems.append(f\"{m['name']}: {why}\")\n"
+    new: "            pass\n"
+  - name: "an old found in two files is moved to the first"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_leaves_an_old_found_nowhere_twice_in_another_file_or_in_two_files_and_says_what_it_found
+    old: "if len(found) == 1 and list(found.values()) == [1]:"
+    new: "if list(found.values())[:1] == [1]:"
+  - name: "an old found twice in one other file is moved there"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_leaves_an_old_found_nowhere_twice_in_another_file_or_in_two_files_and_says_what_it_found
+    old: "and list(found.values()) == [1]:"
+    new: "and list(found.values())[0] >= 1:"
+  - name: "a move that makes the same mutant as another mutation is made"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_leaves_a_move_that_would_make_the_same_mutant_as_another_mutation_and_names_it
+    old: "(same := made.get(made_by_move))"
+    new: "(same := None)"
+  - name: "a move is not compared with the moves before it"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_leaves_a_second_move_that_would_make_the_mutant_a_first_move_made
+    old: "                    made[made_by_move] = f\"{own}: {m['name']}\"\n"
+    new: "                    pass\n"
+  - name: "the mutants of the other lists are not compared"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_leaves_a_move_that_would_make_the_same_mutant_as_another_mutation_and_names_it
+    old: "        lists.append((_relative(other, root), (data.get(\"mutations\") or []) if isinstance(data, dict) else []))\n"
+    new: "        pass\n"
+  - name: "a moved file is written plain whatever its quotes"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_with_only_moves_the_named_mutations_alone_and_runs_with_no_other_mode
+    old: "_as_written(to, node.style)"
+    new: "_as_written(to, None)"
+  - name: "the list is written again by YAML"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_moves_an_old_that_moved_unchanged_to_another_file_and_changes_only_its_file_line
+    old: "        path.write_bytes(text.encode(\"utf-8\"))\n"
+    new: "        path.write_text(yaml.safe_dump(data, sort_keys=False), encoding=\"utf-8\")\n"
+  - name: "an untracked file is not searched"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_moves_an_old_that_moved_unchanged_to_another_file_and_changes_only_its_file_line
+    old: "\"--cached\", \"--others\", \"--exclude-standard\""
+    new: "\"--cached\", \"--exclude-standard\""
+  - name: "the mutation lists are searched too"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_moves_an_old_that_moved_unchanged_to_another_file_and_changes_only_its_file_line
+    old: "if name.startswith(\"tests/mutations/\") or not"
+    new: "if not"
+  - name: "a mutation --only does not name is moved too"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_with_only_moves_the_named_mutations_alone_and_runs_with_no_other_mode
+    old: "if only is not None and m[\"name\"] not in only or not (why := stale(root, m)):"
+    new: "if not (why := stale(root, m)):"
+  - name: "a name --only gives that the list does not have is not refused"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_with_only_a_name_the_list_does_not_have_is_refused_and_moves_nothing
+    old: "unknown = sorted(set(only) - {m.get(\"name\") for m in mutations if isinstance(m, dict)})"
+    new: "unknown = []"
+  - name: "--realign beside --runs is taken"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_with_only_moves_the_named_mutations_alone_and_runs_with_no_other_mode
+    error: Failed
+    old: "a.focused_only or a.runs is not None):"
+    new: "a.focused_only):"
+  - name: "--realign leaves the mutant a killed run left"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_restores_a_mutant_a_killed_run_left_before_it_reads_the_code
+    old: "        if why := restore_left(root, root / \"out\" / \"mutations\"):"
+    new: "        if False and (why := restore_left(root, root / \"out\" / \"mutations\")):"
+  - name: "a list that is not YAML ends --realign in a traceback"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_refuses_a_list_that_is_not_yaml_and_says_why
+    error: ParserError
+    old: "        raise ValueError(f\"{path} is not YAML: {' '.join(str(e).split())}\") from e\n"
+    new: "        raise\n"
+  - name: "a file: written as a block is rewritten as if plain"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_leaves_a_mutation_whose_file_is_written_as_a_block
+    old: "if node.style in (\"|\", \">\"):"
+    new: "if False:"
+  - name: "a key given twice is not refused"
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_realign_refuses_a_list_that_gives_a_key_twice
+    old: "if k.value in seen:"
+    new: "if False:"
