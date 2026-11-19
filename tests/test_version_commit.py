@@ -5,6 +5,7 @@ with stand-ins for the demo builder, the two counting scripts and the version an
 from __future__ import annotations
 
 import datetime as dt
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -73,12 +74,13 @@ def _repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _version_commit(repo: Path, summary: str = SUMMARY, *args: str, row: str | None = None) -> subprocess.CompletedProcess:
-    """Run it with a row file of `summary` and a 變更者, or of `row` as given."""
+def _version_commit(repo: Path, summary: str = SUMMARY, *args: str, row: str | None = None,
+                    env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """Run it with a row file of `summary` and a 變更者, or of `row` as given, in `env` (this process's by default)."""
     (repo.parent / "row.txt").write_text(row if row is not None else f"{summary} | chinchiang（Claude Code 協作）\n",
                                          encoding="utf-8")
     return subprocess.run([sys.executable, str(SCRIPT), "--row", str(repo.parent / "row.txt"), "--for", "a feature", *args],
-                          cwd=repo, capture_output=True, text=True, encoding="utf-8")
+                          cwd=repo, capture_output=True, text=True, encoding="utf-8", env=env)
 
 
 def test_it_commits_the_next_version_its_row_counted_now_and_the_demo_with_the_message_and_trailers_given(tmp_path):
@@ -207,3 +209,45 @@ def test_a_row_file_that_cannot_be_read_is_refused_with_nothing_changed(tmp_path
     assert done.returncode == 2, done.stdout + done.stderr
     assert done.stderr == f"version_commit: {missing}: cannot be read: No such file or directory\n"
     assert _files(repo) == before and _unchanged_head(repo) == "a feature"
+
+
+def _no_identity(tmp_path: Path, repo: Path) -> dict[str, str]:
+    """An environment where git has no committer identity in `repo`, whatever the machine: no `GIT_*`, `EMAIL*` or
+    `XDG_CONFIG_HOME` of this process's, a HOME with no git config, no system config, `user.useConfigOnly` (no address
+    made up from the host's name), none set in the repository, and `LC_ALL=C`, so git says it in English."""
+    (tmp_path / "home").mkdir()
+    _git(repo, "config", "--unset", "user.email")
+    _git(repo, "config", "--unset", "user.name")
+    keep = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "EMAIL")) and k != "XDG_CONFIG_HOME"}
+    return {**keep, "HOME": str(tmp_path / "home"), "LC_ALL": "C", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "user.useConfigOnly", "GIT_CONFIG_VALUE_0": "true"}
+
+
+def test_git_with_no_committer_identity_is_refused_before_anything_changes(tmp_path):
+    """With no identity, git commit is the step that would fail, after the three files are changed and staged."""
+    repo = _repo(tmp_path)
+    before = _files(repo)
+    done = _version_commit(repo, env=_no_identity(tmp_path, repo))
+    assert done.returncode == 2, done.stdout + done.stderr
+    assert done.stderr == (f"version_commit: git has no committer identity in {repo} (is HOME the real one?): "
+                           "fatal: no email was given and auto-detection is disabled\n"), done.stderr
+    assert _files(repo) == before and _unchanged_head(repo) == "a feature"
+    assert _git(repo, "status", "--porcelain").stdout == ""
+
+
+def test_a_commit_step_that_fails_gives_the_command_that_brings_the_three_files_back(tmp_path):
+    """The files are left changed and staged: `git checkout --` would restore them from the index, the new row with them."""
+    files = ("docs/CHANGELOG.md", "docs/workbench/index.html", "src/mara/__init__.py")
+    repo = _repo(tmp_path)
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\necho refused by a hook >&2\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    done = _version_commit(repo)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert done.stderr.startswith("version_commit: the commit failed, and the files changed so far are left as they are: "
+                                  "git commit: refused by a hook"), done.stderr
+    assert done.stderr.endswith(f"; to bring them back to HEAD: git restore --staged --worktree --source=HEAD -- {' '.join(files)}\n"), \
+        done.stderr
+    assert _unchanged_head(repo) == "a feature"
+    _git(repo, "restore", "--staged", "--worktree", "--source=HEAD", "--", *files)
+    assert _git(repo, "status", "--porcelain").stdout == "", "the command it gives brings them back"
