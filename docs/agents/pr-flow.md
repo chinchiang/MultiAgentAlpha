@@ -40,9 +40,11 @@ A change that becomes a pull request goes through these steps in order. Each end
    out), the two axes reported apart. What the prompts say every time is in `docs/agents/self-review.md`. A review you
    did not run is said so in the body.
    Then commit, each commit passing. Product code in its own commit; its mutation list and `tests/SEAMS.md` beside it.
-   The version, its CHANGELOG row and the demo page go in **the last commit** of the branch (it may hold nothing else):
-   `scripts/renumber.py` renumbers only when the rebase stops with no commit left to apply, so a version commit in the
-   middle sends you to the hand-made fix. To change a commit you have made without `rebase -i` or `--amend`, start from
+   The version, its CHANGELOG row and the demo page go in **the version commit** (`GLOSSARY.md`), the branch's last
+   commit, which may hold nothing else and which `scripts/version_commit.py` makes (its docstring gives its arguments
+   and what it refuses): `scripts/renumber.py` renumbers only when the rebase stops with no commit left to apply, so a
+   version commit in the middle sends you to the hand-made fix. To change a commit you have made without `rebase -i`
+   or `--amend`, start from
    a clean working tree (`git status --short` prints nothing): a fix you have not committed is committed on the branch
    first, as a commit of its own (`git commit -am <message>`, after `git add`, or the `git add -N` above, for a new
    file). Otherwise, after the rename, `git switch` refuses a fix to a file of the branch and leaves you on
@@ -149,4 +151,4 @@ A change that becomes a pull request goes through these steps in order. Each end
 
 Versions are fixed at merge time, not when the branch is cut. Whether a change takes a version, and which, is in
 `docs/CHANGELOG.md`, "版本規則". A change that takes one bumps `mara.__version__`, adds its row and rebuilds the demo page
-with `scripts/build_workbench_demo.py`, all in the branch's last commit (step 3).
+with `scripts/build_workbench_demo.py`, all in the version commit, the branch's last (step 3).

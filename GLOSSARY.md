@@ -318,6 +318,10 @@ _Avoid_: leftover, stray file (a left path can be a tracked file changed or dele
 What a branch adds over its base: the commits since the merge base of the two, or, before they are made, what the working tree adds over that merge base, its untracked files included. `scripts/change_lines.py` reads the lines a change adds as git diff shows them, for the two checks of a change, `scripts/line_width.py` and `scripts/control_chars.py`; the lines already there are not its business.
 _Avoid_: diff, patch (git's text of a change, not the change), finding (a finding is what a reviewer reports; a check's are its hits)
 
+**Version commit**:
+The last commit of a branch that takes a version: `mara.__version__`, its row of `docs/CHANGELOG.md` and the demo page rebuilt for it, and nothing else (`docs/agents/pr-flow.md` step 3; which changes take a version is in the CHANGELOG's "## 版本規則"). `scripts/version_commit.py` makes it; `scripts/renumber.py` gives it another version when a pull request merged first took its own. What both compute about it is in `scripts/version_files.py`.
+_Avoid_: release commit, bump commit (it records a version; nothing is released)
+
 **Result line**:
 The one line a tool's step of a pull request's CI ends on, which says whether the tool passed: its clean line ("no leaks found") when it has no hit, otherwise the summary of its hits. `scripts/pr_checks.py` reads one per step of each tool step 6 of `docs/agents/pr-flow.md` reads, and prints it `ok` only when it is the clean line.
 _Avoid_: verdict line (a verdict is a ballot role's ruling, or a model family's result), finding line (a check's are its hits)
