@@ -1,11 +1,13 @@
 """Mutation checks: apply each mutation of a list to the source, run the tests that should catch it, and restore it; or
-name the lists a change touches (--lists-for), or run each of them and sum them up (--base).
+name the lists a change touches (--lists-for), or run each of them and sum them up (--base); or move the stale mutations
+of a list to where their `old` now is (--realign).
 
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml                  # every mutation of the list
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --only "a name" --only "another"  # some of them, by name
   .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --focused-only   # the focused tests alone, never the whole suite
   .venv/bin/python scripts/mutate.py --lists-for origin/main   # the lists the change touches, one per line; runs nothing
   .venv/bin/python scripts/mutate.py --base origin/main        # run each of them, focused, and sum them up
+  .venv/bin/python scripts/mutate.py tests/mutations/web-children.yaml --realign   # move each stale mutation's file; runs nothing
 
 A mutation list (GLOSSARY.md) is a YAML file in tests/mutations/, where tests/test_mutation_lists.py checks that each
 one loads, that each of its mutations has a caught_by, and that no two lists make the same mutant (mutant):
@@ -84,13 +86,24 @@ not take is not run. Then it prints `summary`: each list's last line after its n
 `at:` and the LEFT lines, each after its list (run_base). It exits 0 when every list caught all, 1 when a mutation was
 missed or an error, 2 when a list was refused (none runs) or a baseline failed (the other lists still run), whatever
 the lists it skipped; a change that touches no list is said so, exit 0.
+With --realign it runs no mutation. It first restores what a killed run left (restore_left, as every run does), then,
+for each stale mutation (GLOSSARY.md; stale) of the list, or of those --only names, it searches every file git tracks,
+or that is untracked and not ignored, apart from tests/mutations/. When the `old` occurs exactly once in exactly one
+other file, it rewrites that mutation's `file:` value, plain or in the quotes it was written in, and no other byte of
+the list, and prints `<name>: <old file> -> <new file>`; unless the value is a block, or the moved mutation would make
+the same mutant as another of this list or of a list under tests/mutations/, which it names. Each other stale mutation
+(found nowhere, more than once in one file, or in several files), and such a move, is printed as
+`<name>: left: <why it is stale>; <what it found>` and left as it is (realign). The list is read as YAML, not loaded:
+its other problems are not --realign's. It takes a list, and no --base, --lists-for, --focused-only or --runs; it exits
+0 when no stale mutation is left, 1 when one is, 2 when --only names a mutation the list does not have, the list is not
+YAML or gives a key twice, git fails, or restore_left refuses (a run still going, a file edited since).
 With --focused-only the whole suite never runs, for checking the tests of one module: the baseline is the focused
 tests, and a mutation they miss is missed.
 Exit 0 when every mutation was caught, 1 when one was missed or was an error, 2 when the list is wrong (or names no
 focused tests for --focused-only), needs another Python, or the tests fail without a mutation.
 
-GLOSSARY.md terms: Mutation list, Left path, Marked catch, Change. Not pure: it edits the files it mutates and runs pytest and
-git in the root.
+GLOSSARY.md terms: Mutation list, Stale mutation, Left path, Marked catch, Change. Not pure: it edits the files it
+mutates, and the list --realign re-aligns, and runs pytest and git in the root.
 """
 
 from __future__ import annotations
@@ -147,6 +160,17 @@ def _quoted_newline(old: str, text: str | None) -> str:
     return " (YAML keeps \\n as written in single quotes: write the value in double quotes)"
 
 
+def stale(root: Path, m: dict) -> str:
+    """Why `m`, a mutation with a `file` and an `old`, is a stale mutation (GLOSSARY.md): `` `old` occurs <n> times in
+    <file> `` when its `old` does not occur exactly once in its file, with _quoted_newline's hint when it gives one, or
+    `no file <file>` when the file is gone; empty when it is not stale. load and --realign both ask it."""
+    text = (root / m["file"]).read_text(encoding="utf-8") if (root / m["file"]).is_file() else None
+    if text is None:
+        return f"no file {m['file']}"
+    n = text.count(m["old"])
+    return f"`old` occurs {n} times in {m['file']}{_quoted_newline(m['old'], text)}" if n != 1 else ""
+
+
 def _is_specifier(value: object) -> bool:
     """Whether `value` is a version specifier as pyproject.toml's requires-python is (`>=3.13`, `>=3.11,<3.14`)."""
     if not isinstance(value, str):
@@ -160,9 +184,9 @@ def _is_specifier(value: object) -> bool:
 
 def load(path: Path, root: Path) -> tuple[list[str], list[dict], str | None]:
     """(the focused tests, the mutations, its requires-python or None) of a list, every focused path checked to exist, a
-    requires-python to be a specifier (_is_specifier), every `old` to occur exactly once and to differ from its `new`, no
-    two mutations of a file to make the same mutant, every `caught_by` to name a test (_names_a_test), and every
-    `error` to be an exception's name other than AssertionError; ValueError otherwise."""
+    requires-python to be a specifier (_is_specifier), no mutation to be stale (stale), every `new` to differ from its
+    `old`, no two mutations of a file to make the same mutant, every `caught_by` to name a test (_names_a_test), and
+    every `error` to be an exception's name other than AssertionError; ValueError otherwise."""
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     focused = list(data.get("focused") or [])
     mutations = data.get("mutations") or []
@@ -176,11 +200,8 @@ def load(path: Path, root: Path) -> tuple[list[str], list[dict], str | None]:
         if missing:
             problems.append(f"{m.get('name', m)}: no {', '.join(missing)}")
             continue
-        text = (root / m["file"]).read_text(encoding="utf-8") if (root / m["file"]).is_file() else None
-        n = text.count(m["old"]) if text is not None else -1
-        if n != 1:
-            problems.append(f"{m['name']}: `old` occurs {n} times in {m['file']}{_quoted_newline(m['old'], text)}" if n >= 0
-                            else f"{m['name']}: no file {m['file']}")
+        if why := stale(root, m):
+            problems.append(f"{m['name']}: {why}")
         elif m["new"] == m["old"]:
             problems.append(f"{m['name']}: new is old, so the file is unchanged")
         else:
@@ -532,6 +553,152 @@ def run_base(base: str, root: Path, runs: Path) -> int:
     return 2 if 2 in codes else 1 if 1 in codes else 0
 
 
+def _searched(root: Path) -> dict[str, str]:
+    """The text of each file --realign looks for an `old` in: each file git tracks in `root` or that is untracked and
+    not ignored, that is on the disk and is UTF-8, apart from tests/mutations/; by its path relative to `root`."""
+    cp = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root, capture_output=True)
+    if cp.returncode != 0:
+        raise ValueError(f"git ls-files: {cp.stderr.decode('utf-8', 'replace').strip()}")
+    texts = {}
+    for name in sorted(set(cp.stdout.decode("utf-8", "replace").split("\0")) - {""}):
+        if name.startswith("tests/mutations/") or not (root / name).is_file():
+            continue
+        try:
+            texts[name] = (root / name).read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+    return texts
+
+
+def _relative(path: Path, root: Path) -> str:
+    """`path` relative to `root`, as a list is named; as given when it is outside `root`."""
+    return path.resolve().relative_to(root).as_posix() if path.resolve().is_relative_to(root) else str(path)
+
+
+def _has_text(m: object, *keys: str) -> bool:
+    """Whether `m` is a mapping whose value under each of `keys` is a text."""
+    return isinstance(m, dict) and all(isinstance(m.get(k), str) for k in keys)
+
+
+def _once(path: Path, node: yaml.MappingNode) -> None:
+    """ValueError, naming the key and its two lines, when `node` gives a key twice: YAML takes the last, and the place
+    of the value to rewrite would be read from the first."""
+    seen: dict[object, int] = {}
+    for k, _ in node.value:
+        if k.value in seen:
+            raise ValueError(f"{path}: `{k.value}` is given twice, on lines {seen[k.value]} and {k.start_mark.line + 1}")
+        seen[k.value] = k.start_mark.line + 1
+
+
+def _file_nodes(path: Path, text: str) -> list[yaml.Node | None]:
+    """The node of each mutation's `file` value in the text of the list at `path`, where its place in the text is read
+    from, in the order of its mutations: one per entry of `mutations`, None for an entry that is not a mapping or has no
+    `file`; none when the list has no sequence of mutations. ValueError when the list, or one of its entries, gives a key
+    twice (_once)."""
+    node = yaml.compose(text)
+    if not isinstance(node, yaml.MappingNode):
+        return []
+    _once(path, node)
+    entries = next((v for k, v in node.value if k.value == "mutations"), None)
+    if not isinstance(entries, yaml.SequenceNode):
+        return []
+    nodes: list[yaml.Node | None] = []
+    for e in entries.value:
+        if isinstance(e, yaml.MappingNode):
+            _once(path, e)
+        nodes.append(next((v for k, v in e.value if k.value == "file"), None) if isinstance(e, yaml.MappingNode) else None)
+    return nodes
+
+
+def _as_written(path: str, style: str | None) -> str:
+    """`path` as a plain YAML value (`style` None or empty), or in single (`'`) or double (`"`) quotes."""
+    return {"'": "'" + path.replace("'", "''") + "'", '"': json.dumps(path)}.get(style or "", path)
+
+
+def _made_mutants(path: Path, mutations: list, root: Path) -> dict[tuple[str, str], str]:
+    """The mutant (mutant) of each mutation that is not stale and has a text `name`, `file`, `old` and `new`, of
+    `mutations`, the list at `path`, then of every other list under tests/mutations/, read as YAML, in the order of
+    their names; each as `<list>: <name>`, the list relative to `root`, the first mutation that makes it named. A list
+    that is not YAML, or holds no mapping, gives none."""
+    lists = [(_relative(path, root), mutations)]
+    for other in sorted((root / "tests" / "mutations").glob("*.yaml")):
+        if other.resolve() == path.resolve():
+            continue
+        try:
+            data = yaml.safe_load(other.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            continue
+        lists.append((_relative(other, root), (data.get("mutations") or []) if isinstance(data, dict) else []))
+    made: dict[tuple[str, str], str] = {}
+    for name, ms in lists:
+        for m in ms:
+            if _has_text(m, "name", "file", "old", "new") and not stale(root, m):
+                made.setdefault(mutant(root, m), f"{name}: {m['name']}")
+    return made
+
+
+def realign(path: Path, root: Path, only: list[str] | None) -> int:
+    """Move each stale mutation (stale) of the list at `path`, or of those `only` names, whose `old` occurs exactly once
+    in exactly one other file _searched gives, to that file, rewriting its `file` value, plain or in the quotes it was
+    written in, and no other byte of the list, and print `<name>: <old file> -> <new file>`; unless its `file` value is
+    a block, or the moved mutation makes the same mutant as one _made_mutants gives or one moved before it. Print
+    `<name>: left: <why it is stale>; <what the search found>` for each other stale mutation, and leave it. A mutation
+    with no text `name`, `file` or `old` is passed over. The list is read as YAML, not loaded (load), which refuses a
+    stale `old`; its other problems are not looked at. 0 when none is left, 1 when one is, 2 when `only` names a
+    mutation the list does not have (nothing moves); ValueError when git fails, or the list is not YAML or gives a key
+    twice (_file_nodes)."""
+    text = path.read_bytes().decode("utf-8")  # newlines as written, so a CRLF list keeps them
+    try:
+        data = yaml.safe_load(text) or {}
+        nodes = _file_nodes(path, text)
+    except yaml.YAMLError as e:
+        raise ValueError(f"{path} is not YAML: {' '.join(str(e).split())}") from e
+    mutations = data.get("mutations") if isinstance(data, dict) and isinstance(data.get("mutations"), list) else []
+    if only is not None:
+        unknown = sorted(set(only) - {m.get("name") for m in mutations if isinstance(m, dict)})
+        if unknown:
+            print(f"ERROR: no mutation named {', '.join(unknown)}", file=sys.stderr)
+            return 2
+    searched = _searched(root)
+    made = _made_mutants(path, mutations, root)
+    own = _relative(path, root)
+    edits: list[tuple[int, int, str]] = []
+    left = 0
+    for m, node in zip(mutations, nodes, strict=True):  # one node per mutation, read from the same text
+        if not _has_text(m, "name", "file", "old"):
+            continue
+        if only is not None and m["name"] not in only or not (why := stale(root, m)):
+            continue
+        found = {name: n for name, t in searched.items() if (n := t.count(m["old"]))}
+        if len(found) == 1 and list(found.values()) == [1]:
+            (to,) = found
+            assert isinstance(node, yaml.ScalarNode)  # its value is a text
+            made_by_move = mutant(root, {**m, "file": to}) if isinstance(m.get("new"), str) else None
+            if node.style in ("|", ">"):
+                print(f"{m['name']}: left: {why}; found in {to}, but its file: is a block, not plain or in quotes")
+            elif made_by_move is not None and (same := made.get(made_by_move)):
+                print(f"{m['name']}: left: {why}; moved to {to} it makes the same mutant as {same}")
+            else:
+                if made_by_move is not None:
+                    made[made_by_move] = f"{own}: {m['name']}"
+                edits.append((node.start_mark.index, node.end_mark.index, _as_written(to, node.style)))
+                print(f"{m['name']}: {m['file']} -> {to}")
+                continue
+        elif not found:
+            print(f"{m['name']}: left: {why}; found nowhere")
+        elif len(found) == 1:
+            ((name, n),) = found.items()
+            print(f"{m['name']}: left: {why}; found {n} times in {name}")
+        else:
+            print(f"{m['name']}: left: {why}; found in {', '.join(found)}")
+        left += 1
+    for start, end, written in sorted(edits, reverse=True):
+        text = text[:start] + written + text[end:]
+    if edits:
+        path.write_bytes(text.encode("utf-8"))
+    return 1 if left else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("mutations", type=Path, nargs="?", help="the YAML list")
@@ -541,7 +708,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)  # a repository other than this one (tests)
     ap.add_argument("--runs", type=Path, default=None, help="default: <root>/out/mutations")
     ap.add_argument("--focused-only", action="store_true", help="run the focused tests alone, never the whole suite")
+    ap.add_argument("--realign", action="store_true", help="move each stale mutation's file to where its old now is; runs nothing")
     a = ap.parse_args(argv)
+    if a.realign and (a.base is not None or a.lists_for is not None or a.focused_only or a.runs is not None):
+        ap.error("--realign runs no mutation: --base, --lists-for, --focused-only and --runs do not apply")
+    if a.realign and a.mutations is None:
+        ap.error("--realign needs a list")
     if a.base is not None and (a.mutations is not None or a.lists_for is not None or a.only or a.focused_only):
         ap.error("--base runs every list the change touches, focused: give no list, --lists-for, --only or --focused-only")
     if a.base is not None:
@@ -552,6 +724,15 @@ def main(argv: list[str] | None = None) -> int:
     if a.lists_for is not None and (a.only or a.focused_only):
         ap.error("--lists-for runs no mutation: --only and --focused-only do not apply")
     root = a.root.resolve()
+    if a.realign:
+        if why := restore_left(root, root / "out" / "mutations"):
+            print(f"ERROR: {why}", file=sys.stderr)
+            return 2
+        try:
+            return realign(a.mutations, root, a.only)
+        except ValueError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 2
     if a.lists_for is not None:
         try:
             touched = lists_for(a.lists_for, root)

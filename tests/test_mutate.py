@@ -796,3 +796,208 @@ def test_base_restores_what_a_killed_run_left_before_it_reads_the_change(tmp_pat
     out = capsys.readouterr().out
     assert "== tests/mutations/b-door.yaml" in out and "a-window" not in out
     assert code == 1  # b-door.yaml misses its mutation
+
+
+# --realign: a stale mutation's file moved to where its old now is
+
+
+def test_a_stale_mutation_says_why_and_one_that_is_not_says_nothing(tmp_path):
+    """A mutation is stale when its `old` does not occur exactly once in its file, or the file is gone; stale says why
+    in the words load gives, the hint for single quotes included."""
+    root = _repo(tmp_path)
+    (root / "src" / "twice.py").write_text("A = 1\nB = 1\n", encoding="utf-8")
+    (root / "src" / "lines.py").write_text("A = 1\nB = 2\n", encoding="utf-8")
+    assert mutate.stale(root, {"file": "src/window.py", "old": "return 3"}) == ""
+    assert mutate.stale(root, {"file": "src/window.py", "old": "return 4"}) == "`old` occurs 0 times in src/window.py"
+    assert mutate.stale(root, {"file": "src/twice.py", "old": " = 1"}) == "`old` occurs 2 times in src/twice.py"
+    assert mutate.stale(root, {"file": "src/gone.py", "old": "return 3"}) == "no file src/gone.py"
+    assert mutate.stale(root, {"file": "src/lines.py", "old": "A = 1\\nB = 2"}) == (
+        "`old` occurs 0 times in src/lines.py (YAML keeps \\n as written in single quotes: write the value in double quotes)")
+
+
+MOVED_LIST = """\
+# window mutations
+focused: [tests/test_window.py]
+mutations:
+  - name: 'a wider window'   # single quotes
+    file: src/window.py  # where it was
+    caught_by: tests/test_window.py::test_limit
+    old: 'return 3'
+    new: 'return 4'
+  - name: "a pane of two"
+    file: "src/pane.py"
+    old: "PANE = 1"
+    new: "PANE = 2"
+  - name: a block
+    file: src/pane.py
+    old: |-
+      def frame():
+          return 1
+    new: |-
+      def frame():
+          return 0
+"""
+
+
+def _realign_repo(tmp_path: Path, mutations: str = MOVED_LIST) -> tuple[Path, Path]:
+    """_git_repo with src/pane.py, and a list of it under tests/mutations/, committed; (the root, the list)."""
+    root = _git_repo(tmp_path)
+    (root / "src" / "pane.py").write_text("PANE = 1\n\n\ndef frame():\n    return 1\n", encoding="utf-8")
+    (root / "tests" / "mutations").mkdir()
+    path = root / "tests" / "mutations" / "window.yaml"
+    path.write_text(mutations, encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "a list")
+    return root, path
+
+
+def test_realign_moves_an_old_that_moved_unchanged_to_another_file_and_changes_only_its_file_line(tmp_path, capsys):
+    """Every other byte of the list stays as it was: single and double quotes, a block, the comments."""
+    root, path = _realign_repo(tmp_path)
+    (root / "src" / "window.py").write_text("from sash import limit\n", encoding="utf-8")
+    (root / "src" / "sash.py").write_text(SOURCE, encoding="utf-8")  # untracked, as it is before a commit
+    assert mutate.main([str(path), "--realign", "--root", str(root)]) == 0
+    assert capsys.readouterr().out.splitlines() == ["a wider window: src/window.py -> src/sash.py"]
+    assert path.read_text(encoding="utf-8") == MOVED_LIST.replace("file: src/window.py  #", "file: src/sash.py  #")
+    assert (root / "src" / "sash.py").read_text(encoding="utf-8") == SOURCE
+    assert not (root / "out").exists(), "no run starts"
+
+
+def test_realign_leaves_an_old_found_nowhere_twice_in_another_file_or_in_two_files_and_says_what_it_found(tmp_path, capsys):
+    """Each is listed for a human with why it is stale, the hint for single quotes included, and what the search
+    found; the list is left as it was, exit 1."""
+    listed = MOVED_LIST.replace("old: 'return 3'", "old: 'return 3  # the window\\n'")
+    root, path = _realign_repo(tmp_path, listed)
+    (root / "src" / "pane.py").write_text("", encoding="utf-8")
+    (root / "src" / "glass.py").write_text("PANE = 1\nPANE = 1\n", encoding="utf-8")
+    for name in ("frames", "sash"):
+        (root / "src" / f"{name}.py").write_text("def frame():\n    return 1\n", encoding="utf-8")
+    assert mutate.main([str(path), "--realign", "--root", str(root)]) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        "a wider window: left: `old` occurs 0 times in src/window.py (YAML keeps \\n as written in single quotes: write the value in "
+        "double quotes); found nowhere",
+        "a pane of two: left: `old` occurs 0 times in src/pane.py; found 2 times in src/glass.py",
+        "a block: left: `old` occurs 0 times in src/pane.py; found in src/frames.py, src/sash.py"]
+    assert path.read_text(encoding="utf-8") == listed
+
+
+def test_realign_leaves_a_move_that_would_make_the_same_mutant_as_another_mutation_and_names_it(tmp_path, capsys):
+    """The other mutation may be of another list under tests/mutations/ or of this one; exit 1, the list as it was."""
+    listed = MOVED_LIST + '  - name: the glass\n    file: src/glass.py\n    old: "PANE = 1"\n    new: "PANE = 2"\n'
+    root, path = _realign_repo(tmp_path, listed)
+    (root / "src" / "window.py").write_text("from sash import limit\n", encoding="utf-8")
+    (root / "src" / "sash.py").write_text(SOURCE, encoding="utf-8")
+    (root / "src" / "pane.py").write_text("def frame():\n    return 1\n", encoding="utf-8")
+    (root / "src" / "glass.py").write_text("PANE = 1\n", encoding="utf-8")
+    (root / "tests" / "mutations" / "sash.yaml").write_text(
+        json.dumps({"mutations": [{"name": "the sash", "file": "src/sash.py", "old": "return 3", "new": "return 4"}]}),
+        encoding="utf-8")
+    assert mutate.main([str(path), "--realign", "--root", str(root)]) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        "a wider window: left: `old` occurs 0 times in src/window.py; moved to src/sash.py it makes the same mutant as "
+        "tests/mutations/sash.yaml: the sash",
+        "a pane of two: left: `old` occurs 0 times in src/pane.py; moved to src/glass.py it makes the same mutant as "
+        "tests/mutations/window.yaml: the glass"]
+    assert path.read_text(encoding="utf-8") == listed
+
+
+def test_realign_moves_a_mutation_whose_file_was_deleted_and_leaves_the_lists_other_problems(tmp_path, capsys):
+    """After a run that exits 0 no `old` of the list is stale; a caught_by that names no test is not --realign's."""
+    listed = MOVED_LIST.replace("caught_by: tests/test_window.py::test_limit", "caught_by: tests/test_window.py::test_gone")
+    root, path = _realign_repo(tmp_path, listed)
+    _git(root, "mv", "src/window.py", "src/sash.py")
+    assert mutate.main([str(path), "--realign", "--root", str(root)]) == 0
+    assert capsys.readouterr().out.splitlines() == ["a wider window: src/window.py -> src/sash.py"]
+    assert path.read_text(encoding="utf-8") == listed.replace("file: src/window.py  #", "file: src/sash.py  #")
+    with pytest.raises(ValueError) as refused:
+        mutate.load(path, root)
+    assert str(refused.value) == "a wider window: caught_by: no tests/test_window.py::test_gone"
+
+
+def test_realign_with_only_moves_the_named_mutations_alone_and_runs_with_no_other_mode(tmp_path, capsys):
+    root, path = _realign_repo(tmp_path)
+    (root / "src" / "window.py").write_text("from sash import limit\n", encoding="utf-8")
+    (root / "src" / "sash.py").write_text(SOURCE, encoding="utf-8")
+    (root / "src" / "pane.py").write_text("def frame():\n    return 1\n", encoding="utf-8")
+    (root / "src" / "glass.py").write_text("PANE = 1\n", encoding="utf-8")
+    assert mutate.main([str(path), "--realign", "--only", "a pane of two", "--root", str(root)]) == 0
+    assert capsys.readouterr().out.splitlines() == ["a pane of two: src/pane.py -> src/glass.py"]
+    assert path.read_text(encoding="utf-8") == MOVED_LIST.replace('file: "src/pane.py"', 'file: "src/glass.py"')
+    for argv in (["--base", "main"], ["--lists-for", "main"], ["--focused-only"], ["--runs", str(tmp_path / "runs")]):
+        with pytest.raises(SystemExit) as stop:
+            mutate.main([str(path), "--realign", *argv, "--root", str(root)])
+        assert stop.value.code == 2 and "--realign runs no mutation" in capsys.readouterr().err, argv
+    with pytest.raises(SystemExit) as stop:
+        mutate.main(["--realign", "--root", str(root)])
+    assert stop.value.code == 2 and "--realign needs a list" in capsys.readouterr().err
+    assert path.read_text(encoding="utf-8") == MOVED_LIST.replace('file: "src/pane.py"', 'file: "src/glass.py"')
+    assert not (root / "out").exists() and not (tmp_path / "runs").exists(), "no run starts"
+
+
+def test_realign_with_only_a_name_the_list_does_not_have_is_refused_and_moves_nothing(tmp_path, capsys):
+    root, path = _realign_repo(tmp_path)
+    (root / "src" / "window.py").write_text("from sash import limit\n", encoding="utf-8")
+    (root / "src" / "sash.py").write_text(SOURCE, encoding="utf-8")
+    assert mutate.main([str(path), "--realign", "--only", "a wider window", "--only", "no such", "--root", str(root)]) == 2
+    out = capsys.readouterr()
+    assert out.err == "ERROR: no mutation named no such\n" and out.out == ""
+    assert path.read_text(encoding="utf-8") == MOVED_LIST
+
+
+def test_realign_leaves_a_second_move_that_would_make_the_mutant_a_first_move_made(tmp_path, capsys):
+    listed = ("mutations:\n"
+              "  - {name: first, file: src/window.py, old: return 3, new: return 4}\n"
+              "  - {name: second, file: src/door.py, old: return 3, new: return 4}\n")
+    root, path = _realign_repo(tmp_path, listed)
+    _git(root, "mv", "src/window.py", "src/sash.py")
+    assert mutate.main([str(path), "--realign", "--root", str(root)]) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        "first: src/window.py -> src/sash.py",
+        "second: left: no file src/door.py; moved to src/sash.py it makes the same mutant as tests/mutations/window.yaml: first"]
+    assert path.read_text(encoding="utf-8") == listed.replace("file: src/window.py", "file: src/sash.py")
+
+
+def test_realign_restores_a_mutant_a_killed_run_left_before_it_reads_the_code(tmp_path, capsys):
+    """Left in place, the mutant would make the `old` it replaced look stale, and found nowhere."""
+    root, path = _realign_repo(tmp_path)
+    run = root / "out" / "mutations" / "20261022T000000000000Z"
+    for kind, text in (("original", SOURCE), ("mutant", SOURCE.replace("return 3", "return 4"))):
+        (run / kind / "src").mkdir(parents=True)
+        (run / kind / "src" / "window.py").write_text(text, encoding="utf-8")
+    (run / "pid").write_text(str(_gone_pid()), encoding="utf-8")
+    (root / "src" / "window.py").write_text(SOURCE.replace("return 3", "return 4"), encoding="utf-8")
+    assert mutate.main([str(path), "--realign", "--root", str(root)]) == 0
+    assert capsys.readouterr().out.splitlines() == [f"restored src/window.py, left mutated by the run {run}"]
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+    assert path.read_text(encoding="utf-8") == MOVED_LIST
+
+
+def test_realign_refuses_a_list_that_is_not_yaml_and_says_why(tmp_path, capsys):
+    root, path = _realign_repo(tmp_path, "focused: [unclosed\n")
+    assert mutate.main([str(path), "--realign", "--root", str(root)]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith(f"ERROR: {path} is not YAML: ") and "line 2" in err, err
+    assert path.read_text(encoding="utf-8") == "focused: [unclosed\n"
+
+
+def test_realign_leaves_a_mutation_whose_file_is_written_as_a_block(tmp_path, capsys):
+    """Only a plain or quoted `file:` value is rewritten in place; a block one is listed for a human, exit 1."""
+    listed = MOVED_LIST.replace("file: src/window.py  # where it was", "file: >-\n      src/window.py")
+    root, path = _realign_repo(tmp_path, listed)
+    _git(root, "mv", "src/window.py", "src/sash.py")
+    assert mutate.main([str(path), "--realign", "--root", str(root)]) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        "a wider window: left: no file src/window.py; found in src/sash.py, but its file: is a block, not plain or in quotes"]
+    assert path.read_text(encoding="utf-8") == listed
+
+
+@pytest.mark.parametrize("listed, key, lines", [
+    (MOVED_LIST + "mutations: []\n", "mutations", (3, 21)),
+    (MOVED_LIST.replace("    caught_by: tests/test_window.py::test_limit\n", "    file: src/sash.py\n"), "file", (5, 6))])
+def test_realign_refuses_a_list_that_gives_a_key_twice(tmp_path, capsys, listed, key, lines):
+    """YAML takes the last of two; the place of the value to rewrite would be read from the first."""
+    root, path = _realign_repo(tmp_path, listed)
+    _git(root, "mv", "src/window.py", "src/sash.py")
+    assert mutate.main([str(path), "--realign", "--root", str(root)]) == 2
+    assert capsys.readouterr().err == f"ERROR: {path}: `{key}` is given twice, on lines {lines[0]} and {lines[1]}\n"
+    assert path.read_text(encoding="utf-8") == listed
