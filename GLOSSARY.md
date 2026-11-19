@@ -315,7 +315,7 @@ A path git status lists after a run of `scripts/mutate.py` that it did not list 
 _Avoid_: leftover, stray file (a left path can be a tracked file changed or deleted); not the copies a killed run leaves, which `restore_left` restores
 
 **Change**:
-What a branch adds over its base: the commits since the merge base of the two, or, before they are made, what the working tree adds over that merge base, its untracked files included. `scripts/change_lines.py` reads the lines a change adds as git diff shows them, for the two checks of a change, `scripts/line_width.py` and `scripts/control_chars.py`; the lines already there are not its business.
+What a branch adds over its base: the commits since the merge base of the two, or, before they are made, what the working tree adds over that merge base, its untracked files included. `scripts/change_lines.py` reads the lines a change adds as git diff shows them, for the two checks of a change, `scripts/line_width.py` and `scripts/control_chars.py`; the lines already there are not its business. `scripts/change_counts.py` reads the same change, each file of it whole, to count the mutations and tests it adds, changes and removes.
 _Avoid_: diff, patch (git's text of a change, not the change), finding (a finding is what a reviewer reports; a check's are its hits)
 
 **Version commit**:

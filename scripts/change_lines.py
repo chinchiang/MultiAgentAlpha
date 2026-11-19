@@ -1,4 +1,5 @@
 """What a change adds, read once for the two checks of it: scripts/line_width.py and scripts/control_chars.py.
+scripts/change_counts.py, which reads each file of a change whole, takes its arguments, git_prefix and git_error.
 
 A change is what the commits since the merge base of --base and --head add, or with --worktree what the working tree
 adds over that merge base: the tracked files, committed or not, and every untracked file git does not ignore, read as
@@ -124,7 +125,8 @@ def untracked_lines(git: list[str], repo: Path, *pathspec: str) -> AddedLines:
 
 
 def parse_args(description: str, argv: list[str] | None) -> argparse.Namespace:
-    """The arguments both checks take: --base, --head, --worktree and, for the tests, --repo."""
+    """The arguments both checks, and scripts/change_counts.py, take: --base, --head, --worktree and, for the tests,
+    --repo."""
     ap = argparse.ArgumentParser(description=description)
     ap.add_argument("--base", required=True,
                     help="the change is what the commits since the merge base with this add, or with --worktree the working tree")
