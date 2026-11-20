@@ -18,6 +18,27 @@ Infer the repo from `git remote -v`; `gh` does this automatically when run insid
 
 File issues only into the user's own repo. Never file into `mattpocock/skills` (the repo these skills come from) unless the user owns it. In a fork, `gh` can default to the upstream parent, so before the first `gh issue create` of a session, check the target with `gh repo view --json nameWithOwner` and confirm it with the user if it is not their repo.
 
+## Agent briefs
+
+An **Agent brief** (`GLOSSARY.md`) follows the triage skill's template, which lives in the plugin cache, outside this
+repository. What this repository asks of a brief on top of it is here.
+
+### How each statement was established
+
+Every statement of how the code behaves now, under "Current behavior" and wherever else a brief makes one, ends with
+how it was established, in parentheses, in one of three forms:
+
+- `run:` the command, or what was reproduced, and the commit or head it ran on:
+  `(run: git log --oneline 036fc5a..94f8924 -- docs/agents/issue-tracker.md, empty)`.
+- `read:` what was read (a function, a doc, a log, a comment) and at which commit:
+  `(read: docs/agents/issue-tracker.md on 94f8924)`.
+- `carried:` where it came from (an issue body, a review, a comment), when nobody checked it:
+  `(carried: this issue's body, not re-verified)`. A carried statement may stay in the brief; the agent that picks the
+  issue up checks it first.
+
+Two sources share one parenthesis, parted by `;`: `(run: …; read: …)`. A marker on a section's heading line covers
+every statement of that section: `**Current behavior** (run: each case reproduced in a throwaway repository on <head>)`.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
