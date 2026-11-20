@@ -469,16 +469,16 @@ real one in place.
 
 ## A file not shaped as SARIF
 
-`test_sarif_shape.py` reads each of `mara.tools.sarif`'s readers, and `mara.tools.semgrep_rules.normalize_sarif`, on
-documents that are JSON but not shaped as SARIF, one part at a time, and compares the start of `NotShapedAsSarif`'s
-text, the path then "not shaped as SARIF", which `load_prerecorded` and `run_all` copy into a tool's note. Its review
-test runs a mock `Pipeline` on a copy of `fixtures/vuln-sample-sarif` with one file replaced, and compares the report's
-`tool_health` with that of the session's `mock_report` (`conftest.py`), the review of the recorded files; a change to
-those files or to the mock config moves both. Its `run_all` tests borrow two stand-ins: `_tools`, the osv-scanner of
-`test_osv_ci.py`, which copies what it is given as its SARIF, a string as it is; and `_tool_dir_with_a_fake_semgrep` of
-`test_semgrep_ci.py` ("A stand-in semgrep", above), so that test needs the locked tools as that file's do
-(`needs_tools`). Every SARIF file under `fixtures/` is read too, as what the tools write: a check of a new part that a
-tool writes in another type fails there first.
+`test_sarif_shape.py` reads each of `mara.tools.sarif`'s readers, `mara.tools.semgrep_rules.normalize_sarif` and
+`mara.tools.semgrep_rules.timeouts`, on documents that are JSON but not shaped as SARIF, one part at a time, and
+compares the start of `NotShapedAsSarif`'s text, the path then "not shaped as SARIF", which `load_prerecorded` and
+`run_all` copy into a tool's note. Its review test runs a mock `Pipeline` on a copy of `fixtures/vuln-sample-sarif` with
+one file replaced, and compares the report's `tool_health` with that of the session's `mock_report` (`conftest.py`), the
+review of the recorded files; a change to those files or to the mock config moves both. Its `run_all` tests borrow two
+stand-ins: `_tools`, the osv-scanner of `test_osv_ci.py`, which copies what it is given as its SARIF, a string as it is;
+and `_tool_dir_with_a_fake_semgrep` of `test_semgrep_ci.py` ("A stand-in semgrep", above), so that test needs the locked
+tools as that file's do (`needs_tools`). Every SARIF file under `fixtures/` is read too, as what the tools write: a
+check of a new part that a tool writes in another type fails there first.
 
 ## A stand-in gh
 

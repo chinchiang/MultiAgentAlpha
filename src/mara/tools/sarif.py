@@ -109,9 +109,10 @@ def _check_rule(shape: _Shape, rule: dict, where: str) -> None:
 
 
 def _check_invocation(shape: _Shape, invocation: dict, where: str) -> None:
-    """Each notification of both kinds, its message and every location it names."""
+    """Each notification of both kinds, its descriptor, its message and every location it names."""
     for key in NOTIFICATION_KEYS:
         for notification, at in shape.items(invocation, key, where, nullable=True):
+            shape.member(notification, "descriptor", dict, at, nullable=True)
             _check_message(shape, notification, at, nullable=True)
             for loc, at_loc in shape.items(notification, "locations", at, nullable=True):
                 _check_location(shape, loc, at_loc, region=False)
@@ -145,12 +146,13 @@ def _check_run(shape: _Shape, run: dict, where: str) -> None:
 
 def shape_problem(doc: object) -> str | None:
     """The first part of `doc` not shaped as SARIF, as where it is and what it is ("runs[0].invocations[0] is a number,
-    not an object"), or None. The parts checked are those the readers below, and semgrep_rules.normalize_sarif, read into
-    or take as text or a number: the objects, the arrays (of a result's locations, the first, the one read), the strings
-    and a start line, an integer. A part they only compare (an invocation's executionSuccessful, a notification's level,
-    a suppression's status, a tag) is not checked, and no value is: this is not a check against SARIF's schema. A member
-    that is absent is fine; one that is null is not, but where every reader of it takes a null for its absence (an
-    invocation's notifications, a notification's message and locations, a result's locations)."""
+    not an object"), or None. The parts checked are those the readers below, semgrep_rules.normalize_sarif and
+    semgrep_rules.timeouts read into or take as text or a number: the objects, the arrays (of a result's locations, the
+    first, the one read), the strings and a start line, an integer. A part they only compare (an invocation's
+    executionSuccessful, a notification's level and its descriptor's id, a suppression's status, a tag) is not checked,
+    and no value is: this is not a check against SARIF's schema. A member that is absent is fine; one that is null is
+    not, but where every reader of it takes a null for its absence (an invocation's notifications, a notification's
+    descriptor, message and locations, a result's locations)."""
     shape = _Shape()
     if isinstance(doc, dict):
         for run, at in shape.items(doc, "runs", ""):

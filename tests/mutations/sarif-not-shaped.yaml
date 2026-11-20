@@ -2,9 +2,9 @@ focused: [tests/test_sarif_shape.py]
 # A file that is JSON but not shaped as SARIF (#344): shape_problem checks the type of each part the SARIF readers read
 # into or take as text or a number, each reader asks it first and takes such a file as a report it cannot read, and a
 # review takes it as a tool's scan that did not complete. Each mutation drops one of those checks or one of its limits
-# (a result's first location, the nulls the readers take for absent), one reader's question, or one caller's catch in
-# the tool runner. "scan_complete reads a document not shaped as SARIF" is caught by the AttributeError it raises on
-# the first such document: the reading that fails is the fault.
+# (a result's first location, the nulls the readers take for absent), one reader's question, one reader's taking such a
+# null for absent, or one caller's catch in the tool runner. "scan_complete reads a document not shaped as SARIF" is
+# caught by the AttributeError it raises on the first such document: the reading that fails is the fault.
 mutations:
   - name: no document is found not shaped as SARIF
     file: src/mara/tools/sarif.py
@@ -96,3 +96,25 @@ mutations:
     caught_by: "tests/test_sarif_shape.py::test_a_null_the_notification_readers_take_for_absent_is_still_read[a notification's locations are null]"
     old: '            for loc, at_loc in shape.items(notification, "locations", at, nullable=True):'
     new: '            for loc, at_loc in shape.items(notification, "locations", at):'
+  - name: a notification's descriptor is not checked
+    file: src/mara/tools/sarif.py
+    caught_by: tests/test_sarif_shape.py::test_a_document_not_shaped_as_sarif_has_no_error_notifications
+    old: '            shape.member(notification, "descriptor", dict, at, nullable=True)'
+    new: '            pass'
+  - name: a notification's null descriptor is not taken as absent
+    file: src/mara/tools/sarif.py
+    caught_by: "tests/test_sarif_shape.py::test_a_null_the_notification_readers_take_for_absent_is_still_read[a notification's descriptor is null]"
+    old: 'shape.member(notification, "descriptor", dict, at, nullable=True)'
+    new: 'shape.member(notification, "descriptor", dict, at)'
+  - name: normalize_sarif does not take null notifications for absent
+    file: src/mara/tools/semgrep_rules.py
+    caught_by: "tests/test_sarif_shape.py::test_normalizing_a_null_the_readers_take_for_absent_leaves_it_as_it_is[an invocation's notifications are null]"
+    error: TypeError
+    old: '            for note in inv.get("toolExecutionNotifications") or []:'
+    new: '            for note in inv.get("toolExecutionNotifications", []):'
+  - name: normalize_sarif does not take a notification's null message for absent
+    file: src/mara/tools/semgrep_rules.py
+    caught_by: "tests/test_sarif_shape.py::test_normalizing_a_null_the_readers_take_for_absent_leaves_it_as_it_is[a notification's message is null]"
+    error: AttributeError
+    old: '                text = (note.get("message") or {}).get("text")'
+    new: '                text = note.get("message", {}).get("text")'

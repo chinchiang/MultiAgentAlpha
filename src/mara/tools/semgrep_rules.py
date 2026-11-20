@@ -109,7 +109,7 @@ def timeouts(path: Path | str) -> list[tuple[str, str]]:
     """Each timeout of the SARIF at `path`, a rule semgrep gave up on for a file, as the rule's canonical id and the
     file, in the order it records them (sarif.notifications): a notification whose descriptor is `Timeout`, which names
     both in its text alone. A scan that timed out still completes (scan_complete), without that rule's findings in that
-    file. An empty list when the file cannot be read, is not JSON, or is not shaped as SARIF."""
+    file. An empty list when the file cannot be read, is not JSON, or is not shaped as SARIF (sarif.shape_problem)."""
     found = []
     for n in notifications(path):
         m = _TIMEOUT_RE.match((n.get("message") or {}).get("text", ""))
@@ -144,8 +144,8 @@ def normalize_sarif(path: Path) -> dict:
         if "rules" in driver:
             driver["rules"] = kept
         for inv in run.get("invocations", []):
-            for note in inv.get("toolExecutionNotifications", []):
-                text = note.get("message", {}).get("text")
+            for note in inv.get("toolExecutionNotifications") or []:
+                text = (note.get("message") or {}).get("text")
                 if text:
                     note["message"]["text"] = _TEXT_PREFIX_RE.sub("'", text)
     path.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n", encoding="utf-8")
