@@ -8,21 +8,15 @@ A change that becomes a pull request goes through these steps in order. Each end
    for the reason you meant: read the failure message, not only the exit code. A change of documents or tests only has
    no red stage: say so in the body, and say which assertions you proved sensitive some other way (a test that fails
    on a made-up bad input, a hand-made bad copy of the file).
-   A test written after the fix, or green the moment it is written, is shown red on the base's code in a worktree of
-   `origin/main` under `scratch/` (`git worktree add scratch/<dir> origin/main`), with the new and changed test files
-   copied in and the main checkout's tools linked in (`ln -s "$PWD/.mara-tools" scratch/<dir>/.mara-tools`, from the
-   main checkout), run with the main checkout's interpreter, `PYTHONPATH=<worktree>/src` and `HOME=scratch/empty-home`,
-   and the worktree removed after (`git worktree remove --force`, which removes the link and leaves the main checkout's
-   `.mara-tools` as it is). Git ignores `.mara-tools`, so a worktree has none, and a test that needs a tool looks for it
-   below the repository it sits in and skips: a run that skips more than the same test files skip in the main checkout
-   has not shown those tests red. Neither `git stash` (its stack is shared by every
-   worktree of the checkout) nor the base's files written over the main checkout's (a run of the checks may be reading
-   them). A test that fails without reaching the part it is about is not red for the reason you meant: a `DID NOT RAISE`
-   because an `or` with a value on its left never reads the right (`hint or name`), say. Change the test until it
-   reaches that part. A test of a module or a script the base does not have fails there on its import or on the
-   missing file (`ModuleNotFoundError`, `No such file or directory`), which shows nothing of what it checks: such a
-   test is shown sensitive by its mutations, each caught by it at the assertion its name gives (step 3), and the body
-   says so.
+   A test written after the fix, or green the moment it is written, is shown red on the base's code:
+   `.venv/bin/python scripts/red_on_base.py <test file>... [-k <expr>]` runs the working tree's tests in a worktree of
+   the merge base with `origin/main` and prints each test's status (its docstring says how it gets there). A test it
+   reports `SKIPPED` has not been shown red. A test that fails without reaching the part it is about is not red for the
+   reason you meant: a `DID NOT RAISE` because an `or` with a value on its left never reads the right (`hint or name`),
+   say. Change the test until it reaches that part. A test of a module or a script the base does not have fails there
+   on its import or on the missing file (`ModuleNotFoundError`, `No such file or directory`), which shows nothing of
+   what it checks, whatever status the script gives it. Such a test is shown sensitive by its mutations, each caught by
+   it at the assertion its name gives (step 3), and the body says so.
 3. **Make it green, review it, then commit it.** Green in the working tree, nothing committed yet: the code, its
    `tests/mutations/<name>.yaml` and `tests/SEAMS.md`, and, when the change takes a version, the version, its CHANGELOG
    row and the demo page. Run `scripts/check_local.py --only worktree` beside the tests (seconds): ruff; the width of
