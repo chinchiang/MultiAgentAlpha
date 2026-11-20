@@ -18,6 +18,18 @@ skips; in which order it decides. A docstring moved with its code moves verbatim
 rewritten whole. History belongs in the commit message and the pull request; a known gap that a test pins is named by
 pointing at the follow-up.
 
+## An input's shape is checked when catching cannot tell its failures apart
+
+Code that reads an input it does not write (a file a tool writes, a provider's reply, a record read back) finds out in
+one of two ways that the input is not of the shape it expects. Catching what the reading raises is enough when the
+`try` holds the reading alone, so little that nothing else in it raises those exceptions, and the caller treats every
+failure the same: `mara.agents.reviewer` counts an item of a reply that it cannot build a finding from as an
+**Invalid item**. The parts read, and their types, are checked explicitly instead when the caller must say which part
+is wrong, must tell a wrong input from a bug of its own, or reads a part that a wrong type lets through without raising
+(an object iterated where an array goes, a string taken for a list of its characters). Such a check covers the parts
+the code reads, not a schema: `mara.tools.sarif.shape_problem` is one, and its docstring says which parts and for which
+readers. The places that already catch are left as they are; the call is made on the changes a review reads.
+
 ## One concept, one wording
 
 A concept the glossary names is written with the glossary's word everywhere: code, docstrings, comments, tests, docs
