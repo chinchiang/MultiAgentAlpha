@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from mara.tools.sarif import error_notifications, read_sarif, scan_complete
-from mara.tools.semgrep_rules import normalize_sarif
+from mara.tools.semgrep_rules import normalize_sarif, timeouts
 from tests.test_semgrep_ci import _tool_dir_with_a_fake_semgrep, needs_tools
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,6 +71,8 @@ NOT_SHAPED = {
                                                                      locations=[{"physicalLocation": {"artifactLocation": "x"}}]),
     "a notification's uri is a number": _notification(message={"text": "m"},
                                                        locations=[{"physicalLocation": {"artifactLocation": {"uri": 5}}}]),
+    "a notification's descriptor is a string": _notification(descriptor="Timeout"),  # read by semgrep_rules.timeouts
+    "a notification's descriptor is an array": _notification(descriptor=["Timeout"]),
     "a tool is a string": {"runs": [{"tool": "x"}]},
     "a driver is a string": {"runs": [{"tool": {"driver": "x"}}]},
     "a driver's name is a number": _driver(name=5),
@@ -142,6 +144,12 @@ def test_normalizing_a_document_not_shaped_as_sarif_leaves_the_file_as_it_is(tmp
     assert path.read_bytes() == before
 
 
+@pytest.mark.parametrize("doc", NOT_SHAPED.values(), ids=NOT_SHAPED.keys())
+def test_a_document_not_shaped_as_sarif_has_no_timeouts(tmp_path, doc):
+    """semgrep_ci.py prints the timeouts of semgrep's SARIF (semgrep_rules.timeouts): one not shaped as SARIF has none."""
+    assert timeouts(_write(tmp_path, doc)) == []
+
+
 @pytest.mark.parametrize("doc, part", [
     ({"runs": [{"invocations": [1]}]}, "runs[0].invocations[0] is a number, not an object"),
     (_located(region={"startLine": "x"}), "runs[0].results[0].locations[0].physicalLocation.region.startLine is a string, not an integer"),
@@ -194,6 +202,7 @@ NULL_READ_AS_ABSENT = {
     "an invocation's notifications are null": (_invocation(toolExecutionNotifications=None), [], True),
     "a notification's message is null": (_notification(message=None, locations=[]), [""], False),
     "a notification's locations are null": (_notification(message={"text": "m"}, locations=None), ["m"], False),
+    "a notification's descriptor is null": (_notification(message={"text": "m"}, descriptor=None), ["m"], False),
 }
 
 
@@ -201,6 +210,13 @@ NULL_READ_AS_ABSENT = {
 def test_a_null_the_notification_readers_take_for_absent_is_still_read(tmp_path, doc, notes, complete):
     assert error_notifications(_write(tmp_path, doc)) == notes
     assert scan_complete(doc) is complete
+
+
+@pytest.mark.parametrize("doc", [doc for doc, _notes, _complete in NULL_READ_AS_ABSENT.values()], ids=NULL_READ_AS_ABSENT.keys())
+def test_normalizing_a_null_the_readers_take_for_absent_leaves_it_as_it_is(tmp_path, doc):
+    """semgrep's SARIF is normalized before it is read (semgrep_ci.py, run_all): a null it holds where the readers take
+    one for absent does not stop it, and the document it returns still holds the null."""
+    assert normalize_sarif(_write(tmp_path, doc)) == doc
 
 
 def test_a_result_whose_locations_are_null_is_still_read_as_having_none(tmp_path):
