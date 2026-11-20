@@ -15,3 +15,21 @@ mutations:
     caught_by: tests/test_control_chars.py::test_the_working_tree_mode_reads_the_lines_not_committed_yet_and_no_commit_message
     old: "base if a.worktree else f\"{base}..{a.head}\","
     new: "base if a.worktree else \"4b825dc642cb6eb9a060e54bf8d69288fbee4904\", a.head,"
+  - name: --file and --base do not exclude each other
+    file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_file_goes_without_base_head_and_worktree_and_one_of_file_and_base_is_required
+    error: Failed
+    old: '    given = ap.add_mutually_exclusive_group(required=True) if files else ap'
+    new: '    given = ap'
+  - name: --file goes with --worktree
+    file: scripts/change_lines.py
+    caught_by: "tests/test_control_chars.py::test_file_goes_without_base_head_and_worktree_and_one_of_file_and_base_is_required[with --worktree]"
+    error: Failed
+    old: '(a.head != "HEAD" or a.worktree)'
+    new: '(a.head != "HEAD")'
+  - name: the other scripts of the shared arguments take --file too
+    file: scripts/change_lines.py
+    caught_by: tests/test_control_chars.py::test_the_other_scripts_of_the_shared_arguments_still_require_base_and_take_no_file
+    error: Failed
+    old: "    if files:\n        given.add_argument(\"--file\""
+    new: "    if True:\n        given.add_argument(\"--file\""

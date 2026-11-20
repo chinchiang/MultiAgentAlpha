@@ -307,7 +307,9 @@ through `scripts/change_lines.py` (its arguments, the merge base, the diff and t
 failure prints, and the ending: each file not UTF-8 and the summary), so a change to that module reaches both test
 files, and either may be the one that catches a mutation of it. `scripts/change_counts.py` takes its arguments, the
 prefix of its git commands and the error a git failure prints, so a change of those reaches `test_change_counts.py`
-too.
+too. `parse_args` gives `scripts/control_chars.py` alone its --file, read with no git and no repository: its tests write
+the files in `tmp_path`, and one runs the main of `scripts/line_width.py` and of `scripts/change_counts.py` to check that neither takes it and both
+still require --base, comparing the last line of argparse's error.
 
 Three tests run a script as check_local and CI do, as a child process. Two run `scripts/line_width.py` in a locale
 that is not UTF-8 (`_run_in_a_locale_that_is_not_utf8`):

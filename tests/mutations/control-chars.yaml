@@ -20,3 +20,24 @@ mutations:
     caught_by: tests/test_control_chars.py::test_a_control_character_in_a_commit_message_of_the_change_is_named_with_its_commit
     old: 'enumerate(message.split("\n"), 1)'
     new: 'enumerate(message.split("\n"))'
+  - name: only the first file given is read
+    file: scripts/control_chars.py
+    caught_by: tests/test_control_chars.py::test_a_clean_file_passes_one_not_utf8_fails_and_one_missing_is_an_error
+    old: '    for path in paths:'
+    new: '    for path in paths[:1]:'
+  - name: a file's lines are counted from 0
+    file: scripts/control_chars.py
+    caught_by: tests/test_control_chars.py::test_a_file_given_is_read_whole_and_each_control_character_is_named_with_its_line
+    old: 'enumerate(text.split("\n"), 1)'
+    new: 'enumerate(text.split("\n"))'
+  - name: a file that is not UTF-8 is an error, not a finding
+    file: scripts/control_chars.py
+    caught_by: tests/test_control_chars.py::test_a_clean_file_passes_one_not_utf8_fails_and_one_missing_is_an_error
+    old: "            not_utf8.append(str(path))\n            continue\n"
+    new: "            return 2\n"
+  - name: a file that cannot be read ends in a traceback
+    file: scripts/control_chars.py
+    caught_by: tests/test_control_chars.py::test_a_clean_file_passes_one_not_utf8_fails_and_one_missing_is_an_error
+    error: FileNotFoundError
+    old: '        except OSError as e:'
+    new: '        except KeyError as e:'
