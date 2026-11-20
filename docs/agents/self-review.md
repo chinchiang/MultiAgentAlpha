@@ -58,8 +58,9 @@ each sub-agent says which of its items still hold.
 - To try the old version of a file, `git -C <main checkout> worktree add <your directory>/<name> origin/main`. A
   worktree has no `.venv` and no `scratch/`, so run its tests with the main checkout's interpreter and
   `PYTHONPATH=<worktree>/src`, or the main checkout's own `src/` is imported.
-- When you are done, remove your throwaway repositories and worktrees (`git -C <main checkout> worktree remove
-  <worktree>`), and say in your report what you could not remove.
+- When you are done, remove what you built in your directory, its throwaway repositories and worktrees
+  (`git -C <main checkout> worktree remove <worktree>`), and leave the directory itself in place, empty. Say in your
+  report what you could not remove.
 - Report in Traditional Chinese with Taiwan usage (the owner reads it): at most 10 items in all, following the groups of
   your section, the hard findings first and then the judgement calls; each item in at most three lines (where, what,
   why), a quotation of the spec or of the hunk being one line; what does not fit goes in one sentence. Code, paths and
