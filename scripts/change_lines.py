@@ -8,7 +8,8 @@ Each added line is read as UTF-8 whatever the locale's encoding and split at new
 with paths as the files are named (core.quotepath=false, header_path); a binary file has no lines in it, and a file
 whose added lines are not UTF-8 is named instead (diff_lines). Each check keeps what it looks for in the lines and how
 it says so; the arguments (parse_args), the error a git failure prints (git_error) and the ending, each not-UTF-8 file
-and the summary (report), are shared.
+and the summary (report), are shared. scripts/control_chars.py alone also reads files no change names (its --file,
+which parse_args gives it when asked), and ends that reading with report too.
 """
 
 from __future__ import annotations
@@ -124,17 +125,25 @@ def untracked_lines(git: list[str], repo: Path, *pathspec: str) -> AddedLines:
     return added
 
 
-def parse_args(description: str, argv: list[str] | None) -> argparse.Namespace:
+def parse_args(description: str, argv: list[str] | None, *, files: bool = False) -> argparse.Namespace:
     """The arguments both checks, and scripts/change_counts.py, take: --base, --head, --worktree and, for the tests,
-    --repo."""
+    --repo. With `files` (scripts/control_chars.py), --file too: the files to read whole in place of a change, which
+    excludes --base, one of the two being required, and is refused with --worktree or a --head other than HEAD; `file`
+    is then None when --file is not given. Without `files` there is no --file, and no `file`."""
     ap = argparse.ArgumentParser(description=description)
-    ap.add_argument("--base", required=True,
-                    help="the change is what the commits since the merge base with this add, or with --worktree the working tree")
+    given = ap.add_mutually_exclusive_group(required=True) if files else ap
+    given.add_argument("--base", required=not files,
+                       help="the change is what the commits since the merge base with this add, or with --worktree the working tree")
+    if files:
+        given.add_argument("--file", nargs="+", type=Path, help="read these files whole, each line, in place of a change")
     ap.add_argument("--head", default="HEAD")
     ap.add_argument("--worktree", action="store_true",
                     help="read the working tree over the merge base, untracked files included, not the commits up to --head")
     ap.add_argument("--repo", type=Path, default=Path("."), help=argparse.SUPPRESS)  # a repository other than this one (tests)
-    return ap.parse_args(argv)
+    a = ap.parse_args(argv)
+    if files and a.file and (a.head != "HEAD" or a.worktree):
+        ap.error("argument --file: not allowed with argument --head or --worktree")
+    return a
 
 
 def read_change(a: argparse.Namespace, *pathspec: str) -> Change:

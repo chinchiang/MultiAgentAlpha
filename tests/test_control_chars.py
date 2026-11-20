@@ -278,3 +278,48 @@ def test_check_local_and_ci_run_it_on_what_a_pull_request_adds():
     step = step[:step.index("\n      - name:")]
     assert "if: github.event_name == 'pull_request'" in step and "BASE_SHA: ${{ github.event.pull_request.base.sha }}" in step
     assert 'run: python3 scripts/control_chars.py --base "$BASE_SHA"' in step
+
+
+def test_a_file_given_is_read_whole_and_each_control_character_is_named_with_its_line(tmp_path, capsys):
+    """--file checks every line of a file no change holds, a pull request body before it is used."""
+    body = tmp_path / "pr-body.md"
+    body.write_text(f"## Summary\n\nOne{LS}two\nfine\n", encoding="utf-8")
+    assert control_chars.main(["--file", str(body)]) == 1
+    assert capsys.readouterr().out.splitlines() == [f"{body}:3: U+2028", "1 control character(s) in the files given"]
+
+
+def test_a_clean_file_passes_one_not_utf8_fails_and_one_missing_is_an_error(tmp_path, capsys):
+    clean, latin = tmp_path / "clean.md", tmp_path / "latin.md"
+    clean.write_text("fine\nalso fine\n", encoding="utf-8")
+    latin.write_bytes("café\n".encode("latin-1"))
+    assert control_chars.main(["--file", str(clean)]) == 0
+    assert capsys.readouterr().out.splitlines() == ["no control character in the files given"]
+    assert control_chars.main(["--file", str(clean), str(latin)]) == 1
+    assert capsys.readouterr().out.splitlines() == [f"{latin}: not UTF-8", "1 file(s) not UTF-8"]
+    assert control_chars.main(["--file", str(clean), str(tmp_path / "none.md")]) == 2
+    out, err = capsys.readouterr()
+    assert (out, err) == ("", f"ERROR: {tmp_path / 'none.md'}: No such file or directory\n")
+
+
+@pytest.mark.parametrize("args, error", [
+    (["--file", "x.md", "--base", "main"], "argument --base: not allowed with argument --file"),
+    ([], "one of the arguments --base --file is required"),
+    (["--file", "x.md", "--worktree"], "argument --file: not allowed with argument --head or --worktree"),
+    (["--file", "x.md", "--head", "change"], "argument --file: not allowed with argument --head or --worktree"),
+], ids=["with --base", "neither", "with --worktree", "with --head"])
+def test_file_goes_without_base_head_and_worktree_and_one_of_file_and_base_is_required(capsys, args, error):
+    with pytest.raises(SystemExit) as e:
+        control_chars.main(args)
+    assert e.value.code == 2
+    assert capsys.readouterr().err.splitlines()[-1].endswith(f"error: {error}")
+
+
+@pytest.mark.parametrize("script", ["line_width", "change_counts"])
+def test_the_other_scripts_of_the_shared_arguments_still_require_base_and_take_no_file(capsys, script):
+    module = __import__(script)
+    for args, error in [([], "the following arguments are required: --base"),
+                        (["--base", "main", "--file", "x.md"], "unrecognized arguments: --file x.md")]:
+        with pytest.raises(SystemExit) as e:
+            module.main(args)
+        assert e.value.code == 2
+        assert capsys.readouterr().err.splitlines()[-1].endswith(f"error: {error}")

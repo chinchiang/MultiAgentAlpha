@@ -109,7 +109,8 @@ A change that becomes a pull request goes through these steps in order. Each end
    last) and this step runs again on the branch head; the numbers in the body are those of that run, and a fix the
    sub-agents did not see is said so in the body.
 5. **Write the body** to `scratch/pr-body-<name>.md` (`mattpocock-skills:pr`), in English, ending with the attribution
-   line; search it for control characters. Show what the change does before and after, and what you did not run.
+   line; check it for control characters (`.venv/bin/python scripts/control_chars.py --file
+   scratch/pr-body-<name>.md`, exit 0). Show what the change does before and after, and what you did not run.
    What it says the change does, and so do the commit messages and the CHANGELOG row, is against `origin/main`, not
    against a version of your own that a review saw: a fault only that version had is not one the change fixes. A fact
    you verified names the commit it was verified on, and facts verified on different commits are written apart (a fault
