@@ -24,6 +24,10 @@
 #
 # One more since 2026-11-14, for the same opentelemetry-api~=1.37.0 pin as CVE-2026-114603: CVE-2026-126360, fixed in
 # opentelemetry-api 1.45.2. Remove it with CVE-2026-114603, at the semgrep release that relaxes the pin, and relock.
+#
+# One more since 2026-11-20, for the same mcp==1.29.0 pin (semgrep 1.179.0 through 1.186.0, the newest release, checked
+# that day): CVE-2026-115563, fixed in mcp 1.30.0. Remove it with CVE-2026-59951, at the semgrep release that relaxes the
+# pin, and relock.
 
 [[IgnoredVulns]]
 id = "CVE-2026-59951"
@@ -54,3 +58,8 @@ reason = "MCP Python SDK client HTTP transports follow cross-origin redirects ca
 id = "CVE-2026-116686"
 ignoreUntil = 2026-12-31
 reason = "MCP Python SDK client fetches server-chosen $ref URLs while validating tool output schemas (GHSA-rwrf-2pqf-9j8j, CVSS 3.1 6.5); fixed in mcp 1.30.0, but semgrep 1.179.0-1.182.1 pin mcp==1.29.0 so the closure cannot take it. semgrep contains no MCP client code (no ClientSession, streamablehttp_client or sse_client), so no semgrep command reaches it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."
+
+[[IgnoredVulns]]
+id = "CVE-2026-115563"
+ignoreUntil = 2026-12-31
+reason = "MCP Python SDK OAuth client could send credentials to an authorization server chosen by the MCP server (GHSA-qx49-fqc8-xw99); fixed in mcp 1.30.0, but semgrep 1.179.0-1.186.0 pin mcp==1.29.0 so the closure cannot take it. The flaw is in the client's OAuth flow (mcp.client); semgrep imports only mcp.server, mcp.shared and mcp.types and contains no MCP client code, so no semgrep command reaches it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."

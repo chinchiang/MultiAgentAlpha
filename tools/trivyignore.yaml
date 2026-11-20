@@ -79,6 +79,17 @@ vulnerabilities:
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
     expired_at: 2026-12-31
+  - id: CVE-2026-115563
+    paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
+    statement: >-
+      mcp 1.29.0 in the semgrep closure (GHSA-qx49-fqc8-xw99): the OAuth client could send credentials to an
+      authorization server chosen by the MCP server; fixed in mcp 1.30.0. semgrep 1.179.0 through 1.186.0 (the
+      newest release, checked 2026-11-20) pin mcp==1.29.0, so relocking cannot reach the fix. semgrep contains
+      no MCP client code, and MARA runs semgrep scan only. Mirrors tools/osv-semgrep.toml; re-check at a
+      semgrep release that relaxes the pin.
+      The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
+      mirrors tools/osv-cyberseceval.toml.
+    expired_at: 2026-12-31
   - id: CVE-2026-59890
     paths: ["tools/cyberseceval-requirements.txt"]
     statement: >-
