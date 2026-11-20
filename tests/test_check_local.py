@@ -177,12 +177,13 @@ def test_only_osv_runs_the_four_osv_scans(tmp_path, monkeypatch):
     assert ran == ["osv-runtime", "osv-model-eval", "osv-cyberseceval", "osv-semgrep", "ruff"]
 
 
-def test_only_worktree_runs_the_four_checks_of_the_working_tree(tmp_path, monkeypatch, capsys):
-    """Before the first commit, in seconds: ruff, and the width, control characters, mutation lists and SEAMS pointers of the
-    working tree. The summary pads every name to the longest it runs, so the last lines of the logs start in one column."""
+def test_only_worktree_runs_the_five_checks_of_the_working_tree(tmp_path, monkeypatch, capsys):
+    """Before the first commit, in under a minute: ruff, the width, control characters, mutation lists and SEAMS pointers
+    of the working tree, then semgrep, which scans the files as they are, untracked ones included, and takes longest. The
+    summary pads every name to the longest it runs, so the last lines of the logs start in one column."""
     ran = _recording(monkeypatch, ALL_CHECKS)
     assert check_local.main(["--only", "worktree", "--logs", str(tmp_path)]) == 0
-    assert ran == ["ruff", "lines-worktree", "chars-worktree", "pytest-worktree"]
+    assert ran == ["ruff", "lines-worktree", "chars-worktree", "pytest-worktree", "semgrep"]
     summary = [line for line in capsys.readouterr().out.splitlines() if line.startswith("ok")]
     assert [line[:21] for line in summary] == [f"ok   {name:15} " for name in ran]
 
