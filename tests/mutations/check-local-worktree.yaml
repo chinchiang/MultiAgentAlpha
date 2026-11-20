@@ -27,21 +27,26 @@ mutations:
     new: 'log = subprocess.run('
   - name: the worktree group leaves ruff out
     file: scripts/check_local.py
-    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_four_checks_of_the_working_tree
+    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_five_checks_of_the_working_tree
     old: 'WORKTREE_CHECKS = ("ruff", "lines-worktree",'
     new: 'WORKTREE_CHECKS = ("lines-worktree",'
   - name: the worktree group runs the checks of the branch's commits
     file: scripts/check_local.py
-    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_four_checks_of_the_working_tree
-    old: '"ruff", "lines-worktree", "chars-worktree", "pytest-worktree")'
-    new: '"ruff", "lines", "chars", "pytest-worktree")'
+    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_five_checks_of_the_working_tree
+    old: '"ruff", "lines-worktree", "chars-worktree", "pytest-worktree", "semgrep")'
+    new: '"ruff", "lines", "chars", "pytest-worktree", "semgrep")'
   - name: the worktree group leaves pytest-worktree out
     file: scripts/check_local.py
-    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_four_checks_of_the_working_tree
-    old: '"chars-worktree", "pytest-worktree")  #'
-    new: '"chars-worktree")  #'
+    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_five_checks_of_the_working_tree
+    old: '"chars-worktree", "pytest-worktree", "semgrep")  #'
+    new: '"chars-worktree", "semgrep")  #'
+  - name: the worktree group leaves semgrep out
+    file: scripts/check_local.py
+    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_five_checks_of_the_working_tree
+    old: '"pytest-worktree", "semgrep")  #'
+    new: '"pytest-worktree")  #'
   - name: the summary pads every name to 8 columns
     file: scripts/check_local.py
-    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_four_checks_of_the_working_tree
+    caught_by: tests/test_check_local.py::test_only_worktree_runs_the_five_checks_of_the_working_tree
     old: 'width = max(8, *map(len, a.only))'
     new: 'width = 8'

@@ -3,7 +3,7 @@
   .venv/bin/python scripts/check_local.py                     # ruff, line width, control characters, mypy, semgrep, the suite, gitleaks
   .venv/bin/python scripts/check_local.py --only ruff mypy    # some of them
   .venv/bin/python scripts/check_local.py --only osv          # the four osv-scanner scans (the network)
-  .venv/bin/python scripts/check_local.py --only worktree     # before a commit, in seconds: what the working tree adds
+  .venv/bin/python scripts/check_local.py --only worktree     # before a commit, in under a minute: the working tree
   .venv/bin/python scripts/check_local.py --base origin/main  # the base of the branch's change (default origin/main)
 
 Run it with the dev environment's interpreter: ruff and pytest come from it. Each check writes its whole output to
@@ -31,13 +31,15 @@ the hash-locked closures, each with its own config:
   osv-model-eval  scripts/osv_ci.py on tools/model-eval-requirements.txt, with tools/osv-model-eval.toml
   osv-cyberseceval  scripts/osv_ci.py on tools/cyberseceval-requirements.txt, with tools/osv-cyberseceval.toml
   osv-semgrep     scripts/osv_ci.py on tools/semgrep-requirements.txt, with tools/osv-semgrep.toml
-Run only when named, before the first commit of a change (docs/agents/pr-flow.md step 3), in seconds, the group worktree:
+Run only when named, before the first commit of a change (docs/agents/pr-flow.md step 3), in under a minute, the group worktree:
   ruff            as above
   lines-worktree  scripts/line_width.py --worktree: the lines the working tree adds to Python files over the merge base
                   with --base, committed or not and its untracked files included, are within 150 columns
   chars-worktree  scripts/control_chars.py --worktree: the same lines hold no control character
   pytest-worktree tests/test_mutation_lists.py and tests/test_seams.py: every mutation list loads, no two lists make
                   the same mutant, and every pointer of tests/SEAMS.md names something that is there
+  semgrep         as above, last as it takes longest (some 20 seconds): it scans the files as they are, untracked ones
+                  included, so a finding in a new file shows before the first commit
 Not run here: the whole suite on CPython 3.12 and 3.13, the other repository scanners (trivy, zizmor, csp-evaluator, and
 osv-scanner on the seeded fixture), the two mock reviews and the ML-BOM check of mara-review.yml, and docs-check.yml.
 When a check that reads the branch's commits (lines, chars, gitleaks) ran and the working tree has changes git status lists,
@@ -132,7 +134,7 @@ CHECKS: dict[str, Check] = {
 }
 DEFAULT_CHECKS = ("ruff", "lines", "chars", "mypy", "semgrep", "pytest", "gitleaks")  # the osv scans need the network: by name
 OSV_CHECKS = tuple(OSV_SCANS)
-WORKTREE_CHECKS = ("ruff", "lines-worktree", "chars-worktree", "pytest-worktree")  # the working tree, before a commit: by name
+WORKTREE_CHECKS = ("ruff", "lines-worktree", "chars-worktree", "pytest-worktree", "semgrep")  # the working tree, before a commit: by name
 GROUPS = {"osv": OSV_CHECKS, "worktree": WORKTREE_CHECKS}
 
 
