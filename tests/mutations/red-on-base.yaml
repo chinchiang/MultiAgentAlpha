@@ -1,0 +1,91 @@
+focused: [tests/test_red_on_base.py]
+# scripts/red_on_base.py runs the working tree's tests on the base's code (#328): a worktree of the merge base, the
+# working tree's tests/ in it, the checkout's .mara-tools linked, pytest run with the base's src/ and an empty HOME, and
+# each test read from the JUnit XML as RED, GREEN, SKIPPED or UNREACHED. Each mutation drops one of those parts, one
+# reading of the XML, one refusal, or the removal of the worktree.
+mutations:
+  - name: the worktree is of HEAD, not of the merge base
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_of_what_the_base_lacks_is_red_with_its_failure_and_one_that_passes_on_both_is_green
+    old: 'str(tree), base.stdout.strip())'
+    new: 'str(tree), "HEAD")'
+  - name: the checkout's code is imported, not the base's
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_of_what_the_base_lacks_is_red_with_its_failure_and_one_that_passes_on_both_is_green
+    old: '"PYTHONPATH": str(tree / "src")'
+    new: '"PYTHONPATH": str(root / "src")'
+  - name: the run on the base keeps the caller's HOME
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_the_base_s_code_is_imported_from_its_worktree_with_an_empty_home_and_k_selects_the_tests
+    old: '"HOME": str(work / "home")'
+    new: '"HOME": os.environ["HOME"]'
+  - name: -k is not handed to pytest
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_the_base_s_code_is_imported_from_its_worktree_with_an_empty_home_and_k_selects_the_tests
+    old: '*files, *(["-k", a.k] if a.k else [])]'
+    new: '*files]'
+  - name: only the test files of tests/ are copied, not its helpers
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_helper_only_the_working_tree_has_in_tests_is_used_by_the_run_on_the_base
+    old: 'ignore=shutil.ignore_patterns("__pycache__")'
+    new: 'ignore=shutil.ignore_patterns("__pycache__", "[!t]*.py")'
+  - name: the checkout's tools are not linked in
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_needs_the_tools_runs_on_the_base_with_the_checkout_s_and_one_skipped_otherwise_says_why
+    old: '        if (root / TOOLS).exists():'
+    new: '        if False:'
+  - name: a collection error ends the run
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_of_a_module_the_base_lacks_is_unreached_with_its_import_error_and_counted_neither_red_nor_green
+    old: '"-q", "--continue-on-collection-errors",'
+    new: '"-q",'
+  - name: an import error in a test is red
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_each_testcase_is_read_as_its_failure_s_first_arrow_and_error_lines_its_skip_reason_or_an_import_error_unreached
+    old: 'error[1:].lstrip().startswith(UNREACHED_ERRORS))'
+    new: 'False)'
+  - name: a file pytest could not collect is red unless its error is an import's
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_file_pytest_could_not_collect_is_unreached_whatever_its_error
+    old: '        unreached = not case.get("classname") or ('
+    new: '        unreached = ('
+  - name: the last E line of a failure is read, not the first
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_each_testcase_is_read_as_its_failure_s_first_arrow_and_error_lines_its_skip_reason_or_an_import_error_unreached
+    old: 'for line in lines if line.startswith(mark)), None)'
+    new: 'for line in reversed(lines) if line.startswith(mark)), None)'
+  - name: a skipped test is green
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_each_testcase_is_read_as_its_failure_s_first_arrow_and_error_lines_its_skip_reason_or_an_import_error_unreached
+    old: '        if failed is None and (skipped := case.find("skipped")) is not None:'
+    new: '        if failed is None and (skipped := case.find("skipped")) is not None and False:'
+  - name: a test's classes are left out of its node id
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_each_testcase_is_read_as_its_failure_s_first_arrow_and_error_lines_its_skip_reason_or_an_import_error_unreached
+    old: '[found[0], *filter(None, found[1].split(".")), name]'
+    new: '[found[0], name]'
+  - name: a test file the working tree lacks is run
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_file_not_under_the_working_tree_s_tests_is_refused_with_exit_2_and_no_worktree_made
+    old: '    if missing := [f for f in a.files if not (Path(f).is_file() and Path(f).resolve().is_relative_to(tests))]:'
+    new: '    if missing := []:'
+  - name: a test file outside the working tree's tests/ is run
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_file_not_under_the_working_tree_s_tests_is_refused_with_exit_2_and_no_worktree_made
+    old: 'Path(f).is_file() and Path(f).resolve().is_relative_to(tests)'
+    new: 'Path(f).is_file()'
+  - name: pytest not running the tests is a run
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_pytest_not_running_the_tests_is_exit_2_with_its_output
+    old: '        if ran.returncode not in RAN:'
+    new: '        if False:'
+  - name: an interrupt ends in a traceback
+    file: scripts/red_on_base.py
+    caught_by: "tests/test_red_on_base.py::test_no_worktree_is_left_behind_and_the_checkout_s_tools_are_as_they_were[an interrupt]"
+    old: '    except KeyboardInterrupt:'
+    new: '    except KeyError:'
+  - name: the worktree is not removed
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_no_worktree_is_left_behind_and_the_checkout_s_tools_are_as_they_were
+    old: '        _git(root, "worktree", "remove", "--force", str(tree))'
+    new: '        pass'

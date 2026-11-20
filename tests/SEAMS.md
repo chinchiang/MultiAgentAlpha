@@ -579,3 +579,17 @@ one list; it relies on `load` returning `(focused, mutations, requires_python)` 
 that does not load.
 `self_focused` reads each list as YAML (its `mutations`' `file` and its `focused` entries) and names one that mutates
 `tests/test_mutation_lists.py` and focuses on all of it.
+
+## The red on the base (`scripts/red_on_base.py`)
+
+`test_red_on_base.py` runs the script as a child process with this interpreter in a git repository of its own (`_repo`:
+a package pkg whose main, also origin/main, has f and whose branch adds g), its working tree given the test files of
+each case, and reads the lines it prints, by position. It relies on the script running pytest as its direct child, not
+through a shell: the interrupt case is a test of that repository that sends SIGINT to its parent process. It reads
+`git worktree list` and the repository's scratch/ after a run, so it relies on the script writing under scratch/ only
+the directory it removes; a test of that repository checks that it runs in scratch/red-on-base-<suffix>/tree, the
+directory's prefix and depth. Its refusals compare the start of stderr's line word for word (`ERROR: <file>: no such
+test file under the working tree's tests/`, `ERROR: git merge-base <base> HEAD: `, `ERROR: pytest exited 4 on the
+base:`). It imports `scripts/red_on_base.py` as a module (`import red_on_base`) and calls its outcomes on JUnit XML as
+pytest wrote it, relying on outcomes returning, in the order of the XML, triples (status, node id, lines), and on its
+UNREACHED_NOTE.

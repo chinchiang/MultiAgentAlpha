@@ -88,3 +88,11 @@ accepted:
       Exact allowlist line for the pre-existing synthetic Stripe credential in the Django calibration
       fixture. The snippet hash binds this exception to that literal; changed values or other lines
       are not accepted. All fixture paths remain covered by gitleaks with exact-value exceptions.
+  - rule: python.lang.security.use-defused-xml
+    paths: [scripts/red_on_base.py]
+    reason: >
+      red_on_base.outcomes parses the JUnit XML that the pytest red_on_base.py itself started wrote, into a directory
+      it made with tempfile.mkdtemp under the checkout's scratch/ and removes afterwards; the XML holds the results of
+      the working tree's own tests, run by hand by the person changing them, and is never read from outside. The
+      standard library parser is kept rather than a new dependency (defusedxml) for that one trusted file. Reviewed
+      2026-11-20 with the scan that introduced it.
