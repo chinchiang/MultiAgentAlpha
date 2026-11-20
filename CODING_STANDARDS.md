@@ -54,10 +54,9 @@ what holds instead; those sentences are left as they were decided.
 columns (日期, 版本, 變更摘要, 變更者, 查證狀態) and its version rules ("## 版本規則"). The summary opens with the kind of change and the
 ADR it follows (left out when the change follows none), numbers its parts (1), (2), …, says which tests were added or
 changed, whether the workbench demo was recaptured, and ends with whether the report body changed ("報告正文未變", or
-"報告正文變更：" and what changed). 查證狀態 carries the counts `scripts/check_citations.py` gives; when the report body did not
-change, the evidence and word counts repeat the previous row's. `mara.__version__` equals the newest row's version,
-and the newest row has its demo sentence and its last sentence (`tests/test_version.py`). Which changes add no row is
-in "## 版本規則".
+"報告正文變更：" and what changed). The date, the version and 查證狀態 are `scripts/version_commit.py`'s to write, and
+its docstring says from what. `mara.__version__` equals the newest row's version, and the newest row has its demo
+sentence and its last sentence (`tests/test_version.py`). Which changes add no row is in "## 版本規則".
 
 ## A doc names no version Dependabot bumps
 
@@ -71,16 +70,12 @@ docs keep naming their versions.
 ## A behaviour change commits its mutation list
 
 The mutations a behaviour change's tests were checked against (`scripts/mutate.py`) are committed with the change, as
-`tests/mutations/<name>.yaml`, each naming the test meant to catch it (`caught_by`). A change that makes a committed
-list stale re-aligns each `old` to the code in the same commit (`scripts/mutate.py <list> --realign` re-aligns some:
-**Stale mutation** in `GLOSSARY.md`), or drops a mutation that no longer means anything; `tests/test_mutation_lists.py`
-goes red on a list that does not load, or that has a mutation with no `caught_by`. A re-aligned mutation still makes the
+`tests/mutations/<name>.yaml`, each naming the test meant to catch it (`caught_by`); what else a list must be is
+checked by `tests/test_mutation_lists.py`, whose docstring names the checks. A change that makes a committed list stale
+re-aligns each `old` to the code in the same commit (`scripts/mutate.py <list> --realign` re-aligns some: **Stale
+mutation** in `GLOSSARY.md`), or drops a mutation that no longer means anything. A re-aligned mutation still makes the
 fault its name says: a review compares each re-aligned `old`/`new` with the list's previous version, and a mutation that
-now makes another fault is renamed or re-aligned again. Each mutant is in one list: `tests/test_mutation_lists.py` goes
-red when two lists make the same one, and the copy is dropped from the list that added it later. A list that mutates
-`tests/test_mutation_lists.py` focuses on the node of the test it means (`tests/test_mutation_lists.py::<test>`), not
-the whole file, which that file checks too: with the mutant applied the file no longer holds the list's own `old`, so
-the list's own load test fails first on every mutation.
+now makes another fault is renamed or re-aligned again.
 
 A mutation made to show that a test notices something that must not happen (a read of the environment, a refusal that
 is skipped) makes it happen only where that test looks, so the rest of the test still passes and it fails at the
@@ -89,15 +84,12 @@ earlier assertion of the same test and proves nothing about the line it targets:
 `tests/mutations/tool-workspace-honoured.yaml` falls back to the environment's directory only when the workspace's
 does not exist, not always.
 
-A review reads where the test that caught a new mutation fails: `scripts/mutate.py` prints it on the mutation's
-`CAUGHT` line, the source line pytest marks and, for a marked catch (`GLOSSARY.md`), its mark, and `results.json` of
-the run holds them as `at` and `error`, beside the test and the logs of that mutation, `<slug>.focused.log` for the
-focused tests and `<slug>.suite.log` for a whole-suite run (`<slug>` is the mutation's name made fit for a file name).
-The failure in full is in the log of the run that caught it. A mutation names an `error:` only once a run has shown
-that exception ending the failure at the place its name gives: a file the mutant no longer writes, read as a
-`FileNotFoundError`; a refusal it drops, met as pytest's `Failed` (DID NOT RAISE). An `error:` that would hide a
-mutant breaking more than its name says, a `TypeError` far from the line it targets, is not written: the mutation is
-narrowed instead.
+A review reads where the test that caught a new mutation fails and, for a marked catch (`GLOSSARY.md`), its mark;
+`scripts/mutate.py`'s docstring says where a run prints them and which log holds the failure in full. A mutation names
+an `error:` only once a run has shown that exception ending the failure at the place its name gives: a file the mutant
+no longer writes, read as a `FileNotFoundError`; a refusal it drops, met as pytest's `Failed` (DID NOT RAISE). An
+`error:` that would hide a mutant breaking more than its name says, a `TypeError` far from the line it targets, is not
+written: the mutation is narrowed instead.
 
 ## Lines are wrapped by hand
 

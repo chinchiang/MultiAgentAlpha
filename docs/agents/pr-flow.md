@@ -41,9 +41,10 @@ A change that becomes a pull request goes through these steps in order. Each end
    The version, its CHANGELOG row and the demo page go in **the version commit** (`GLOSSARY.md`), the branch's last
    commit, which may hold nothing else and which `scripts/version_commit.py` makes (its docstring gives its arguments
    and what it refuses): `scripts/renumber.py` renumbers only when the rebase stops with no commit left to apply, so a
-   version commit in the middle sends you to the hand-made fix. The counts of tests and mutations its row states are
-   what `scripts/change_counts.py --base origin/main` prints once the change is done (`--worktree` before the commits),
-   its `changed` split by hand into what the change did (its docstring says why).
+   version commit in the middle sends you to the hand-made fix. Every count of tests or mutations written down (a
+   commit message, the row, the body) is what `scripts/change_counts.py --base origin/main` prints once the change is
+   done (`--worktree` before the commits), its `changed` split by hand into what the change did (its docstring says
+   why).
    To change a commit you have made without `rebase -i` or `--amend`, start from
    a clean working tree (`git status --short` prints nothing): a fix you have not committed is committed on the branch
    first, as a commit of its own (`git commit -am <message>`, after `git add`, or the `git add -N` above, for a new
@@ -89,8 +90,8 @@ A change that becomes a pull request goes through these steps in order. Each end
    the `LEFT` lines of all of them. Re-run one list alone with `scripts/mutate.py <list> --focused-only`. A list whose
    `requires-python` this interpreter does not take is a `SKIP` line of the summary: run it alone with an interpreter
    it takes (`>=3.13`: a venv of `tools/dev-requirements-py313.txt`, as CI's 3.13 job installs). A mutation
-   edits `src/`, so never run two of these at once. Done when every check `AGENTS.md` lists is `ok` and every mutation
-   of those lists is caught for the reason its name says.
+   edits `src/`, so never run two of these at once. Done when every check `check_local.py` runs is `ok`, its osv scans
+   included when `AGENTS.md` asks for them, and every mutation of those lists is caught for the reason its name says.
    Of every other mutation of those lists, read each marked catch and each `LEFT` line the summary gathers: a test the
    change adds or edits can catch an old mutation before its `caught_by` does.
    For the mutations the change adds or edits, read where the test that caught each failed (third paragraph of "A
