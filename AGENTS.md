@@ -16,8 +16,8 @@
 
 ### Issue tracker
 
-GitHub Issues (`chinchiang/MultiAgentAlpha`, via `gh`). Before creating, reading or commenting on an issue: read
-`docs/agents/issue-tracker.md`.
+GitHub Issues (`chinchiang/MultiAgentAlpha`, via `gh`). Before creating, reading or commenting on an issue, or writing
+an agent brief: read `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
