@@ -551,12 +551,14 @@ the three pytest jobs of `.github/workflows/mara-review.yml` (`tests + mock revi
 
 `test_mutate.py` drives `scripts/mutate.py` through `main`, with the hidden `--root` pointing at a throwaway repository
 of one module and its test (`_repo`) and `--runs` at a directory of `tmp_path`, and the list written as JSON (`_list`).
-Nothing is patched: each mutation runs real pytest, as a child process, in the throwaway repository. So what the tests of where a catch failed read is pytest's own output, its failure section
-(the banner, the head of the failure, the `>` line, the traceback's last line path:line: ExceptionName, and the
-Captured lines after it), and the regular expressions of `_failure` follow that shape: a pytest that prints it
-otherwise reaches these tests first. The tests of left paths build the repository as a git repository with its files
-committed (`_git_repo`) and run real git status in it; those give no `--runs`, so the run's own directory is inside
-the root, as it is in this checkout.
+Nothing is patched: each mutation runs real pytest, as a child process, in the throwaway repository. So what the tests
+of where a catch failed read is pytest's own output, its failure section (the banner, the head of the failure, the `>`
+line, each frame's `path:line: ` line, the traceback's last line path:line: ExceptionName, and the Captured lines after
+it), and the regular expressions of `_failure` follow that shape. They rely too on how pytest prints a frame's path:
+relative to the directory it ran in, from `..` beside it, absolute outside it or once a test changed directory. A pytest
+that prints them otherwise reaches these tests first. The
+tests of left paths build the repository as a git repository with its files committed (`_git_repo`) and run real git
+status in it; those give no `--runs`, so the run's own directory is inside the root, as it is in this checkout.
 The tests of `--lists-for` build on `_git_repo` a repository with a list per way a change touches one, committed and tagged
 `base` (`_touching_repo`), change it the way each list's name says, and run real git (merge-base, diff, ls-files)
 through `main`; they read what it prints, one list per line. The tests of `--base` build their own repository whose

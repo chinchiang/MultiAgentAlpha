@@ -125,7 +125,7 @@ def test_a_mutation_caught_by_an_error_of_the_code_under_test_is_marked_with_the
     (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
     assert (code, result["caught"], result["at"], result["error"]) == (0, True, "assert limit() == 3", "KeyError")
     assert capsys.readouterr().out.splitlines()[0] == ("CAUGHT the door's size  <- tests/test_window.py::test_limit  "
-                                                       "at: assert limit() == 3  (KeyError)")
+                                                       "at: assert limit() == 3  raised: src/window.py:5  (KeyError)")
 
 
 def test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one_that_ends_in_another_is(tmp_path, capsys):
@@ -133,9 +133,7 @@ def test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one
     A miss has no mark."""
     root = _repo(tmp_path)
     (root / "src" / "window.py").write_text('SIZES = {"window": 3}\n\n\ndef limit():\n    return SIZES["window"]\n', encoding="utf-8")
-    (root / "tests" / "test_window.py").write_text(
-        "import pytest\nfrom window import limit\n\n\ndef test_limit():\n    if limit() == 2:\n        pytest.fail('two', pytrace=False)\n"
-        "    assert limit() == 3\n", encoding="utf-8")
+    (root / "tests" / "test_window.py").write_text(SIZES_TEST, encoding="utf-8")
     made = [("the door's size", 'SIZES["window"]', 'SIZES["door"]', "KeyError"),
             ("the wall's sizes", '{"window": 3}', '{"wall": 3}', "FileNotFoundError"),
             ("a wider window", '{"window": 3}', '{"window": 4}', "KeyError"),
@@ -146,8 +144,8 @@ def test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one
                  "--focused-only"])
     by = "  <- tests/test_window.py::test_limit"
     assert capsys.readouterr().out.splitlines()[:5] == [
-        f"CAUGHT the door's size{by}  at: if limit() == 2:",
-        f"CAUGHT the wall's sizes{by}  at: if limit() == 2:  (KeyError, not FileNotFoundError)",
+        f"CAUGHT the door's size{by}  at: if limit() == 2:  raised: src/window.py:5",
+        f"CAUGHT the wall's sizes{by}  at: if limit() == 2:  raised: src/window.py:5  (KeyError, not FileNotFoundError)",
         f"CAUGHT a wider window{by}  at: assert limit() == 3  (AssertionError, not KeyError)",
         f"CAUGHT a narrower window{by}  (no exception, not KeyError)",
         "MISSED another blank line  (focused)"]
@@ -155,6 +153,109 @@ def test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one
     results = json.loads((run / "results.json").read_text(encoding="utf-8"))
     assert [(r["error"], r["declared_error"]) for r in results] == [("KeyError", "KeyError"), ("KeyError", "FileNotFoundError"),
                                                                     ("AssertionError", "KeyError"), (None, "KeyError"), (None, "KeyError")]
+
+
+SIZES_SOURCE = 'SIZES = {"window": 3}\n\n\ndef size(name):\n    return SIZES[name]\n\n\ndef limit():\n    return size("window")\n'
+SIZES_TEST = ("import pytest\nfrom window import limit\n\n\ndef test_limit():\n    if limit() == 2:\n        pytest.fail('two', pytrace=False)\n"
+              "    assert limit() == 3\n")
+
+
+def test_a_catch_that_ends_in_another_exception_than_an_assertion_error_says_where_it_was_raised(tmp_path, capsys):
+    """Where it was raised is the traceback's deepest frame of the repository, a frame below the test's line `at:` gives;
+    whether the mutation names that exception or not, and whether the catch is marked or not. An AssertionError, a
+    failure with no exception read, and a miss have none."""
+    root = _repo(tmp_path)
+    (root / "src" / "window.py").write_text(SIZES_SOURCE, encoding="utf-8")
+    (root / "tests" / "test_window.py").write_text(SIZES_TEST, encoding="utf-8")
+    made = [("the door's size", 'size("window")', 'size("door")', {"error": "KeyError"}),
+            ("a plural size", "SIZES[name]", 'SIZES[name + "s"]', {}),
+            ("a wider window", '{"window": 3}', '{"window": 4}', {}),
+            ("a narrower window", '{"window": 3}', '{"window": 2}', {}),
+            ("another blank line", "\n\n\ndef limit", "\n\n\n\ndef limit", {})]
+    mutations = [{"name": n, "file": "src/window.py", "old": o, "new": w, **e} for n, o, w, e in made]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                 "--focused-only"])
+    by = "  <- tests/test_window.py::test_limit"
+    assert capsys.readouterr().out.splitlines()[:5] == [
+        f"CAUGHT the door's size{by}  at: if limit() == 2:  raised: src/window.py:5",
+        f"CAUGHT a plural size{by}  at: if limit() == 2:  raised: src/window.py:5  (KeyError)",
+        f"CAUGHT a wider window{by}  at: assert limit() == 3",
+        f"CAUGHT a narrower window{by}",
+        "MISSED another blank line  (focused)"]
+    (run,) = (tmp_path / "runs").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [r["raised"] for r in results] == ["src/window.py:5", "src/window.py:5", None, None, None]
+
+
+def test_an_exception_raised_outside_the_repository_is_placed_at_the_deepest_line_of_the_repository_that_led_to_it(tmp_path, capsys):
+    """A file read through pathlib raises in the standard library, a path outside pytest's rootdir: where it was raised,
+    for a reader of the repository, is its own last frame, the line that called into it."""
+    root = _repo(tmp_path)
+    (root / "src" / "window.py").write_text(
+        'from pathlib import Path\n\n\ndef size(root):\n    return len(Path(root, "window.txt").read_text())\n', encoding="utf-8")
+    (root / "tests" / "test_window.py").write_text(
+        "from window import size\n\n\ndef test_limit(tmp_path):\n    (tmp_path / 'window.txt').write_text('abc')\n"
+        "    assert size(tmp_path) == 3\n", encoding="utf-8")
+    mutations = [{"name": "the door's file", "file": "src/window.py", "old": '"window.txt"', "new": '"door.txt"',
+                  "error": "FileNotFoundError"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                 "--focused-only"])
+    assert capsys.readouterr().out.splitlines()[0] == ("CAUGHT the door's file  <- tests/test_window.py::test_limit  "
+                                                       "at: assert size(tmp_path) == 3  raised: src/window.py:5")
+    (run,) = (tmp_path / "runs").iterdir()
+    (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert result["raised"] == "src/window.py:5"
+
+
+def test_an_exception_raised_beside_the_repository_is_placed_at_the_deepest_line_of_the_repository_too(tmp_path, capsys):
+    """pytest prints a path beside its rootdir relative to it, from `..`, when that is shorter than the absolute one."""
+    root = _repo(tmp_path)
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "sizes.py").write_text('SIZES = {"window": 3}\n\n\ndef size(name):\n    return SIZES[name]\n', encoding="utf-8")
+    (root / "pyproject.toml").write_text('[tool.pytest.ini_options]\npythonpath = ["src", "../lib"]\n', encoding="utf-8")
+    (root / "src" / "window.py").write_text('from sizes import size\n\n\ndef limit():\n    return size("window")\n', encoding="utf-8")
+    mutations = [{"name": "the door's size", "file": "src/window.py", "old": 'size("window")', "new": 'size("door")', "error": "KeyError"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                 "--focused-only"])
+    (run,) = (tmp_path / "runs").iterdir()
+    assert "../lib/sizes.py:5: KeyError" in (run / "the_door's_size.focused.log").read_text(encoding="utf-8").splitlines()
+    (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert result["raised"] == "src/window.py:5"
+
+
+def test_an_exception_raised_in_the_repository_by_a_test_that_changed_directory_is_placed_there_too(tmp_path, capsys):
+    """pytest prints every frame's path absolute once a test has left the directory it started in (monkeypatch.chdir):
+    a path under the root is named relative to it."""
+    root = _repo(tmp_path)
+    (root / "src" / "window.py").write_text(SIZES_SOURCE, encoding="utf-8")
+    (root / "tests" / "test_window.py").write_text(
+        "from window import limit\n\n\ndef test_limit(tmp_path, monkeypatch):\n    monkeypatch.chdir(tmp_path)\n"
+        "    assert limit() == 3\n", encoding="utf-8")
+    mutations = [{"name": "the door's size", "file": "src/window.py", "old": 'size("window")', "new": 'size("door")', "error": "KeyError"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                 "--focused-only"])
+    (run,) = (tmp_path / "runs").iterdir()
+    assert f"{root}/src/window.py:5: KeyError" in (run / "the_door's_size.focused.log").read_text(encoding="utf-8").splitlines()
+    (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert result["raised"] == "src/window.py:5"
+
+
+def test_an_exception_raised_in_an_installed_package_under_the_root_is_placed_at_the_repository_s_line(tmp_path, capsys):
+    """A virtual environment in the root, as this checkout's .venv is, puts installed packages under it, in
+    site-packages: their frames are not the repository's."""
+    root = _repo(tmp_path)
+    packages = root / ".venv" / "lib" / "site-packages"
+    packages.mkdir(parents=True)
+    (packages / "sizes.py").write_text('SIZES = {"window": 3}\n\n\ndef size(name):\n    return SIZES[name]\n', encoding="utf-8")
+    (root / "pyproject.toml").write_text('[tool.pytest.ini_options]\npythonpath = ["src", ".venv/lib/site-packages"]\n', encoding="utf-8")
+    (root / "src" / "window.py").write_text('from sizes import size\n\n\ndef limit():\n    return size("window")\n', encoding="utf-8")
+    mutations = [{"name": "the door's size", "file": "src/window.py", "old": 'size("window")', "new": 'size("door")', "error": "KeyError"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                 "--focused-only"])
+    (run,) = (tmp_path / "runs").iterdir()
+    assert ".venv/lib/site-packages/sizes.py:5: KeyError" in (run / "the_door's_size.focused.log").read_text(encoding="utf-8").splitlines()
+    (result,) = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert result["raised"] == "src/window.py:5"
 
 
 def test_a_catch_by_the_whole_suite_says_where_from_its_log_and_a_failure_with_no_traceback_says_nothing(tmp_path, capsys):
@@ -705,6 +806,27 @@ def test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_
                             f"{a}: CAUGHT a narrower window  <- tests/test_window.py::test_not_two"]
     assert summary[7:] == ["left:", f"{b}: LEFT stray.txt  (baseline)"]
     assert code == 1, "b-door.yaml missed its mutation"
+
+
+def test_base_reprints_where_a_marked_catch_was_raised(tmp_path, capsys):
+    root = _git_repo(tmp_path)
+    (root / "src" / "window.py").write_text(SIZES_SOURCE, encoding="utf-8")
+    (root / "tests" / "test_window.py").write_text(SIZES_TEST, encoding="utf-8")
+    (root / "tests" / "mutations").mkdir()
+    mutations = [{"name": "a plural size", "file": "src/window.py", "old": "SIZES[name]", "new": 'SIZES[name + "s"]',
+                  "caught_by": "tests/test_window.py::test_limit"}]
+    (root / "tests" / "mutations" / "sizes.yaml").write_text(json.dumps({"focused": ["tests/test_window.py"], "mutations": mutations}),
+                                                             encoding="utf-8")
+    (root / ".gitignore").write_text("out/\n", encoding="utf-8")
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "sizes")
+    _git(root, "tag", "base")
+    (root / "src" / "window.py").write_text(SIZES_SOURCE + "# a change\n", encoding="utf-8")
+    assert mutate.main(["--base", "base", "--root", str(root)]) == 0
+    out = capsys.readouterr().out
+    summary = out[out.index("\nsummary\n") + 1:].splitlines()
+    assert summary[2:] == ["marked:", "tests/mutations/sizes.yaml: CAUGHT a plural size  <- tests/test_window.py::test_limit  "
+                                      "at: if limit() == 2:  raised: src/window.py:5  (KeyError)"]
 
 
 def test_base_refuses_a_list_that_does_not_load_before_any_file_is_touched(tmp_path, capsys):
