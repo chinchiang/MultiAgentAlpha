@@ -28,6 +28,10 @@
 # One more since 2026-11-20, for the same mcp==1.29.0 pin (semgrep 1.179.0 through 1.186.0, the newest release, checked
 # that day): CVE-2026-115563, fixed in mcp 1.30.0. Remove it with CVE-2026-59951, at the semgrep release that relaxes the
 # pin, and relock.
+#
+# One more since 2026-11-21, for semgrep's wcmatch~=8.3 pin (semgrep 1.179.0 through 1.186.0, the newest release,
+# checked that day): CVE-2026-132276, fixed in wcmatch 11.2. Remove it, instead of renewing it, at the semgrep release
+# that relaxes the pin, and relock.
 
 [[IgnoredVulns]]
 id = "CVE-2026-59951"
@@ -63,3 +67,8 @@ reason = "MCP Python SDK client fetches server-chosen $ref URLs while validating
 id = "CVE-2026-115563"
 ignoreUntil = 2026-12-31
 reason = "MCP Python SDK OAuth client could send credentials to an authorization server chosen by the MCP server (GHSA-qx49-fqc8-xw99); fixed in mcp 1.30.0, but semgrep 1.179.0-1.186.0 pin mcp==1.29.0 so the closure cannot take it. The flaw is in the client's OAuth flow (mcp.client); semgrep imports only mcp.server, mcp.shared and mcp.types and contains no MCP client code, so no semgrep command reaches it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."
+
+[[IgnoredVulns]]
+id = "CVE-2026-132276"
+ignoreUntil = 2026-12-31
+reason = "wcmatch polynomial-time ReDoS when matching untrusted names against multi-star patterns (GHSA-53pm-wgxf-c6qf); fixed in wcmatch 11.2, but semgrep 1.179.0-1.186.0 pin wcmatch~=8.3 so the closure cannot take it. semgrep calls wcmatch only in TargetManager, globmatch of each target path against the path include and exclude patterns of the rules it runs; the reviewed repository controls the paths but no pattern (MARA passes --x-ignore-semgrepignore-files, and the pinned rules are hash-locked). Those rules hold at most two single stars in a segment; their 224 globs against crafted paths (a 4000-byte path, the advisory's 255-byte names) took at most 0.024 s a match (wcmatch 8.5.2, 2026-11-21). Re-check at a semgrep release that relaxes the pin, or when the pinned rules change."

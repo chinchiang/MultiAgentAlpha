@@ -90,6 +90,18 @@ vulnerabilities:
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
     expired_at: 2026-12-31
+  - id: CVE-2026-132276
+    paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
+    statement: >-
+      wcmatch 8.5.2 in the semgrep closure (GHSA-53pm-wgxf-c6qf): polynomial-time ReDoS when matching untrusted
+      names against multi-star patterns; fixed in wcmatch 11.2. semgrep 1.179.0 through 1.186.0 (the newest
+      release, checked 2026-11-21) pin wcmatch~=8.3, so relocking cannot reach the fix. semgrep matches target
+      paths against the pinned rules' path patterns only, which the reviewed repository does not control and
+      which hold at most two single stars in a segment. Mirrors tools/osv-semgrep.toml; re-check at a semgrep
+      release that relaxes the pin.
+      The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
+      mirrors tools/osv-cyberseceval.toml.
+    expired_at: 2026-12-31
   - id: CVE-2026-59890
     paths: ["tools/cyberseceval-requirements.txt"]
     statement: >-
