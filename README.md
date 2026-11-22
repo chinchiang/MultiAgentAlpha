@@ -81,7 +81,10 @@ or an evidence input (`--sarif-dir`, `--mock-fixtures`, `--psirt-event`)
 executes, the evidence the policies trust and the config itself, and the reports of one run would be
 bundled into the next); run it from the workspace (`mara review path/to/target`) or set `MARA_HOME`
 outside the target. Secret files, symlinks, unsafe paths and file/request-size
-limits are visible in the coverage manifest; omitted required text prevents a complete result. Live
+limits are visible in the coverage manifest; omitted required text prevents a complete result. In a git
+target every tracked file is in scope, a tracked `build/`, `dist/` or `node_modules/` included, and so is
+any file that reads as text whatever its extension: only a binary is excluded as `unsupported_format`, so a
+change cannot hide code from the models in a directory or under a name the bundle used to skip. Live
 model calls require a current local secret preflight, even when other SARIF was pre-recorded; the only
 exception is `--calibration-sample` (see Live mode). Use
 HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
