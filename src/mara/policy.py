@@ -352,6 +352,40 @@ def p8_unsupervised_reject(cfg: MaraConfig, workspace: Workspace, today: dt.date
     )
 
 
+def p9_in_country(cfg: MaraConfig) -> PolicyResult:
+    """An in-country pipeline (`site: prc`; report chapter 26, CN-1) sends neither source nor findings out of the
+    country. Every model that is not a mock is self-hosted: `openai_compatible`, `on_prem`, on a private host, which no
+    setting overrides (`allow_source_code_to_non_on_prem` is refused, where P5 takes it). Findings do not leave as
+    tickets on a hosted tracker, and a PSIRT hand-off goes to a private host. What the config cannot say is whose code
+    a target is: a site that reviews in-country code with another config is not caught here."""
+    if cfg.site != "prc":
+        return PolicyResult("P9", "in-country", True, f"site {cfg.site}: no in-country rule applies")
+    problems = []
+    for m in cfg.models:
+        if m.provider == "mock":
+            continue
+        if m.provider != "openai_compatible" or m.data_residency != "on_prem":
+            problems.append(f"{m.name}: provider {m.provider}, data_residency {m.data_residency}; an in-country model is "
+                            "openai_compatible and on_prem")
+            continue
+        ok, why = _host_is_private(m.base_url or "", tuple(cfg.private_dns_suffixes))
+        if not ok:
+            problems.append(f"{m.name}: {why}")
+    if cfg.allow_source_code_to_non_on_prem:
+        problems.append("allow_source_code_to_non_on_prem is set: no setting lets source leave an in-country site")
+    if cfg.human_queue.enabled and cfg.human_queue.ticketing != "none":
+        problems.append(f"human_queue.ticketing is {cfg.human_queue.ticketing}: findings would leave the country as tickets; "
+                        "set it to none and decide them from out/human_queue.md")
+    if cfg.psirt.enabled:
+        ok, why = _host_is_private(cfg.psirt.webhook_url, tuple(cfg.private_dns_suffixes))
+        if not ok:
+            problems.append(f"psirt.webhook_url: {why}")
+    if problems:
+        return PolicyResult("P9", "in-country", False, "; ".join(problems))
+    return PolicyResult("P9", "in-country", True, "site prc: every model is self-hosted on a private host, and no ticket or "
+                        "hand-off leaves the country")
+
+
 # a function of the config alone: MaraConfig refuses to build a config one of them fails
 CONFIG_POLICIES = (
     p1_covered_models,
@@ -360,11 +394,12 @@ CONFIG_POLICIES = (
     p4_gate_bounds,
     p5_data_residency,
     p6_psirt_scope,
+    p9_in_country,
 )
 
 
 def config_policies(cfg: MaraConfig) -> list[PolicyResult]:
-    """P1 to P6, which read nothing but the config."""
+    """P1 to P6 and P9, which read nothing but the config."""
     return [p(cfg) for p in CONFIG_POLICIES]
 
 
@@ -374,14 +409,14 @@ def workspace_policies(cfg: MaraConfig, workspace: Workspace, today: dt.date | N
 
 
 def evaluate_policies(cfg: MaraConfig, workspace: Workspace, today: dt.date | None = None) -> list[PolicyResult]:
-    """Every policy result, P1 to P8 in order."""
-    return config_policies(cfg) + workspace_policies(cfg, workspace, today)
+    """Every policy result, P1 to P9 in order."""
+    return sorted(config_policies(cfg) + workspace_policies(cfg, workspace, today), key=lambda r: int(r.id[1:]))
 
 
 @dataclass(frozen=True)
 class ConfigCheck:
     """A config file as `mara check-config` and the workbench's environment page read it: the config, or why its
-    structure is invalid (`error`, the exception's text as it is), and the eight policy results when it is not.
+    structure is invalid (`error`, the exception's text as it is), and the nine policy results when it is not.
     `passed` holds exactly when `load_config` accepts the file."""
 
     config: MaraConfig | None

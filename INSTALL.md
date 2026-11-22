@@ -191,7 +191,7 @@ Needed only for reviews with real models. `config/mara.yaml` documents the topol
 ```bash
 export AWS_PROFILE=...                      # Bedrock (after `aws sso login --profile ...`)
 export GEMINI_API_KEY=... GLM_LOCAL_KEY=...
-mara check-config config/mara.yaml          # the eight policy checks first / 先過八條政策檢查
+mara check-config config/mara.yaml          # the nine policy checks first / 先過九條政策檢查
 mara review path/to/repo --config config/mara.yaml --out out
 ```
 

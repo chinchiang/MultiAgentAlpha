@@ -350,10 +350,10 @@ def test_check_config_lists_every_violation(root):
     assert res.output.count("FAIL") == 5
     ok = runner.invoke(app, ["check-config", str(root / "config" / "mara.yaml")])
     assert ok.exit_code == 0, ok.output
-    assert "8/8 policies pass" in _plain(ok.output)
+    assert "9/9 policies pass" in _plain(ok.output)
     js = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml"), "--json"])
     assert js.exit_code == 1 and any(not r["passed"] for r in json.loads(js.stdout))
-    assert "3/8 policies pass" in js.stderr, "the summary stays off stdout, which a parser reads"
+    assert "4/9 policies pass" in js.stderr, "the summary stays off stdout, which a parser reads"
 
 
 def test_json_output_is_plain_even_on_a_colour_terminal(monkeypatch, root):
@@ -366,13 +366,13 @@ def test_json_output_is_plain_even_on_a_colour_terminal(monkeypatch, root):
     monkeypatch.setattr(cli, "console", Console(force_terminal=True, color_system="truecolor", width=30))
     runner = CliRunner()
     js = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml"), "--json"])
-    assert "\x1b" not in js.stdout and len(json.loads(js.stdout)) == 8
+    assert "\x1b" not in js.stdout and len(json.loads(js.stdout)) == 9
     v = runner.invoke(app, ["cvss", "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"])
     assert v.exit_code == 0 and json.loads(v.stdout)["score"] == 9.3
 
 
 def _plain(text: str) -> str:
-    """CLI output without rich's colour codes (FORCE_COLOR splits "8/8" into styled pieces)."""
+    """CLI output without rich's colour codes (FORCE_COLOR splits "9/9" into styled pieces)."""
     return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
 
 
@@ -559,7 +559,7 @@ def test_a_config_file_passes_the_check_exactly_when_load_config_accepts_it(path
 def test_a_config_that_violates_policies_has_a_valid_structure_and_says_which_policies_fail():
     check = policy.check_config_file(ROOT / "config" / "examples" / "violating.yaml", Workspace(ROOT))
     assert check.structure_ok and check.config is not None and check.error == "" and not check.passed
-    assert len(check.policies) == 8 and {r.id for r in check.policies if not r.passed} >= {"P1", "P2", "P3"}
+    assert len(check.policies) == 9 and {r.id for r in check.policies if not r.passed} >= {"P1", "P2", "P3"}
 
 
 def test_a_structure_error_is_kept_whole_and_there_is_nothing_to_evaluate(tmp_path):
@@ -714,10 +714,91 @@ def test_check_config_prints_a_warning_and_still_passes():
     runner = CliRunner()
     res = runner.invoke(app, ["check-config", str(ROOT / "config" / "mara.mock.yaml")])
     out = " ".join(res.output.split())
-    assert res.exit_code == 0 and "8/8 policies pass" in out
+    assert res.exit_code == 0 and "9/9 policies pass" in out
     assert "warning: human_queue.tighten_alpha_step 0.1 changes no outcome" in out
     shipped = runner.invoke(app, ["check-config", str(ROOT / "config" / "mara.yaml")])
     assert shipped.exit_code == 0 and "warning" not in shipped.output, "the shipped config sets nothing that changes nothing"
     as_json = runner.invoke(app, ["check-config", str(ROOT / "config" / "mara.mock.yaml"), "--json"])
     assert as_json.exit_code == 0 and "warning" not in as_json.stdout and "warning: human_queue" in " ".join(as_json.stderr.split())
+
+
+# ---------------------------------------------------------------- P9 in-country
+
+
+IN_COUNTRY = {"provider": "openai_compatible", "data_residency": "on_prem"}
+
+
+def _prc(**over):
+    """A three-family in-country panel that passes every policy: each model self-hosted on a private host, no ticket
+    filed outside."""
+    raw = _base(site="prc", human_queue={"ticketing": "none"})
+    for m, fam, host in zip(raw["models"], ("deepseek", "glm", "qwen"), ("10.20.30.40", "10.20.30.41", "10.20.30.42"), strict=True):
+        m.update(IN_COUNTRY, family=fam, model=fam, base_url=f"https://{host}:8000/v1")
+    raw.update(over)
+    return raw
+
+
+def _p9(raw) -> policy.PolicyResult:
+    cfg = MaraConfig.model_validate(raw, context={"skip_policies": True})
+    return next(r for r in evaluate_policies(cfg, Workspace(ROOT)) if r.id == "P9")
+
+
+def test_p9_a_site_that_is_not_in_country_is_not_judged():
+    assert _base().get("site") is None and MaraConfig.model_validate(_base()).site == "global"
+    result = _p9(_base())
+    assert result.passed and "no in-country rule applies" in result.reason
+
+
+def test_p9_an_in_country_pipeline_of_self_hosted_models_passes():
+    assert _p9(_prc()).passed
+    MaraConfig.model_validate(_prc())  # and loads: no other policy is in its way
+    shipped = load_config(ROOT / "config" / "examples" / "prc-site.yaml", Workspace(ROOT))
+    assert shipped.site == "prc" and all(r.passed for r in evaluate_policies(shipped, Workspace(ROOT)))
+
+
+@pytest.mark.parametrize("why, change, says", [
+    ("a vendor API", lambda raw: raw["models"][0].update(provider="anthropic", family="anthropic", model="claude-opus-5-5",
+                                                         data_residency="vendor_api_zdr", base_url=None), "provider anthropic"),
+    ("a vendor API declared on_prem", lambda raw: raw["models"][0].update(provider="gemini", family="gemini", model="gemini-3.8-flash",
+                                                                          base_url=None), "provider gemini"),
+    ("a self-hosted model on a public host", lambda raw: raw["models"][1].update(base_url="https://llm.example.com/v1"), "is neither"),
+    ("a self-hosted model not declared on_prem", lambda raw: raw["models"][1].update(data_residency="vendor_api_zdr"),
+     "data_residency vendor_api_zdr"),
+    ("the override P5 takes", lambda raw: raw.update(allow_source_code_to_non_on_prem=True), "allow_source_code_to_non_on_prem"),
+    ("tickets on a hosted tracker", lambda raw: raw.update(human_queue={"ticketing": "github_issues"}), "human_queue.ticketing"),
+    ("a PSIRT hand-off to a public host", lambda raw: raw.update(psirt={"enabled": True, "webhook_url": "https://psirt.example.com/in",
+                                                                         "product": "p"}), "psirt.webhook_url"),
+])
+def test_p9_what_would_take_source_or_findings_out_of_the_country_fails(why, change, says):
+    raw = _prc()
+    change(raw)
+    result = _p9(raw)
+    assert not result.passed and says in result.reason, (why, result.reason)
+    with pytest.raises(ValueError, match="P9 in-country"):
+        MaraConfig.model_validate(raw)
+
+
+def test_p9_what_stays_in_the_country_passes():
+    raw = _prc(human_queue={"enabled": False, "ticketing": "github_issues"})  # no queue: no ticket is filed
+    assert _p9(raw).passed
+    raw = _prc(psirt={"enabled": True, "webhook_url": "https://psirt.internal/in", "product": "p"})
+    assert _p9(raw).passed
+    raw = _prc()
+    raw["models"][0].update(provider="mock", model="mock-x", base_url=None)  # a mock sends nothing anywhere
+    assert _p9(raw).passed
+
+
+def test_p9_the_production_panel_cannot_be_run_as_an_in_country_site():
+    raw = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    raw["site"] = "prc"
+    with pytest.raises(ValueError, match="P9 in-country") as refused:
+        MaraConfig.model_validate(raw)
+    for name in ("claude-reviewer", "gemini-reviewer", "human_queue.ticketing"):
+        assert name in str(refused.value)
+    assert "glm-reviewer" not in str(refused.value).split("P9 in-country")[1], "the self-hosted family is in order"
+
+
+def test_the_policies_come_in_the_order_of_their_numbers():
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
+    assert [r.id for r in evaluate_policies(cfg, Workspace(ROOT))] == [f"P{i}" for i in range(1, 10)]
 

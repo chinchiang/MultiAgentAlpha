@@ -155,6 +155,8 @@ class Pipeline:
             # here, not in __init__: the providers a review calls are the ones in place when it starts, and every call
             # of each then counts against the one budget, whoever makes it (mara.providers.budget)
             self.providers = {n: p if isinstance(p, Limited) else Limited(p, self.budget) for n, p in self.providers.items()}
+        if self.cfg.site != "global":
+            self._say(f"L0: site {self.cfg.site}: an in-country review under policy P9, nothing of it is to leave the country")
         target = Path(target).resolve()
         # before anything runs: the tools come from, and P8/the backlog were read from, the MARA
         # workspace; none of it may be supplied by the repository under review

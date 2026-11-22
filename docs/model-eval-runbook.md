@@ -38,7 +38,7 @@ labelled `live` (the scripts refuse), so the governance checks cannot be satisfi
 - G-8 gap: CyberSecEval at the pinned ref has no Bedrock provider. `plan` lists it as skipped for the
   anthropic family, `run` exits 1, and that family's two CyberSecEval metrics stay missing, so G-8
   stays red for it until there is a route (e.g. the same model through the Anthropic API).
-- `mara check-config config/mara.yaml` passes (P1–P8).
+- `mara check-config config/mara.yaml` passes (P1–P9).
 - Python 3.11 on Linux x86_64, this package installed from the hash-pinned closure
   (`pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt && pip install --require-hashes --only-binary=:all: -r tools/build-requirements.txt && pip install --no-deps --no-build-isolation -e .`).
 

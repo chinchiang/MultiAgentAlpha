@@ -6,7 +6,7 @@ directory's manifest (installed version, signature verification) and whether the
 (`runner.tool_path`, never PATH). The trivy database: `trivy_db.check`, the same freshness and integrity rule a
 review applies (cached while the database file is unchanged, since the check hashes it). Configs: every file
 under `config/` and `config/examples/`, checked by `policy.check_config_file`, the check `mara check-config` renders
-too: whether its structure is valid and, when it is, the eight policy results. Credentials are reported by environment
+too: whether its structure is valid and, when it is, the nine policy results. Credentials are reported by environment
 variable name and presence only, never by value.
 
 Not pure: it reads the workspace, the tool directory, the trivy database, the environment and the clock (the trivy

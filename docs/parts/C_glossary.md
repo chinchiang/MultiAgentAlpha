@@ -30,7 +30,7 @@
 | Seeded benchmark | 刻意植入已知漏洞並附標籤的樣本集，用於校準 | 第 11.5 節、`calib/` |
 | Fail-closed | 任何必要步驟失敗時判為不完整、閘門不通過，而不是當成「沒有發現」 | 第 6.1 節 |
 | MARA_HOME | MARA 工作區（鎖定工具、校準證據）的位置；位於被審 repo 內時拒絕審查 | 第 9 章 |
-| P1–P8 | 雛型在載入設定時強制的政策規則（資料主權、家族多樣性、無監督不採納等） | 第 10 章、`src/mara/policy.py` |
+| P1–P9 | 雛型在載入設定時強制的政策規則（資料主權、家族多樣性、無監督不採納、境內管線等） | 第 10 章、`src/mara/policy.py` |
 | Dawid-Skene | 無金標準下同時估計真實標籤與標註者混淆矩陣的 EM 演算法 | 第 11.5 節 |
 | PoLL | Panel of LLM evaluators，不同供應商的小模型評審團 | 第 4.4 節 |
 | SARIF | Static Analysis Results Interchange Format，OASIS 標準 | 第 6.1 節 |

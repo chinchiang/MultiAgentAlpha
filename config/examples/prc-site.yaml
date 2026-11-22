@@ -27,4 +27,10 @@ roles:
   judges: [deepseek-local, glm-local]
 gate:
   human_threshold_alpha: 0.5           # tighter human queue to compensate for the smaller panel
+# Policy P9: this is an in-country pipeline. Every model must be self-hosted on a private host, no setting lets source
+# leave, and findings do not leave as tickets on a hosted tracker.
+site: prc
+human_queue:
+  ticketing: none                      # decided in the country from out/human_queue.md, never filed as GitHub issues
+  tighten_alpha_step: 0                # changes no outcome on this panel (`mara check-config` says so of a step that would not)
 reduced_panel_reason: "中國廠區境內管線：Claude API 在境外，依 CSL/DSL/PIPL 不得跨境送原始碼"

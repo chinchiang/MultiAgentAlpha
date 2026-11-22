@@ -1,0 +1,73 @@
+focused: [tests/test_policy.py]
+mutations:
+  - name: an in-country site is not judged
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p9_what_would_take_source_or_findings_out_of_the_country_fails
+    old: '    if cfg.site != "prc":'
+    new: '    if True:'
+  - name: a vendor API model passes at an in-country site
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p9_what_would_take_source_or_findings_out_of_the_country_fails
+    old: '        if m.provider != "openai_compatible" or m.data_residency != "on_prem":'
+    new: '        if m.data_residency != "on_prem":'
+  - name: a model not declared on_prem passes at an in-country site
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p9_what_would_take_source_or_findings_out_of_the_country_fails
+    old: '        if m.provider != "openai_compatible" or m.data_residency != "on_prem":'
+    new: '        if m.provider != "openai_compatible":'
+  - name: an in-country model on a public host passes
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p9_what_would_take_source_or_findings_out_of_the_country_fails
+    old: |-
+      if not ok:
+                  problems.append(f"{m.name}: {why}")
+          if cfg.allow_source_code_to_non_on_prem:
+    new: |-
+      if False:
+                  problems.append(f"{m.name}: {why}")
+          if cfg.allow_source_code_to_non_on_prem:
+  - name: the override P5 takes lets source leave an in-country site
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p9_what_would_take_source_or_findings_out_of_the_country_fails
+    old: |-
+      if cfg.allow_source_code_to_non_on_prem:
+              problems.append("allow_source_code_to_non_on_prem is set
+    new: |-
+      if False:
+              problems.append("allow_source_code_to_non_on_prem is set
+  - name: findings leave an in-country site as tickets
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p9_what_would_take_source_or_findings_out_of_the_country_fails
+    old: '    if cfg.human_queue.enabled and cfg.human_queue.ticketing != "none":'
+    new: '    if False:'
+  - name: a queue that is off is refused for its ticketing
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p9_what_stays_in_the_country_passes
+    old: '    if cfg.human_queue.enabled and cfg.human_queue.ticketing != "none":'
+    new: '    if cfg.human_queue.ticketing != "none":'
+  - name: a PSIRT hand-off leaves an in-country site
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p9_what_would_take_source_or_findings_out_of_the_country_fails
+    old: '            problems.append(f"psirt.webhook_url: {why}")'
+    new: '            pass'
+  - name: a mock model is refused at an in-country site
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_p9_what_stays_in_the_country_passes
+    old: |-
+      if m.provider == "mock":
+                  continue
+              if m.provider != "openai_compatible" or m.data_residency != "on_prem":
+    new: |-
+      if False:
+                  continue
+              if m.provider != "openai_compatible" or m.data_residency != "on_prem":
+  - name: the in-country policy is not one a config must pass to load
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_check_config_lists_every_violation
+    old: "    p6_psirt_scope,\n    p9_in_country,\n)"
+    new: "    p6_psirt_scope,\n)"
+  - name: the policies are listed in the order they are evaluated
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_the_policies_come_in_the_order_of_their_numbers
+    old: '    return sorted(config_policies(cfg) + workspace_policies(cfg, workspace, today), key=lambda r: int(r.id[1:]))'
+    new: '    return config_policies(cfg) + workspace_policies(cfg, workspace, today)'

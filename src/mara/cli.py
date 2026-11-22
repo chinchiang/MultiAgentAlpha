@@ -222,7 +222,7 @@ def check_config(
     config: Path | None = typer.Argument(None, show_default=False, help="default: <workspace>/config/mara.yaml"),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
 ):
-    """Check a config file: its structure, then every configuration policy (P1-P8); exit non-zero when the structure is
+    """Check a config file: its structure, then every configuration policy (P1-P9); exit non-zero when the structure is
     invalid or any policy fails."""
     from rich.markup import escape
 

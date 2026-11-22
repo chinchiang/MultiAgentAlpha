@@ -279,6 +279,13 @@ class MaraConfig(BaseModel):
         default="", description="Policy P1: reference of the authorization (ticket, contract clause)"
     )
     reduced_panel_reason: str = Field(default="", description="Policy P3: why only two model families are available (e.g. PRC in-country pipeline)")
+    site: Literal["global", "prc"] = Field(
+        default="global",
+        description="Policy P9: where the code this config reviews is held. `prc`: an in-country pipeline (report chapter "
+        "26, CN-1), from which neither source nor findings may leave the country, so every model is self-hosted on a "
+        "private host and no ticket or hand-off goes to a service outside. The config cannot know whose code a target "
+        "is: an in-country site runs with an in-country config",
+    )
     private_dns_suffixes: list[str] = Field(
         default_factory=list,
         description="Policies P2/P5: the organisation's private DNS zones (e.g. .iec.inventec), treated like .internal; each needs two labels",
