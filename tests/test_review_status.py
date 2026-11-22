@@ -73,15 +73,36 @@ def test_every_incomplete_reason_in_the_order_reviews_have_always_written_them()
 
 def test_an_accepted_finding_at_a_blocking_tier_and_severity_blocks_on_its_final_outcome():
     # rejected by the jury (tier A: corroborated by a tool, voted down by three independent judges); a human true positive on a
-    # waiting finding; a human false positive on an accepted one; and tier C, which is not a blocking tier, accepted by
-    # a human
+    # waiting finding; a human false positive on an accepted one; tier C and tier D, which are not blocking tiers,
+    # confirmed by a human, which blocks at a blocking severity whatever the tier; and the same below that severity
     rows = [row("F-1", "A", "High", "accepted"), row("F-2", "A", "Medium", "accepted"), row("F-3", "A", "Critical", "rejected"),
             row("F-4", "B", "Critical", "needs_human", decision="true_positive"),
             row("F-5", "A", "Critical", "accepted", decision="false_positive"),
-            row("F-6", "C", "Critical", "needs_human", decision="true_positive")]
+            row("F-6", "C", "Critical", "needs_human", decision="true_positive"),
+            row("F-7", "D", "High", "dropped", decision="true_positive"),
+            row("F-8", "D", "Medium", "dropped", decision="true_positive")]
     a = assess(FACTS, rows, [], [dim("xss", 80.0)], OUTCOME, GATE)
-    assert blocking_reasons(rows, OUTCOME, GATE) == {"F-1": "blocking_tier_and_severity", "F-4": "blocking_tier_and_severity"}
-    assert (a.review_status, a.gate_passed, a.gate_reasons, a.overall_score) == ("complete", False, ("blocking_tier_and_severity",), 80.0)
+    assert blocking_reasons(rows, OUTCOME, GATE) == {
+        "F-1": "blocking_tier_and_severity", "F-4": "blocking_tier_and_severity",
+        "F-6": "human_confirmed_at_blocking_severity", "F-7": "human_confirmed_at_blocking_severity"}
+    assert (a.review_status, a.gate_passed, a.gate_reasons, a.overall_score) == (
+        "complete", False, ("blocking_tier_and_severity", "human_confirmed_at_blocking_severity"), 80.0)
+
+
+def test_a_finding_blocks_at_its_gate_severity_the_higher_of_the_finders_vector_and_the_judges_bands():
+    """One reviewer writes the CVSS vector and no judge sees it: a Low vector on a finding the judges call Critical
+    must not keep it from blocking, and the judges calling a Critical vector Low must not either."""
+    low_vector = row("F-1", "A", "Low", "accepted").model_copy(update={"operational_severity": "Critical"})
+    low_bands = row("F-2", "A", "Critical", "accepted").model_copy(update={"operational_severity": "Low"})
+    both_low = row("F-3", "A", "Low", "accepted").model_copy(update={"operational_severity": "Medium"})
+    no_bands = row("F-4", "A", "High", "accepted").model_copy(update={"operational_severity": None})
+    assert [c.gate_severity for c in (low_vector, low_bands, both_low, no_bands)] == ["Critical", "Critical", "Medium", "High"]
+    assert blocking_reasons([low_vector, low_bands, both_low, no_bands], OUTCOME, GATE) == {
+        "F-1": "blocking_tier_and_severity", "F-2": "blocking_tier_and_severity", "F-4": "blocking_tier_and_severity"}
+    unknown = row("F-5", "A", "Unknown", "accepted").model_copy(update={"operational_severity": "Low"})
+    assert unknown.gate_severity == "Unknown", "an unknown CVSS severity is not replaced by a band"
+    odd_band = row("F-6", "A", "High", "accepted").model_copy(update={"operational_severity": "Weird"})
+    assert odd_band.gate_severity == "High", "a band that is none (a report edited by hand) neither raises nor lowers it"
 
 
 def test_while_the_queue_is_tightened_an_accepted_tier_c_finding_at_the_severity_floor_blocks():
@@ -92,10 +113,14 @@ def test_while_the_queue_is_tightened_an_accepted_tier_c_finding_at_the_severity
     a = assess(FACTS, rows, [], [dim("xss", 80.0)], tightened, GATE)
     assert blocking_reasons(rows, tightened, GATE) == {"F-1": "tier_c_while_tightened"} and a.tier_c_blocked_while_tightened == 1
     assert a.gate_reasons == ("tier_c_while_tightened",)
-    # untightened, tier C at the floor goes to a human; accepted only by a human's ruling, it does not block
+    # untightened, tier C at the floor goes to a human; once a human confirms it, it blocks for that, not for the tightening
     untightened = [row("F-1", "C", "High", "needs_human", decision="true_positive"), row("F-2", "C", "Medium", "accepted")]
     a = assess(FACTS, untightened, [], [dim("xss", 80.0)], OUTCOME, GATE)
-    assert a.gate_passed and blocking_reasons(untightened, OUTCOME, GATE) == {} and a.tier_c_blocked_while_tightened == 0
+    assert blocking_reasons(untightened, OUTCOME, GATE) == {"F-1": "human_confirmed_at_blocking_severity"}
+    assert not a.gate_passed and a.tier_c_blocked_while_tightened == 0
+    # and a human false positive on it lets it through
+    ruled_out = [row("F-1", "C", "High", "needs_human", decision="false_positive"), row("F-2", "C", "Medium", "accepted")]
+    assert assess(FACTS, ruled_out, [], [dim("xss", 80.0)], OUTCOME, GATE).gate_passed
 
 
 def test_gate_reasons_come_in_a_fixed_order_without_repeats():
@@ -103,6 +128,10 @@ def test_gate_reasons_come_in_a_fixed_order_without_repeats():
             row("F-4", "B", "Medium", "needs_human")]
     a = assess(FACTS, rows, [], [dim("xss", 40.0), dim("secrets", 30.0)], replace(OUTCOME, exclude_tier_c=True), GATE)
     assert a.gate_reasons == ("review_incomplete", "blocking_tier_and_severity", "tier_c_while_tightened", "dimension_below_minimum")
+    confirmed = [*rows, row("F-5", "D", "Critical", "dropped", decision="true_positive")]
+    a = assess(FACTS, confirmed, [], [dim("xss", 40.0)], replace(OUTCOME, exclude_tier_c=True), GATE)
+    assert a.gate_reasons == ("review_incomplete", "blocking_tier_and_severity", "tier_c_while_tightened",
+                              "human_confirmed_at_blocking_severity", "dimension_below_minimum")
     low = assess(FACTS, [], [], [dim("xss", 59.9), dim("secrets", 100.0)], OUTCOME, GATE)
     assert (low.review_status, low.gate_passed, low.gate_reasons) == ("complete", False, ("dimension_below_minimum",))
     assert assess(FACTS, [], [], [dim("xss", 60.0)], OUTCOME, GATE).gate_passed, "the minimum itself passes"
@@ -146,6 +175,10 @@ def _old_rules(facts: ReviewFacts, consensus, tool_results, dims, *, exclude_tie
             return "blocking_tier_and_severity"
         if exclude_tier_c and tier_c_needs_human(c.tier, c.cvss4_severity, tier_c_min):
             return "tier_c_while_tightened"
+        # the one rule added since (docs/adr/0003-human-resolution.md, amended 2026-11-22): a human true positive blocks
+        # at a blocking severity whatever its tier
+        if c.human_decision and c.human_decision["decision"] == "true_positive" and c.cvss4_severity in block_on_severity:
+            return "human_confirmed_at_blocking_severity"
         return None
 
     overall = round(sum(x.score for x in dims) / len(dims), 1) if dims else 0.0

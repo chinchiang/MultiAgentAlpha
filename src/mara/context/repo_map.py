@@ -4,11 +4,13 @@ who wrote the code (authority/sycophancy bias)."""
 
 from __future__ import annotations
 
+import codecs
 import hashlib
 import json
 import os
 import re
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from html import escape
 from pathlib import Path
@@ -42,7 +44,17 @@ TEXT_EXT = {
     ".sql",
     ".xml",
     ".lock",
+    # more source and configuration formats. A file of a known format is never taken for a binary: with a NUL or a
+    # byte that is not UTF-8 in it, it is bundled or omitted, not excluded, so one such byte in a comment does not
+    # take a source file out of the review unseen
+    ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte", ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".rs", ".kt", ".kts",
+    ".swift", ".scala", ".m", ".mm", ".pl", ".pm", ".lua", ".r", ".dart", ".ex", ".exs", ".erl", ".hs", ".clj", ".groovy",
+    ".gradle", ".tf", ".tfvars", ".hcl", ".ps1", ".psm1", ".bat", ".cmd", ".bash", ".zsh", ".fish", ".ksh", ".proto",
+    ".graphql", ".gql", ".properties", ".conf", ".jsp", ".asp", ".aspx", ".erb", ".ejs", ".hbs", ".twig", ".jinja", ".j2",
 }
+# files known by name, as MANIFESTS are, and a script known by its first two bytes
+SOURCE_NAMES = {"Dockerfile", "Makefile", "GNUmakefile", "Jenkinsfile", "Vagrantfile", "Rakefile", "Procfile", "Containerfile"}
+SHEBANG = b"#!"
 MANIFESTS = {
     "requirements.txt",
     "package.json",
@@ -59,6 +71,10 @@ MANIFESTS = {
     "Cargo.toml",
     "Cargo.lock",
 }
+# The path every exchange plants its canary at (mara.exchange.Canary). A target's own file of that name would sit in
+# the bundle beside the plant, and a finding that cites the path is set aside as a canary report: whatever the
+# target put there went unreviewed. Such a file is omitted, which leaves the coverage incomplete.
+CANARY_PATH = "__mara_canary__.md"
 MAX_FILE_BYTES = 200_000
 MAX_TOTAL_CHARS = 400_000
 MAX_REPOSITORY_CHARS = 16_000_000
@@ -226,8 +242,10 @@ def redact_secrets(text: str) -> str:
     return _SECRET_VALUE.sub(lambda m: "[REDACTED]" + "\n" * m.group().count("\n"), text)
 
 
-def _read_bounded(root: Path, rel: Path) -> str:
-    """Open each component without following symlinks, including directory components."""
+def _read_raw(root: Path, rel: Path) -> bytes:
+    """The first MAX_FILE_BYTES + 1 bytes of a regular file, each path component opened without following symlinks,
+    directory components included: a result longer than MAX_FILE_BYTES says the file is over the limit. A symlink, a
+    path outside `root` and anything but a regular file raise ValueError or OSError."""
     if hasattr(os, "O_DIRECTORY") and hasattr(os, "O_NOFOLLOW") and os.open in getattr(os, "supports_dir_fd", set()):
         fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
         try:
@@ -241,10 +259,7 @@ def _read_bounded(root: Path, rel: Path) -> str:
 
                 if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
                     raise ValueError("not_regular_file")
-                data = f.read(MAX_FILE_BYTES + 1)
-            if len(data) > MAX_FILE_BYTES:
-                raise ValueError("file_size_limit")
-            return data.decode("utf-8")
+                return f.read(MAX_FILE_BYTES + 1)
         finally:
             os.close(fd)
     else:
@@ -261,13 +276,28 @@ def _read_bounded(root: Path, rel: Path) -> str:
             raise ValueError("outside_root") from None
         if not cur.is_file():
             raise ValueError("not_regular_file")
-        if cur.stat().st_size > MAX_FILE_BYTES:
-            raise ValueError("file_size_limit")
         with cur.open("rb") as f:
-            data = f.read(MAX_FILE_BYTES + 1)
-        if len(data) > MAX_FILE_BYTES:
-            raise ValueError("file_size_limit")
-        return data.decode("utf-8")
+            return f.read(MAX_FILE_BYTES + 1)
+
+
+def _read_bounded(root: Path, rel: Path) -> str:
+    """The UTF-8 text of a file of at most MAX_FILE_BYTES, read as _read_raw reads it; a larger one raises ValueError."""
+    data = _read_raw(root, rel)
+    if len(data) > MAX_FILE_BYTES:
+        raise ValueError("file_size_limit")
+    return data.decode("utf-8")
+
+
+def looks_like_text(data: bytes) -> bool:
+    """Whether `data`, a file's bytes or the first of them, reads as UTF-8 text: no NUL byte, and every byte sequence
+    valid UTF-8, a multi-byte character cut off at the end allowed (a file read up to a limit ends anywhere)."""
+    if b"\0" in data:
+        return False
+    try:
+        codecs.getincrementaldecoder("utf-8")().decode(data, final=False)
+    except UnicodeDecodeError:
+        return False
+    return True
 
 
 def _content_hash(content: dict[str, str]) -> str:
@@ -282,16 +312,41 @@ def _content_hash(content: dict[str, str]) -> str:
 # and a timeout reads as a failed call, which each caller already treats as "git cannot answer".
 GIT_TIMEOUT = 60
 
+# Settings every git that runs in the target is given through its environment, where they outrank the target's own
+# .git/config as `-c` does. The target is untrusted, and its config is not part of what `git clone` copies but is
+# part of an unpacked archive or a prepared checkout: `core.fsmonitor = /path/to/program` made the first git call of
+# a review run that program, with the review's environment, provider keys included. No hook runs from the target
+# either. This closes the settings that the read-only calls here and the scanners' own (semgrep lists files with
+# git) are known to follow; it is not a list of every setting that names a program.
+GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull}
+
+
+def git_safe_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """GIT_SAFE_CONFIG as the GIT_CONFIG_COUNT / GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n variables git reads it from,
+    numbered after the settings `env` already gives that way (a host that passes `safe.directory` so, as containers
+    do, keeps it); among settings of one key git takes the last, so these still outrank what `env` holds. A count in
+    `env` that is not a number is replaced: git itself refuses to run with one."""
+    try:
+        first = max(0, int((env or {}).get("GIT_CONFIG_COUNT", "0")))
+    except ValueError:
+        first = 0
+    out = {"GIT_CONFIG_COUNT": str(first + len(GIT_SAFE_CONFIG))}
+    for i, (key, value) in enumerate(GIT_SAFE_CONFIG.items(), first):
+        out[f"GIT_CONFIG_KEY_{i}"] = key
+        out[f"GIT_CONFIG_VALUE_{i}"] = value
+    return out
+
 
 def _run_git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess | None:
     """git in `root`, or None when it does not finish in GIT_TIMEOUT or cannot start. Text output is
     UTF-8 (what git writes), not the locale code page: on a cp950 host a non-ASCII path came back
-    garbled or failed to decode."""
+    garbled or failed to decode. It runs under GIT_SAFE_CONFIG, whatever the config of `root` says."""
+    env = {**os.environ, **git_safe_env(os.environ)}
     try:
         if text:
             return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT,
-                                  encoding="utf-8", errors="replace")
-        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT)
+                                  encoding="utf-8", errors="replace", env=env)
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT, env=env)
     except (subprocess.TimeoutExpired, OSError):
         return None
 
@@ -588,6 +643,7 @@ def build_context(root: str | Path) -> RepoContext:
     tracked = _run_git(root, "ls-files", "--cached", "-z", "--", ".", text=False) if use_git and probe is not None else None
     if use_git and (tracked is None or tracked.returncode != 0):
         ctx.omitted["."] = "git_ls_files_failed"
+    in_git = tracked is not None and tracked.returncode == 0  # every path below is one git tracks
     paths = (
         [Path(os.fsdecode(x)) for x in tracked.stdout.split(b"\0") if x] if tracked is not None and tracked.returncode == 0
         else [] if use_git
@@ -605,7 +661,10 @@ def build_context(root: str | Path) -> RepoContext:
             ctx.omitted[rel] = "unsafe_path"
             continue
         p = root / relpath
-        if any(part in SKIP_DIRS for part in relpath.parts):
+        # a generated directory is left out only of a directory that is walked: in a git target every path here is
+        # tracked, so the repository itself calls it source, and leaving `build/x.py` out unseen let a change hide code
+        # from every model while the coverage stayed complete
+        if not in_git and any(part in SKIP_DIRS for part in relpath.parts):
             ctx.excluded[rel] = "generated_directory"
             continue
         ctx.files.append(p)
@@ -618,12 +677,27 @@ def build_context(root: str | Path) -> RepoContext:
         if _SECRET_FILE.match(p.name):
             ctx.excluded[rel] = "secret_file"
             continue
-        if ext not in TEXT_EXT and p.name not in MANIFESTS and p.name != "Dockerfile":
+        if rel == CANARY_PATH:
+            ctx.omitted[rel] = "reserved_path"
+            continue
+        try:
+            data = _read_raw(root, relpath)
+        except (OSError, ValueError):
+            data = None
+        known = ext in TEXT_EXT or p.name in MANIFESTS or p.name in SOURCE_NAMES or (data is not None and data.startswith(SHEBANG))
+        # a file of no known text format is excluded only when it cannot be read as text (a binary, or a symlink or
+        # special file that is never opened); one that reads as text is source whatever its name says, and goes the way
+        # of a known format: into the bundle, or omitted, which leaves the coverage incomplete. What this cannot tell
+        # is a source file of an unknown format made to look binary (one NUL in a comment): the known formats above
+        # are there so that the common ones cannot be
+        if not known and (data is None or not looks_like_text(data)):
             ctx.excluded[rel] = "unsupported_format"
             continue
         try:
-            text = _read_bounded(root, relpath)
-        except (OSError, ValueError, UnicodeError):
+            if data is None or len(data) > MAX_FILE_BYTES:
+                raise ValueError("unreadable_or_file_size_limit")
+            text = data.decode("utf-8")
+        except (ValueError, UnicodeError):
             ctx.omitted[rel] = "unreadable_unsafe_or_oversize"
             continue
         if is_calibration_answer_key(rel, text):

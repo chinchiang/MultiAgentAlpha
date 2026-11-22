@@ -7,13 +7,25 @@ from ..audit import ReplyRecord
 from ..context.repo_map import RepoContext
 from ..providers.base import Provider
 from ..schemas import DIMENSION_LABELS, Finding, Provenance
+from ..scoring import cvss4
 from . import base
 from .context_agent import ContextView
 
-# The 11 base metrics in specification order, then optional supplemental/environmental ones (scoring/cvss4.py
-# parses and scores the vector; this only shapes what a constrained decoder may emit).
+# The 11 base metrics in specification order, then optional supplemental ones, which change no score (scoring/cvss4.py
+# parses and scores the vector; this only shapes what a constrained decoder may emit). Threat and environmental metrics
+# are not a reviewer's to set: read() refuses a vector that carries one (base_vector_only).
 CVSS4_VECTOR_PATTERN = (r"^CVSS:4\.0/AV:[NALP]/AC:[LH]/AT:[NP]/PR:[NLH]/UI:[NPA]/VC:[HLN]/VI:[HLN]/VA:[HLN]"
-                        r"/SC:[HLN]/SI:[HLN]/SA:[HLN](/[A-Z]{1,3}:[A-Za-z]{1,5})*$")
+                        r"/SC:[HLN]/SI:[HLN]/SA:[HLN](/(S|AU|R|V|RE|U):[A-Za-z]{1,5})*$")
+
+
+def base_vector_only(vector: str) -> str:
+    """`vector` when it scores on its base metrics alone (CVSS-B); ValueError when it carries a threat or environmental
+    metric. Those describe the deployment and the threat landscape, which no reviewer of the source knows, and they
+    only ever lower a score: `/MVC:N/MVI:N/MVA:N` takes a 9.3 to 0.0, so one reviewer could keep its own finding from
+    blocking the gate."""
+    if cvss4.nomenclature(vector) != "CVSS-B":
+        raise ValueError("a reviewer's CVSS vector carries threat or environmental metrics")
+    return vector
 
 FINDING_SCHEMA = {
     "type": "object",
@@ -81,7 +93,7 @@ def review_dimension(provider: Provider, ctx: RepoContext, dimension: str, canar
                     id="pending", dimension=dimension, title=raw["title"], cwe=raw["cwe"],
                     standard_refs=raw.get("standard_refs", []), provenance=prov, reachability=raw["reachability"],
                     reachability_argument=raw["reachability_argument"], exploit_sketch=raw["exploit_sketch"],
-                    cvss4_vector=raw["cvss4_vector"], model_confidence=raw["model_confidence"],
+                    cvss4_vector=base_vector_only(raw["cvss4_vector"]), model_confidence=raw["model_confidence"],
                     source_family=provider.family, source_model=provider.model,
                 )
                 findings.append(f)

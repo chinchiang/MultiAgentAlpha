@@ -45,7 +45,7 @@ Private vulnerability reporting was switched on for this repository on 2026-09-1
 (*Settings → Code security → Private vulnerability reporting*), so while the repository is public
 the link above opens the private advisory form directly.
 
-**While the repository is private (since 2026-09-21)** GitHub does not offer private vulnerability
+**While the repository is private (as it was from 2026-09-21 to 2026-10-12; it is public now)** GitHub does not offer private vulnerability
 reporting, and the link above returns 404. Everyone who can read the code is then a collaborator:
 report the problem to the maintainer (@chinchiang) directly through a non-public channel (a direct
 message or an internal e-mail, not an issue, pull request or discussion). The maintainer opens a
@@ -70,7 +70,7 @@ non-reachable condition, the advisory is closed with the reasoning written down.
 Every pull request runs the L0 tools pinned and verified in `tools/versions.lock` (semgrep with
 pinned rules, osv-scanner over the hash-locked Python closures, trivy with an offline database,
 gitleaks, zizmor, csp-evaluator). While the repository is public their SARIF goes to GitHub Code Scanning; while it is
-private (since 2026-09-21) that upload job is skipped, because Code Scanning on a private repository needs
+private (as it was from 2026-09-21 to 2026-10-12) that upload job is skipped, because Code Scanning on a private repository needs
 GitHub Advanced Security, and the SARIF is kept as a workflow artifact instead. OpenSSF Scorecard runs on every
 push to `main` and weekly: through the GitHub API while public; while private as `scorecard --local` with the
 locked CLI, which runs only the checks that need no API (Dangerous-Workflow, Token-Permissions,

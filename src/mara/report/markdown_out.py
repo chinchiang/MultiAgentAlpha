@@ -61,7 +61,9 @@ def render_markdown(r: ReviewReport) -> str:
             f"### {f.id} · {literal(f.title)}",
             f"- Dimension: {DIMENSION_LABELS[f.dimension]} · {f.cwe} · refs: {', '.join(f.standard_refs) or '-'}",
             f"- CVSS 4.0 **{c.cvss4_score} {c.cvss4_severity}** (`{f.cvss4_vector}`) · SSVC **{c.ssvc_decision}**"
-            f" · tier **{c.tier.value}** · consensus {c.weighted_score}",
+            # the severity the gate read, when the judges' bands put it above the vector's (GLOSSARY.md: gate severity)
+            + (f" · gate severity **{c.gate_severity}** (judges)" if c.gate_severity != c.cvss4_severity else "")
+            + f" · tier **{c.tier.value}** · consensus {c.weighted_score}",
             f"- Families agreeing: {', '.join(x.value for x in c.families_agreeing) or '-'} · tool corroborated: {c.tool_corroborated}"
             f" · skeptic refuted: {c.skeptic_refuted} · position-consistent: {c.position_consistent}",
             f"- Evidence: {code(f'{p.file}:{p.line}')} — {code(p.quote[:160])}",

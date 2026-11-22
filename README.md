@@ -24,6 +24,22 @@ This repository contains two things:
    endpoint) when configured. `mara serve` adds a local, bilingual web workbench on top of the command
    line; its [read-only demo](https://chinchiang.github.io/MultiAgentAlpha/workbench/) runs on GitHub Pages.
 
+**Start here.** With Python 3.11 on Linux x86_64 and a virtual environment active, three installs and one command
+give a complete offline review of the seeded vulnerable fixture, with no API key and no network after the installs
+(other interpreters and platforms: [INSTALL.md](INSTALL.md) section 2.3):
+
+```bash
+python -m pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt
+python -m pip install --require-hashes --only-binary=:all: -r tools/build-requirements.txt
+python -m pip install --no-deps --no-build-isolation -e .
+mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out   # or `mara`: the same in the browser
+```
+
+It writes `out/report.md`, `report.json`, `report.sarif` and `human_queue.md`. Where to read next:
+[Architecture](#architecture) for how a review runs, [Live mode](#live-mode) for real models,
+[Status](#status) for what has and has not been validated, and [INSTALL.md](INSTALL.md) for every installation layer.
+The sections in between are reference material for one subject each.
+
 ## Online report (GitHub Pages)
 
 The HTML edition of the report is served by GitHub Pages straight from the `docs/` folder of
@@ -34,7 +50,7 @@ are (Jekyll would otherwise try to build the Markdown and mishandle the non-ASCI
 name), and `docs/index.html` is a self-contained redirect to the report, so the public address is
 just <https://chinchiang.github.io/MultiAgentAlpha/>. Pages has been live since 2026-09-17 (the "pages build and deployment" runs in the Actions tab are
 the deployment record). **The site stays public while the repository is private**: after the
-repository became private on 2026-09-21, Pages kept building on every push to `main`, and on
+repository became private on 2026-09-21 (it has been public again since 2026-10-12), Pages kept building on every push to `main`, and on
 2026-09-24 the address, the report and the other `docs/` files still answered 200 to an anonymous
 request (the Pages API reports `public: true`). Keeping it public is the owner's decision of
 2026-09-24; to take the report offline instead, unpublish the site under Settings → Pages. The
@@ -67,7 +83,11 @@ Git targets include tracked source only: a repository root and any directory tra
 repository's HEAD (a subdirectory such as `fixtures/vuln-sample`) are read through `git ls-files`, and
 if git cannot answer (dubious ownership, a broken index) the review fails closed with
 `git_ls_files_failed` instead of walking the tree. Only a directory outside any committed history
-(including one that merely sits inside a home-directory dotfiles repo) is walked.
+(including one that merely sits inside a home-directory dotfiles repo) is walked. Every git MARA or a
+scanner runs in the target is given `core.fsmonitor=false` and an empty hooks path through its environment,
+which outranks the target's own `.git/config`: a target that is an unpacked archive rather than a clone
+could otherwise name a program there and have the review run it. A target's own file at the path the
+canary is planted at (`__mara_canary__.md`) is omitted as `reserved_path`, and the review is incomplete.
 
 MARA's own trust anchors live in the MARA workspace, never in the code under review: the pinned
 tools (`.mara-tools`, or `MARA_TOOLS_DIR`), policy P8's evidence `calib/latest.json`, the human-queue
@@ -81,7 +101,10 @@ or an evidence input (`--sarif-dir`, `--mock-fixtures`, `--psirt-event`)
 executes, the evidence the policies trust and the config itself, and the reports of one run would be
 bundled into the next); run it from the workspace (`mara review path/to/target`) or set `MARA_HOME`
 outside the target. Secret files, symlinks, unsafe paths and file/request-size
-limits are visible in the coverage manifest; omitted required text prevents a complete result. Live
+limits are visible in the coverage manifest; omitted required text prevents a complete result. In a git
+target every tracked file is in scope, a tracked `build/`, `dist/` or `node_modules/` included, and so is
+any file that reads as text whatever its extension: only a binary is excluded as `unsupported_format`, so a
+change cannot hide code from the models in a directory or under a name the bundle used to skip. Live
 model calls require a current local secret preflight, even when other SARIF was pre-recorded; the only
 exception is `--calibration-sample` (see Live mode). Use
 HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
@@ -186,7 +209,7 @@ Found a security problem in this repository's own code? See [SECURITY.md](SECURI
 
 ## Quick start (offline)
 
-Step-by-step installation (bilingual, 正體中文 / English), including how to obtain the private repository, the non-Linux fallback and the optional tool and live-model layers, is in [INSTALL.md](INSTALL.md).
+Step-by-step installation (bilingual, 正體中文 / English), including how to obtain the repository, the non-Linux fallback and the optional tool and live-model layers, is in [INSTALL.md](INSTALL.md).
 
 ```bash
 python -m pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt   # the resolved, hash-pinned closure
@@ -237,7 +260,7 @@ Each run is a `mara review` subprocess with its own directory `out/runs/<run-id>
 the roles and models of the config at launch in `run.json`, the child's output in `run.log`, every report the command line writes,
 and `progress.json`, which `mara review --progress-file` rewrites at every stage boundary. Every check of the command line still
 decides, and the server repeats them before it starts the child only to name the refusal on the page. One review runs at a time,
-and never while a job replaces the tools or the trivy database; stopping the server (Ctrl-C, SIGTERM, SIGHUP) cancels it. The PSIRT options stay on the command line, because they start legal clocks. A plain
+and never while a job replaces the tools or the trivy database; stopping the server (Ctrl-C, SIGTERM, SIGHUP) cancels it, and a server that starts first stops any review or job an earlier server left running (a killed server; Linux only, where `/proc` says which command a pid runs). The PSIRT options stay on the command line, because they start legal clocks. A plain
 `mara review` into `out/` appears read-only in the list.
 
 The server listens on a loopback address only (`--host 127.0.0.1`, `localhost` or `::1`; reach a remote one through an SSH tunnel,
@@ -893,7 +916,7 @@ tools/             versions.lock, hash-pinned Python closures, triage / ignore /
 sbom/              ML-BOM manifest (models.yaml) and the CycloneDX BOM
 ops/               model-swap drill register, PSIRT records
 training/          AI-literacy curriculum, quiz and register (G-13)
-.github/workflows  four hardened workflows: mara-review, scorecard, governance, docs-check (SHA-pinned, least privilege)
+.github/workflows  five hardened workflows: mara-review, scorecard, governance, docs-check, osv-watch (SHA-pinned, least privilege)
 ```
 
 ## Status

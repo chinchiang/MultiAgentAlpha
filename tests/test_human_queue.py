@@ -65,8 +65,9 @@ def test_selection_reasons_and_full_context(cfg):
     assert tightened == {"F-1", "F-2"}
 
 
-def test_rejected_non_d_findings_are_queued_until_p8_allows_silence(cfg):
-    # assessment #60: without a passing AAT (policy P8) no rejected finding goes without a human look (rejection review)
+def test_rejected_and_dropped_findings_are_queued_until_p8_allows_silence(cfg):
+    # assessment #60: without a passing AAT (policy P8) no finding the pipeline put out by itself, rejected or dropped,
+    # goes without a human look (rejection review)
     fs = [_finding("F-1", 10), _finding("F-2", 20), _finding("F-3", 30)]
     def rows(policy):
         return {"F-1": row("rejected", "F-1", outcome_policy=policy), "F-2": row("dropped", "F-2", outcome_policy=policy),
@@ -74,7 +75,8 @@ def test_rejected_non_d_findings_are_queued_until_p8_allows_silence(cfg):
 
     items = {i.finding_id: i for i in build_queue(fs, rows(scored_rows.policy(cfg)), {}, {}, [], cfg)}
     assert items["F-1"].reasons == ["unsupervised_reject_unverified"] and items["F-3"].reasons == ["unsupervised_reject_unverified"]
-    assert "F-2" not in items  # a dropped finding (tier D) is not a rejection
+    # a dropped finding (tier D) is out on two judges' or one skeptic's word, no more supervised than a rejection
+    assert items["F-2"].reasons == ["unsupervised_reject_unverified"] and items["F-2"].tier == "D"
     cfg_true = cfg.model_copy(deep=True)
     cfg_true.gate.unsupervised_reject_allowed = True
     assert build_queue(fs, rows(scored_rows.policy(cfg_true)), {}, {}, [], cfg_true) == []

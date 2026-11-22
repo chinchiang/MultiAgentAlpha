@@ -24,6 +24,10 @@ dev = ["pytest>=8.0", "ruff>=0.5", "markdown>=3.6", "jsonschema>=4.18"]
 [project.scripts]
 mara = "mara.cli:app"
 
+[tool.setuptools]
+# a wheel or sdist carries the terms of what it bundles: the FIRST CVSS port (LICENSE-CVSS) and the attributions in NOTICE
+license-files = ["LICENSE", "LICENSE-CVSS", "NOTICE"]
+
 [tool.setuptools.dynamic]
 version = { attr = "mara.__version__" }
 

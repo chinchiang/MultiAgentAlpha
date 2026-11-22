@@ -6,9 +6,9 @@ This document explains how to obtain and install the MARA (Multi-Agent Review Ar
 
 ## 1. 取得原始碼 / Getting the source
 
-repo 是私有的（2026-09-21 起），取得方式取決於對方有沒有 GitHub 帳號。
+repo 自 2026-10-12 起是公開的（2026-09-21 至 2026-10-12 之間曾為私有），任何人都可以直接 `git clone https://github.com/chinchiang/MultiAgentAlpha.git`，或在網頁上按 **Code → Download ZIP**，不需要邀請。以下 1.1 的 collaborator 邀請、1.2 的壓縮檔交付與 1.3 的限制，只在 repo 再度轉為私有時適用。
 
-The repository is private (since 2026-09-21), so how someone obtains it depends on whether they have a GitHub account.
+The repository has been public since 2026-10-12 (it was private from 2026-09-21 until then): anyone can `git clone https://github.com/chinchiang/MultiAgentAlpha.git`, or choose **Code → Download ZIP** on the web page, without an invitation. The collaborator invitation of 1.1, the archive hand-over of 1.2 and the limits of 1.3 apply only if the repository is made private again.
 
 ### 1.1 對方有 GitHub 帳號：加為 collaborator / With a GitHub account: add them as a collaborator
 

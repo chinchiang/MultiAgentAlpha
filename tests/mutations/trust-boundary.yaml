@@ -1,0 +1,60 @@
+focused: [tests/test_git_subprocess_bounds.py, tests/test_trust_boundary_fixes.py, tests/test_tools_csp.py,
+          tests/test_tool_target_config.py, tests/test_context_scope.py]
+mutations:
+  - name: git in the target runs under the target's own config
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_git_subprocess_bounds.py::test_a_program_the_targets_git_config_names_is_not_run
+    old: '    env = {**os.environ, **git_safe_env(os.environ)}'
+    new: '    env = {**os.environ}'
+  - name: the fsmonitor setting left to the target
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_git_subprocess_bounds.py::test_a_program_the_targets_git_config_names_is_not_run
+    old: 'GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull}'
+    new: 'GIT_SAFE_CONFIG = {"core.hooksPath": os.devnull}'
+  - name: a tool's environment carries no git settings
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_git_subprocess_bounds.py::test_a_tool_runs_git_under_the_same_settings
+    old: '    env.update(git_safe_env())'
+    new: '    pass'
+  - name: a prerecorded file that is not JSON ends the review
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_trust_boundary_fixes.py::test_a_prerecorded_file_that_is_not_json_is_a_tool_that_did_not_run
+    error: JSONDecodeError
+    old: '        except (NotShapedAsSarif, json.JSONDecodeError, UnicodeDecodeError, OSError) as e:'
+    new: '        except (NotShapedAsSarif, UnicodeDecodeError, OSError) as e:'
+  - name: a prerecorded file that is not UTF-8 ends the review
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_trust_boundary_fixes.py::test_a_prerecorded_file_that_is_not_json_is_a_tool_that_did_not_run
+    error: UnicodeDecodeError
+    old: '        except (NotShapedAsSarif, json.JSONDecodeError, UnicodeDecodeError, OSError) as e:'
+    new: '        except (NotShapedAsSarif, json.JSONDecodeError, OSError) as e:'
+  - name: a temporary ledger left behind when the move fails
+    file: src/mara/psirt_ledger.py
+    caught_by: tests/test_trust_boundary_fixes.py::test_a_ledger_write_that_fails_leaves_the_ledger_as_it_was
+    old: '        tmp.unlink(missing_ok=True)'
+    new: '        pass'
+  - name: a CSP scan that skipped a file completes
+    file: src/mara/tools/csp_eval.py
+    caught_by: tests/test_tools_csp.py::test_a_scan_that_skipped_a_file_did_not_complete
+    old: '                "executionSuccessful": not truncated and not skipped,'
+    new: '                "executionSuccessful": not truncated,'
+  - name: a skipped file is only a note
+    file: src/mara/tools/csp_eval.py
+    caught_by: tests/test_tools_csp.py::test_a_scan_that_skipped_a_file_did_not_complete
+    old: '{"level": "error", "descriptor": {"id": "CSP_FILE_SKIPPED"}'
+    new: '{"level": "note", "descriptor": {"id": "CSP_FILE_SKIPPED"}'
+  - name: osv-scanner honours the target's .gitignore
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_target_config.py::test_every_tool_is_handed_neutral_config_instead_of_the_targets
+    old: 'OSV_TARGET_FLAGS = ["--no-ignore"]'
+    new: 'OSV_TARGET_FLAGS = []'
+  - name: a target's file at the canary's path bundled beside the plant
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_context_scope.py::test_a_targets_own_file_at_the_canarys_path_is_omitted_so_the_coverage_is_incomplete
+    old: '        if rel == CANARY_PATH:'
+    new: '        if False:'
+  - name: the host's own git settings overwritten
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_git_subprocess_bounds.py::test_the_settings_are_added_after_those_the_host_already_gives_through_the_environment
+    old: '        first = max(0, int((env or {}).get("GIT_CONFIG_COUNT", "0")))'
+    new: '        first = 0'

@@ -25,6 +25,7 @@ from pathlib import Path
 import httpx
 
 from .config import MaraConfig
+from .file_replace import replace
 
 LEDGER_SCHEMA = "mara-psirt-ledger/1"
 HANDSHAKE_SCHEMA = "mara-psirt/1"
@@ -84,7 +85,15 @@ def load_ledger(path: Path | str) -> dict:
 def save_ledger(ledger: dict, path: Path | str) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # written beside the ledger and moved over it (mara.file_replace): a run that stops mid-write, or a reader at that
+    # moment, leaves or sees the whole old ledger, never half of one, which load_ledger would refuse on the next run
+    # with every delivery it recorded
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        replace(tmp, p)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def item_for(ledger: dict, payload: dict, now: dt.datetime) -> dict:

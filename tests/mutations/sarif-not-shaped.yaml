@@ -59,8 +59,8 @@ mutations:
   - name: a prerecorded file not shaped as SARIF ends the review
     file: src/mara/tools/runner.py
     caught_by: tests/test_sarif_shape.py::test_a_review_whose_prerecorded_sarif_is_not_shaped_as_sarif_completes_without_that_tool
-    old: '        except NotShapedAsSarif as e:  # a scan that did not complete'
-    new: '        except KeyError as e:  # a scan that did not complete'
+    old: '        except (NotShapedAsSarif, json.JSONDecodeError, UnicodeDecodeError, OSError) as e:'
+    new: '        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:'
   - name: a prerecorded file not shaped as SARIF is a scan that completed
     file: src/mara/tools/runner.py
     caught_by: tests/test_sarif_shape.py::test_a_review_whose_prerecorded_sarif_is_not_shaped_as_sarif_completes_without_that_tool

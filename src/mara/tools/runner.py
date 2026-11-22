@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..context.repo_map import git_safe_env
 from . import pins
 from .sarif import NotShapedAsSarif, ToolResult, read_sarif, scan_complete
 
@@ -52,9 +53,11 @@ TOOL_ENV_ALLOWLIST = (
 
 def tool_env(*extra: str, **set_vars: str) -> dict[str, str]:
     """The environment for a tool subprocess: the allowlisted parent variables, plus the named `extra` ones a
-    particular call needs (zizmor's online audits: GH_TOKEN), plus `set_vars` set explicitly."""
+    particular call needs (zizmor's online audits: GH_TOKEN), plus the git settings a tool that calls git in the
+    target must run under (mara.context.repo_map.GIT_SAFE_CONFIG), plus `set_vars` set explicitly."""
     keep = set(TOOL_ENV_ALLOWLIST) | set(extra)
     env = {k: v for k, v in os.environ.items() if k in keep}
+    env.update(git_safe_env())
     env.update(set_vars)
     return env
 
@@ -154,6 +157,8 @@ def neutral_configs(out_dir: Path) -> dict[str, Path]:
 # read_sarif only drops status "accepted". gitleaks gets an explicit config and no allowlist below.
 SEMGREP_TARGET_FLAGS = ["--x-ignore-semgrepignore-files"]
 ZIZMOR_TARGET_FLAGS = ["--no-config", "--no-ignores", "--collect=all"]  # all: also what .gitignore hides
+# also the lockfiles the target's .gitignore names: a committed lockfile listed there was otherwise not scanned
+OSV_TARGET_FLAGS = ["--no-ignore"]
 
 
 def has_actions_inputs(target: Path) -> bool:
@@ -229,7 +234,7 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, wo
                     target,
                 )
             elif tool == "osv-scanner":
-                cp = _run([exe, "scan", "source", "--config", str(neutral["osv-scanner"]), "--format", "sarif",
+                cp = _run([exe, "scan", "source", "--config", str(neutral["osv-scanner"]), *OSV_TARGET_FLAGS, "--format", "sarif",
                            "--output-file", str(sarif), "-r", "."], target)
                 if cp.returncode not in (0, 1):
                     # 127 no packages, 128 general error (e.g. api.osv.dev unreachable): osv-scanner may still write an
@@ -297,10 +302,12 @@ def load_prerecorded(sarif_dir: Path) -> list[ToolRun]:
     the GitHub Actions workflow where the tool step runs in an isolated job."""
     runs = []
     for p in sorted(sarif_dir.glob("*.sarif")):
-        doc = json.loads(p.read_text(encoding="utf-8"))
         try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
             results = read_sarif(p, p.stem)
-        except NotShapedAsSarif as e:  # a scan that did not complete: the review goes on without its results
+        except (NotShapedAsSarif, json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
+            # a scan that did not complete, or a file that is not JSON or cannot be read: the review goes on without
+            # its results and the tool did not run, as run_all treats the same failures of a scan it started
             runs.append(ToolRun(tool=p.stem, ran=False, note=f"prerecorded, {e}"))
             continue
         runs.append(ToolRun(tool=p.stem, ran=scan_complete(doc), results=results, note="prerecorded"))

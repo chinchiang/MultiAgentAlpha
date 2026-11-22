@@ -103,10 +103,12 @@ def decide(s: OutcomeSignals, policy: OutcomePolicy) -> JuryOutcome:
         reasons.append(SKEPTIC_REFUTED_JURY_OVERRODE)
     if reasons:
         return JuryOutcome("needs_human", tuple(reasons), unsupervised_reject_unverified=False)
+    # assessment #60: without a passing Alternative Annotator Test (policy P8) a human reviews every finding the
+    # pipeline puts out by itself, dropped or rejected; the jury outcome stays as it is so the AAT keeps its sample,
+    # and the review is not incomplete for it. A dropped finding is out on two judges' word about a claim they read
+    # without the code, or on one skeptic's, which is no more supervised than a rejection.
     if s.tier == EvidenceTier.D:
-        return JuryOutcome("dropped", (), unsupervised_reject_unverified=False)
+        return JuryOutcome("dropped", (), unsupervised_reject_unverified=not policy.unsupervised_reject_allowed)
     if s.score >= policy.accept_threshold:
         return JuryOutcome("accepted", (), unsupervised_reject_unverified=False)
-    # assessment #60: without a passing Alternative Annotator Test (policy P8) a human reviews every rejection;
-    # the jury outcome stays rejected so the AAT keeps its sample, and the review is not incomplete for it
     return JuryOutcome("rejected", (), unsupervised_reject_unverified=not policy.unsupervised_reject_allowed)

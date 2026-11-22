@@ -9,6 +9,13 @@ Copyright (c) 2023 FIRST.ORG, Inc., Red Hat, and contributors.
 The applicable BSD 2-Clause terms are reproduced in LICENSE-CVSS. The Python port
 and its integration into MARA are modifications to that reference implementation.
 
+The JSON schemas in src/mara/groundtruth/cyclonedx/ (bom-1.6.schema.json,
+spdx.schema.json, jsf-0.82.schema.json) are the CycloneDX 1.6 schema files, from
+https://github.com/CycloneDX/specification. Their own "$comment" fields state that
+they are published under the Apache License 2.0 (see LICENSE) and that the JSON
+Signature Format schema was developed by Anders Rundgren as part of the OpenKeyStore
+project.
+
 Third-party dependencies, model weights, datasets, standards and research material
 remain under their respective licenses. This project's license does not grant rights
 to redistribute model weights or full standards texts. Tool and rule-set sources and

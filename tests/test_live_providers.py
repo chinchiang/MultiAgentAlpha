@@ -125,10 +125,14 @@ def test_the_cvss_pattern_means_the_same_to_a_full_match_decoder_and_to_json_sch
 
     pattern = FINDING_SCHEMA["properties"]["findings"]["items"]["properties"]["cvss4_vector"]["pattern"]
     for v in ("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N",
-              "CVSS:4.0/AV:L/AC:H/AT:P/PR:L/UI:A/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N/E:P/U:Amber/MSI:S"):
+              "CVSS:4.0/AV:L/AC:H/AT:P/PR:L/UI:A/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N/S:P/U:Amber/RE:M"):
         assert re.fullmatch(pattern, v) and re.search(pattern, v)
         score(v)
-    for v in ("CVSS:4.0/", "CVSS:4.0/AV:N/AC:L", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"):
+    # a threat or an environmental metric is not a reviewer's to set (mara.agents.reviewer.base_vector_only)
+    for v in ("CVSS:4.0/", "CVSS:4.0/AV:N/AC:L", "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+              "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N/E:U",
+              "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N/MVC:N/MVI:N/MVA:N",
+              "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N/CR:L"):
         assert not re.fullmatch(pattern, v) and not re.search(pattern, v)
 
 

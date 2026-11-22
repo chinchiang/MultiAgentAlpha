@@ -91,7 +91,9 @@ def test_the_final_outcome_drives_the_gate_scores_and_report_in_both_directions(
     assert cons["F-0001"].final_outcome == "rejected" and cons["F-0001"].accepted, "a human false positive outranks an accepting jury"
     assert cons["F-0029"].final_outcome == "accepted" and cons["F-0029"].tier.value == "D", "tier stays D"
     assert cons["F-0002"].blocking_reason == "blocking_tier_and_severity"
-    assert cons["F-0001"].blocking_reason is None and cons["F-0029"].blocking_reason is None
+    # a human confirmed a Critical finding: it blocks although its tier, the pipeline's own evidence, is D
+    assert cons["F-0029"].gate_severity == "Critical" and cons["F-0029"].blocking_reason == "human_confirmed_at_blocking_severity"
+    assert cons["F-0001"].blocking_reason is None
     # two human true positives join the accepted findings, one human false positive leaves them
     assert sum(d.accepted_findings for d in second.dimensions) == sum(d.accepted_findings for d in first.dimensions) + 2 - 1
     md = render_markdown(second)

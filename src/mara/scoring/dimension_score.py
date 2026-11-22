@@ -1,4 +1,6 @@
-"""Dimension score 0-100 from accepted findings. Deterministic and explainable."""
+"""Dimension score 0-100 from the findings whose final outcome is accepted, each a penalty for its gate severity
+(GLOSSARY.md) scaled by its evidence tier, or in full when a human confirmed it (docs/adr/0003-human-resolution.md).
+Deterministic and explainable. Pure."""
 
 from __future__ import annotations
 
@@ -21,7 +23,9 @@ def score_dimension(dimension: str, findings: list[Finding], consensus: dict[str
         outcome = c.final_outcome
         if outcome == "accepted":
             accepted += 1
-            total -= PENALTY[c.cvss4_severity] * TIER_FACTOR[c.tier]
+            # a finding a human confirmed counts in full whatever its tier: the tier factor discounts for how little the
+            # pipeline's own evidence supports a finding, and a human ruled this one real
+            total -= PENALTY[c.gate_severity] * (1.0 if c.human_confirmed else TIER_FACTOR[c.tier])
         elif outcome == "needs_human":
             human += 1  # awaiting a decision, not rejected
         else:

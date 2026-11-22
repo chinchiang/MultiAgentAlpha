@@ -158,7 +158,7 @@ def report_view(manifest: dict[str, Any], report: ReviewReport, progress: dict[s
         c = cons.get(f.id)
         findings.append({
             **f.model_dump(mode="json"),
-            "severity": c.cvss4_severity if c else None,  # no ruling is no severity, not the CVSS severity "None"
+            "severity": c.gate_severity if c else None,  # no ruling is no severity, not the CVSS severity "None"
             "consensus": _consensus(c),
             "skeptic": sk[f.id].model_dump(mode="json") if f.id in sk else None,
             "redteam": rt[f.id].model_dump(mode="json") if f.id in rt else None,

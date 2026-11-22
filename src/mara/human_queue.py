@@ -94,7 +94,7 @@ def build_queue(
             continue
         reasons = list(c.human_reasons)  # never empty when the jury sent it to a human (decide() always says why)
         if c.in_rejection_review:
-            # rejection review (policy P8, docs/adr/0005-jury-outcome.md): the jury outcome stays rejected
+            # rejection review (policy P8, docs/adr/0005-jury-outcome.md): the jury outcome stays rejected or dropped
             reasons.append(UNSUPERVISED_REJECT_UNVERIFIED)
         if not reasons:
             continue

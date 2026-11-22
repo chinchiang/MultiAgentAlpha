@@ -34,7 +34,10 @@ DRIVER_NAME = "mara_driver.js"
 PACKAGE_DIR = "csp-evaluator"
 SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
 MAX_POLICIES = 400
-MAX_FILE_BYTES = 512 * 1024
+# A file over this is not read, and the scan then did not complete (build_sarif). High enough for a built page or a
+# bundled script (this repository's own docs/workbench/index.html is over 512 KiB, the limit before): a limit that
+# ordinary files reach would leave every such target without its CSP tool.
+MAX_FILE_BYTES = 8 * 1024 * 1024
 
 SCAN_EXTS = {".html", ".htm", ".js", ".mjs", ".cjs", ".ts", ".jsx", ".tsx", ".py", ".conf", ".cfg", ".htaccess"}
 SKIP_DIRS = {".git", ".mara-tools", "node_modules", "out", "__pycache__", ".venv", "venv",
@@ -195,10 +198,12 @@ def build_sarif(policies: list[CspPolicy], results: list[ToolResult], *, version
                 note: str = "", truncated: bool = False, parse_errors: list[str] | None = None,
                 skipped: list[str] | None = None) -> dict:
     """A truncated extraction is a failed invocation (executionSuccessful false, an error notification): a target
-    could otherwise flood the cap with dummy policies and have its real ones go unread behind a complete-looking run."""
+    could otherwise flood the cap with dummy policies and have its real ones go unread behind a complete-looking run.
+    So is one that skipped a file (over MAX_FILE_BYTES, or unreadable): a policy in a file padded past the limit went
+    unread while the scan counted as the CSP dimension's required tool having run."""
     notifications = [{"level": "note", "descriptor": {"id": "CSP_PARSE_ERROR"}, "message": {"text": m}}
                      for m in (parse_errors or [])]
-    notifications += [{"level": "note", "descriptor": {"id": "CSP_FILE_SKIPPED"}, "message": {"text": m}} for m in (skipped or [])]
+    notifications += [{"level": "error", "descriptor": {"id": "CSP_FILE_SKIPPED"}, "message": {"text": m}} for m in (skipped or [])]
     if truncated:
         notifications.append({"level": "error", "descriptor": {"id": "CSP_POLICY_CAP"},
                               "message": {"text": f"policy extraction stopped at {MAX_POLICIES} policies; later files were not read"}})
@@ -216,7 +221,7 @@ def build_sarif(policies: list[CspPolicy], results: list[ToolResult], *, version
                 "rules": [],
             }},
             "invocations": [{
-                "executionSuccessful": not truncated,
+                "executionSuccessful": not truncated and not skipped,
                 "properties": props,
                 "toolExecutionNotifications": notifications,
             }],

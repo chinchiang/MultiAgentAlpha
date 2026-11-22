@@ -4,6 +4,7 @@ text=True the output was decoded in the locale code page: on a cp950 Windows hos
 non-ASCII directory name came back garbled, and an incremental review of it saw no changes)."""
 import json
 import subprocess
+import sys
 
 import pytest
 
@@ -49,3 +50,52 @@ def test_every_git_call_is_bounded_and_a_timeout_fails_closed(repo, monkeypatch)
     assert calls and not ctx.complete and not ctx.content
     with pytest.raises(ValueError, match="cannot resolve base ref"):
         git_changed_files(repo, "HEAD~1")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the stand-in fsmonitor program is a shell script")
+def test_a_program_the_targets_git_config_names_is_not_run(repo, tmp_path):
+    """core.fsmonitor in the target's .git/config named a program, and the first git call of a review ran it with the
+    review's environment. Every git here runs under GIT_SAFE_CONFIG, which outranks the target's config."""
+    marker = tmp_path / "ran"
+    program = tmp_path / "fsmonitor.sh"
+    program.write_text(f"#!/bin/sh\ntouch '{marker}'\n", encoding="utf-8")
+    program.chmod(0o755)
+    git(repo, "config", "core.fsmonitor", str(program))
+    ctx = build_context(repo)
+    assert sorted(ctx.content) == ["a.py", "b.py"]
+    assert git_changed_files(repo, "HEAD~1") == ["b.py"] and target_identity(repo)
+    assert not marker.exists(), "the target's fsmonitor program ran"
+    # the program does run for a git that is not given the settings: the test would notice
+    subprocess.run(["git", "-C", str(repo), "status"], check=True, capture_output=True)
+    assert marker.exists()
+
+
+def test_a_tool_runs_git_under_the_same_settings():
+    """semgrep lists the target's files with git: a tool's environment carries the settings too."""
+    from mara.context.repo_map import GIT_SAFE_CONFIG, git_safe_env
+    from mara.tools.runner import tool_env
+
+    env = tool_env()
+    assert GIT_SAFE_CONFIG["core.fsmonitor"] == "false"
+    assert git_safe_env().items() <= env.items() and env["GIT_CONFIG_COUNT"] == str(len(GIT_SAFE_CONFIG))
+    keys = {env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"] for i in range(len(GIT_SAFE_CONFIG))}
+    assert keys == GIT_SAFE_CONFIG
+
+
+def test_the_settings_are_added_after_those_the_host_already_gives_through_the_environment(repo, monkeypatch):
+    """A container that passes safe.directory through GIT_CONFIG_COUNT keeps it: overwritten, git called the checkout
+    of dubious ownership and every review of it ended in git_ls_files_failed."""
+    from mara.context.repo_map import GIT_SAFE_CONFIG, git_safe_env
+
+    host = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": "*"}
+    added = git_safe_env(host)
+    assert added["GIT_CONFIG_COUNT"] == str(1 + len(GIT_SAFE_CONFIG)) and "GIT_CONFIG_KEY_0" not in added
+    assert {added[f"GIT_CONFIG_KEY_{i}"]: added[f"GIT_CONFIG_VALUE_{i}"] for i in range(1, 1 + len(GIT_SAFE_CONFIG))} == GIT_SAFE_CONFIG
+    assert git_safe_env({"GIT_CONFIG_COUNT": "many"})["GIT_CONFIG_COUNT"] == str(len(GIT_SAFE_CONFIG))
+    # and git reads both: the host's setting and ours
+    for k, v in host.items():
+        monkeypatch.setenv(k, v)
+    seen = mod._git(repo, "config", "--get-all", "safe.directory")
+    assert seen is not None and "*" in seen.splitlines()
+    assert mod._git(repo, "config", "--get", "core.fsmonitor") == "false"
+
