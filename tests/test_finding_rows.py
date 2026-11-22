@@ -119,7 +119,9 @@ def test_the_page_shows_no_severity_for_a_finding_without_a_consensus_row(case):
 
 def test_characterization_a_cvss_severity_of_none_is_still_the_string_none(case):
     report = case["report"].model_copy(deep=True)
-    report.consensus = [c.model_copy(update={"cvss4_severity": "None"}) if c.finding_id == case["x"] else c for c in report.consensus]
+    # with no band from the judges either: the page shows the gate severity (GLOSSARY.md), the higher of the two
+    report.consensus = [c.model_copy(update={"cvss4_severity": "None", "operational_severity": None}) if c.finding_id == case["x"] else c
+                        for c in report.consensus]
     row = _page_row(report, case["x"])
     assert row["severity"] == "None" and row["consensus"] is not None
 

@@ -69,15 +69,15 @@ class EvidenceTier(StrEnum):
 
 
 SEVERITY_ORDER: list[str] = ["None", "Low", "Medium", "High", "Critical"]
+"""CVSS 4.0 severity bands, low to high; the single source for gate and queue comparisons."""
 
 
 def higher_severity(severity: str, other: str | None) -> str:
     """The higher of two severity bands; `severity` itself when it is no band (an unknown severity ranks above every
-    band) or when there is no `other`."""
-    if other is None or severity not in SEVERITY_ORDER:
+    band), or when `other` is none or no band (a report edited by hand: it never lowers nor replaces `severity`)."""
+    if other is None or other not in SEVERITY_ORDER or severity not in SEVERITY_ORDER:
         return severity
     return max(severity, other, key=SEVERITY_ORDER.index)
-"""CVSS 4.0 severity bands, low to high; the single source for gate and queue comparisons."""
 
 
 class Provenance(BaseModel):

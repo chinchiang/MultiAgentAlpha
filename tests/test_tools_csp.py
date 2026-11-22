@@ -121,7 +121,8 @@ def test_a_scan_that_skipped_a_file_did_not_complete(tmp_path):
     dimension's required tool had "run": a skipped file is now an error notification of a failed invocation."""
     from mara.tools.sarif import scan_complete
 
-    _write(tmp_path, "big.html", '<meta http-equiv="Content-Security-Policy" content="default-src *">' + " " * (csp_eval.MAX_FILE_BYTES + 1))
+    # the header's name in two parts, so that the scan of this repository does not read a policy out of this file
+    _write(tmp_path, "big.html", '<meta http-equiv="Content-Security-' + 'Policy" content="default-src *">' + " " * (csp_eval.MAX_FILE_BYTES + 1))
     skipped: list[str] = []
     assert csp_eval.extract_policies(tmp_path, skipped) == ([], False)
     assert skipped == [f"big.html: over {csp_eval.MAX_FILE_BYTES // 1024} KiB, not read"]

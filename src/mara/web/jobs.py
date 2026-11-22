@@ -87,7 +87,7 @@ class JobRegistry:
         procs.write_json(d / "job.json", job)
 
     def stop_survivors(self, grace: float = procs.STOP_GRACE_SECONDS) -> list[str]:
-        """Stop every job an earlier server left running (procs.is_survivor) and record it interrupted; a job left
+        """Stop every job a server that has ended left running (procs.left_by_a_server_that_ended) and record it interrupted; a job left
         running kept replacing the tools or the database under the reviews this server admitted. Returns the jobs
         stopped."""
         stopped = []
@@ -95,7 +95,7 @@ class JobRegistry:
             job = procs.read_json(d / "job.json")
             if job is None or job.get("status") != "running" or self.children.running(d.name):
                 continue
-            if procs.stop_survivor(job.get("pid"), job.get("argv"), grace):
+            if procs.left_by_a_server_that_ended(job) and procs.stop_survivor(job.get("pid"), job.get("argv"), grace):
                 job.update(status="interrupted", finished_at=procs.now())
                 procs.write_json(d / "job.json", job)
                 stopped.append(d.name)

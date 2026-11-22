@@ -49,9 +49,13 @@ def child(tmp_path):
         proc.wait(timeout=30)
 
 
-def _left_running(directory: Path, record: str, pid, argv) -> Path:
+# a server that has ended: no process has this pid (above the kernel's largest)
+ENDED_SERVER = {"pid": 2 ** 22 + 4321, "argv": ["mara", "serve"]}
+
+
+def _left_running(directory: Path, record: str, pid, argv, server=ENDED_SERVER) -> Path:
     directory.mkdir(parents=True)
-    procs.write_json(directory / record, {"id": directory.name, "status": "running", "pid": pid, "argv": argv,
+    procs.write_json(directory / record, {"id": directory.name, "status": "running", "pid": pid, "argv": argv, "server": server,
                                           "started_at": procs.now(), "finished_at": None, "exit_code": None})
     return directory / record
 
@@ -105,6 +109,35 @@ def test_a_recorded_pid_that_another_command_holds_now_is_left_alone(tmp_path, c
     assert runs.stop_survivors(grace=1) == []
     assert proc.poll() is None, "neither the reused pid nor a run that is not recorded running was signalled"
     assert procs.read_json(record)["status"] == "running"
+
+
+@needs_proc
+def test_the_review_of_another_server_that_is_still_serving_is_left_alone(tmp_path, child):
+    """A second workbench started on the same workspace is not "the next server": the first one's review is healthy."""
+    server_argv, serving = child()  # stands for the first server, still running
+    argv, proc = child()
+    runs = RunRegistry(tmp_path, tmp_path / "out", table=procs.ChildTable())
+    theirs = _left_running(runs.runs_dir / procs.new_id(), "run.json", proc.pid, argv, server={"pid": serving.pid, "argv": server_argv})
+    unnamed = _left_running(runs.runs_dir / procs.new_id(), "run.json", proc.pid, argv, server=None)
+    assert runs.stop_survivors(grace=1) == []
+    assert proc.poll() is None and {procs.read_json(p)["status"] for p in (theirs, unnamed)} == {"running"}
+    procs.kill(serving)
+    serving.wait(timeout=30)
+    assert runs.stop_survivors(grace=5) == [theirs.parent.name], "once that server has ended, its review is a survivor"
+    assert proc.wait(timeout=30) == -signal.SIGTERM
+    assert procs.read_json(unnamed)["status"] == "running", "a record that names no server is never stopped"
+
+
+def test_a_launched_childs_record_names_the_server_that_started_it(tmp_path):
+    made = []
+    children = procs.Children("test", lambda *_a: None, start=lambda argv, **kw: made.append(procs.spawn(argv, **kw)) or made[-1])
+    _id, rec = children.launch("run", tmp_path / "runs", record="run.json", log="run.log", cwd=tmp_path, env=dict(os.environ),
+                               prepare=lambda child_id, d: ([sys.executable, "-c", "pass"], {"id": child_id, "status": "running"}))
+    made[0].wait(timeout=60)
+    assert rec["server"] == procs.this_server() and rec["server"]["pid"] == os.getpid()
+    if Path("/proc/self/cmdline").is_file():
+        assert procs.is_survivor(rec["server"]["pid"], rec["server"]["argv"]), "this server runs under the command line it recorded"
+        assert not procs.left_by_a_server_that_ended({**rec, "argv": [sys.executable, "-c", "pass"]})
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="os.kill(pid, SIGINT) ends a Windows process")

@@ -101,6 +101,8 @@ def test_a_finding_blocks_at_its_gate_severity_the_higher_of_the_finders_vector_
         "F-1": "blocking_tier_and_severity", "F-2": "blocking_tier_and_severity", "F-4": "blocking_tier_and_severity"}
     unknown = row("F-5", "A", "Unknown", "accepted").model_copy(update={"operational_severity": "Low"})
     assert unknown.gate_severity == "Unknown", "an unknown CVSS severity is not replaced by a band"
+    odd_band = row("F-6", "A", "High", "accepted").model_copy(update={"operational_severity": "Weird"})
+    assert odd_band.gate_severity == "High", "a band that is none (a report edited by hand) neither raises nor lowers it"
 
 
 def test_while_the_queue_is_tightened_an_accepted_tier_c_finding_at_the_severity_floor_blocks():

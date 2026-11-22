@@ -81,3 +81,21 @@ def test_a_tool_runs_git_under_the_same_settings():
     keys = {env[f"GIT_CONFIG_KEY_{i}"]: env[f"GIT_CONFIG_VALUE_{i}"] for i in range(len(GIT_SAFE_CONFIG))}
     assert keys == GIT_SAFE_CONFIG
 
+
+def test_the_settings_are_added_after_those_the_host_already_gives_through_the_environment(repo, monkeypatch):
+    """A container that passes safe.directory through GIT_CONFIG_COUNT keeps it: overwritten, git called the checkout
+    of dubious ownership and every review of it ended in git_ls_files_failed."""
+    from mara.context.repo_map import GIT_SAFE_CONFIG, git_safe_env
+
+    host = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "safe.directory", "GIT_CONFIG_VALUE_0": "*"}
+    added = git_safe_env(host)
+    assert added["GIT_CONFIG_COUNT"] == str(1 + len(GIT_SAFE_CONFIG)) and "GIT_CONFIG_KEY_0" not in added
+    assert {added[f"GIT_CONFIG_KEY_{i}"]: added[f"GIT_CONFIG_VALUE_{i}"] for i in range(1, 1 + len(GIT_SAFE_CONFIG))} == GIT_SAFE_CONFIG
+    assert git_safe_env({"GIT_CONFIG_COUNT": "many"})["GIT_CONFIG_COUNT"] == str(len(GIT_SAFE_CONFIG))
+    # and git reads both: the host's setting and ours
+    for k, v in host.items():
+        monkeypatch.setenv(k, v)
+    seen = mod._git(repo, "config", "--get-all", "safe.directory")
+    assert seen is not None and "*" in seen.splitlines()
+    assert mod._git(repo, "config", "--get", "core.fsmonitor") == "false"
+

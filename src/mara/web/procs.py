@@ -138,22 +138,44 @@ def is_survivor(pid: object, argv: object) -> bool:
     return [os.fsdecode(part) for part in raw.split(b"\0")[:-1]] == [str(a) for a in argv]
 
 
+def this_server() -> dict[str, Any]:
+    """This process as a child's record names the server that started it: its pid and its command line as /proc gives
+    it (None where there is no /proc)."""
+    try:
+        argv: list[str] | None = [os.fsdecode(part) for part in Path("/proc/self/cmdline").read_bytes().split(b"\0")[:-1]]
+    except OSError:
+        argv = None
+    return {"pid": os.getpid(), "argv": argv}
+
+
+def left_by_a_server_that_ended(record: dict[str, Any]) -> bool:
+    """Whether `record`, a run's or a job's, is of a child whose server no longer runs and which itself still does: the
+    record names its server (this_server), that server is not running with its command line any more, and the child is
+    a survivor (is_survivor). A record that names no server (one written before it did) is never one: a second
+    workbench on the same workspace must not stop the review a first one, still serving, is running."""
+    server = record.get("server")
+    if not isinstance(server, dict) or is_survivor(server.get("pid"), server.get("argv")):
+        return False
+    return is_survivor(record.get("pid"), record.get("argv"))
+
+
 def stop_survivor(pid: object, argv: object, grace: float = STOP_GRACE_SECONDS) -> bool:
     """Stop a survivor (is_survivor) and its process group, as stop() does a child of this server: SIGTERM, then SIGKILL
-    when it still runs with that command line `grace` seconds later. Returns whether it was one, and so was stopped."""
+    when it still runs with that command line `grace` seconds later. Returns whether it was one and no longer runs:
+    False for one that could not be signalled (another user's) or that outlived the kill."""
     if not is_survivor(pid, argv) or not isinstance(pid, int):
         return False
     for sig, wait in ((signal.SIGTERM, grace), (getattr(signal, "SIGKILL", signal.SIGTERM), KILL_WAIT_SECONDS)):
         try:
             os.killpg(pid, sig)  # a child is the leader of its own process group (spawn)
-        except (ProcessLookupError, PermissionError, OSError):
-            return True
+        except OSError:  # gone since it was read (ProcessLookupError), or not ours to signal (PermissionError)
+            return not is_survivor(pid, argv)
         deadline = time.monotonic() + wait
         while time.monotonic() < deadline:
             if not is_survivor(pid, argv):
                 return True
             time.sleep(0.05)
-    return True
+    return not is_survivor(pid, argv)
 
 
 def _wait_until(to_wait: list[subprocess.Popen[bytes]], deadline: float) -> None:
@@ -317,6 +339,7 @@ class Children:
             d = parent / child_id
             d.mkdir(parents=True)
             argv, rec = prepare(child_id, d)
+            rec["server"] = this_server()  # who may stop it once this server has ended (left_by_a_server_that_ended)
             write_json(d / record, rec)
             try:
                 pid = self.start(child_id, argv, cwd=cwd, log_path=d / log, env=env, tag=tag)

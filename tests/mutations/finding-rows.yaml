@@ -32,8 +32,8 @@ mutations:
   - name: the page gives a finding with no ruling the CVSS severity None again
     file: src/mara/web/views.py
     caught_by: tests/test_finding_rows.py::test_the_page_shows_no_severity_for_a_finding_without_a_consensus_row
-    old: '"severity": c.cvss4_severity if c else None,  # no ruling is no severity, not the CVSS severity "None"'
-    new: '"severity": c.cvss4_severity if c else "None",'
+    old: '"severity": c.gate_severity if c else None,  # no ruling is no severity, not the CVSS severity "None"'
+    new: '"severity": c.gate_severity if c else "None",'
   - name: the SARIF report fails on a finding with no consensus row
     file: src/mara/report/sarif_out.py
     caught_by: tests/test_finding_rows.py::test_characterization_the_sarif_report_emits_nothing_for_a_finding_without_a_consensus_row

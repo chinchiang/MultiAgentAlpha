@@ -13,7 +13,6 @@ mutations:
   - name: a survivor that ignores SIGTERM is never killed
     file: src/mara/web/procs.py
     caught_by: tests/test_web_survivors.py::test_a_survivor_that_ignores_sigterm_is_killed_after_the_grace
-    error: TimeoutExpired
     old: '    for sig, wait in ((signal.SIGTERM, grace), (getattr(signal, "SIGKILL", signal.SIGTERM), KILL_WAIT_SECONDS)):'
     new: '    for sig, wait in ((signal.SIGTERM, grace),):'
   - name: a stopped survivor's run stays recorded running
@@ -45,3 +44,19 @@ mutations:
     new: |-
       for sig, handler in held.items():
                       pass
+  - name: the review of a server still serving is stopped
+    file: src/mara/web/procs.py
+    caught_by: tests/test_web_survivors.py::test_the_review_of_another_server_that_is_still_serving_is_left_alone
+    old: '    if not isinstance(server, dict) or is_survivor(server.get("pid"), server.get("argv")):'
+    new: '    if not isinstance(server, dict):'
+  - name: a record that names no server is stopped
+    file: src/mara/web/procs.py
+    caught_by: tests/test_web_survivors.py::test_the_review_of_another_server_that_is_still_serving_is_left_alone
+    old: '    if not isinstance(server, dict) or is_survivor(server.get("pid"), server.get("argv")):'
+    new: '    if isinstance(server, dict) and is_survivor(server.get("pid"), server.get("argv")):'
+  - name: a child's record does not name its server
+    file: src/mara/web/procs.py
+    caught_by: tests/test_web_survivors.py::test_a_launched_childs_record_names_the_server_that_started_it
+    error: KeyError
+    old: '            rec["server"] = this_server()  # who may stop it once this server has ended (left_by_a_server_that_ended)'
+    new: '            pass'

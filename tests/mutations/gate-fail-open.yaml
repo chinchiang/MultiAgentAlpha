@@ -102,3 +102,19 @@ mutations:
     caught_by: tests/test_jury_outcome.py::test_the_jury_outcome_read_back_from_a_report_is_the_one_decided
     old: 'self.jury_outcome in ("rejected", "dropped") and self.unsupervised_reject_unverified'
     new: 'self.jury_outcome == "rejected" and self.unsupervised_reject_unverified'
+  - name: a known source format with a NUL taken for a binary
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_context_scope.py::test_a_source_file_of_a_known_format_is_not_taken_for_a_binary_for_one_nul_byte
+    old: '    ".mjs", ".cjs", ".mts", ".cts", ".vue",'
+    new: '    ".cjs", ".mts", ".cts", ".vue",'
+  - name: a script is not known by its first two bytes
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_context_scope.py::test_a_source_file_of_a_known_format_is_not_taken_for_a_binary_for_one_nul_byte
+    old: ' or (data is not None and data.startswith(SHEBANG))'
+    new: ''
+  - name: a band that is none replaces the vector's severity
+    file: src/mara/schemas.py
+    caught_by: tests/test_review_status.py::test_a_finding_blocks_at_its_gate_severity_the_higher_of_the_finders_vector_and_the_judges_bands
+    error: ValueError
+    old: '    if other is None or other not in SEVERITY_ORDER or severity not in SEVERITY_ORDER:'
+    new: '    if other is None or severity not in SEVERITY_ORDER:'

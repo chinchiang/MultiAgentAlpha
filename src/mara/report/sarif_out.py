@@ -49,7 +49,7 @@ def to_sarif(report: ReviewReport) -> dict:
             continue
         q = queued.get(f.id)
         # what is emitted follows the final outcome (docs/adr/0007-review-status-and-gate.md), never whether the human
-        # queue is on: an accepted finding; a finding needing a human and a rejected finding under rejection review
+        # queue is on: an accepted finding; a finding needing a human and a rejected or dropped finding under rejection review
         # (policy P8), both as notes; and a human false positive (docs/adr/0003-human-resolution.md), dismissed with the
         # ruling as its justification, so code scanning records why the alert closed instead of reading it as fixed
         outcome = c.final_outcome

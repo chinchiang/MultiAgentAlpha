@@ -4,7 +4,7 @@ mutations:
   - name: git in the target runs under the target's own config
     file: src/mara/context/repo_map.py
     caught_by: tests/test_git_subprocess_bounds.py::test_a_program_the_targets_git_config_names_is_not_run
-    old: '    env = {**os.environ, **git_safe_env()}'
+    old: '    env = {**os.environ, **git_safe_env(os.environ)}'
     new: '    env = {**os.environ}'
   - name: the fsmonitor setting left to the target
     file: src/mara/context/repo_map.py
@@ -53,3 +53,8 @@ mutations:
     caught_by: tests/test_context_scope.py::test_a_targets_own_file_at_the_canarys_path_is_omitted_so_the_coverage_is_incomplete
     old: '        if rel == CANARY_PATH:'
     new: '        if False:'
+  - name: the host's own git settings overwritten
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_git_subprocess_bounds.py::test_the_settings_are_added_after_those_the_host_already_gives_through_the_environment
+    old: '        first = max(0, int((env or {}).get("GIT_CONFIG_COUNT", "0")))'
+    new: '        first = 0'

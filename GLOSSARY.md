@@ -237,7 +237,7 @@ A finding whose final outcome is accepted and whose evidence tier and gate sever
 _Avoid_: blocker, critical finding (severity alone does not block)
 
 **Gate severity**:
-The severity the gate, the tier C rule, the dimension score, the PSIRT trigger and a code-scanning result's level read for a finding: the higher of the CVSS severity of its finder's vector and the judges' operational severity (the middle of the judge families' severity bands). One reviewer writes the vector and no judge sees it, so neither alone can lower it. The CVSS score and severity stay in the report as the vector gives them.
+The severity the gate, the tier C rule, the dimension score, the PSIRT trigger and a code-scanning result's level read for a finding: the higher of the CVSS severity of its finder's vector and the judges' operational severity (the middle of the judge families' severity bands). One reviewer writes the vector and no judge sees it, so neither alone can lower it. The CVSS score and severity stay in the report as the vector gives them; the Markdown report names the gate severity beside them when it is higher, and the workbench lists and sorts findings by it.
 _Avoid_: severity (say which: CVSS severity, operational severity or gate severity), final severity
 
 **Bias audit**:

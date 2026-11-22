@@ -420,7 +420,7 @@ def test_a_launch_writes_the_record_before_it_starts_the_child(tmp_path):
 
     children, seen = _launching([], start=start), []
     child_id, _ = _launch(children, tmp_path, seen)
-    assert on_disk == [{"id": child_id, "status": "running", "exit_code": None}]
+    assert on_disk == [{"id": child_id, "status": "running", "exit_code": None, "server": procs.this_server()}]
 
 
 # ---------------------------------------------------------------- the workspace a child is given

@@ -64,7 +64,9 @@ The persisted shape stays `ConsensusResult` in `report.json`, so retained report
   for a rejection review, and the AAT's sample is still the rejected findings alone (calibration counts only non-D
   rejections), so P8 unlocks on the same evidence as before. The sentences made stale are "A **dropped finding** is
   at tier D and needs no human" and "P8 queues only those" (the non-D rejections): a dropped finding needs no human
-  decision for the review to be complete, and P8 now queues it for a look. `gate.unsupervised_reject_allowed: true`
+  decision for the review to be complete, and P8 now queues it for a look. Each one is a queue item, so a ticket,
+  and counts toward the backlog that tightens the queue (`human_queue.backlog_limit`): a panel that drops many
+  findings reaches the limit sooner, which the owner weighs when setting it. `gate.unsupervised_reject_allowed: true`
   ends the look for both. `tests/test_jury_outcome.py` and `tests/test_human_queue.py` pin it.
 - Amended 2026-11-22: the severity among the jury signals is the **gate severity** (GLOSSARY.md), the higher of the
   CVSS severity of the finder's vector and the judges' operational severity, so the tier C rule sends a finding to a

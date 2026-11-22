@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from html import escape
 from pathlib import Path
@@ -43,7 +44,17 @@ TEXT_EXT = {
     ".sql",
     ".xml",
     ".lock",
+    # more source and configuration formats. A file of a known format is never taken for a binary: with a NUL or a
+    # byte that is not UTF-8 in it, it is bundled or omitted, not excluded, so one such byte in a comment does not
+    # take a source file out of the review unseen
+    ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte", ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp", ".rs", ".kt", ".kts",
+    ".swift", ".scala", ".m", ".mm", ".pl", ".pm", ".lua", ".r", ".dart", ".ex", ".exs", ".erl", ".hs", ".clj", ".groovy",
+    ".gradle", ".tf", ".tfvars", ".hcl", ".ps1", ".psm1", ".bat", ".cmd", ".bash", ".zsh", ".fish", ".ksh", ".proto",
+    ".graphql", ".gql", ".properties", ".conf", ".jsp", ".asp", ".aspx", ".erb", ".ejs", ".hbs", ".twig", ".jinja", ".j2",
 }
+# files known by name, as MANIFESTS are, and a script known by its first two bytes
+SOURCE_NAMES = {"Dockerfile", "Makefile", "GNUmakefile", "Jenkinsfile", "Vagrantfile", "Rakefile", "Procfile", "Containerfile"}
+SHEBANG = b"#!"
 MANIFESTS = {
     "requirements.txt",
     "package.json",
@@ -310,20 +321,27 @@ GIT_TIMEOUT = 60
 GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull}
 
 
-def git_safe_env() -> dict[str, str]:
-    """GIT_SAFE_CONFIG as the GIT_CONFIG_COUNT / GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n variables git reads it from."""
-    env = {"GIT_CONFIG_COUNT": str(len(GIT_SAFE_CONFIG))}
-    for i, (key, value) in enumerate(GIT_SAFE_CONFIG.items()):
-        env[f"GIT_CONFIG_KEY_{i}"] = key
-        env[f"GIT_CONFIG_VALUE_{i}"] = value
-    return env
+def git_safe_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """GIT_SAFE_CONFIG as the GIT_CONFIG_COUNT / GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n variables git reads it from,
+    numbered after the settings `env` already gives that way (a host that passes `safe.directory` so, as containers
+    do, keeps it); among settings of one key git takes the last, so these still outrank what `env` holds. A count in
+    `env` that is not a number is replaced: git itself refuses to run with one."""
+    try:
+        first = max(0, int((env or {}).get("GIT_CONFIG_COUNT", "0")))
+    except ValueError:
+        first = 0
+    out = {"GIT_CONFIG_COUNT": str(first + len(GIT_SAFE_CONFIG))}
+    for i, (key, value) in enumerate(GIT_SAFE_CONFIG.items(), first):
+        out[f"GIT_CONFIG_KEY_{i}"] = key
+        out[f"GIT_CONFIG_VALUE_{i}"] = value
+    return out
 
 
 def _run_git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess | None:
     """git in `root`, or None when it does not finish in GIT_TIMEOUT or cannot start. Text output is
     UTF-8 (what git writes), not the locale code page: on a cp950 host a non-ASCII path came back
     garbled or failed to decode. It runs under GIT_SAFE_CONFIG, whatever the config of `root` says."""
-    env = {**os.environ, **git_safe_env()}
+    env = {**os.environ, **git_safe_env(os.environ)}
     try:
         if text:
             return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT,
@@ -662,14 +680,16 @@ def build_context(root: str | Path) -> RepoContext:
         if rel == CANARY_PATH:
             ctx.omitted[rel] = "reserved_path"
             continue
-        known = ext in TEXT_EXT or p.name in MANIFESTS or p.name == "Dockerfile"
         try:
             data = _read_raw(root, relpath)
         except (OSError, ValueError):
             data = None
+        known = ext in TEXT_EXT or p.name in MANIFESTS or p.name in SOURCE_NAMES or (data is not None and data.startswith(SHEBANG))
         # a file of no known text format is excluded only when it cannot be read as text (a binary, or a symlink or
         # special file that is never opened); one that reads as text is source whatever its name says, and goes the way
-        # of a known format: into the bundle, or omitted, which leaves the coverage incomplete
+        # of a known format: into the bundle, or omitted, which leaves the coverage incomplete. What this cannot tell
+        # is a source file of an unknown format made to look binary (one NUL in a comment): the known formats above
+        # are there so that the common ones cannot be
         if not known and (data is None or not looks_like_text(data)):
             ctx.excluded[rel] = "unsupported_format"
             continue

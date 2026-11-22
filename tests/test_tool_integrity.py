@@ -45,7 +45,7 @@ def test_skipped_files_are_reported_and_dot_directories_are_read(tmp_path):
     skipped: list[str] = []
     policies, truncated = csp_eval.extract_policies(tmp_path, skipped)
     assert [p.file for p in policies] == [".well-known/server.conf"], "only the VCS/tool directories are skipped"
-    assert not truncated and skipped == ["big.js: over 512 KiB, not read"]
+    assert not truncated and skipped == [f"big.js: over {csp_eval.MAX_FILE_BYTES // 1024} KiB, not read"]
     doc = csp_eval.build_sarif(policies, [], version="1", skipped=skipped)
     notes = doc["runs"][0]["invocations"][0]["toolExecutionNotifications"]
     assert any(n["descriptor"]["id"] == "CSP_FILE_SKIPPED" and "big.js" in n["message"]["text"] for n in notes)

@@ -34,7 +34,10 @@ DRIVER_NAME = "mara_driver.js"
 PACKAGE_DIR = "csp-evaluator"
 SARIF_SCHEMA = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
 MAX_POLICIES = 400
-MAX_FILE_BYTES = 512 * 1024
+# A file over this is not read, and the scan then did not complete (build_sarif). High enough for a built page or a
+# bundled script (this repository's own docs/workbench/index.html is over 512 KiB, the limit before): a limit that
+# ordinary files reach would leave every such target without its CSP tool.
+MAX_FILE_BYTES = 8 * 1024 * 1024
 
 SCAN_EXTS = {".html", ".htm", ".js", ".mjs", ".cjs", ".ts", ".jsx", ".tsx", ".py", ".conf", ".cfg", ".htaccess"}
 SKIP_DIRS = {".git", ".mara-tools", "node_modules", "out", "__pycache__", ".venv", "venv",
