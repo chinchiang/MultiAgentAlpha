@@ -99,11 +99,12 @@ OWN_INCOMPLETE_REASONS = (CONTEXT_COVERAGE_INCOMPLETE, SOURCE_EGRESS_BLOCKED, RE
                           CONTEXT_VIEW_INCOMPLETE, UNRESOLVED_HUMAN_REVIEW, UNRESOLVED_TOOL_FINDINGS)
 INCOMPLETE_REASONS = frozenset(OWN_INCOMPLETE_REASONS) | frozenset(INCOMPLETE_COUNTERS)
 
-# The gate reasons, and GATE_REASONS their fixed order in a report, which is schemas.GateReason's. The two finding codes
+# The gate reasons, and GATE_REASONS their fixed order in a report, which is schemas.GateReason's. The three finding codes
 # are also each blocking finding's blocking_reason (schemas.BlockingReason).
 REVIEW_INCOMPLETE: GateReason = "review_incomplete"
 BLOCKING_TIER_AND_SEVERITY: BlockingReason = "blocking_tier_and_severity"
 TIER_C_WHILE_TIGHTENED: BlockingReason = "tier_c_while_tightened"
+HUMAN_CONFIRMED_AT_BLOCKING_SEVERITY: BlockingReason = "human_confirmed_at_blocking_severity"
 DIMENSION_BELOW_MINIMUM: GateReason = "dimension_below_minimum"
 GATE_REASONS: tuple[GateReason, ...] = get_args(GateReason)
 
@@ -135,14 +136,19 @@ def _blocking_reason(c: ConsensusResult, outcome_policy: OutcomePolicy, gate_pol
     """Why a finding blocks the gate, or None. Only a finding whose final outcome is accepted blocks (a human ruling
     outranks the jury): at a tier and severity the gate blocks on, or, while the human queue is tightened and no
     longer queues tier C at the severity floor (tighten_exclude_tier_c), such a tier C finding, so it does not pass on
-    one family's word plus the jury. Tightening may cut human work; it never lets more through. An unknown severity
-    ranks above every band."""
+    one family's word plus the jury. Tightening may cut human work; it never lets more through. A finding a human
+    confirmed as a true positive blocks at a severity the gate blocks on whatever its tier: the tier says how much the
+    pipeline's own evidence supports a finding, and a human's ruling that it is real is stronger than any of it. The
+    severity read is the gate severity (schemas.ConsensusResult.gate_severity). An unknown severity ranks above every
+    band."""
     if c.final_outcome != "accepted":
         return None
-    if c.tier.value in gate_policy.block_on_tiers and c.cvss4_severity in gate_policy.block_on_severity:
+    if c.tier.value in gate_policy.block_on_tiers and c.gate_severity in gate_policy.block_on_severity:
         return BLOCKING_TIER_AND_SEVERITY
-    if outcome_policy.exclude_tier_c and tier_c_needs_human(c.tier, c.cvss4_severity, outcome_policy.tier_c_min_severity):
+    if outcome_policy.exclude_tier_c and tier_c_needs_human(c.tier, c.gate_severity, outcome_policy.tier_c_min_severity):
         return TIER_C_WHILE_TIGHTENED
+    if c.human_confirmed and c.gate_severity in gate_policy.block_on_severity:
+        return HUMAN_CONFIRMED_AT_BLOCKING_SEVERITY
     return None
 
 

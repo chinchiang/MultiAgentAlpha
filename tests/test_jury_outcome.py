@@ -48,8 +48,13 @@ def test_until_the_aat_passes_a_rejected_finding_goes_to_rejection_review_and_st
     assert (out.value, out.reasons, out.unsupervised_reject_unverified) == ("rejected", (), True)
 
 
-def test_a_tier_d_finding_with_verified_provenance_is_dropped_and_not_sent_to_rejection_review():
+def test_until_the_aat_passes_a_tier_d_finding_with_verified_provenance_is_dropped_and_goes_to_rejection_review():
     out = decide(DROPPED, POLICY)
+    assert (out.value, out.reasons, out.unsupervised_reject_unverified) == ("dropped", (), True)
+
+
+def test_once_p8_allows_it_a_dropped_finding_goes_without_a_human_look():
+    out = decide(DROPPED, replace(POLICY, unsupervised_reject_allowed=True))
     assert (out.value, out.reasons, out.unsupervised_reject_unverified) == ("dropped", (), False)
 
 
@@ -148,7 +153,7 @@ def test_the_jury_outcome_read_back_from_a_report_is_the_one_decided(case):
     written = _row(case)
     row = ConsensusResult.model_validate_json(written.model_dump_json())
     assert row.jury_outcome == ROUND_TRIP[case][2] and row == written
-    assert row.in_rejection_review == (case == "rejected under rejection review")
+    assert row.in_rejection_review == (case in ("rejected under rejection review", "dropped", "dropped after the skeptic refuted it"))
 
 
 def test_a_report_written_before_rejection_review_was_recorded_reads_as_not_under_review():

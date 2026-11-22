@@ -1,0 +1,104 @@
+focused: [tests/test_context_scope.py, tests/test_gate_severity.py, tests/test_review_status.py, tests/test_jury_outcome.py,
+          tests/test_human_queue.py]
+mutations:
+  - name: a tracked file in a generated directory left out of the bundle
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_context_scope.py::test_a_tracked_file_in_a_generated_directory_is_in_the_bundle
+    old: '        if not in_git and any(part in SKIP_DIRS for part in relpath.parts):'
+    new: '        if any(part in SKIP_DIRS for part in relpath.parts):'
+  - name: a text file of no known format excluded unread
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_context_scope.py::test_a_text_file_of_no_known_format_is_in_the_bundle
+    old: '        if not known and (data is None or not looks_like_text(data)):'
+    new: '        if not known:'
+  - name: a file over the size limit bundled up to the limit
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_context_scope.py::test_a_text_file_of_no_known_format_over_the_size_limit_is_omitted_so_the_coverage_is_incomplete
+    old: '            if data is None or len(data) > MAX_FILE_BYTES:'
+    new: '            if data is None:'
+  - name: a NUL byte read as text
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_context_scope.py::test_what_reads_as_text
+    old: '    if b"\0" in data:'
+    new: '    if False:'
+  - name: a threat or environmental metric taken from a reviewer
+    file: src/mara/agents/reviewer.py
+    caught_by: tests/test_gate_severity.py::test_a_vector_with_a_threat_or_an_environmental_metric_is_refused
+    error: Failed
+    old: '    if cvss4.nomenclature(vector) != "CVSS-B":'
+    new: '    if False:'
+  - name: a reviewer's vector built into a finding unchecked
+    file: src/mara/agents/reviewer.py
+    caught_by: tests/test_gate_severity.py::test_a_reviewers_finding_whose_vector_zeroes_itself_is_an_invalid_item_not_a_finding_of_no_severity
+    old: 'cvss4_vector=base_vector_only(raw["cvss4_vector"]), model_confidence'
+    new: 'cvss4_vector=raw["cvss4_vector"], model_confidence'
+  - name: merged findings keep the first finder's vector
+    file: src/mara/reviewer_round.py
+    caught_by: tests/test_gate_severity.py::test_merged_findings_keep_the_highest_vector_whichever_finder_comes_first
+    old: '            if cvss4.score(f.cvss4_vector) > cvss4.score(vectors[match.id]):'
+    new: '            if False:'
+  - name: the gate severity is the vector's alone
+    file: src/mara/schemas.py
+    caught_by: tests/test_gate_severity.py::test_a_tier_c_finding_the_judges_call_critical_goes_to_a_human_although_its_vector_is_medium
+    old: '        return higher_severity(self.cvss4_severity, self.operational_severity)'
+    new: '        return self.cvss4_severity'
+  - name: the judges' bands replace a higher vector
+    file: src/mara/schemas.py
+    caught_by: tests/test_gate_severity.py::test_a_tier_c_finding_the_judges_call_critical_goes_to_a_human_although_its_vector_is_medium
+    old: '    return max(severity, other, key=SEVERITY_ORDER.index)'
+    new: '    return other'
+  - name: the gate's tier and severity rule reads the vector's severity
+    file: src/mara/review_status.py
+    caught_by: tests/test_review_status.py::test_a_finding_blocks_at_its_gate_severity_the_higher_of_the_finders_vector_and_the_judges_bands
+    old: 'c.tier.value in gate_policy.block_on_tiers and c.gate_severity in gate_policy.block_on_severity'
+    new: 'c.tier.value in gate_policy.block_on_tiers and c.cvss4_severity in gate_policy.block_on_severity'
+  - name: a finding a human confirmed does not block below a blocking tier
+    file: src/mara/review_status.py
+    caught_by: tests/test_review_status.py::test_an_accepted_finding_at_a_blocking_tier_and_severity_blocks_on_its_final_outcome
+    old: '    if c.human_confirmed and c.gate_severity in gate_policy.block_on_severity:'
+    new: '    if False:'
+  - name: a finding a human confirmed blocks at any severity
+    file: src/mara/review_status.py
+    caught_by: tests/test_review_status.py::test_an_accepted_finding_at_a_blocking_tier_and_severity_blocks_on_its_final_outcome
+    old: '    if c.human_confirmed and c.gate_severity in gate_policy.block_on_severity:'
+    new: '    if c.human_confirmed:'
+  - name: a finding a human confirmed scored at its tier's factor
+    file: src/mara/scoring/dimension_score.py
+    caught_by: tests/test_gate_severity.py::test_the_dimension_score_counts_a_finding_a_human_confirmed_in_full_whatever_its_tier
+    old: '(1.0 if c.human_confirmed else TIER_FACTOR[c.tier])'
+    new: 'TIER_FACTOR[c.tier]'
+  - name: the dimension score reads the vector's severity
+    file: src/mara/scoring/dimension_score.py
+    caught_by: tests/test_gate_severity.py::test_the_dimension_score_counts_a_finding_at_its_gate_severity
+    old: 'PENALTY[c.gate_severity]'
+    new: 'PENALTY[c.cvss4_severity]'
+  - name: the tier C rule reads the vector's severity
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_gate_severity.py::test_a_tier_c_finding_the_judges_call_critical_goes_to_a_human_although_its_vector_is_medium
+    old: 'severity=higher_severity(sev, operational),'
+    new: 'severity=sev,'
+  - name: the PSIRT trigger reads the vector's severity
+    file: src/mara/report/psirt_out.py
+    caught_by: tests/test_gate_severity.py::test_the_psirt_trigger_reads_the_gate_severity
+    old: 'c.gate_severity in ps.trigger_severities'
+    new: 'c.cvss4_severity in ps.trigger_severities'
+  - name: a code-scanning result's level is the vector's
+    file: src/mara/report/sarif_out.py
+    caught_by: tests/test_gate_severity.py::test_a_code_scanning_results_level_is_that_of_its_gate_severity
+    old: 'else LEVEL[c.gate_severity],'
+    new: 'else LEVEL[c.cvss4_severity],'
+  - name: a dropped finding goes without a rejection review
+    file: src/mara/scoring/outcome.py
+    caught_by: tests/test_jury_outcome.py::test_until_the_aat_passes_a_tier_d_finding_with_verified_provenance_is_dropped_and_goes_to_rejection_review
+    old: '        return JuryOutcome("dropped", (), unsupervised_reject_unverified=not policy.unsupervised_reject_allowed)'
+    new: '        return JuryOutcome("dropped", (), unsupervised_reject_unverified=False)'
+  - name: a dropped finding reviewed even once P8 allows silence
+    file: src/mara/scoring/outcome.py
+    caught_by: tests/test_jury_outcome.py::test_once_p8_allows_it_a_dropped_finding_goes_without_a_human_look
+    old: '        return JuryOutcome("dropped", (), unsupervised_reject_unverified=not policy.unsupervised_reject_allowed)'
+    new: '        return JuryOutcome("dropped", (), unsupervised_reject_unverified=True)'
+  - name: only a rejected finding reads as under rejection review
+    file: src/mara/schemas.py
+    caught_by: tests/test_jury_outcome.py::test_the_jury_outcome_read_back_from_a_report_is_the_one_decided
+    old: 'self.jury_outcome in ("rejected", "dropped") and self.unsupervised_reject_unverified'
+    new: 'self.jury_outcome == "rejected" and self.unsupervised_reject_unverified'

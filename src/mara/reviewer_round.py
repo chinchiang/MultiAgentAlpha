@@ -21,6 +21,7 @@ from .identity import norm_path, same_place
 from .progress import Progress
 from .providers.base import Provider
 from .schemas import Finding, ModelFamily
+from .scoring import cvss4
 from .scoring.idcheck import check_finding_refs
 
 
@@ -84,10 +85,13 @@ def _review(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConf
 
 def dedupe(findings: list[Finding]) -> list[Finding]:
     """Merge findings of one dimension at one place (mara.identity.same_place: one file, one CWE, lines at most
-    NEAR_LINES apart), the first one kept with the families that found it as its `finder_families`, sorted by name;
-    an unverified finding is never merged into a verified one, nor a verified one into an unverified one."""
+    NEAR_LINES apart), the first one kept with the families that found it as its `finder_families`, sorted by name,
+    and with the highest-scoring CVSS vector any of them gave (the first of them on a tie), so that which reviewer's
+    finding sorts first does not decide the severity; an unverified finding is never merged into a verified one, nor a
+    verified one into an unverified one."""
     kept: list[Finding] = []
     finders: dict[str, set[ModelFamily]] = {}
+    vectors: dict[str, str] = {}
     for f in findings:
         p = f.provenance[0]
         match = None
@@ -103,6 +107,10 @@ def dedupe(findings: list[Finding]) -> list[Finding]:
         if match is None:
             kept.append(f)
             finders[f.id] = {f.source_family}
+            vectors[f.id] = f.cvss4_vector
         else:
             finders[match.id].add(f.source_family)
-    return [k.model_copy(update={"finder_families": sorted(finders[k.id], key=lambda x: x.value)}) for k in kept]
+            if cvss4.score(f.cvss4_vector) > cvss4.score(vectors[match.id]):
+                vectors[match.id] = f.cvss4_vector
+    return [k.model_copy(update={"finder_families": sorted(finders[k.id], key=lambda x: x.value), "cvss4_vector": vectors[k.id]})
+            for k in kept]

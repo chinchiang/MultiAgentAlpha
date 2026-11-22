@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ..bias.diversity import finders_of, pairwise_family_agreement
-from ..schemas import SEVERITY_ORDER, ConsensusResult, Finding, JudgeVote, ModelFamily
+from ..schemas import SEVERITY_ORDER, ConsensusResult, Finding, JudgeVote, ModelFamily, higher_severity
 from ..tools.evidence import corroborates
 from ..tools.sarif import ToolResult
 from . import cvss4
@@ -104,13 +104,15 @@ def score(findings: list[Finding], ballots: Ballots, tool_results: list[ToolResu
         # finding with an invalid vector is dropped at L2 as an invalid item, so scoring here cannot fail
         num = cvss4.score(f.cvss4_vector)
         sev = cvss4.severity(num)
-        # Keep mathematical CVSS severity separate from the jury's operational opinion.
+        # The mathematical CVSS severity and the jury's operational opinion are recorded apart; the higher of the two is
+        # the gate severity (schemas.ConsensusResult.gate_severity), which the tier C rule below reads like the gate
         family_bands = [max((v.severity_band for v in fv if v.judge_family == fam), key=SEVERITY_ORDER.index) for fam in valid_families]
         operational = sorted(family_bands, key=SEVERITY_ORDER.index)[len(family_bands) // 2] if family_bands else None
         rt = ballots.redteam.get(f.id)
         ssvc = ssvc_decision(severity=sev, exploitable=rt.exploitable if rt else "unknown", tier=tier)
-        outcome = decide(OutcomeSignals(tier=tier, score=weighted, severity=sev, provenance_verified=prov_ok, skeptic_refuted=refuted,
-                                        skeptic_abstained=unchallenged, quorum_ok=quorum_ok, passes_complete=len(fv) == len(raw_votes),
+        outcome = decide(OutcomeSignals(tier=tier, score=weighted, severity=higher_severity(sev, operational),
+                                        provenance_verified=prov_ok, skeptic_refuted=refuted, skeptic_abstained=unchallenged,
+                                        quorum_ok=quorum_ok, passes_complete=len(fv) == len(raw_votes),
                                         alpha=alpha, votes_tp=tp, votes_fp=fp, votes_human=human, position_consistent=consistent),
                          policy)
         rows.append(

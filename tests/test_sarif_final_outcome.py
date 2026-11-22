@@ -95,7 +95,9 @@ def _old_to_sarif(report: ReviewReport) -> dict:
             "ruleId": rule_id,
             # a finding waiting for a human decision is emitted as a note, never as an error, so code
             # scanning does not show it as confirmed; the decision on the ticket settles it (G-11)
-            "level": "note" if q is not None else _OLD_LEVEL[c.cvss4_severity],
+            # the one change since: the level is that of the gate severity (GLOSSARY.md), the severity a blocking result
+            # blocks at, where it was the CVSS severity of the finder's vector alone
+            "level": "note" if q is not None else _OLD_LEVEL[c.gate_severity],
             "rank": round(c.weighted_score * 100, 1),
             "message": {"text": f"[{c.tier.value}] {f.title} (CVSS 4.0 {c.cvss4_score} {c.cvss4_severity}; SSVC {c.ssvc_decision})"},
             # a URI reference: a path with a space or '#' must be percent-encoded to stay one

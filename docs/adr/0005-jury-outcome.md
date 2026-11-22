@@ -53,3 +53,22 @@ The persisted shape stays `ConsensusResult` in `report.json`, so retained report
     to be read as judge seats, one per family by P3. No test pinned that rule until now:
     `tests/test_jury_quorum.py::test_with_too_few_independent_seats_the_finders_families_judge_at_a_discount_and_the_quorum_still_fails`.
     No sentence of the decision is stale.
+- Amended 2026-11-22: rejection review covers dropped findings too. `decide()` records `unsupervised_reject_unverified`
+  on a dropped finding as it does on a rejected one, and `ConsensusResult.in_rejection_review` reads both, so until
+  the Alternative Annotator Test passes a human looks at every finding the pipeline put out by itself. With the
+  panel of `config/mara.yaml` a finding with one finder is judged by two families that read only the blinded claim,
+  not the code; when both call it a false positive it is at tier D and was dropped with no human look, and the
+  skeptic whose verdict they read is one of those two families. That is no more supervised than a rejection, and
+  the open question above already named dropped findings as what "the pipeline drops without a human today". What
+  stands: the jury outcome keeps its four values and a dropped finding stays dropped, the review is not incomplete
+  for a rejection review, and the AAT's sample is still the rejected findings alone (calibration counts only non-D
+  rejections), so P8 unlocks on the same evidence as before. The sentences made stale are "A **dropped finding** is
+  at tier D and needs no human" and "P8 queues only those" (the non-D rejections): a dropped finding needs no human
+  decision for the review to be complete, and P8 now queues it for a look. `gate.unsupervised_reject_allowed: true`
+  ends the look for both. `tests/test_jury_outcome.py` and `tests/test_human_queue.py` pin it.
+- Amended 2026-11-22: the severity among the jury signals is the **gate severity** (GLOSSARY.md), the higher of the
+  CVSS severity of the finder's vector and the judges' operational severity, so the tier C rule sends a finding to a
+  human on the judges' bands as well as on the vector. The judges' bands were recorded as `operational_severity` and
+  read by nothing; one reviewer's vector, which no judge sees, alone decided whether an accepted finding blocked. A
+  reviewer's vector now carries base metrics only (`mara.agents.reviewer.base_vector_only`), and merged findings
+  keep the highest vector any finder gave (`mara.reviewer_round.dedupe`). `decide()`'s interface does not change.

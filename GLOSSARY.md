@@ -141,7 +141,7 @@ A finding with enough evidence to stand (any tier but D) that the jury did not a
 _Avoid_: dropped finding, false positive (that is a human ruling)
 
 **Dropped finding**:
-A finding at evidence tier D that needs no human: too little support, or refuted by the skeptic and not carried by the jury. It is out on the evidence, not on the jury's vote.
+A finding at evidence tier D that the pipeline put out without a human reason: too little support, or refuted by the skeptic and not carried by the jury. It is out on the evidence, not on the jury's vote. Until policy P8 allows otherwise it still gets a rejection review.
 _Avoid_: rejected finding
 
 **Human queue**:
@@ -153,7 +153,7 @@ One reason a finding needs a human: a jury signal that fell short, a rejection r
 _Avoid_: incomplete reason (that is the review's, not the finding's), why
 
 **Rejection review**:
-The human look at every rejected finding that policy P8 requires until the Alternative Annotator Test passes. The finding enters the human queue, its jury outcome stays rejected, and the review is not incomplete because of it.
+The human look at every rejected finding and every dropped finding that policy P8 requires until the Alternative Annotator Test passes. The finding enters the human queue, its jury outcome stays as the jury concluded it, and the review is not incomplete because of it.
 _Avoid_: needing a human (that outcome is undecided; a rejection under review is decided)
 
 **Queue tightening**:
@@ -233,8 +233,12 @@ Whether a review's result lets the change merge, and when it does not, the gate 
 _Avoid_: check (a CI check is a different thing), pass/fail
 
 **Blocking finding**:
-A finding whose final outcome is accepted and whose evidence tier and severity meet the gate's blocking rules; while the human queue is tightened, an accepted tier C finding at the severity floor blocks too, since no human will look at it.
+A finding whose final outcome is accepted and whose evidence tier and gate severity meet the gate's blocking rules; while the human queue is tightened, an accepted tier C finding at the severity floor blocks too, since no human will look at it; and a finding a human confirmed as a true positive blocks at a blocking severity whatever its tier.
 _Avoid_: blocker, critical finding (severity alone does not block)
+
+**Gate severity**:
+The severity the gate, the tier C rule, the dimension score, the PSIRT trigger and a code-scanning result's level read for a finding: the higher of the CVSS severity of its finder's vector and the judges' operational severity (the middle of the judge families' severity bands). One reviewer writes the vector and no judge sees it, so neither alone can lower it. The CVSS score and severity stay in the report as the vector gives them.
+_Avoid_: severity (say which: CVSS severity, operational severity or gate severity), final severity
 
 **Bias audit**:
 The report's counts and statistics of how the review went: every exchange's reply outcomes and canary echoes by role and family, what the pipeline dropped, merged or excluded on the way, the jury's agreement and position flips, and the exchange version the counts follow. It holds no report metadata: the rollout phase, the human queue's tightening and the ML-BOM and model-evaluation status are fields of the report of their own. Each of its entries is an audit counter.

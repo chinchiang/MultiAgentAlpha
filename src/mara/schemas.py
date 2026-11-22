@@ -69,6 +69,14 @@ class EvidenceTier(StrEnum):
 
 
 SEVERITY_ORDER: list[str] = ["None", "Low", "Medium", "High", "Critical"]
+
+
+def higher_severity(severity: str, other: str | None) -> str:
+    """The higher of two severity bands; `severity` itself when it is no band (an unknown severity ranks above every
+    band) or when there is no `other`."""
+    if other is None or severity not in SEVERITY_ORDER:
+        return severity
+    return max(severity, other, key=SEVERITY_ORDER.index)
 """CVSS 4.0 severity bands, low to high; the single source for gate and queue comparisons."""
 
 
@@ -159,10 +167,11 @@ class JudgeVote(BaseModel):
 
 
 JuryOutcomeValue = Literal["accepted", "rejected", "dropped", "needs_human"]
-# Why a gate blocks, in the fixed order a report lists them, and the two of them a blocking finding carries
+# Why a gate blocks, in the fixed order a report lists them, and the three of them a blocking finding carries
 # (docs/adr/0007-review-status-and-gate.md; mara.review_status writes them)
-GateReason = Literal["review_incomplete", "blocking_tier_and_severity", "tier_c_while_tightened", "dimension_below_minimum"]
-BlockingReason = Literal["blocking_tier_and_severity", "tier_c_while_tightened"]
+GateReason = Literal["review_incomplete", "blocking_tier_and_severity", "tier_c_while_tightened", "human_confirmed_at_blocking_severity",
+                     "dimension_below_minimum"]
+BlockingReason = Literal["blocking_tier_and_severity", "tier_c_while_tightened", "human_confirmed_at_blocking_severity"]
 RolloutPhase = Literal["not_started", "shadow", "advisory", "blocking"]  # G-10 (config.RolloutConfig)
 
 
@@ -191,11 +200,20 @@ class ConsensusResult(BaseModel):
     # the same content (docs/adr/0003-human-resolution.md) is recorded here and settles the final outcome
     human_decision: dict | None = Field(default=None, description="The usable decision that settles this finding: "
                                         "decision, key, issue, decided_by, decided_at")
-    unsupervised_reject_unverified: bool = Field(default=False, description="A rejected finding under rejection review "
+    unsupervised_reject_unverified: bool = Field(default=False, description="A rejected or dropped finding under rejection review "
                                                  "(policy P8, docs/adr/0005-jury-outcome.md); false in reports written before it")
     blocking_reason: BlockingReason | None = Field(default=None, description="Why this blocking finding blocks the gate "
                                         "(docs/adr/0007-review-status-and-gate.md); null on every other finding and in reports "
                                         "written before it")
+
+    @property
+    def gate_severity(self) -> str:
+        """The gate severity (GLOSSARY.md): the higher of the CVSS severity of the finder's vector and the judges'
+        operational severity, so that neither one reviewer's vector nor the jury alone can lower what the gate, the
+        tier C rule, the dimension score and the PSIRT trigger read. A CVSS severity outside the bands stays as it is
+        (the readers rank an unknown severity above every band); a report written before the judges' bands were
+        recorded reads the CVSS severity."""
+        return higher_severity(self.cvss4_severity, self.operational_severity)
 
     @property
     def jury_outcome(self) -> JuryOutcomeValue:
@@ -219,10 +237,15 @@ class ConsensusResult(BaseModel):
         return self.human_decision is not None
 
     @property
+    def human_confirmed(self) -> bool:
+        """A usable decision ruled this finding a true positive (docs/adr/0003-human-resolution.md)."""
+        return self.human_decision is not None and self.human_decision["decision"] == "true_positive"
+
+    @property
     def in_rejection_review(self) -> bool:
-        """A rejected finding no human has ruled on yet, which policy P8 queues for a human look while the jury outcome
-        stays rejected (rejection review, docs/adr/0005-jury-outcome.md)."""
-        return not self.resolved_by_human and self.jury_outcome == "rejected" and self.unsupervised_reject_unverified
+        """A rejected or dropped finding no human has ruled on yet, which policy P8 queues for a human look while its
+        jury outcome stays as the jury concluded it (rejection review, docs/adr/0005-jury-outcome.md)."""
+        return not self.resolved_by_human and self.jury_outcome in ("rejected", "dropped") and self.unsupervised_reject_unverified
 
 
 class DimensionScore(BaseModel):
