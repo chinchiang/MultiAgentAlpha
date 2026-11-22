@@ -8,8 +8,8 @@ mutations:
   - name: the plan falls back to the finder's family even with enough independent seats
     file: src/mara/ballot_round.py
     caught_by: tests/test_jury_quorum.py::test_a_voided_independent_judge_starts_no_fallback_so_the_quorum_fails_and_a_human_decides
-    old: '                elif independent(f) < min_ind:'
-    new: '                elif independent(f) <= min_ind:'
+    old: '                elif independent(f) < min_ind and not left_to_its_independent_judges(f):'
+    new: '                elif independent(f) <= min_ind and not left_to_its_independent_judges(f):'
   - name: the plan counts the finder's own family as independent of it
     file: src/mara/ballot_round.py
     caught_by: tests/test_jury_quorum.py::test_with_too_few_independent_seats_the_finders_families_judge_at_a_discount_and_the_quorum_still_fails

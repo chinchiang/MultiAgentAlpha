@@ -387,6 +387,7 @@ class ConfigCheck:
     config: MaraConfig | None
     error: str
     policies: tuple[PolicyResult, ...]
+    warnings: tuple[str, ...] = ()  # config_warnings: what the config says that changes nothing; no policy fails for it
 
     @property
     def structure_ok(self) -> bool:
@@ -397,6 +398,68 @@ class ConfigCheck:
         return self.config is not None and all(r.passed for r in self.policies)
 
 
+def _independent_seats(cfg: MaraConfig) -> list[tuple[int, int]]:
+    """(finder families, judge families independent of them) for every set of reviewer families that could find one
+    finding."""
+    by_name = {m.name: m.family for m in cfg.models}
+    judges = {by_name[n] for n in cfg.roles.judges}
+    reviewers = sorted({by_name[n] for n in cfg.roles.reviewers}, key=lambda fam: fam.value)
+    out = []
+    for mask in range(1, 2 ** len(reviewers)):
+        finders = {fam for i, fam in enumerate(reviewers) if mask >> i & 1}
+        out.append((len(finders), len(judges - finders)))
+    return out
+
+
+def judging_family_counts(cfg: MaraConfig) -> set[int]:
+    """How many judge families can vote on one finding with its quorum met, over every set of reviewer families that
+    could have found it: the counts the agreement proxy is ever read on. A finding short of its quorum goes to a human
+    whatever its agreement, so those counts are left out; fewer than two families have no agreement to read."""
+    return {seats for _finders, seats in _independent_seats(cfg) if seats >= max(2, cfg.gate.min_independent_judges)}
+
+
+def unreachable_quorum(cfg: MaraConfig) -> str | None:
+    """Why no finding can reach its quorum under `cfg`, or None when one can: whichever families find it, fewer judge
+    families than `gate.min_independent_judges` are independent of them, and finder corroboration, when it is on, does
+    not apply either. Every finding then needs a human, and no review of a target with a finding is complete without
+    one ruling each."""
+    from .scoring.jury import corroborable
+
+    gate = cfg.gate
+    if any(seats >= gate.min_independent_judges or corroborable(finders, seats, gate.min_independent_judges, gate.finder_corroboration)
+           for finders, seats in _independent_seats(cfg)):
+        return None
+    return (f"no finding can reach its quorum: gate.min_independent_judges is {gate.min_independent_judges}, and whichever "
+            f"reviewer families find a finding, fewer judge families are independent of them, so every finding needs a "
+            f"human; add a judge family that does not review, or decide every finding by hand knowingly")
+
+
+def inert_tightening(cfg: MaraConfig) -> str | None:
+    """Why `human_queue.tighten_alpha_step` changes no outcome under `cfg`, or None when it does or is 0. The agreement
+    proxy takes few values (mara.scoring.jury.attainable_agreement): a tightened threshold that no value lies between
+    it and the base sends the same findings to a human as the base does."""
+    from .scoring.jury import attainable_agreement
+
+    hq, base = cfg.human_queue, cfg.gate.human_threshold_alpha
+    if not hq.enabled or hq.tighten_alpha_step == 0:
+        return None
+    tightened = min(1.0, round(base + hq.tighten_alpha_step, 4))
+    counts = sorted(judging_family_counts(cfg))
+    moved = [n for n in counts if any(base <= v < tightened for v in attainable_agreement(n))]
+    if moved:
+        return None
+    values = "; ".join(f"{n} judge families: {', '.join(str(v) for v in attainable_agreement(n))}" for n in counts)
+    return (f"human_queue.tighten_alpha_step {hq.tighten_alpha_step} changes no outcome: it moves the agreement threshold from "
+            f"{base} to {tightened}, and the agreement proxy takes no value between them with this panel"
+            + (f" ({values})" if values else " (no finding can reach its quorum on two or more judge families)")
+            + "; set it to 0, or to a step that crosses one of those values")
+
+
+def config_warnings(cfg: MaraConfig) -> tuple[str, ...]:
+    """What `cfg` sets that has no effect. A warning fails no policy and refuses no config: `mara check-config` prints it."""
+    return tuple(w for w in (unreachable_quorum(cfg), inert_tightening(cfg)) if w)
+
+
 def check_config_file(path: str | Path, workspace: Workspace) -> ConfigCheck:
     """The structure of the config file `path` and every policy result, whether or not a policy fails, P7 and P8 read
     from `workspace`. A file that cannot be read, is not YAML or fails validation (config.INVALID_FILE_ERRORS) is an invalid
@@ -405,4 +468,4 @@ def check_config_file(path: str | Path, workspace: Workspace) -> ConfigCheck:
         cfg = load_config(path, workspace, enforce_policies=False)
     except INVALID_FILE_ERRORS as e:
         return ConfigCheck(None, str(e), ())
-    return ConfigCheck(cfg, "", tuple(evaluate_policies(cfg, workspace)))
+    return ConfigCheck(cfg, "", tuple(evaluate_policies(cfg, workspace)), config_warnings(cfg))

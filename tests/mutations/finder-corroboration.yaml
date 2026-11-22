@@ -1,0 +1,87 @@
+focused: [tests/test_finder_corroboration.py, tests/test_policy.py]
+mutations:
+  - name: the finders' families are still asked to judge a finding left to its independent judges
+    file: src/mara/ballot_round.py
+    caught_by: tests/test_finder_corroboration.py::test_the_ballot_round_asks_none_of_the_finders_families_to_judge_it
+    old: '                elif independent(f) < min_ind and not left_to_its_independent_judges(f):'
+    new: '                elif independent(f) < min_ind:'
+  - name: corroboration applies with the setting off
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_with_the_setting_off_the_same_votes_leave_it_one_judge_short
+    old: '    return enabled and finder_families >= 2 and 1 <= independent_seats < min_independent_judges'
+    new: '    return finder_families >= 2 and 1 <= independent_seats < min_independent_judges'
+  - name: one finder is enough for corroboration
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_which_findings_may_reach_their_quorum_by_corroboration
+    old: '    return enabled and finder_families >= 2 and 1 <= independent_seats < min_independent_judges'
+    new: '    return enabled and finder_families >= 1 and 1 <= independent_seats < min_independent_judges'
+  - name: corroboration needs no independent seat
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_which_findings_may_reach_their_quorum_by_corroboration
+    old: '    return enabled and finder_families >= 2 and 1 <= independent_seats < min_independent_judges'
+    new: '    return enabled and finder_families >= 2 and 0 <= independent_seats < min_independent_judges'
+  - name: an independent judge's vote against it does not count
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_an_independent_judge_that_says_a_human_must_decide_is_not_a_confirmation_at_any_accept_threshold
+    old: '            and all(v.verdict == "true_positive" for v in fv)'
+    new: '            and True'
+  - name: a vote of a finder's family is allowed in its score
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_a_vote_of_a_finders_family_in_its_score_leaves_it_short
+    old: '            and valid_families == seats'
+    new: '            and valid_families >= seats'
+  - name: an independent seat that did not vote validly is forgiven
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_with_no_valid_vote_of_its_independent_judge_it_is_not_corroborated_at_any_accept_threshold
+    old: '            and valid_families == seats'
+    new: '            and valid_families <= seats'
+  - name: a skeptic that refuted it is no bar
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_without_a_skeptic_outside_its_finders_that_let_it_stand_it_goes_to_a_human
+    old: 'sk.source_family not in finders[f.id] and not refuted and not unchallenged'
+    new: 'sk.source_family not in finders[f.id] and not unchallenged'
+  - name: a skeptic of a family that found it is taken as independent
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_without_a_skeptic_outside_its_finders_that_let_it_stand_it_goes_to_a_human
+    old: 'sk.source_family not in finders[f.id] and not refuted and not unchallenged'
+    new: 'not refuted and not unchallenged'
+  - name: a finding the skeptic abstained on is corroborated
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_a_finding_the_skeptic_abstained_on_goes_to_a_human
+    old: 'sk.source_family not in finders[f.id] and not refuted and not unchallenged'
+    new: 'sk.source_family not in finders[f.id] and not refuted'
+  - name: the row does not say it was corroborated
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_found_by_two_families_and_confirmed_by_the_one_independent_judge_it_is_accepted
+    old: '                finder_corroborated=by_finders,'
+    new: '                finder_corroborated=False,'
+  - name: the audit does not count the corroborated quorums
+    file: src/mara/pipeline.py
+    caught_by: tests/test_finder_corroboration.py::test_a_review_of_the_seeded_fixture_accepts_what_two_families_found_and_one_confirmed_and_drops_nothing_for_it
+    old: '        self.audit.set(Count.FINDER_CORROBORATED_QUORUMS, sum(c.finder_corroborated for c in scoring.rows))'
+    new: '        self.audit.set(Count.FINDER_CORROBORATED_QUORUMS, 0)'
+  - name: the agreement proxy is said to take every share
+    file: src/mara/scoring/jury.py
+    caught_by: tests/test_finder_corroboration.py::test_the_agreement_proxy_takes_few_values
+    old: '    lowest_modal = -(-judge_families // 3)  # the modal label of n votes over three labels holds at least ceil(n / 3)'
+    new: '    lowest_modal = 1'
+  - name: a tightening step is judged against the threshold's old side only
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_a_tightening_step_that_crosses_no_value_the_agreement_proxy_takes_is_warned_of
+    old: '    moved = [n for n in counts if any(base <= v < tightened for v in attainable_agreement(n))]'
+    new: '    moved = [n for n in counts if any(v < tightened for v in attainable_agreement(n))]'
+  - name: a step of 0 is warned of
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_a_tightening_step_that_crosses_no_value_the_agreement_proxy_takes_is_warned_of
+    old: '    if not hq.enabled or hq.tighten_alpha_step == 0:'
+    new: '    if not hq.enabled:'
+  - name: a quorum met only by corroboration is called unreachable
+    file: src/mara/policy.py
+    caught_by: tests/test_policy.py::test_finder_corroboration_makes_a_quorum_reachable_only_where_it_applies
+    old: '    if any(seats >= gate.min_independent_judges or corroborable(finders, seats, gate.min_independent_judges, gate.finder_corroboration)'
+    new: '    if any(seats >= gate.min_independent_judges'
+  - name: check-config prints no warning
+    file: src/mara/cli.py
+    caught_by: tests/test_policy.py::test_check_config_prints_a_warning_and_still_passes
+    old: '            console.print(f"[yellow]warning:[/yellow] {escape(w)}")'
+    new: '            pass'

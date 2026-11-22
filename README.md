@@ -109,7 +109,11 @@ model calls require a current local secret preflight, even when other SARIF was 
 exception is `--calibration-sample` (see Live mode). Use
 HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
 lack two independent judge families when several reviewers find the same issue; add independently
-operated families or complete human review instead of weakening the quorum.
+operated families or complete human review instead of weakening the quorum. `gate.finder_corroboration`
+(on in `config/mara.yaml`) lets a finding two families found stand on the third family alone, when that
+family's skeptic let it stand and its judge confirmed it in both passes; it can only accept, never reject or
+drop, and a finding all three found still goes to a human (docs/adr/0005-jury-outcome.md). `mara check-config`
+warns of a panel on which no finding can reach its quorum, and of a tightening step that changes no outcome.
 
 ## Architecture
 

@@ -112,6 +112,13 @@ class GateConfig(BaseModel):
         "records a passing Alternative Annotator Test (live mode) within 90 days; when false every rejected non-D "
         "finding is queued for a human instead",
     )
+    finder_corroboration: bool = Field(
+        default=False,
+        description="Finder corroboration (GLOSSARY.md, docs/adr/0005-jury-outcome.md): a finding at least two families "
+        "found reaches its quorum on fewer independent judges than min_independent_judges, when every judge family "
+        "independent of its finders, at least one, confirmed it in both passes and a skeptic outside its finders "
+        "neither refuted it nor abstained. It can only accept: anything else still goes to a human",
+    )
 
     @model_validator(mode="after")
     def _valid_block_lists(self) -> GateConfig:

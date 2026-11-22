@@ -645,3 +645,79 @@ def test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_envi
     (environment / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
     check = policy.check_config_file(config, Workspace(given))
     assert check.structure_ok and not check.passed and [r.id for r in check.policies if not r.passed] == ["P8"]
+
+
+# ---------------------------------------------------------------- warnings: what a config sets that changes nothing
+
+
+def _cfg(**over):
+    return MaraConfig.model_validate(_base(**over))
+
+
+def _hq(step):
+    return {"human_queue": {"tighten_alpha_step": step}}
+
+
+def test_a_tightening_step_that_crosses_no_value_the_agreement_proxy_takes_is_warned_of():
+    """Three families that review and judge: a finding of one family has two judges, whose agreement is 0.25 or 1.0, so
+    no step from 0.4 below 0.6 sends another finding to a human, and the largest step allowed is 0.5."""
+    from mara.policy import config_warnings, inert_tightening, judging_family_counts
+
+    assert judging_family_counts(_cfg()) == {2}
+    for step in (0.1, 0.2, 0.5):
+        why = inert_tightening(_cfg(**_hq(step)))
+        assert why is not None and "changes no outcome" in why and "2 judge families: 0.25, 1.0" in why, step
+    assert inert_tightening(_cfg(**_hq(0))) is None, "a step of 0 says it changes nothing"
+    assert inert_tightening(_cfg(human_queue={"enabled": False, "tighten_alpha_step": 0.1})) is None, "nothing is tightened"
+    assert config_warnings(_cfg(**_hq(0.1))) == (inert_tightening(_cfg(**_hq(0.1))),)
+    assert config_warnings(_cfg(**_hq(0))) == ()
+
+
+def test_a_tightening_step_that_crosses_a_value_is_not_warned_of():
+    """A fourth judge family that does not review: a finding of one family has three judges, whose agreement is 0, 0.5
+    or 1.0, and a step from 0.4 to 0.6 sends a two-to-one vote to a human."""
+    from mara.policy import inert_tightening, judging_family_counts
+
+    raw = _base(**_hq(0.2))
+    raw["models"].append({"name": "m", "family": "mistral", "provider": "mock", "model": "mock-mistral", "data_residency": "on_prem"})
+    raw["roles"]["judges"].append("m")
+    four = MaraConfig.model_validate(raw)
+    assert judging_family_counts(four) == {2, 3} and inert_tightening(four) is None
+    raw["human_queue"]["tighten_alpha_step"] = 0.05
+    assert inert_tightening(MaraConfig.model_validate(raw)) is not None, "0.4 to 0.45 crosses neither 0.5 nor 1.0"
+
+
+def test_a_panel_on_which_no_finding_can_reach_its_quorum_is_warned_of():
+    """Two families that review and judge, a quorum of two: a finding of one family has one independent judge, a
+    finding of both none (config/examples/prc-site.yaml). Every finding needs a human."""
+    from mara.policy import check_config_file, unreachable_quorum
+
+    assert unreachable_quorum(_cfg()) is None, "three families: a finding of one of them has its two judges"
+    prc = check_config_file(ROOT / "config" / "examples" / "prc-site.yaml", Workspace(ROOT))
+    assert prc.passed and prc.config is not None, "a warning fails no policy"
+    why = unreachable_quorum(prc.config)
+    assert why is not None and "no finding can reach its quorum" in why and why in prc.warnings
+    one_judge_enough = prc.config.model_copy(update={"gate": prc.config.gate.model_copy(update={"min_independent_judges": 1})})
+    assert unreachable_quorum(one_judge_enough) is None
+
+
+def test_finder_corroboration_makes_a_quorum_reachable_only_where_it_applies():
+    from mara.policy import unreachable_quorum
+
+    raw = _base(gate={"min_independent_judges": 3})  # three families, a quorum of three: never three independent judges
+    assert unreachable_quorum(MaraConfig.model_validate(raw)) is not None
+    raw["gate"]["finder_corroboration"] = True  # a finding of two families now stands on the third
+    assert unreachable_quorum(MaraConfig.model_validate(raw)) is None
+
+
+def test_check_config_prints_a_warning_and_still_passes():
+    runner = CliRunner()
+    res = runner.invoke(app, ["check-config", str(ROOT / "config" / "mara.mock.yaml")])
+    out = " ".join(res.output.split())
+    assert res.exit_code == 0 and "8/8 policies pass" in out
+    assert "warning: human_queue.tighten_alpha_step 0.1 changes no outcome" in out
+    shipped = runner.invoke(app, ["check-config", str(ROOT / "config" / "mara.yaml")])
+    assert shipped.exit_code == 0 and "warning" not in shipped.output, "the shipped config sets nothing that changes nothing"
+    as_json = runner.invoke(app, ["check-config", str(ROOT / "config" / "mara.mock.yaml"), "--json"])
+    assert as_json.exit_code == 0 and "warning" not in as_json.stdout and "warning: human_queue" in " ".join(as_json.stderr.split())
+

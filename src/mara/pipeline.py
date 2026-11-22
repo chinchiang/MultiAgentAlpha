@@ -255,6 +255,7 @@ class Pipeline:
         scoring = jury.score(findings, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
                              tool_path_prefix=ctx.repo_prefix)
         self.audit.set(Count.POSITION_FLIPS, scoring.position_flips)
+        self.audit.set(Count.FINDER_CORROBORATED_QUORUMS, sum(c.finder_corroborated for c in scoring.rows))
         content = ReviewedContent.of_bundle(ctx)
         selection = self.select_decisions(content)
         self.audit.set(Count.HUMAN_DECISIONS_APPLIED, settlement.finish(findings, scoring.rows, selection, content,

@@ -124,6 +124,10 @@ _Avoid_: valid decision (ambiguous between well-formed and usable)
 The judges of a review as their votes are counted: one judge family each, the weight each family's vote carries, the discount on a vote from a family among the finding's finders, and how many families independent of its finders a finding needs for a quorum.
 _Avoid_: panel (see Panel: every model the config names, reviewers included), judges (the judges are the models; the jury is how their votes count)
 
+**Finder corroboration**:
+How a finding that two or more families found reaches its quorum on fewer independent judges than the jury asks for, when the config turns it on: every judge family independent of its finders, at least one, voted true positive in both passes, no family that found it voted, and a skeptic outside its finders neither refuted it nor abstained. It can only complete a quorum for acceptance; anything else leaves the finding to a human. The consensus row records it, and the audit counts such quorums.
+_Avoid_: finder vote (the finders do not vote on it), tool corroboration (a tool result at the finding's place: see Corroboration)
+
 **Panel**:
 The models a config names, each with the role it plays in a review (context builder, reviewer, skeptic, red team, judge). The workbench shows it three ways: a run's record holds the panel of its config at launch, the environment page lists the panel of each config, and, for a report without a run record, the models the report's provider manifest lists, each under the roles the report's audit counted its family calling for, since the report holds no roles. Of a model's endpoint the workbench shows the host and nothing else.
 _Avoid_: jury (the jury is how the judges' votes count), team, roster
