@@ -48,27 +48,30 @@ it: a mutant of the same size written within a second of the original would othe
 bytecode. The file is restored after each mutation, and checked to be byte for byte what it was.
 For each mutation it prints CAUGHT, MISSED or ERROR and its name; a catch also names the test that caught it
 (`<- <test>`) and, from that run's output, where it failed (`at:` and the source line pytest marks with `>`), the first
-failure being the only one, since pytest stops there (-x). A catch is marked with the exception that ended the failure,
-read from its traceback's last line, when it is not the one the mutation names (`error: FileNotFoundError`, above), or,
-when it names none, when it is not an AssertionError:
-`(KeyError)`, and `(KeyError, not FileNotFoundError)` or `(no exception, not FileNotFoundError)` when it names one. A
-failure with no such line, as an ExceptionGroup's, has no exception, and no `at:` either; with no `error` named, it has
-no mark. A catch is marked with `(expected <caught_by>)` when a test other than the one its
-`caught_by` names caught it (a test file named alone names each of its tests; a test named without its parameters,
-each of them). A marked catch is still a catch: whether it is the fault the name says is for the reader to judge.
+failure being the only one, since pytest stops there (-x), and, when the exception that ended it is not an
+AssertionError, where that exception was raised as the repository sees it (`raised:` and the path:line, relative to the
+root, of the traceback's deepest frame under the root and not in an installed package's site-packages: an exception the
+standard library or a package raises is placed at the line of the repository that called into it). A catch is marked
+with the exception that ended the failure, read from its traceback's last line, when it is not the one the mutation
+names (`error: FileNotFoundError`, above), or, when it names none, when it is not an AssertionError: `(KeyError)`, and
+`(KeyError, not FileNotFoundError)` or `(no exception, not FileNotFoundError)` when it names one. A failure with no such
+line, as an ExceptionGroup's, has no exception, and no `at:` either; with no `error` named, it has no mark. A catch is
+marked with `(expected <caught_by>)` when a test other than the one its `caught_by` names caught it (a test file named
+alone names each of its tests; a test named without its parameters, each of them). A marked catch is still a catch:
+whether it is the fault the name says is for the reader to judge.
 It reads git status (untracked files one by one) before the runs without a mutation, after them, and after each run
 with one; every path it lists that it did not list before, outside the run's own directory, is a left path, printed
 after the last mutation as `LEFT <path>  (<the mutation, or baseline>)`, and neither removed nor counted against the
 run. In a root that is not a git repository it says so on stderr, and does not look; once git status fails during a
 run, it says so and looks no more.
 Each run writes out/mutations/<UTC time>/results.json (one entry per mutation: caught, by which test, by the focused
-tests or the whole suite, pytest's exit code, the logs it wrote, at and error (null when the output holds none, as for
-a failure with pytrace=False, or for a mutation not caught), expected (the caught_by a catch did not match, else null),
-declared_error (the mutation's `error`, else null) and left (the paths it left, null when git status was not read)),
-the output of the runs without a mutation (baseline.focused.log, baseline.suite.log), the output of the focused tests
-with each mutation in <slug>.focused.log, the output of each run of the whole suite with a mutation in <slug>.suite.log
-(<slug> is the mutation's name with whitespace, / \\ : * ? " < > | turned into _, at most 80 characters), a copy of the
-list and its pid; a later run never overwrites an earlier one.
+tests or the whole suite, pytest's exit code, the logs it wrote, at and error (null when the output holds none, as for a
+failure with pytrace=False, or for a mutation not caught), raised (null as well, and for an AssertionError), expected
+(the caught_by a catch did not match, else null), declared_error (the mutation's `error`, else null) and left (the paths
+it left, null when git status was not read)), the output of the runs without a mutation (baseline.focused.log,
+baseline.suite.log), the output of the focused tests with each mutation in <slug>.focused.log, the output of each run of
+the whole suite with a mutation in <slug>.suite.log (<slug> is the mutation's name with whitespace, / \\ : * ? " < > |
+turned into _, at most 80 characters), a copy of the list and its pid; a later run never overwrites an earlier one.
 Before it mutates a file, a run keeps the file and its mutant under original/ and mutant/ in its directory, and removes
 them once the file is restored. A run killed in between (SIGKILL, SIGTERM, the end of a session) never restores it, so
 every run first looks for such copies: a file still holding the mutant is restored from original/, one holding the
@@ -130,6 +133,9 @@ BANNER = re.compile(r"^=+ (?:FAILURES|ERRORS) =+$")  # where pytest's output sta
 FAILURE_HEAD = re.compile(r"^_+ .*\S.* _+$")
 EXCEPTION_NAME = r"[A-Za-z_][\w.]*"  # an exception's name as a traceback's last line gives it, dotted or not
 EXCEPTION_LINE = re.compile(rf"^\S.*:\d+: ({EXCEPTION_NAME})$")  # the last line of a traceback: path:line: ExceptionName
+# a frame's path and line in a traceback, its last line's included; an `E` line that happens to match comes before
+# that last line, so it is never the deepest
+FRAME_LINE = re.compile(r"^(\S.*?):(\d+): ")
 CAPTURED = re.compile(r"^-+ Captured .* -+$")  # where a failure's traceback ends and the output of its test begins
 
 
@@ -251,13 +257,28 @@ def _pytest(root: Path, tests: list[str]) -> tuple[int, str, str]:
     return cp.returncode, failed[0] if failed else "", cp.stdout + cp.stderr
 
 
-def _failure(out: str) -> tuple[str | None, str | None]:
+def _in_root(path: str, root: Path) -> str | None:
+    """`path`, as pytest prints a frame's (relative to the directory it ran in, `root`, or absolute once a test changed
+    directory), relative to `root`; None when it is outside `root` or in an installed package (site-packages)."""
+    p = Path(path)
+    if p.is_absolute():
+        try:
+            p = p.relative_to(root.resolve())
+        except ValueError:
+            return None
+    if p.parts[:1] == ("..",) or "site-packages" in p.parts:
+        return None
+    return p.as_posix()
+
+
+def _failure(out: str, root: Path) -> tuple[str | None, str | None, str | None]:
     """(the source line pytest marks with `>` in the first failure of `out`, stripped; the name of the exception that
-    ended it, from the traceback's last line); None for what the output does not hold."""
+    ended it, from the traceback's last line; when there is that exception, the path:line of the traceback's deepest
+    frame of the repository, `root` (_in_root)); None for what the output does not hold."""
     lines = out.splitlines()
     start = next((i for i, line in enumerate(lines) if BANNER.match(line)), None)
     if start is None:
-        return None, None
+        return None, None, None
     section = []
     for line in lines[start + 2:]:  # after the banner and the head of the first failure
         if line.startswith("=") or FAILURE_HEAD.match(line) or CAPTURED.match(line):
@@ -265,7 +286,8 @@ def _failure(out: str) -> tuple[str | None, str | None]:
         section.append(line)
     at = next((line[1:].strip() for line in section if line.startswith(">")), None)
     error = next((m[1] for line in reversed(section) if (m := EXCEPTION_LINE.match(line))), None)
-    return at, error
+    frames = [f"{path}:{m[2]}" for line in section if (m := FRAME_LINE.match(line)) and (path := _in_root(m[1], root))]
+    return at, error, frames[-1] if error and frames else None
 
 
 def changed_paths(base: str, root: Path) -> set[str]:
@@ -418,10 +440,11 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite
     if path.read_bytes() != original:
         raise RuntimeError(f"{m['file']} was not restored")
     _drop_copies(run_dir)
-    at, error = _failure(out) if code == 1 else (None, None)
+    at, error, raised = _failure(out, root) if code == 1 else (None, None, None)
     expected = m["caught_by"] if code == 1 and "caught_by" in m and not is_named_by(by, m["caught_by"]) else None
     return {"mutation": m["name"], "file": m["file"], "caught": code == 1, "by": by, "where": where, "exit": code, "logs": logs,
-            "at": at, "error": error, "expected": expected, "declared_error": m.get("error")}
+            "at": at, "error": error, "raised": raised if error != "AssertionError" else None, "expected": expected,
+            "declared_error": m.get("error")}
 
 
 def error_mark(r: dict) -> str:
@@ -485,7 +508,8 @@ def run_mutation_list(path: Path, focused: list[str], mutations: list[dict], roo
             print(f"ERROR {r['mutation']}  (pytest exit {r['exit']}, {r['where']})", flush=True)
         else:
             line = (("CAUGHT " if r["caught"] else "MISSED ") + r["mutation"] + (f"  <- {r['by']}" if r["by"] else f"  ({r['where']})")
-                    + (f"  at: {r['at']}" if r["at"] else "") + (f"  ({mark})" if (mark := error_mark(r)) else "")
+                    + (f"  at: {r['at']}" if r["at"] else "") + (f"  raised: {r['raised']}" if r["raised"] else "")
+                    + (f"  ({mark})" if (mark := error_mark(r)) else "")
                     + (f"  (expected {r['expected']})" if r["expected"] else ""))
             print(line, flush=True)
             if r["caught"] and (mark or r["expected"]):
