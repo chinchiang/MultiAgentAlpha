@@ -63,6 +63,10 @@ _Avoid_: L2 (a layer number, not a concept), review (the review is every stage, 
 The part of a review in which every ballot role rules on the deduplicated findings: the skeptic, then the red team on the findings the skeptic did not refute, then each judge in a forward and a mirrored reverse pass. A voided reply worth it is asked once more. Its result, the ballots (the skeptic's verdicts, the red team's notes and the judges' votes), is what the jury outcome is scored from.
 _Avoid_: L3/L4 (layer numbers, not a concept), jury round (the jury is the judges alone)
 
+**Exchange limit**:
+How many exchanges one review may make (`limits.max_exchanges`; none unless the config sets one). The context call and the reviewer round are counted before either is made, and when they would pass the limit none of them is made; the ballot round is held call by call, each call past the limit refused as a provider error without reaching a model. Either way the review is incomplete with `exchange_limit_reached`. It counts exchanges, not HTTP requests (a provider's own retries are inside one) and not tokens.
+_Avoid_: quota, budget (the vendor's), rate limit (that is the provider's, and a provider error of its own)
+
 **Truncation**:
 A reply the vendor stopped at the output limit; a budget problem, never charged to the model, and never evidence of a canary echo.
 _Avoid_: cut-off for unparseable replies

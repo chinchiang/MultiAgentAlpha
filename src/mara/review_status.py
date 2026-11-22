@@ -72,6 +72,7 @@ class ReviewFacts:
     incomplete_counters: tuple[str, ...]  # the audit counters that make the review incomplete (Audit.incomplete_reasons)
     rollout_phase: RolloutPhase  # G-10
     fail_on_gate: bool  # `mara review --fail-on-gate`: enforce a blocked gate for this review in any phase
+    exchange_limit_reached: bool = False  # the reviewer round was not asked for it, or a call was refused (mara.providers.budget)
 
 
 @dataclass(frozen=True)
@@ -86,16 +87,18 @@ class Assessment:
 
 
 # The incomplete reasons this module writes itself, and OWN_INCOMPLETE_REASONS the order a review writes them in; the
-# audit's INCOMPLETE_COUNTERS come after the first three. Together they are INCOMPLETE_REASONS, every incomplete reason,
+# audit's INCOMPLETE_COUNTERS come after the first four. Together they are INCOMPLETE_REASONS, every incomplete reason,
 # which the score summary's allowlist imports (docs/adr/0004-score-summary.md).
 CONTEXT_COVERAGE_INCOMPLETE = "context_coverage_incomplete"
 SOURCE_EGRESS_BLOCKED = "source_egress_blocked_by_secret_preflight"
+EXCHANGE_LIMIT_REACHED = "exchange_limit_reached"
 REQUIRED_TOOL_INCOMPLETE = "required_tool_incomplete"
 ML_BOM_SIGNATURE_UNVERIFIED = "ml_bom_signature_unverified"
 CONTEXT_VIEW_INCOMPLETE = "context_view_incomplete"
 UNRESOLVED_HUMAN_REVIEW = "unresolved_human_review"
 UNRESOLVED_TOOL_FINDINGS = "unresolved_tool_findings"
-OWN_INCOMPLETE_REASONS = (CONTEXT_COVERAGE_INCOMPLETE, SOURCE_EGRESS_BLOCKED, REQUIRED_TOOL_INCOMPLETE, ML_BOM_SIGNATURE_UNVERIFIED,
+OWN_INCOMPLETE_REASONS = (CONTEXT_COVERAGE_INCOMPLETE, SOURCE_EGRESS_BLOCKED, EXCHANGE_LIMIT_REACHED, REQUIRED_TOOL_INCOMPLETE,
+                          ML_BOM_SIGNATURE_UNVERIFIED,
                           CONTEXT_VIEW_INCOMPLETE, UNRESOLVED_HUMAN_REVIEW, UNRESOLVED_TOOL_FINDINGS)
 INCOMPLETE_REASONS = frozenset(OWN_INCOMPLETE_REASONS) | frozenset(INCOMPLETE_COUNTERS)
 
@@ -158,12 +161,15 @@ def _incomplete_reasons(facts: ReviewFacts, consensus: list[ConsensusResult], to
         out.append(CONTEXT_COVERAGE_INCOMPLETE)
     if facts.egress_blocked:
         out.append(SOURCE_EGRESS_BLOCKED)
+    if facts.exchange_limit_reached:
+        out.append(EXCHANGE_LIMIT_REACHED)
     if not facts.required_tools_ran:
         out.append(REQUIRED_TOOL_INCOMPLETE)
     out.extend(facts.incomplete_counters)
     if facts.ml_bom_signature is False:
         out.append(ML_BOM_SIGNATURE_UNVERIFIED)
-    if facts.context_view_missing and not facts.egress_blocked:  # no context call is made when egress is blocked
+    # no context call is made when egress is blocked, and none may have been when the exchange limit was reached
+    if facts.context_view_missing and not facts.egress_blocked and not facts.exchange_limit_reached:
         out.append(CONTEXT_VIEW_INCOMPLETE)
     if any(c.final_outcome == "needs_human" for c in consensus):
         out.append(UNRESOLVED_HUMAN_REVIEW)

@@ -201,6 +201,19 @@ class TrainingConfig(BaseModel):
                                       description="Roles that must each have a valid record for governance check G-13")
 
 
+class LimitsConfig(BaseModel):
+    """What one review may spend (GLOSSARY.md: exchange limit)."""
+
+    model_config = {"extra": "forbid"}
+
+    max_exchanges: int | None = Field(
+        default=None, ge=0,
+        description="The exchanges (prompts sent to a model, a provider's own retries inside each) one review may make; "
+        "null for no limit. A review that would pass it makes no reviewer call at all, and one that reaches it later "
+        "has the calls left refused; either way the review is incomplete (exchange_limit_reached), never short of a check",
+    )
+
+
 class RolloutConfig(BaseModel):
     """G-10: three-phase rollout (report section 15.4). shadow: the pipeline runs and records, the
     gate is not enforced; advisory: blocking findings are marked, not enforced; blocking: `mara review`
@@ -284,6 +297,7 @@ class MaraConfig(BaseModel):
     ml_bom: MlBomConfig = Field(default_factory=MlBomConfig, description="G-7: ML-BOM for the self-hosted model weights")
     training: TrainingConfig = Field(default_factory=TrainingConfig, description="G-13: AI-literacy training register")
     rollout: RolloutConfig = Field(default_factory=RolloutConfig, description="G-10: rollout phase (shadow / advisory / blocking)")
+    limits: LimitsConfig = Field(default_factory=LimitsConfig, description="What one review may spend: the exchange limit")
     model_eval: ModelEvalConfig = Field(default_factory=ModelEvalConfig, description="G-8: quarterly red-team evaluation of the model families")
 
     def model_by_name(self, name: str) -> ModelSpec:

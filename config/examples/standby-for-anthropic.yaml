@@ -68,6 +68,8 @@ gate:
   accept_threshold: 0.6
   human_threshold_alpha: 0.4
   finder_corroboration: true
+limits:
+  max_exchanges: 3000
 allow_source_code_to_non_on_prem: false
 anthropic_covered_models_authorized: false
 anthropic_covered_models_authorization_ref: ''

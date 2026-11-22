@@ -106,7 +106,10 @@ target every tracked file is in scope, a tracked `build/`, `dist/` or `node_modu
 any file that reads as text whatever its extension: only a binary is excluded as `unsupported_format`, so a
 change cannot hide code from the models in a directory or under a name the bundle used to skip. Live
 model calls require a current local secret preflight, even when other SARIF was pre-recorded; the only
-exception is `--calibration-sample` (see Live mode). Use
+exception is `--calibration-sample` (see Live mode). `limits.max_exchanges` (3000 in
+`config/mara.yaml`) bounds what one review may spend: a review whose context and reviewer calls would pass it
+makes none of them, one that reaches it in the ballot round has the calls left refused, and either is
+incomplete (`exchange_limit_reached`); it counts prompts sent, not tokens. Use
 HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
 lack two independent judge families when several reviewers find the same issue; add independently
 operated families or complete human review instead of weakening the quorum. `gate.finder_corroboration`

@@ -409,6 +409,7 @@
  "reason.context_truncations": "context truncations",
  "reason.context_unverified_items": "unverified context facts",
  "reason.context_view_incomplete": "the context view is incomplete",
+ "reason.exchange_limit_reached": "the review reached its exchange limit (limits.max_exchanges)",
  "reason.invalid_findings_dropped": "invalid findings dropped",
  "reason.judge_errors": "judge provider errors",
  "reason.judge_invalid_items": "invalid judge items",

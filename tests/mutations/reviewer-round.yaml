@@ -33,5 +33,5 @@ mutations:
   - name: the reviewers are asked although source egress was blocked
     file: src/mara/reviewer_round.py
     caught_by: tests/test_reviewer_round.py::test_no_reviewer_is_asked_when_the_secret_preflight_blocked_source_egress
-    old: "    if egress_blocked:\n        progress.skip("
-    new: "    if False:\n        progress.skip("
+    old: '    skipped = egress_blocked or over_exchange_limit'
+    new: '    skipped = over_exchange_limit'

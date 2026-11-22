@@ -57,6 +57,13 @@ gate:
   # also outside its finders, does not refute it; anything else still goes to a human (docs/adr/0005-jury-outcome.md)
   finder_corroboration: true
 
+# What one review may spend. An exchange is one prompt sent to a model. A repository at the bundle's size limit (16M
+# characters, about 40 batches) takes about 1,500 for the context and reviewer calls (batches x dimensions x
+# reviewers) and a few hundred for the ballots; twice that is the limit. A review that would pass it makes no
+# reviewer call, one that reaches it later has the calls left refused, and either is incomplete, never short of a check.
+limits:
+  max_exchanges: 3000
+
 allow_source_code_to_non_on_prem: false
 
 # Policies enforced at load time (see src/mara/policy.py; `mara check-config` lists them):

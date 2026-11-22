@@ -29,7 +29,8 @@ ROLE_NAMES = (
     "skeptic_retries", "skeptic_truncations", "skeptic_unparseable_replies", "skeptic_unverified_controls",
 )
 OTHER_NAMES = (
-    "bundle_files_changed", "bundle_files_related", "context_view_items", "exchange_version", "finder_corroborated_quorums",
+    "bundle_files_changed", "bundle_files_related", "context_view_items", "exchange_version", "exchanges_refused_at_limit",
+    "finder_corroborated_quorums",
     "findings_deduped", "findings_raw",
     "global_krippendorff_alpha", "human_decisions_applied", "human_decisions_not_usable", "input_tokens", "judge_agreement",
     "output_tokens", "position_flips", "redteam_same_family", "secret_preflight_calibration_exempted", "self_family_fallback_votes",
