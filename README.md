@@ -267,7 +267,7 @@ Each run is a `mara review` subprocess with its own directory `out/runs/<run-id>
 the roles and models of the config at launch in `run.json`, the child's output in `run.log`, every report the command line writes,
 and `progress.json`, which `mara review --progress-file` rewrites at every stage boundary. Every check of the command line still
 decides, and the server repeats them before it starts the child only to name the refusal on the page. One review runs at a time,
-and never while a job replaces the tools or the trivy database; stopping the server (Ctrl-C, SIGTERM, SIGHUP) cancels it, and a server that starts first stops any review or job an earlier server left running (a killed server; Linux only, where `/proc` says which command a pid runs). The PSIRT options stay on the command line, because they start legal clocks. A plain
+and never while a job replaces the tools or the trivy database; stopping the server (Ctrl-C, SIGTERM, SIGHUP) cancels it, a maintenance job can be stopped from the page and is stopped after its timeout (thirty minutes for an install or a download), and a server that starts first stops any review or job an earlier server left running (a killed server; Linux only, where `/proc` says which command a pid runs). The PSIRT options stay on the command line, because they start legal clocks. A plain
 `mara review` into `out/` appears read-only in the list.
 
 The server listens on a loopback address only (`--host 127.0.0.1`, `localhost` or `::1`; reach a remote one through an SSH tunnel,

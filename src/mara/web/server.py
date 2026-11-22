@@ -396,6 +396,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.OK, {"jobs": app.jobs.list()})
                 case "POST", ["jobs"]:
                     self._json(HTTPStatus.CREATED, {"job": app.jobs.create(JobRequest.model_validate(payload))})
+                case "POST", ["jobs", job_id, "cancel"]:
+                    self._json(HTTPStatus.OK, {"job": app.jobs.cancel(job_id)})
                 case "GET", ["jobs", job_id]:
                     job = app.jobs.get(job_id)
                     if job is None:

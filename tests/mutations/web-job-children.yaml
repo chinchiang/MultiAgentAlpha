@@ -10,12 +10,8 @@ mutations:
 - name: a job exiting 0 recorded failed
   file: src/mara/web/jobs.py
   caught_by: 'tests/test_web_server.py::test_a_job_whose_exit_is_recorded_while_it_is_read_is_never_read_as_interrupted[job.json is read]'
-  old: '        job.update(status="finished" if code == 0 else "failed", exit_code=code, finished_at=procs.now())
-
-    '
-  new: '        job.update(status="failed", exit_code=code, finished_at=procs.now())
-
-    '
+  old: '        status = "timed_out" if timed_out else "cancelled" if stopped else "finished" if code == 0 else "failed"'
+  new: '        status = "timed_out" if timed_out else "cancelled" if stopped else "failed"'
 - name: a job registry with a table of its own, not the server's
   file: src/mara/web/server.py
   caught_by: tests/test_web_server.py::test_one_review_at_a_time_and_cancel_stops_it

@@ -1,0 +1,45 @@
+focused: [tests/test_web_job_cancel.py]
+mutations:
+  - name: a stopped job is recorded by its exit code
+    file: src/mara/web/jobs.py
+    caught_by: tests/test_web_job_cancel.py::test_a_running_job_is_stopped_and_recorded_cancelled
+    old: '        status = "timed_out" if timed_out else "cancelled" if stopped else "finished" if code == 0 else "failed"'
+    new: '        status = "timed_out" if timed_out else "finished" if code == 0 else "failed"'
+  - name: a job stopped by its timeout is recorded cancelled
+    file: src/mara/web/jobs.py
+    caught_by: tests/test_web_job_cancel.py::test_a_job_that_runs_past_its_timeout_is_stopped_and_recorded_timed_out
+    old: '        status = "timed_out" if timed_out else "cancelled" if stopped else "finished" if code == 0 else "failed"'
+    new: '        status = "cancelled" if stopped else "finished" if code == 0 else "failed"'
+  - name: a job is never stopped by its timeout
+    file: src/mara/web/jobs.py
+    caught_by: tests/test_web_job_cancel.py::test_a_job_that_runs_past_its_timeout_is_stopped_and_recorded_timed_out
+    old: '        timer.start()'
+    new: '        pass'
+  - name: a cancel of a job that is not running is answered as done
+    file: src/mara/web/jobs.py
+    caught_by: tests/test_web_job_cancel.py::test_a_job_that_is_not_running_cannot_be_cancelled
+    error: Failed
+    old: '        if not procs.ID_RE.match(job_id) or self.children.stop(job_id) != "stopped":'
+    new: '        if not procs.ID_RE.match(job_id) or self.children.stop(job_id) == "unknown":'
+  - name: the timer of a job that ended is kept
+    file: src/mara/web/jobs.py
+    caught_by: tests/test_web_job_cancel.py::test_a_job_that_ends_in_time_is_recorded_by_its_exit_code_and_its_timer_is_dropped
+    old: |-
+      def _record_exit(self, job_id: str, code: int, stopped: bool) -> None:
+              """Record how a job ended: timed_out when its timeout stopped it, cancelled when anything else did (a cancel, the
+              server's exit), else finished or failed by its exit code."""
+              self._forget_timer(job_id)
+    new: |-
+      def _record_exit(self, job_id: str, code: int, stopped: bool) -> None:
+              """Record how a job ended: timed_out when its timeout stopped it, cancelled when anything else did (a cancel, the
+              server's exit), else finished or failed by its exit code."""
+  - name: a kind of job has no timeout
+    file: src/mara/web/jobs.py
+    caught_by: tests/test_web_job_cancel.py::test_every_kind_of_job_has_a_timeout
+    old: '"trivy_db_download": 30 * 60, "trivy_db_status": 5 * 60,'
+    new: '"trivy_db_download": 30 * 60,'
+  - name: the server has no route to stop a job
+    file: src/mara/web/server.py
+    caught_by: tests/test_web_job_cancel.py::test_the_page_stops_a_job_through_the_server
+    old: '                case "POST", ["jobs", job_id, "cancel"]:'
+    new: '                case "POST", ["jobs", job_id, "cancel-off"]:'
