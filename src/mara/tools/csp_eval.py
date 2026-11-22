@@ -195,10 +195,12 @@ def build_sarif(policies: list[CspPolicy], results: list[ToolResult], *, version
                 note: str = "", truncated: bool = False, parse_errors: list[str] | None = None,
                 skipped: list[str] | None = None) -> dict:
     """A truncated extraction is a failed invocation (executionSuccessful false, an error notification): a target
-    could otherwise flood the cap with dummy policies and have its real ones go unread behind a complete-looking run."""
+    could otherwise flood the cap with dummy policies and have its real ones go unread behind a complete-looking run.
+    So is one that skipped a file (over MAX_FILE_BYTES, or unreadable): a policy in a file padded past the limit went
+    unread while the scan counted as the CSP dimension's required tool having run."""
     notifications = [{"level": "note", "descriptor": {"id": "CSP_PARSE_ERROR"}, "message": {"text": m}}
                      for m in (parse_errors or [])]
-    notifications += [{"level": "note", "descriptor": {"id": "CSP_FILE_SKIPPED"}, "message": {"text": m}} for m in (skipped or [])]
+    notifications += [{"level": "error", "descriptor": {"id": "CSP_FILE_SKIPPED"}, "message": {"text": m}} for m in (skipped or [])]
     if truncated:
         notifications.append({"level": "error", "descriptor": {"id": "CSP_POLICY_CAP"},
                               "message": {"text": f"policy extraction stopped at {MAX_POLICIES} policies; later files were not read"}})
@@ -216,7 +218,7 @@ def build_sarif(policies: list[CspPolicy], results: list[ToolResult], *, version
                 "rules": [],
             }},
             "invocations": [{
-                "executionSuccessful": not truncated,
+                "executionSuccessful": not truncated and not skipped,
                 "properties": props,
                 "toolExecutionNotifications": notifications,
             }],

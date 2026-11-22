@@ -67,7 +67,11 @@ Git targets include tracked source only: a repository root and any directory tra
 repository's HEAD (a subdirectory such as `fixtures/vuln-sample`) are read through `git ls-files`, and
 if git cannot answer (dubious ownership, a broken index) the review fails closed with
 `git_ls_files_failed` instead of walking the tree. Only a directory outside any committed history
-(including one that merely sits inside a home-directory dotfiles repo) is walked.
+(including one that merely sits inside a home-directory dotfiles repo) is walked. Every git MARA or a
+scanner runs in the target is given `core.fsmonitor=false` and an empty hooks path through its environment,
+which outranks the target's own `.git/config`: a target that is an unpacked archive rather than a clone
+could otherwise name a program there and have the review run it. A target's own file at the path the
+canary is planted at (`__mara_canary__.md`) is omitted as `reserved_path`, and the review is incomplete.
 
 MARA's own trust anchors live in the MARA workspace, never in the code under review: the pinned
 tools (`.mara-tools`, or `MARA_TOOLS_DIR`), policy P8's evidence `calib/latest.json`, the human-queue

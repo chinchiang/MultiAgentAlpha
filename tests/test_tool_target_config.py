@@ -54,6 +54,7 @@ def test_every_tool_is_handed_neutral_config_instead_of_the_targets(tmp_path, mo
     assert "--x-ignore-semgrepignore-files" in seen["semgrep"]
     osv_config = Path(_argv_after(seen["osv-scanner"], "--config"))
     assert osv_config.read_text(encoding="utf-8") == "" and out.resolve() in osv_config.parents
+    assert "--no-ignore" in seen["osv-scanner"], "a committed lockfile the target's .gitignore names is scanned too"
     assert {"--no-config", "--no-ignores", "--collect=all"} <= set(seen["zizmor"])
     trivy_ignore, trivy_config = Path(_argv_after(seen["trivy"], "--ignorefile")), Path(_argv_after(seen["trivy"], "--config"))
     assert trivy_ignore.read_text(encoding="utf-8") == "" and trivy_config.read_text(encoding="utf-8") == "{}\n"

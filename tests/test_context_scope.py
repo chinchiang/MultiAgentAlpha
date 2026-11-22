@@ -7,7 +7,8 @@ import subprocess
 
 import pytest
 
-from mara.context.repo_map import MAX_FILE_BYTES, build_context, looks_like_text
+from mara import exchange
+from mara.context.repo_map import CANARY_PATH, MAX_FILE_BYTES, build_context, looks_like_text
 
 PNG = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"
 
@@ -64,6 +65,16 @@ def test_a_generated_directory_of_a_walked_directory_is_still_excluded(tmp_path)
     ctx = build_context(root)
     assert ctx.excluded == {"node_modules/x/index.js": "generated_directory"}
     assert list(ctx.content) == ["app.py"]
+
+
+def test_a_targets_own_file_at_the_canarys_path_is_omitted_so_the_coverage_is_incomplete(tmp_path):
+    """Bundled beside the planted canary, it was read by the models, and every finding citing it was set aside as a
+    canary report (mara.exchange.cites_canary): whatever the target put at that path went unreviewed, unseen."""
+    ctx = build_context(git_target(tmp_path / "t", {"src/ok.py": b"print(1)\n", CANARY_PATH: b"eval(input())\n",
+                                                    "docs/" + CANARY_PATH: b"only the top-level path is the plant's\n"}))
+    assert ctx.omitted == {CANARY_PATH: "reserved_path"} and not ctx.complete
+    assert sorted(ctx.content) == ["docs/" + CANARY_PATH, "src/ok.py"]
+    assert exchange.CANARY_PATH == CANARY_PATH, "one path: the plant's and the one the bundle keeps free"
 
 
 @pytest.mark.parametrize("data, text", [(b"plain\n", True), ("中文\n".encode(), True), ("中文".encode()[:-1], True), (b"", True),

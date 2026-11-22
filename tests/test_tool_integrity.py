@@ -48,7 +48,9 @@ def test_skipped_files_are_reported_and_dot_directories_are_read(tmp_path):
     assert not truncated and skipped == ["big.js: over 512 KiB, not read"]
     doc = csp_eval.build_sarif(policies, [], version="1", skipped=skipped)
     notes = doc["runs"][0]["invocations"][0]["toolExecutionNotifications"]
-    assert scan_complete(doc) and any(n["descriptor"]["id"] == "CSP_FILE_SKIPPED" and "big.js" in n["message"]["text"] for n in notes)
+    assert any(n["descriptor"]["id"] == "CSP_FILE_SKIPPED" and "big.js" in n["message"]["text"] for n in notes)
+    # a file that was not read may hold the policy that matters: the scan did not complete (tests/test_tools_csp.py)
+    assert not scan_complete(doc)
 
 
 # ------------------------------------------------------------------ no interpreter from PATH

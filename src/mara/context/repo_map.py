@@ -60,6 +60,10 @@ MANIFESTS = {
     "Cargo.toml",
     "Cargo.lock",
 }
+# The path every exchange plants its canary at (mara.exchange.Canary). A target's own file of that name would sit in
+# the bundle beside the plant, and a finding that cites the path is set aside as a canary report: whatever the
+# target put there went unreviewed. Such a file is omitted, which leaves the coverage incomplete.
+CANARY_PATH = "__mara_canary__.md"
 MAX_FILE_BYTES = 200_000
 MAX_TOTAL_CHARS = 400_000
 MAX_REPOSITORY_CHARS = 16_000_000
@@ -297,16 +301,34 @@ def _content_hash(content: dict[str, str]) -> str:
 # and a timeout reads as a failed call, which each caller already treats as "git cannot answer".
 GIT_TIMEOUT = 60
 
+# Settings every git that runs in the target is given through its environment, where they outrank the target's own
+# .git/config as `-c` does. The target is untrusted, and its config is not part of what `git clone` copies but is
+# part of an unpacked archive or a prepared checkout: `core.fsmonitor = /path/to/program` made the first git call of
+# a review run that program, with the review's environment, provider keys included. No hook runs from the target
+# either. This closes the settings that the read-only calls here and the scanners' own (semgrep lists files with
+# git) are known to follow; it is not a list of every setting that names a program.
+GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull}
+
+
+def git_safe_env() -> dict[str, str]:
+    """GIT_SAFE_CONFIG as the GIT_CONFIG_COUNT / GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n variables git reads it from."""
+    env = {"GIT_CONFIG_COUNT": str(len(GIT_SAFE_CONFIG))}
+    for i, (key, value) in enumerate(GIT_SAFE_CONFIG.items()):
+        env[f"GIT_CONFIG_KEY_{i}"] = key
+        env[f"GIT_CONFIG_VALUE_{i}"] = value
+    return env
+
 
 def _run_git(root: Path, *args: str, text: bool = True) -> subprocess.CompletedProcess | None:
     """git in `root`, or None when it does not finish in GIT_TIMEOUT or cannot start. Text output is
     UTF-8 (what git writes), not the locale code page: on a cp950 host a non-ASCII path came back
-    garbled or failed to decode."""
+    garbled or failed to decode. It runs under GIT_SAFE_CONFIG, whatever the config of `root` says."""
+    env = {**os.environ, **git_safe_env()}
     try:
         if text:
             return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT,
-                                  encoding="utf-8", errors="replace")
-        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT)
+                                  encoding="utf-8", errors="replace", env=env)
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False, timeout=GIT_TIMEOUT, env=env)
     except (subprocess.TimeoutExpired, OSError):
         return None
 
@@ -636,6 +658,9 @@ def build_context(root: str | Path) -> RepoContext:
             ctx.workflows.append(p)
         if _SECRET_FILE.match(p.name):
             ctx.excluded[rel] = "secret_file"
+            continue
+        if rel == CANARY_PATH:
+            ctx.omitted[rel] = "reserved_path"
             continue
         known = ext in TEXT_EXT or p.name in MANIFESTS or p.name == "Dockerfile"
         try:

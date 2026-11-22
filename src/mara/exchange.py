@@ -34,7 +34,7 @@ from typing import Any, Final, Literal, get_args
 
 from pydantic import ValidationError
 
-from .context.repo_map import RepoContext
+from .context.repo_map import CANARY_PATH, RepoContext
 from .providers.base import STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply, clip_strings
 
 # 1: the adapters' own rules (unparseable replies filed as truncations, an empty reply a refusal in two families)
@@ -192,7 +192,7 @@ def parse_items(outcome: Outcome, model_cls, key: str = "items") -> tuple[list |
 
 # ---------------------------------------------------------------- canary
 
-CANARY_PATH = "__mara_canary__.md"
+# CANARY_PATH, where the canary is planted, is mara.context.repo_map's: the bundle keeps a target's own file off it
 
 
 def cites_canary(item: Any) -> bool:

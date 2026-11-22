@@ -116,6 +116,23 @@ def test_extraction_cap_is_reported(tmp_path):
     assert truncated and len(policies) == csp_eval.MAX_POLICIES
 
 
+def test_a_scan_that_skipped_a_file_did_not_complete(tmp_path):
+    """A policy in a file padded past MAX_FILE_BYTES went unread while the scan counted as complete, so the CSP
+    dimension's required tool had "run": a skipped file is now an error notification of a failed invocation."""
+    from mara.tools.sarif import scan_complete
+
+    _write(tmp_path, "big.html", '<meta http-equiv="Content-Security-Policy" content="default-src *">' + " " * (csp_eval.MAX_FILE_BYTES + 1))
+    skipped: list[str] = []
+    assert csp_eval.extract_policies(tmp_path, skipped) == ([], False)
+    assert skipped == [f"big.html: over {csp_eval.MAX_FILE_BYTES // 1024} KiB, not read"]
+    doc = csp_eval.build_sarif([], [], version="1", skipped=skipped)
+    invocation = doc["runs"][0]["invocations"][0]
+    assert invocation["executionSuccessful"] is False
+    assert [(n["level"], n["descriptor"]["id"]) for n in invocation["toolExecutionNotifications"]] == [("error", "CSP_FILE_SKIPPED")]
+    assert not scan_complete(doc)
+    assert scan_complete(csp_eval.build_sarif([], [], version="1", skipped=[])), "a scan that read every file completes"
+
+
 def test_skips_oversized_and_hidden_files(tmp_path):
     _write(tmp_path, "big.html", '<meta http-equiv="Content-Security-Policy" content="default-src x">' + " " * (csp_eval.MAX_FILE_BYTES + 1))
     _write(tmp_path, "node_modules/lib.js", "h = {'Content-Security-Policy': \"default-src 'self'\"}")
