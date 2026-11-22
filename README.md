@@ -24,6 +24,22 @@ This repository contains two things:
    endpoint) when configured. `mara serve` adds a local, bilingual web workbench on top of the command
    line; its [read-only demo](https://chinchiang.github.io/MultiAgentAlpha/workbench/) runs on GitHub Pages.
 
+**Start here.** With Python 3.11 on Linux x86_64 and a virtual environment active, three installs and one command
+give a complete offline review of the seeded vulnerable fixture, with no API key and no network after the installs
+(other interpreters and platforms: [INSTALL.md](INSTALL.md) section 2.3):
+
+```bash
+python -m pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt
+python -m pip install --require-hashes --only-binary=:all: -r tools/build-requirements.txt
+python -m pip install --no-deps --no-build-isolation -e .
+mara review fixtures/vuln-sample --provider mock --sarif-dir fixtures/vuln-sample-sarif --out out   # or `mara`: the same in the browser
+```
+
+It writes `out/report.md`, `report.json`, `report.sarif` and `human_queue.md`. Where to read next:
+[Architecture](#architecture) for how a review runs, [Live mode](#live-mode) for real models,
+[Status](#status) for what has and has not been validated, and [INSTALL.md](INSTALL.md) for every installation layer.
+The sections in between are reference material for one subject each.
+
 ## Online report (GitHub Pages)
 
 The HTML edition of the report is served by GitHub Pages straight from the `docs/` folder of
@@ -34,7 +50,7 @@ are (Jekyll would otherwise try to build the Markdown and mishandle the non-ASCI
 name), and `docs/index.html` is a self-contained redirect to the report, so the public address is
 just <https://chinchiang.github.io/MultiAgentAlpha/>. Pages has been live since 2026-09-17 (the "pages build and deployment" runs in the Actions tab are
 the deployment record). **The site stays public while the repository is private**: after the
-repository became private on 2026-09-21, Pages kept building on every push to `main`, and on
+repository became private on 2026-09-21 (it has been public again since 2026-10-12), Pages kept building on every push to `main`, and on
 2026-09-24 the address, the report and the other `docs/` files still answered 200 to an anonymous
 request (the Pages API reports `public: true`). Keeping it public is the owner's decision of
 2026-09-24; to take the report offline instead, unpublish the site under Settings → Pages. The
@@ -193,7 +209,7 @@ Found a security problem in this repository's own code? See [SECURITY.md](SECURI
 
 ## Quick start (offline)
 
-Step-by-step installation (bilingual, 正體中文 / English), including how to obtain the private repository, the non-Linux fallback and the optional tool and live-model layers, is in [INSTALL.md](INSTALL.md).
+Step-by-step installation (bilingual, 正體中文 / English), including how to obtain the repository, the non-Linux fallback and the optional tool and live-model layers, is in [INSTALL.md](INSTALL.md).
 
 ```bash
 python -m pip install --require-hashes --only-binary=:all: -r tools/dev-requirements.txt   # the resolved, hash-pinned closure
@@ -900,7 +916,7 @@ tools/             versions.lock, hash-pinned Python closures, triage / ignore /
 sbom/              ML-BOM manifest (models.yaml) and the CycloneDX BOM
 ops/               model-swap drill register, PSIRT records
 training/          AI-literacy curriculum, quiz and register (G-13)
-.github/workflows  four hardened workflows: mara-review, scorecard, governance, docs-check (SHA-pinned, least privilege)
+.github/workflows  five hardened workflows: mara-review, scorecard, governance, docs-check, osv-watch (SHA-pinned, least privilege)
 ```
 
 ## Status
