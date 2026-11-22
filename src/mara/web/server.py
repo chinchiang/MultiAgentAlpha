@@ -25,6 +25,7 @@ runs and reads the workspace, and at exit it stops every child still running thr
 from __future__ import annotations
 
 import base64
+import contextlib
 import datetime as dt
 import hashlib
 import hmac
@@ -37,6 +38,7 @@ import signal
 import socket
 import sys
 import threading
+from collections.abc import Iterator
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
@@ -471,6 +473,25 @@ def _stop_on_signals() -> dict[int, Any]:
     return previous
 
 
+@contextlib.contextmanager
+def _signals_ignored(previous: dict[int, Any]) -> Iterator[None]:
+    """Ignore, for the block, the signals of `previous` (those _stop_on_signals took over) and SIGINT, then give each
+    its handler back. Ctrl-C is the signal a waiting operator sends again: left to raise KeyboardInterrupt inside the
+    cleanup, a second one ended the server with the review it was stopping still running and recorded as running.
+    Only the main thread may set a handler; on any other, nothing is changed."""
+    held = dict(previous)
+    if threading.current_thread() is threading.main_thread():
+        held.setdefault(signal.SIGINT, signal.getsignal(signal.SIGINT))
+        for sig in held:
+            signal.signal(sig, signal.SIG_IGN)
+    try:
+        yield
+    finally:
+        if threading.current_thread() is threading.main_thread():
+            for sig, handler in held.items():
+                signal.signal(sig, handler)
+
+
 def serve(*, host: str, port: int, root: Path, out_dir: Path, open_browser: bool, echo: Any = print) -> None:
     """Run until interrupted (Ctrl-C, SIGTERM, SIGHUP); then every child still running is stopped, and each run or job
     still running gets up to `procs.WAITER_JOIN_SECONDS` to be recorded: a stopped run cancelled, a stopped job with the
@@ -480,6 +501,9 @@ def serve(*, host: str, port: int, root: Path, out_dir: Path, open_browser: bool
     echo(f"MARA workbench {__version__} · workspace {httpd.root} · runs in {httpd.runs.runs_dir}")
     echo(f"open: {url}")
     echo("the link is the key to this server: do not share it; Ctrl-C stops the server and any running review or job")
+    for kind, ids in (("review", httpd.runs.stop_survivors()), ("job", httpd.jobs.stop_survivors())):
+        for child_id in ids:
+            echo(f"stopped a {kind} an earlier server left running: {child_id}")
     previous = _stop_on_signals()
     redirect: Path | None = None
     try:
@@ -492,11 +516,8 @@ def serve(*, host: str, port: int, root: Path, out_dir: Path, open_browser: bool
     except KeyboardInterrupt:
         pass
     finally:
-        for sig in previous:
-            signal.signal(sig, signal.SIG_IGN)  # a second signal must not cut the cleanup short
-        echo("stopping: cancelling any running review and stopping any running job")
-        httpd.close()
-        if redirect is not None:
-            redirect.unlink(missing_ok=True)
-        for sig, handler in previous.items():
-            signal.signal(sig, handler)
+        with _signals_ignored(previous):  # a second signal must not cut the cleanup short
+            echo("stopping: cancelling any running review and stopping any running job")
+            httpd.close()
+            if redirect is not None:
+                redirect.unlink(missing_ok=True)

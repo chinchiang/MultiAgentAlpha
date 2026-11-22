@@ -86,6 +86,21 @@ class JobRegistry:
         job.update(status="finished" if code == 0 else "failed", exit_code=code, finished_at=procs.now())
         procs.write_json(d / "job.json", job)
 
+    def stop_survivors(self, grace: float = procs.STOP_GRACE_SECONDS) -> list[str]:
+        """Stop every job an earlier server left running (procs.is_survivor) and record it interrupted; a job left
+        running kept replacing the tools or the database under the reviews this server admitted. Returns the jobs
+        stopped."""
+        stopped = []
+        for d in sorted(self.jobs_dir.iterdir()) if self.jobs_dir.is_dir() else []:
+            job = procs.read_json(d / "job.json")
+            if job is None or job.get("status") != "running" or self.children.running(d.name):
+                continue
+            if procs.stop_survivor(job.get("pid"), job.get("argv"), grace):
+                job.update(status="interrupted", finished_at=procs.now())
+                procs.write_json(d / "job.json", job)
+                stopped.append(d.name)
+        return stopped
+
     def get(self, job_id: str, lines: int = 400) -> dict[str, Any] | None:
         if not procs.ID_RE.match(job_id):
             return None

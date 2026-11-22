@@ -1,0 +1,47 @@
+focused: [tests/test_web_survivors.py]
+mutations:
+  - name: a live pid is a survivor whatever command holds it
+    file: src/mara/web/procs.py
+    caught_by: tests/test_web_survivors.py::test_a_survivor_is_a_live_pid_with_exactly_the_recorded_command_line
+    old: '    return [os.fsdecode(part) for part in raw.split(b"\0")[:-1]] == [str(a) for a in argv]'
+    new: '    return True'
+  - name: a survivor is not asked to exit
+    file: src/mara/web/procs.py
+    caught_by: tests/test_web_survivors.py::test_the_next_server_stops_a_review_an_earlier_one_left_running_and_records_it_interrupted
+    old: '    for sig, wait in ((signal.SIGTERM, grace), (getattr(signal, "SIGKILL", signal.SIGTERM), KILL_WAIT_SECONDS)):'
+    new: '    for sig, wait in ((getattr(signal, "SIGKILL", signal.SIGTERM), KILL_WAIT_SECONDS),):'
+  - name: a survivor that ignores SIGTERM is never killed
+    file: src/mara/web/procs.py
+    caught_by: tests/test_web_survivors.py::test_a_survivor_that_ignores_sigterm_is_killed_after_the_grace
+    error: TimeoutExpired
+    old: '    for sig, wait in ((signal.SIGTERM, grace), (getattr(signal, "SIGKILL", signal.SIGTERM), KILL_WAIT_SECONDS)):'
+    new: '    for sig, wait in ((signal.SIGTERM, grace),):'
+  - name: a stopped survivor's run stays recorded running
+    file: src/mara/web/runs.py
+    caught_by: tests/test_web_survivors.py::test_the_next_server_stops_a_review_an_earlier_one_left_running_and_records_it_interrupted
+    old: '                manifest.update(status="interrupted", finished_at=procs.now())'
+    new: '                manifest.update(finished_at=procs.now())'
+  - name: a run that is not recorded running is stopped too
+    file: src/mara/web/runs.py
+    caught_by: tests/test_web_survivors.py::test_a_recorded_pid_that_another_command_holds_now_is_left_alone
+    old: '            if manifest is None or manifest.get("status") != "running" or self.children.running(d.name):'
+    new: '            if manifest is None or self.children.running(d.name):'
+  - name: a stopped survivor's job stays recorded running
+    file: src/mara/web/jobs.py
+    caught_by: tests/test_web_survivors.py::test_a_survivor_that_ignores_sigterm_is_killed_after_the_grace
+    old: '                job.update(status="interrupted", finished_at=procs.now())'
+    new: '                job.update(finished_at=procs.now())'
+  - name: Ctrl-C left to interrupt the cleanup
+    file: src/mara/web/server.py
+    caught_by: tests/test_web_survivors.py::test_a_second_ctrl_c_does_not_cut_the_cleanup_short
+    old: '        held.setdefault(signal.SIGINT, signal.getsignal(signal.SIGINT))'
+    new: '        pass'
+  - name: the handlers are not given back after the cleanup
+    file: src/mara/web/server.py
+    caught_by: tests/test_web_survivors.py::test_a_second_ctrl_c_does_not_cut_the_cleanup_short
+    old: |-
+      for sig, handler in held.items():
+                      signal.signal(sig, handler)
+    new: |-
+      for sig, handler in held.items():
+                      pass

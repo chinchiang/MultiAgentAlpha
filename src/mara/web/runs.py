@@ -192,6 +192,23 @@ class RunRegistry:
         manifest.update(status=status, exit_code=code, finished_at=procs.now())
         procs.write_json(run_dir / "run.json", manifest)
 
+    def stop_survivors(self, grace: float = procs.STOP_GRACE_SECONDS) -> list[str]:
+        """Stop every run an earlier server left running (procs.is_survivor: its record says running, this server does
+        not own it, and its pid still runs with the record's command line), and record it interrupted, its progress
+        record closed. Left alone, such a review ran on beside the next one this server admitted, or under an
+        environment job replacing the tools it was using, and could not be cancelled. Returns the runs stopped."""
+        stopped = []
+        for d in sorted(self.runs_dir.iterdir()) if self.runs_dir.is_dir() else []:
+            manifest = procs.read_json(d / "run.json")
+            if manifest is None or manifest.get("status") != "running" or self.children.running(d.name):
+                continue
+            if procs.stop_survivor(manifest.get("pid"), manifest.get("argv"), grace):
+                progress_mod.close_abandoned(d / "progress.json", "stopped: the server that started it had ended")
+                manifest.update(status="interrupted", finished_at=procs.now())
+                procs.write_json(d / "run.json", manifest)
+                stopped.append(d.name)
+        return stopped
+
     def cancel(self, run_id: str) -> dict[str, Any]:
         # a run whose child exited by itself has nothing to stop and is not cancelled: stop() waits for its exit to be recorded
         if self.children.stop(run_id) != "stopped":
