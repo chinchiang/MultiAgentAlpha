@@ -70,6 +70,35 @@ def test_a_program_the_targets_git_config_names_is_not_run(repo, tmp_path):
     assert marker.exists()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the stand-in upload-pack program is a shell script")
+def test_a_transport_program_the_targets_git_config_names_is_not_run(repo, tmp_path):
+    """A partial-clone (promisor) target names an upload-pack program in remote.<name>.uploadpack; git ran it with the
+    review's environment when an ordinary read faulted in a missing object. GIT_SAFE_CONFIG denies every transport, so
+    the lazy fetch does not run the program; the review's metadata-only git calls are unaffected and still see the
+    files."""
+    root = repo.parents[1]
+    marker = tmp_path / "ran"
+    program = tmp_path / "uploadpack.sh"
+    program.write_text(f"#!/bin/sh\ntouch '{marker}'\n", encoding="utf-8")
+    program.chmod(0o755)
+    tree = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD^{tree}"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    (root / ".git" / "objects" / tree[:2] / tree[2:]).unlink()  # a read must now lazily fetch the tree
+    with (root / ".git" / "config").open("a", encoding="utf-8") as fh:
+        fh.write(f'[remote "pr"]\n\turl = {root}\n\tpromisor = true\n\tpartialclonefilter = blob:none\n'
+                 f'\tuploadpack = "{program}"\n[extensions]\n\tpartialClone = pr\n')
+    cfg = (root / ".git" / "config").read_text(encoding="utf-8").replace("repositoryformatversion = 0",
+                                                                         "repositoryformatversion = 1")
+    (root / ".git" / "config").write_text(cfg, encoding="utf-8")
+
+    ctx = build_context(repo)
+    assert not marker.exists(), "the target's upload-pack program ran"
+    assert sorted(ctx.content) == ["a.py", "b.py"]
+    # the program does run for a git that is not given the settings: the test would notice
+    subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", "--quiet", "HEAD:./"], capture_output=True)
+    assert marker.exists()
+
+
 def test_a_tool_runs_git_under_the_same_settings():
     """semgrep lists the target's files with git: a tool's environment carries the settings too."""
     from mara.context.repo_map import GIT_SAFE_CONFIG, git_safe_env

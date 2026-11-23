@@ -314,11 +314,24 @@ GIT_TIMEOUT = 60
 
 # Settings every git that runs in the target is given through its environment, where they outrank the target's own
 # .git/config as `-c` does. The target is untrusted, and its config is not part of what `git clone` copies but is
-# part of an unpacked archive or a prepared checkout: `core.fsmonitor = /path/to/program` made the first git call of
-# a review run that program, with the review's environment, provider keys included. No hook runs from the target
-# either. This closes the settings that the read-only calls here and the scanners' own (semgrep lists files with
-# git) are known to follow; it is not a list of every setting that names a program.
-GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull}
+# part of an unpacked archive or a prepared checkout: a setting that names a program made a git call of a review run
+# that program, with the review's environment, provider keys included.
+#   - core.fsmonitor and core.hooksPath name programs git runs with no transport (on an index read, on a ref update);
+#     they are set to a non-program so the target's cannot run.
+#   - protocol.allow=never denies every transport git might open. This is the one setting that closes a whole family
+#     rather than a named key: remote.<name>.uploadpack, core.sshCommand, url.<base>.insteadOf=ext::…, core.gitProxy
+#     and the git:// proxy all take effect only when git opens a transport, and the dangerous one needs no special
+#     command: a partial-clone (promisor) target whose object is missing makes an ordinary read-only call (rev-parse,
+#     ls-files) lazily fetch it and run the target's upload-pack program. None of the review's own git calls opens a
+#     transport, so denying every one costs nothing here; a missing object is left unresolved, which the callers treat
+#     as "git cannot answer".
+# The remaining program-naming settings (filter.<name>.clean/smudge via .gitattributes, diff.<driver>.textconv,
+# diff.external) fire only when git materialises a blob's content (checkout, archive, a content diff, git log -p). The
+# calls here and the scanners' own are metadata only (merge-base, diff --name-only, rev-parse, ls-files, and semgrep's
+# git ls-files; gitleaks runs in `dir` mode, not over history), so none of those settings is reached. A git command
+# that materialises content, were one added, would need them neutralised too; this is not a list of every setting that
+# names a program.
+GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull, "protocol.allow": "never"}
 
 
 def git_safe_env(env: Mapping[str, str] | None = None) -> dict[str, str]:

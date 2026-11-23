@@ -9,8 +9,13 @@ mutations:
   - name: the fsmonitor setting left to the target
     file: src/mara/context/repo_map.py
     caught_by: tests/test_git_subprocess_bounds.py::test_a_program_the_targets_git_config_names_is_not_run
-    old: 'GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull}'
-    new: 'GIT_SAFE_CONFIG = {"core.hooksPath": os.devnull}'
+    old: 'GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull, "protocol.allow": "never"}'
+    new: 'GIT_SAFE_CONFIG = {"core.hooksPath": os.devnull, "protocol.allow": "never"}'
+  - name: the transport denial left to the target
+    file: src/mara/context/repo_map.py
+    caught_by: tests/test_git_subprocess_bounds.py::test_a_transport_program_the_targets_git_config_names_is_not_run
+    old: 'GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull, "protocol.allow": "never"}'
+    new: 'GIT_SAFE_CONFIG = {"core.fsmonitor": "false", "core.hooksPath": os.devnull}'
   - name: a tool's environment carries no git settings
     file: src/mara/tools/runner.py
     caught_by: tests/test_git_subprocess_bounds.py::test_a_tool_runs_git_under_the_same_settings
