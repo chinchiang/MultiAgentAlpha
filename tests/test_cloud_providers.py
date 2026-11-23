@@ -130,7 +130,7 @@ def test_bedrock_credential_errors_become_a_sanitised_code():
         pass
 
     NoCredentialsError.__module__ = "botocore.exceptions"
-    client, _ = _fake_client(raises=NoCredentialsError("Unable to locate credentials in profile Inventec-IT-..."))
+    client, _ = _fake_client(raises=NoCredentialsError("Unable to locate credentials in profile Example-IT-..."))
     with pytest.raises(RuntimeError, match=r"^provider_auth_failed$"):
         _call(BedrockProvider(_bedrock_spec(), client=client))
     client, _ = _fake_client(raises=KeyError("bug"))
@@ -236,7 +236,7 @@ def test_gemini_records_the_model_version_that_answered():
 
 
 def test_the_gateway_models_use_its_current_names_and_one_endpoint():
-    """Since 2026-10-07 the IEC gateway serves GLM and DeepSeek from one endpoint with one key, told apart by
+    """Since 2026-10-07 the internal gateway serves GLM and DeepSeek from one endpoint with one key, told apart by
     `model` (glm / deepseek); the key may access only those two names, and the old DeepSeek endpoint answers 401."""
     from pathlib import Path
 

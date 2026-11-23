@@ -46,10 +46,10 @@ and without calling any endpoint (credentials unset) the command line was read b
   OpenAICompatible generator still takes `uri` and reads OPENAICOMPATIBLE_API_KEY.
 - `scripts/model_eval.py plan` prints the same commands for the three families.
 Not checked on 0.17.1, because it needs the endpoints: that a probe runs, the report JSONL's `eval` rows
-(`total_evaluated`, `nones`), Opus 5.5 on Bedrock with `temperature` and `top_p` suppressed, and the IEC gateway's
+(`total_evaluated`, `nones`), Opus 5.5 on Bedrock with `temperature` and `top_p` suppressed, and the internal gateway's
 certificate chain through SSL_CERT_FILE. The first run on the G-8 host starts with `garak_probes: [test.Test]`.
 
-Re-checked on 2026-10-08 for the production panel (Claude on Bedrock, Gemini, GLM on the IEC gateway):
+Re-checked on 2026-10-08 for the production panel (Claude on Bedrock, Gemini, GLM on the internal gateway):
 - garak 0.17.0 has a `bedrock` generator (Converse API, boto3 credential chain, generator options
   `region` and `suppressed_params`). Claude Opus 5.5 on Bedrock refuses `temperature` and `top_p`
   ("deprecated for this model"), so both are suppressed.
@@ -58,7 +58,7 @@ Re-checked on 2026-10-08 for the production panel (Claude on Bedrock, Gemini, GL
 - Gemini runs through its OpenAI-compatible endpoint in both tools (garak OpenAICompatible, CyberSecEval
   OPENAI with that base_url): CyberSecEval's GOOGLEGENAI puts the API key in the URL query (`?key=`),
   which MARA's own Gemini provider avoids so the key never lands in a proxy or access log.
-- An endpoint with `ca_bundle` (the IEC gateway), or a CyberSecEval judge behind one (`model_eval.judge_ca_bundle`),
+- An endpoint with `ca_bundle` (the internal gateway), or a CyberSecEval judge behind one (`model_eval.judge_ca_bundle`),
   makes `run` set SSL_CERT_FILE for every family, in garak and CyberSecEval alike, to the public roots plus those
   chains (httpx honours SSL_CERT_FILE): the judge is another endpoint in the process of the model under evaluation
   and must verify too.

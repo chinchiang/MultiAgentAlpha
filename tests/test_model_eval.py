@@ -58,7 +58,7 @@ def test_targets_and_invocations_never_carry_keys(monkeypatch, tmp_path):
     assert "probes.promptinject,probes.encoding" in inv.argv and "sk-secret-glm" not in " ".join(inv.argv)
     assert inv.key_variables == {"OPENAICOMPATIBLE_API_KEY": me.KeyVariable("GLM_LOCAL_KEY", "$GLM_LOCAL_KEY")}
     # reasoning models need room, and garak's default stop sequences end a chat answer at its first "#"
-    assert _generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://llm.iec.inventec/v1/", "max_tokens": 4096,
+    assert _generator_options(ds) == {"openai": {"OpenAICompatible": {"uri": "https://llm.corp.example/v1/", "max_tokens": 4096,
                                                                        "suppressed_params": ["stop"]}}}
     assert me.unsupported(ds) is None and me.unsupported(ds, "cyberseceval") is None
     # Claude on Bedrock: garak's bedrock generator on the AWS credential chain, no key; CyberSecEval has no
@@ -92,7 +92,7 @@ def test_targets_and_invocations_never_carry_keys(monkeypatch, tmp_path):
     pem.write_text("-----BEGIN CERTIFICATE-----\nINTERNAL\n-----END CERTIFICATE-----\n", encoding="utf-8")
     bundle = me._ca_bundle_pem(me.EvalTarget("glm", "glm-reviewer", "glm", "openai_compatible", ds.base_url, "GLM_LOCAL_KEY", "", str(pem)), "")
     assert bundle is not None and bundle.count("BEGIN CERTIFICATE") > 100 and bundle.endswith(pem.read_text(encoding="utf-8"))
-    assert me._ca_bundle_pem(br, "") is None and ds.ca_bundle == "~/.mara/inventec-ca.pem"
+    assert me._ca_bundle_pem(br, "") is None and ds.ca_bundle == "~/.mara/internal-ca.pem"
     an = me.EvalTarget("anthropic", "claude-reviewer", "claude-opus-5-5", "anthropic", "", "")  # the direct Anthropic API
     inv = _invocation(an)
     assert inv.argv[3:6] == ("--target_type", "anthropic", "--target_name")
@@ -101,7 +101,7 @@ def test_targets_and_invocations_never_carry_keys(monkeypatch, tmp_path):
     cse = _plan_of([ds]).of("glm", "cyberseceval")
     assert [inv.benchmark for inv in cse] == ["prompt-injection", "mitre-frr"]
     pi = me.shown(cse[0])
-    assert f"--llm-under-test=OPENAI::{ds.model}::{me.MASK}::https://llm.iec.inventec/v1" in pi
+    assert f"--llm-under-test=OPENAI::{ds.model}::{me.MASK}::https://llm.corp.example/v1" in pi
     assert "--judge-llm=$CSE_JUDGE_LLM" in pi and "--benchmark=mitre-frr" in cse[1].argv
     judge, key = me.KeyVariable("CSE_JUDGE_LLM", "$CSE_JUDGE_LLM"), me.KeyVariable("GLM_LOCAL_KEY", me.MASK)
     assert cse[0].key_variables == {"MARA_CSE_JUDGE": judge, "MARA_CSE_KEY": key}
@@ -1364,7 +1364,7 @@ def test_a_family_without_a_ca_of_its_own_still_verifies_a_judge_behind_an_inter
 
 
 def test_the_config_names_the_ca_of_the_gateway_the_judge_sits_behind(tmp_path):
-    assert load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT)).model_eval.judge_ca_bundle == "~/.mara/inventec-ca.pem"
+    assert load_config(ROOT / "config" / "mara.yaml", Workspace(ROOT)).model_eval.judge_ca_bundle == "~/.mara/internal-ca.pem"
     assert load_config(FIXTURE_PANEL, Workspace(ROOT)).model_eval.judge_ca_bundle == ""  # a config that names none has none
     from pydantic import ValidationError
 

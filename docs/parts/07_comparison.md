@@ -46,7 +46,7 @@
 
 準則：（1）部署方式與資料主權；（2）授權條款；（3）公開的資安相關評估；（4）採購與稽核風險；（5）在本架構中的建議角色。比較對象是雛型自 v0.4.2 起的正式面板（Claude、Gemini、GLM）與冷備援 DeepSeek；初版面板的 Nemotron 不再列入，它的事實見第 7.1 節。
 
-| 準則 | Anthropic Claude（Opus 5.5，經 Amazon Bedrock） | Google Gemini（3.8 Flash，Gemini API 付費層） | 智譜 GLM（GLM-5.3-Flash，IEC 網路內自架） | DeepSeek（V4，冷備援，自架） |
+| 準則 | Anthropic Claude（Opus 5.5，經 Amazon Bedrock） | Google Gemini（3.8 Flash，Gemini API 付費層） | 智譜 GLM（GLM-5.3-Flash，組織內網自架） | DeepSeek（V4，冷備援，自架） |
 |---|---|---|---|---|
 | 部署與資料主權 | 跨境；Bedrock 預設不儲存輸入與輸出，濫用標記的流量最多保留 30 天、不分享給 Anthropic【已證實｜B137】；`global.` 設定檔可在任一 AWS 商用區域處理【已證實｜B138】；與 Anthropic ZDR 是否等同待法務確認【尚未證實】；Fable 系列不可 ZDR【已證實｜B81】 | 跨境；付費層不用於改進產品，但有限期間記錄提示與回應以偵測濫用，天數未載明【已證實｜B139】；不是 ZDR，保證零保留須改用 Vertex AI【已證實｜B140】；雛型以 `vendor_api_retained` 加核准單號放行 | 自架，無資料離境；廠商 API 一律拒絕（P2）；Z.ai 稱 API 內容不儲存、個資在新加坡處理，與本架構無關【廠商主張｜B145】 | 只能自架權重；隱私政策載明資料存於中國【廠商主張｜B88】；API 不得用於原始碼 |
 | 授權 | 商業 API 條款（經 AWS） | 商業 API 條款（Gemini API 附加條款）【B139】 | GLM-5.3-Flash 為 MIT；同代的 GLM-5.3 為自訂授權【已證實｜B143】；IEC 實際部署的權重來源與版本未記錄 | V3.2 與 V4 皆為 MIT【已證實｜A75、A78】 |

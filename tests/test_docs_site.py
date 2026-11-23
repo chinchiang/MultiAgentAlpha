@@ -59,7 +59,7 @@ def test_public_docs_never_name_the_internal_endpoints():
     for cfg in (load_config(c, Workspace(ROOT)) for c in configs):
         needles |= {z.lstrip(".") for z in cfg.private_dns_suffixes}
         needles |= {urlparse(m.base_url).hostname for m in cfg.models if m.base_url and m.data_residency == "on_prem"}
-    assert "iec.inventec" in needles, "the production config declares its internal zone"
+    assert "corp.example" in needles, "the production config declares its internal zone"
     from tests.tracked import tracked_files
 
     docs = [ROOT / f for f in tracked_files(ROOT) if f.startswith(DOCS.relative_to(ROOT).as_posix() + "/")]

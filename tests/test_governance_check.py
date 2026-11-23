@@ -43,7 +43,7 @@ def test_verdicts_on_this_repository(results):
 def test_g3_names_the_retention_approval_and_fails_a_retained_model_without_one(tmp_path):
     import yaml
 
-    assert "gemini-reviewer=20261006-GISMD-Approve-01" in check_g3(ROOT, ROOT / "config" / "mara.yaml").evidence
+    assert "gemini-reviewer=RETENTION-APPROVAL-0001" in check_g3(ROOT, ROOT / "config" / "mara.yaml").evidence
     raw = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
     gemini = next(m for m in raw["models"] if m["data_residency"] == "vendor_api_retained")
     gemini["retention_approval_ref"] = ""

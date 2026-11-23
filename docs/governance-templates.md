@@ -36,7 +36,7 @@ not started, so all three fail today with precise reasons.
 - `config/examples/standby-for-<family>.yaml`: one per production family, declaring `standby_for`
   and a full configuration in which exactly that family is replaced by a standby family. Since
   2026-10-06 the production families are anthropic (Claude on Bedrock), gemini and glm, and every
-  standby uses the on-prem DeepSeek on the IEC gateway (`deepseek`, since 2026-10-07; DeepSeek is
+  standby uses the on-prem DeepSeek on the internal gateway (`deepseek`, since 2026-10-07; DeepSeek is
   PRC-affiliated, so policy P2 holds it to self-hosted private endpoints): `standby-for-anthropic.yaml`,
   `standby-for-gemini.yaml`, `standby-for-glm.yaml`. Each passes `mara check-config`. The served
   model ids are to be confirmed against the deployment, and the weights behind `deepseek` need an ML-BOM entry with

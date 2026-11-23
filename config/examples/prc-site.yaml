@@ -1,7 +1,7 @@
 # In-country pipeline for 上海／重慶 (report chapter 26, CN-1): two on-prem families (DeepSeek, GLM), no cross-border model.
 # Passes the policies only because reduced_panel_reason is stated.
 models:
-  # DeepSeek as the IEC gateway serves it (`model: deepseek`, the same alias the cold standbys use), from the
+  # DeepSeek as the internal gateway serves it (`model: deepseek`, the same alias the cold standbys use), from the
   # site's own in-country instance of the gateway: the address below is a placeholder, and source code must not
   # leave the country, so it may never be the gateway outside the site.
   - name: deepseek-local

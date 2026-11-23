@@ -424,7 +424,7 @@ def test_a_provider_that_is_not_ready_is_a_usage_error_not_a_traceback(tmp_path,
     target.mkdir()
 
     def not_ready(*a, **k):
-        raise ProviderConfigError("ca_bundle ~/.mara/inventec-ca.pem (/root/.mara/inventec-ca.pem) does not exist: "
+        raise ProviderConfigError("ca_bundle ~/.mara/internal-ca.pem (/root/.mara/internal-ca.pem) does not exist: "
                                   "export the internal CA chain to that path, or remove ca_bundle")
 
     monkeypatch.setattr(cli, "Pipeline", not_ready)

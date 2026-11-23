@@ -6,7 +6,7 @@
 
 ### 16.1 原始碼外洩
 
-這是最直接的風險。原始碼會經過三條路徑：送往雲端家族（正式面板為 Amazon Bedrock 上的 Claude 與 Gemini API）、送往組織內的自架端點（正式面板為 IEC 網路內的 GLM，冷備援為 DeepSeek）、存放在 Actions 的 artifact 與日誌中。第一條路徑的控制是資料保留條件與模型選擇（第 7.1 節）：Anthropic 的文件明載 Fable 系列不在 ZDR 範圍內【已證實｜B81】，而且 code execution 工具與 programmatic tool calling 不符合 ZDR【已證實｜B81】，本架構不使用這兩者；Bedrock 預設不儲存輸入與輸出，但帳戶若開啟 model invocation logging，原始碼就會留在紀錄裡【已證實｜B137】；Gemini API 付費層會在有限期間內記錄提示與回應【已證實｜B139】，所以這條路徑的殘餘風險是被接受的而非被消除的，只以核准單號記錄。第二條路徑的控制是網路隔離：自架端點只能從 runner 的網段存取（雛型只接受私有網段或宣告的私有 DNS 區上的 https 端點，內部 CA 以 `ca_bundle` 加入信任而不關閉驗證），且中國關聯模型權重的部署主機不得有出口網路。第三條路徑最常被忽略：GitHub Actions 的日誌是公開倉庫的公開內容，私有倉庫的 artifact 也有保留期；tj-actions 事件的 payload 正是從記憶體掃出 secret、以 base64 編碼後寫進公開的 workflow 日誌【已證實｜C7.14】。雛型在送出前就以程式遮蔽機密值、排除機密檔，live 模式另以 gitleaks 預檢、發現機密即阻擋外送；Markdown 報告只輸出被採納 finding 引用的前 160 字元（人工佇列為 200 字元），但 JSON 與 SARIF 報告保留完整引用。這些都不能取代 artifact 的存取控制。
+這是最直接的風險。原始碼會經過三條路徑：送往雲端家族（正式面板為 Amazon Bedrock 上的 Claude 與 Gemini API）、送往組織內的自架端點（正式面板為組織內網的 GLM，冷備援為 DeepSeek）、存放在 Actions 的 artifact 與日誌中。第一條路徑的控制是資料保留條件與模型選擇（第 7.1 節）：Anthropic 的文件明載 Fable 系列不在 ZDR 範圍內【已證實｜B81】，而且 code execution 工具與 programmatic tool calling 不符合 ZDR【已證實｜B81】，本架構不使用這兩者；Bedrock 預設不儲存輸入與輸出，但帳戶若開啟 model invocation logging，原始碼就會留在紀錄裡【已證實｜B137】；Gemini API 付費層會在有限期間內記錄提示與回應【已證實｜B139】，所以這條路徑的殘餘風險是被接受的而非被消除的，只以核准單號記錄。第二條路徑的控制是網路隔離：自架端點只能從 runner 的網段存取（雛型只接受私有網段或宣告的私有 DNS 區上的 https 端點，內部 CA 以 `ca_bundle` 加入信任而不關閉驗證），且中國關聯模型權重的部署主機不得有出口網路。第三條路徑最常被忽略：GitHub Actions 的日誌是公開倉庫的公開內容，私有倉庫的 artifact 也有保留期；tj-actions 事件的 payload 正是從記憶體掃出 secret、以 base64 編碼後寫進公開的 workflow 日誌【已證實｜C7.14】。雛型在送出前就以程式遮蔽機密值、排除機密檔，live 模式另以 gitleaks 預檢、發現機密即阻擋外送；Markdown 報告只輸出被採納 finding 引用的前 160 字元（人工佇列為 200 字元），但 JSON 與 SARIF 報告保留完整引用。這些都不能取代 artifact 的存取控制。
 
 ### 16.2 Prompt Injection 操縱審查結果
 

@@ -166,7 +166,7 @@ python3 scripts/calibration_run.py --mode mock --date <date> --report /tmp/calib
 ## 4. Where things stand (G-9: 2026-10-12; G-8: 2026-11-11)
 
 - **G-9 is green.** The first live calibration ran on 2026-10-08 against the production panel (Claude Opus 5.5
-  on Bedrock, Gemini 3.8 Flash, GLM on the IEC gateway), five samples and 51 labels, about four hours:
+  on Bedrock, Gemini 3.8 Flash, GLM on the internal gateway), five samples and 51 labels, about four hours:
   `docs/calibration-2026-10-08.md`, `calib/history.json`, `calib/latest.json`. Precision / recall / F1 were
   anthropic 0.45 / 0.82 / 0.58, gemini 0.58 / 0.55 / 0.57 and glm 0.41 / 0.80 / 0.54; the suggested weights
   were not written into `config/mara.yaml`. Its Alternative Annotator Test did not pass because there are no
@@ -175,7 +175,7 @@ python3 scripts/calibration_run.py --mode mock --date <date> --report /tmp/calib
 - **G-8 is still red, but the garak half is wired and runs.** On 2026-11-11 `scripts/model_eval.py run --tool garak`
   ran against all three families with garak 0.17.1, using a copy of the config whose `garak_probes` was only
   `test.Test` (8 prompts, 5 generations each, 40 attempts per family, no source code sent): Claude Opus 5.5 on Bedrock,
-  Gemini 3.8 Flash, and GLM on the IEC gateway (through its internal CA bundle) all exited 0 with `always.Pass` 40/40,
+  Gemini 3.8 Flash, and GLM on the internal gateway (through its internal CA bundle) all exited 0 with `always.Pass` 40/40,
   and `report --mode dry-run` read the three garak reports back (garak pass rate 1.0 for each family). The
   first attempt had failed before sending any prompt: garak joins a relative `--report_prefix` onto
   `~/.local/share/garak/garak_runs/`, so the garak invocation now passes an absolute one (v0.13.84; its CHANGELOG row

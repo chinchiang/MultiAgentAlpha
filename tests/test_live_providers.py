@@ -175,7 +175,7 @@ def test_openai_compatible_a_missing_ca_bundle_is_a_clear_error_not_a_tls_traceb
     from mara.providers.base import ProviderConfigError
 
     with pytest.raises(ProviderConfigError, match=r"ca_bundle .* does not exist"):
-        OpenAICompatibleProvider(_spec(ca_bundle=str(tmp_path / "inventec-ca.pem")))
+        OpenAICompatibleProvider(_spec(ca_bundle=str(tmp_path / "internal-ca.pem")))
     OpenAICompatibleProvider(_spec(ca_bundle=certifi.where()))  # a real bundle: no ProviderConfigError
 
 
