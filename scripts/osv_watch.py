@@ -45,7 +45,7 @@ def run_scan(name: str, args: list[str]) -> tuple[int, list[dict]]:
         report = Path(d) / f"{name}.sarif"
         code = subprocess.run([sys.executable, str(HERE / "osv_ci.py"), *args, "--report", str(report)], cwd=HERE.parent).returncode
         rows = summarize(json.loads(report.read_text(encoding="utf-8"))) if report.is_file() else []
-    return code, [x for x in rows if not x["suppressed"]]
+    return code, rows
 
 
 class GhIssues:

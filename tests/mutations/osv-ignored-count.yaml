@@ -1,0 +1,22 @@
+focused: [tests/test_osv_ci.py]
+mutations:
+  - name: a clean scan counts no IgnoredVulns entry
+    file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_lockfile_mode_fails_on_unignored_advisories_and_passes_when_all_ignored
+    old: 'clean_note = f"{len(entries)} IgnoredVulns entries in'
+    new: 'clean_note = f"{0} IgnoredVulns entries in'
+  - name: a clean scan without a config says nothing of it
+    file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_lockfile_mode_fails_on_unignored_advisories_and_passes_when_all_ignored
+    old: '    clean_note = "no --config"'
+    new: '    clean_note = ""'
+  - name: a result marked suppressed is left out and the scan passes
+    file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_a_result_osv_scanner_marks_suppressed_still_fails_the_scan
+    old: '        for res in run.get("results", []):'
+    new: '        for res in [r for r in run.get("results", []) if not r.get("suppressions")]:'
+  - name: a row keeps a suppressed field
+    file: scripts/osv_ci.py
+    caught_by: tests/test_osv_ci.py::test_packages_are_parsed_from_the_message_or_the_rule_help_table
+    old: '"packages": packages_in(res, rules.get(res.get("ruleId")))})'
+    new: '"packages": packages_in(res, rules.get(res.get("ruleId"))), "suppressed": False})'

@@ -98,14 +98,19 @@ def _step(job: str, step: str, command: str, *lines: str) -> str:
 
 
 L0, MOCK, PY312 = "L0 deterministic tools", "tests + mock review", "tests (CPython 3.12)"
-OSV_LOCKS = ("bootstrap-requirements.txt", "model-eval-requirements.txt", "cyberseceval-requirements.txt",
-             "semgrep-requirements.txt")
-CLEAN = {  # each tool's clean result line, as CI printed it on #327
+OSV_CLEAN = {  # each L0 osv-scanner step's clean line, with the config that step passes, as scripts/osv_ci.py printed it on 2026-11-23
+    "bootstrap-requirements.txt": "no un-ignored known vulnerabilities (0 IgnoredVulns entries in tools/osv-scanner.toml)",
+    "model-eval-requirements.txt": "no un-ignored known vulnerabilities (0 IgnoredVulns entries in tools/osv-model-eval.toml)",
+    "cyberseceval-requirements.txt": "no un-ignored known vulnerabilities (10 IgnoredVulns entries in tools/osv-cyberseceval.toml)",
+    "semgrep-requirements.txt": "no un-ignored known vulnerabilities (8 IgnoredVulns entries in tools/osv-semgrep.toml)",
+}
+OSV_LOCKS = tuple(OSV_CLEAN)
+CLEAN = {  # each tool's clean result line, as CI printed it on #327; osv-scanner's, one of OSV_CLEAN
     "line width": "no added line is wider than 150 columns",
     "control characters": "no control character in what the change adds",
     "gitleaks": "no leaks found",
     "semgrep": "clean: 165 accepted finding(s), 0 untriaged",
-    "osv-scanner": "no un-ignored known vulnerabilities (0 ignored)",
+    "osv-scanner": OSV_CLEAN["semgrep-requirements.txt"],
 }
 WIDTH_STEP = "Line width of the lines the pull request adds"
 
@@ -124,7 +129,7 @@ def _ci(*, semgrep: str | None = CLEAN["semgrep"], width: tuple[str, ...] = (CLE
           + _step(L0, "osv-scanner must report the seeded fixture", "python3 scripts/osv_ci.py --target fixtures/vuln-sample",
                   "requests 2.19.0 reported")
           + "".join(_step(L0, f"osv-scanner on {lock}", f"python3 scripts/osv_ci.py --lockfile tools/{lock}",
-                          CLEAN["osv-scanner"]) for lock in osv_locks))
+                          OSV_CLEAN[lock]) for lock in osv_locks))
     mock = (_step(MOCK, WIDTH_STEP, 'python3 scripts/line_width.py --base "$BASE_SHA"', *width)
             + _step(MOCK, "Control characters in what the pull request adds", 'python3 scripts/control_chars.py --base "$BASE_SHA"',
                     CLEAN["control characters"])
@@ -143,7 +148,7 @@ CLEAN_RESULTS = [
     f"ok   control characters  [{MOCK}]  {CLEAN['control characters']}",
     f"ok   gitleaks  [{L0}]  {CLEAN['gitleaks']}",
     f"ok   semgrep  [{L0}]  {CLEAN['semgrep']}",
-    *[f"ok   osv-scanner  [{L0}]  {CLEAN['osv-scanner']}"] * 4,
+    *[f"ok   osv-scanner  [{L0}]  {line}" for line in OSV_CLEAN.values()],
 ]
 CLEAN_SKIPS = [f"skips  [{MOCK}]  0", f"skips  [{PY312}]  2, each a tool not installed"]
 
@@ -185,7 +190,7 @@ def test_fewer_osv_scans_than_ci_runs_are_named_and_exit_1(tmp_path, capsys):
     """L0 scans four hash-locked closures; three clean ones are not a clean run."""
     assert _run(_gh(tmp_path, JOBS, logs=_ci(osv_locks=OSV_LOCKS[:3]))) == 1
     out = capsys.readouterr().out.splitlines()
-    assert out.count(f"ok   osv-scanner  [{L0}]  {CLEAN['osv-scanner']}") == 3
+    assert [line for line in out if line.startswith("ok   osv-scanner")] == [f"ok   osv-scanner  [{L0}]  {OSV_CLEAN[lock]}" for lock in OSV_LOCKS[:3]]
     assert "MISS osv-scanner  3 of 4 result lines found" in out
 
 
