@@ -2,11 +2,15 @@
 (docs/adr/0006-local-web-workbench.md); a command given runs alone. The server is a recording double: these tests never
 listen on a port or open a browser."""
 
+import os
 import re
+import subprocess
 import sys
+from pathlib import Path
 
 from typer.testing import CliRunner
 
+import mara
 from mara.cli import app
 from mara.web import server
 from tests import cli_output
@@ -50,3 +54,18 @@ def test_mara_help_says_mara_alone_starts_the_workbench():
     res = CliRunner().invoke(app, ["--help"], env={"COLUMNS": "200"})
     assert res.exit_code == 0
     assert "mara alone starts the local web workbench, as mara serve does." in plain(res.output)
+
+
+def test_version_prints_the_package_version_and_runs_no_command(tmp_path, monkeypatch):
+    """--version prints mara.__version__ and exits before any command: the workbench does not start."""
+    calls = recording(monkeypatch)
+    res = CliRunner().invoke(app, ["--version"], env={"MARA_HOME": str(tmp_path)})
+    assert res.exit_code == 0 and res.output.strip() == mara.__version__
+    assert calls == [], "the workbench does not start when --version is asked"
+
+
+def test_python_m_mara_runs_the_cli_entry_point():
+    """`python -m mara` runs the CLI through mara/__main__.py, so the package runs without the installed script."""
+    env = {**os.environ, "PYTHONPATH": str(Path(mara.__file__).resolve().parents[1])}
+    out = subprocess.run([sys.executable, "-m", "mara", "--version"], capture_output=True, text=True, env=env)
+    assert out.returncode == 0 and out.stdout.strip() == mara.__version__, out.stderr

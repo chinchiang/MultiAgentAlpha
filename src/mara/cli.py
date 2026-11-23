@@ -32,8 +32,18 @@ app = typer.Typer(add_completion=False,
 console = Console()
 
 
+def _version(value: bool) -> None:
+    """--version: print the package version (mara.__version__) and exit, before any command runs."""
+    if value:
+        from . import __version__
+        console.print(__version__)
+        raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context) -> None:
+def main(ctx: typer.Context,
+         version: bool = typer.Option(False, "--version", callback=_version, is_eager=True,
+                                      help="Show the MARA version and exit")) -> None:
     """Without a command, start the workbench as `mara serve` with no options does."""
     if ctx.invoked_subcommand is None:
         # serve's own command parses an empty argument list, so its options' defaults are the ones used (ctx.invoke on
