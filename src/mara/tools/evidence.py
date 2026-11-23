@@ -31,7 +31,7 @@ def blocks(t: ToolResult) -> bool:
 
 def ruled_false_positive(t: ToolResult) -> bool:
     """Whether a tool triage ruled the alert `t` a false positive: such an alert corroborates nothing."""
-    return bool(t.triage) and t.triage.get("verdict") == "false_positive"
+    return t.triage is not None and t.triage.get("verdict") == "false_positive"
 
 
 def scans(tool: str, dimension: str) -> bool:

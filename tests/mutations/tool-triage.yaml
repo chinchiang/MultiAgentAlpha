@@ -23,8 +23,8 @@ mutations:
   - name: an accepted risk no longer corroborates
     file: src/mara/tools/evidence.py
     caught_by: tests/test_tool_triage.py::test_an_alert_ruled_a_false_positive_corroborates_nothing_and_an_accepted_risk_still_does
-    old: '    return bool(t.triage) and t.triage.get("verdict") == "false_positive"'
-    new: '    return bool(t.triage)'
+    old: '    return t.triage is not None and t.triage.get("verdict") == "false_positive"'
+    new: '    return t.triage is not None'
   - name: a ruling on a secret is usable
     file: src/mara/tool_triage.py
     caught_by: tests/test_tool_triage.py::test_an_entry_is_usable_only_inside_its_window_and_for_an_alert_that_is_not_a_secret
@@ -68,8 +68,8 @@ mutations:
   - name: a ruling covers every alert of its rule in its file, read or not
     file: src/mara/tool_triage.py
     caught_by: tests/test_tool_triage.py::test_a_ruling_covers_the_alerts_whose_fingerprint_it_lists_and_a_new_one_of_that_rule_in_that_file_blocks
-    old: '        e = rulings.get((target_id, t.tool, t.rule_id, norm_path(t.file), t.fingerprint))'
-    new: '        e = next((v for k, v in rulings.items() if k[:4] == (target_id, t.tool, t.rule_id, norm_path(t.file))), None)'
+    old: '        ruling = rulings.get((target_id, t.tool, t.rule_id, norm_path(t.file), t.fingerprint))'
+    new: '        ruling = next((v for k, v in rulings.items() if k[:4] == (target_id, t.tool, t.rule_id, norm_path(t.file))), None)'
   - name: a fingerprint is the alert's line number
     file: src/mara/tool_triage.py
     caught_by: tests/test_tool_triage.py::test_a_fingerprint_follows_the_text_of_the_alerts_line_not_its_number
@@ -148,13 +148,13 @@ mutations:
   - name: an alert's file is compared as the tool spelled it
     file: src/mara/tool_triage.py
     caught_by: tests/test_tool_triage.py::test_a_file_spelled_with_a_leading_dot_slash_is_the_same_file
-    old: '        e = rulings.get((target_id, t.tool, t.rule_id, norm_path(t.file), t.fingerprint))'
-    new: '        e = rulings.get((target_id, t.tool, t.rule_id, t.file, t.fingerprint))'
+    old: '        ruling = rulings.get((target_id, t.tool, t.rule_id, norm_path(t.file), t.fingerprint))'
+    new: '        ruling = rulings.get((target_id, t.tool, t.rule_id, t.file, t.fingerprint))'
   - name: a note is triaged like an alert
     file: src/mara/tool_triage.py
     caught_by: tests/test_tool_triage.py::test_a_usable_entry_rules_on_the_alert_it_names_and_on_nothing_else
-    old: "        if not is_alert(t.level) or not t.fingerprint:\n            continue\n        e = rulings"
-    new: "        e = rulings"
+    old: "        if not is_alert(t.level) or not t.fingerprint:\n            continue\n        ruling = rulings"
+    new: "        ruling = rulings"
   - name: an accepted risk needs no approval
     file: src/mara/tool_triage.py
     caught_by: tests/test_tool_triage.py::test_an_entry_that_is_not_well_formed_says_what_is_wrong_with_it

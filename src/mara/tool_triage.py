@@ -270,10 +270,10 @@ def apply(results: Iterable[ToolResult], loaded: Loaded, *, target_id: str, targ
     for t in results:
         if not is_alert(t.level) or not t.fingerprint:
             continue
-        e = rulings.get((target_id, t.tool, t.rule_id, norm_path(t.file), t.fingerprint))
-        if e is not None and not secret_alert(t.tool, t.rule_id):
-            t.triage = e.record()
-            matched.append(e)
+        ruling = rulings.get((target_id, t.tool, t.rule_id, norm_path(t.file), t.fingerprint))
+        if ruling is not None and not secret_alert(t.tool, t.rule_id):
+            t.triage = ruling.record()
+            matched.append(ruling)
             out.triaged += 1
     out.stale = sum(1 for e in held if e not in apart and e not in matched)
     out.not_usable = {why: n for why, n in sorted(why_not.items()) if n}
