@@ -63,3 +63,6 @@ triage reads as it always did.
 - The expiry makes triage a recurring duty: an entry is re-read and re-dated at least every `max_days`.
 - A line shift does not lapse an entry (it names no line), and a rule that fires twice in one file is ruled on once:
   the entry is about that rule in that file. A reader who needs finer rulings fixes one of the two.
+- `scripts/tool_triage.py draft` prints entry drafts for a report's untriaged alerts, each with `TODO` for the verdict
+  and the reason so that it is not an entry until a person has ruled; `check` lists the entries of a triage file that
+  are malformed or not usable today.
