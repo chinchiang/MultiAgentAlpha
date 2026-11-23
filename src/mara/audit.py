@@ -120,11 +120,14 @@ class Count(StrEnum):
     SKEPTIC_SAME_FAMILY = "skeptic_same_family"
     STANDARD_REFS_STRIPPED = "standard_refs_stripped"
     TIER_C_BLOCKED_WHILE_TIGHTENED = "tier_c_blocked_while_tightened"
+    TOOL_ALERTS_TRIAGED = "tool_alerts_triaged"
+    TOOL_TRIAGE_NOT_USABLE = "tool_triage_not_usable"  # per reason: tool_triage_not_usable[<why>]
+    TOOL_TRIAGE_STALE = "tool_triage_stale"
     UNKNOWN_CWE = "unknown_cwe"
 
 
 PAIR_COUNTS = frozenset({Count.JUDGE_AGREEMENT})
-REASON_COUNTS = frozenset({Count.HUMAN_DECISIONS_NOT_USABLE})
+REASON_COUNTS = frozenset({Count.HUMAN_DECISIONS_NOT_USABLE, Count.TOOL_TRIAGE_NOT_USABLE})
 ROLE_COUNTERS = tuple(name for counters in ROLES.values() for name in counters.names())  # per model family
 PLAIN_COUNTS = frozenset(Count) - PAIR_COUNTS - REASON_COUNTS - {Count.GLOBAL_KRIPPENDORFF_ALPHA}
 COUNTER_NAMES = ROLE_COUNTERS + tuple(str(m) for m in Count)  # every name a report's bias_audit holds

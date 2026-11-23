@@ -150,6 +150,18 @@ training:
   require_trained_adjudicator: true
   required_roles: [developer, security, adjudicator]
 
+# Tool triage (docs/adr/0010-tool-triage.md): a person's dated rulings on the target's tool alerts, read from
+# calib/tool-triage.yaml in this workspace, never from the target. Off: every tool alert keeps a review incomplete
+# until the code is fixed. On: an alert a usable entry rules on (this target, tool, rule and file, and the alert's
+# fingerprint; decided by a trained adjudicator; at most max_days from its decision to its expiry; never a secret)
+# stays in the report with its ruling and no longer does, and each alert's fingerprint is recorded in the report.
+# `scripts/tool_triage.py draft --report out/report.json` prints entry drafts from such a report; `check` lists the
+# entries that are not usable today.
+tool_triage:
+  enabled: false
+  file: calib/tool-triage.yaml
+  max_days: 90
+
 
 # G-10: three-phase rollout (report section 15.4): shadow (2 months, gate recorded never enforced),
 # advisory (3 months, blocking findings marked), blocking (from month 6, `mara review` exits 2 on a

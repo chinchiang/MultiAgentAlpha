@@ -23,6 +23,17 @@ def is_alert(level: str | None) -> bool:
     return level in ALERT_LEVELS
 
 
+def blocks(t: ToolResult) -> bool:
+    """Whether the tool result `t` keeps a review incomplete: a tool alert no tool triage has ruled on (GLOSSARY.md:
+    triaged alert). A triaged alert stays in the report with its ruling."""
+    return is_alert(t.level) and t.triage is None
+
+
+def ruled_false_positive(t: ToolResult) -> bool:
+    """Whether a tool triage ruled the alert `t` a false positive: such an alert corroborates nothing."""
+    return t.triage is not None and t.triage.get("verdict") == "false_positive"
+
+
 def scans(tool: str, dimension: str) -> bool:
     """Whether `tool` scans for findings in `dimension` (TOOL_DIMENSIONS)."""
     return dimension in TOOL_DIMENSIONS.get(tool, [])
@@ -68,7 +79,8 @@ class ToolEvidence:
 def corroborates(f: Finding, tool_results: list[ToolResult], prefix: str = "") -> bool:
     """A tool result corroborates a finding (tier A) only on the same file, within +-3 lines, with a
     matching CWE (or none), from a tool that scans the finding's dimension, at level error or
-    warning - the levels that also block as unresolved tool findings; a note is information.
+    warning - the levels that also block as unresolved tool findings; a note is information. An alert a
+    tool triage ruled a false positive corroborates nothing; one accepted as a risk is real and still does.
 
     Same file means the exact path. Tools that ran from the repository top level report paths
     below it (pre-recorded zizmor: fixtures/vuln-sample/.github/workflows/deploy.yml), so a path
@@ -79,7 +91,7 @@ def corroborates(f: Finding, tool_results: list[ToolResult], prefix: str = "") -
         # a tool only corroborates findings in the dimensions it scans for (TOOL_DIMENSIONS):
         # csp-evaluator emits results without CWEs, and without this guard any such result would
         # corroborate any finding that happens to sit within +-3 lines
-        if not scans(t.tool, f.dimension) or not is_alert(t.level):
+        if not scans(t.tool, f.dimension) or not is_alert(t.level) or ruled_false_positive(t):
             continue
         tf = norm_path(t.file)
         for p in f.provenance:

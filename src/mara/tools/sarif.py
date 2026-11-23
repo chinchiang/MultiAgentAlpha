@@ -26,6 +26,10 @@ class ToolResult:
     line: int
     cwe: str | None = None          # first CWE the rule names (display / compatibility)
     cwes: list[str] = field(default_factory=list)  # every CWE the rule names; corroboration matches any of them
+    # a person's ruling on this alert for this target, recorded by mara.tool_triage.apply; None when there is none
+    triage: dict | None = None
+    # what ties a ruling to this alert (mara.tool_triage.fingerprint), recorded when a review applies tool triage
+    fingerprint: str | None = None
 
 
 NOTIFICATION_KEYS = ("toolExecutionNotifications", "toolConfigurationNotifications")  # where an invocation says what went wrong

@@ -11,7 +11,7 @@ from .audit import INCOMPLETE_COUNTERS
 from .identity import norm_path
 from .schemas import BlockingReason, ConsensusResult, DimensionScore, GateReason
 from .scoring.outcome import OutcomePolicy, tier_c_needs_human
-from .tools.evidence import is_alert
+from .tools.evidence import blocks
 from .tools.runner import ToolRun
 from .tools.sarif import ToolResult
 
@@ -174,7 +174,7 @@ def _incomplete_reasons(facts: ReviewFacts, consensus: list[ConsensusResult], to
     if any(c.final_outcome == "needs_human" for c in consensus):
         out.append(UNRESOLVED_HUMAN_REVIEW)
     # Tool evidence remains visible independently of model output. A model's silence or rejection never clears an
-    # unsuppressed tool result.
-    if any(is_alert(t.level) for t in tool_results):
+    # tool alert; a person's tool triage does (mara.tool_triage), and the alert stays in the report.
+    if any(blocks(t) for t in tool_results):
         out.append(UNRESOLVED_TOOL_FINDINGS)
     return tuple(out)

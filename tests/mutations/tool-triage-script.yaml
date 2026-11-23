@@ -1,0 +1,57 @@
+focused: [tests/test_tool_triage_script.py]
+mutations:
+  - name: a draft is printed for an alert already triaged
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_a_draft_is_printed_for_each_untriaged_alert_that_may_be_triaged_once
+    old: '        if not isinstance(t, dict) or not is_alert(t.get("level")) or t.get("triage"):'
+    new: '        if not isinstance(t, dict) or not is_alert(t.get("level")):'
+  - name: a draft is printed for a note
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_a_draft_is_printed_for_each_untriaged_alert_that_may_be_triaged_once
+    old: '        if not isinstance(t, dict) or not is_alert(t.get("level")) or t.get("triage"):'
+    new: '        if not isinstance(t, dict) or t.get("triage"):'
+  - name: a draft is printed for a secret
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_a_draft_is_printed_for_each_untriaged_alert_that_may_be_triaged_once
+    old: '        if not tool or not rule or not norm_path(file) or not isinstance(fp, str) or tool_triage.secret_alert(tool, rule):'
+    new: '        if not tool or not rule or not norm_path(file) or not isinstance(fp, str):'
+  - name: a fingerprint reported twice is listed twice
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_a_draft_is_printed_for_each_untriaged_alert_that_may_be_triaged_once
+    old: '        if fp not in entry["fingerprints"]:'
+    new: '        if True:'
+  - name: an alert with no fingerprint is drafted with none
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_a_report_of_a_review_without_tool_triage_drafts_nothing_and_says_how_to_get_one
+    old: '        if not tool or not rule or not norm_path(file) or not isinstance(fp, str) or tool_triage.secret_alert(tool, rule):'
+    new: '        if not tool or not rule or not norm_path(file) or tool_triage.secret_alert(tool, rule):'
+  - name: draft does not say that alerts were left out for want of a fingerprint
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_a_report_of_a_review_without_tool_triage_drafts_nothing_and_says_how_to_get_one
+    old: '        if missing := unstamped(report):'
+    new: '        if False:'
+  - name: check does not list entries that contradict each other
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_check_lists_two_usable_entries_that_disagree_on_one_alert
+    old: '    out += [f"{e.tool} {e.rule} {e.file} (target {e.target_id[:12]}): {tool_triage.CONTRADICTED}" for e in tool_triage.contradicted(held)]'
+    new: '    pass'
+  - name: a draft comes with a verdict already chosen
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_a_draft_is_printed_for_each_untriaged_alert_that_may_be_triaged_once
+    old: '"fingerprints": [], "verdict": TODO, "reason": TODO,'
+    new: '"fingerprints": [], "verdict": "false_positive", "reason": TODO,'
+  - name: a report with no target is drafted for an empty target
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_a_report_with_no_target_or_that_cannot_be_read_drafts_nothing
+    old: "    if not isinstance(target, str) or not target:\n        return []"
+    new: "    target = target or ''"
+  - name: check passes a file with an entry that is not usable
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_check_lists_each_entry_that_is_malformed_or_not_usable_and_exits_1
+    old: '    return 1 if found else 0'
+    new: '    return 0'
+  - name: check does not list a malformed entry
+    file: scripts/tool_triage.py
+    caught_by: tests/test_tool_triage_script.py::test_check_lists_each_entry_that_is_malformed_or_not_usable_and_exits_1
+    old: '    out = list(loaded.malformed)'
+    new: '    out = []'

@@ -271,15 +271,17 @@ class Pipeline:
                reviewed: ReviewerFindings, ballots: ballot_round.Ballots, base_ref: str | None,
                over_exchange_limit: bool = False) -> Stages:
         """The jury scoring with its rows finished (mara.settlement) by the usable decisions on the reviewed content, and
-        the dimension scores, with everything the stages before handed in. The audit counts the rows a decision settled
-        and, by why, the decisions not usable on this content (a decision on other content is not counted)."""
+        the dimension scores, with everything the stages before handed in. Before the scoring, the tool triage is applied
+        to the tool alerts (_triage_tools, which counts what it did in the audit). The audit counts the rows a decision
+        settled and, by why, the decisions not usable on this content (a decision on other content is not counted)."""
         self.progress.begin("scoring")
         findings = reviewed.findings
+        content = ReviewedContent.of_bundle(ctx)
+        self._triage_tools(ctx, tools, content)  # before scoring: an alert ruled a false positive corroborates nothing
         scoring = jury.score(findings, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
                              tool_path_prefix=ctx.repo_prefix)
         self.audit.set(Count.POSITION_FLIPS, scoring.position_flips)
         self.audit.set(Count.FINDER_CORROBORATED_QUORUMS, sum(c.finder_corroborated for c in scoring.rows))
-        content = ReviewedContent.of_bundle(ctx)
         selection = self.select_decisions(content)
         self.audit.set(Count.HUMAN_DECISIONS_APPLIED, settlement.finish(findings, scoring.rows, selection, content,
                                                                         outcome_policy=self.outcome_policy, gate_policy=self.gate_policy))
@@ -292,6 +294,45 @@ class Pipeline:
             dims.append(score_dimension(d, findings, cons_by_id, tools.ran_for(d)))
         return Stages(ctx=ctx, tools=tools, egress=egress, context_view=context_view, reviewed=reviewed, ballots=ballots, scoring=scoring,
                       dimensions=dims, content=content, base_ref=base_ref, over_exchange_limit=over_exchange_limit)
+
+    def _triage_tools(self, ctx: RepoContext, tools: ToolEvidence, content: ReviewedContent) -> None:
+        """Apply the workspace's tool triage (GLOSSARY.md) to this review's tool alerts when the config enables it: each
+        alert gets its fingerprint, and each one a usable entry rules on carries the ruling from here on. A triage file
+        that lies inside the target, whatever the config calls it (a symbolic link, a workspace that holds the target),
+        is not read: the target's rulings on itself count for nothing. A target with no name of its own takes no
+        ruling (mara.tool_triage.apply). The audit counts the alerts triaged, the entries for this target that are not
+        usable, by why, and the usable ones that matched nothing."""
+        cfg = self.cfg.tool_triage
+        if not cfg.enabled:
+            return
+        import datetime as dt
+        import json
+
+        from . import tool_triage
+        from .decisions import TrainingRequirement
+        from .workspace import resolve
+
+        tool_triage.stamp(tools.results, ctx.content, ctx.repo_prefix)
+        path = resolve(cfg.file, self.root).resolve()
+        if path.is_relative_to(Path(ctx.root).resolve()):
+            self.audit.set_reason(Count.TOOL_TRIAGE_NOT_USABLE, tool_triage.FILE_INSIDE_TARGET, 1)
+            self._say(f"L0: tool triage: {cfg.file} lies inside the target and is not read")
+            return
+        try:
+            named = json.loads(ctx.identity)[0] == "git"  # mara.context.repo_map.target_identity: "git" or "path"
+        except (ValueError, IndexError, TypeError):
+            named = False
+        loaded = tool_triage.load(path)
+        applied = tool_triage.apply(tools.results, loaded, target_id=content.target_id, target_named=named, today=dt.date.today(),
+                                    max_days=cfg.max_days, training=TrainingRequirement.from_config(self.cfg.training, self.root))
+        self.audit.set(Count.TOOL_ALERTS_TRIAGED, applied.triaged)
+        self.audit.set(Count.TOOL_TRIAGE_STALE, applied.stale)
+        for why, n in applied.not_usable.items():
+            self.audit.set_reason(Count.TOOL_TRIAGE_NOT_USABLE, why, n)
+        for problem in loaded.malformed:
+            self._say(f"L0: tool triage: {problem}")
+        self._say(f"L0: tool triage: {applied.triaged} alert(s) triaged, {sum(applied.not_usable.values())} entr(ies) not usable, "
+                  f"{applied.stale} stale")
 
     def _assess(self, stages: Stages, fail_on_gate: bool) -> tuple[Assessment, str | None]:
         """The review facts the stages handed in, the ML-BOM signature check among them, and the review status and gate

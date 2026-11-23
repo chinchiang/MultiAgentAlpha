@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from ..invocation import ProviderMode
     from ..pipeline import Stages
     from ..review_status import Assessment
+    from ..tools.sarif import ToolResult
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,16 @@ class ReportMetadata:
     ml_bom: dict[str, MlBomEntry]
     ml_bom_signature: str | None
     model_eval: dict[str, ModelEvalStatus]
+
+
+def _tool_result(t: ToolResult) -> dict:
+    """A tool result as a report holds it: its fields, with `fingerprint` only when the review applied tool triage and
+    `triage` only when one ruled on it, so a report of a review without triage reads as it always did."""
+    out = asdict(t)
+    for key in ("triage", "fingerprint"):
+        if out[key] is None:
+            del out[key]
+    return out
 
 
 def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *, cfg: MaraConfig, target: Path, provider_mode: ProviderMode,
@@ -52,7 +63,7 @@ def assemble(stages: Stages, assessment: Assessment, metadata: ReportMetadata, *
         incomplete_reasons=list(assessment.incomplete_reasons),
         review_scope="incremental" if stages.base_ref else "full",
         coverage=ctx.coverage(),
-        tool_results=[asdict(t) for t in tools.results],
+        tool_results=[_tool_result(t) for t in tools.results],
         tool_health=[{"tool": t.tool, "ran": t.ran, "note": t.note} for t in tools.runs],
         provider_manifest=provider_manifest,
         config_hash=hashlib.sha256(cfg.model_dump_json().encode()).hexdigest(),

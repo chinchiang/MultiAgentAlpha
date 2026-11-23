@@ -195,7 +195,7 @@ def report_view(manifest: dict[str, Any], report: ReviewReport, progress: dict[s
             **counts,
             "human_queue": len(report.human_queue),
             "tool_results": len(tool_results),
-            "tool_results_blocking": sum(1 for t in tool_results if is_alert(t.get("level"))),
+            "tool_results_blocking": sum(1 for t in tool_results if is_alert(t.get("level")) and not t.get("triage")),
             "tools_ran": sum(1 for h in report.tool_health if h.get("ran")),
             "tools_total": len(report.tool_health),
             "incomplete_reasons": len(report.incomplete_reasons),
