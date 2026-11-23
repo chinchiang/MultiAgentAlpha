@@ -263,3 +263,14 @@ def test_a_review_does_not_let_an_expired_ruling_or_a_ruling_on_a_secret_clear_a
     assert all("triage" not in t for t in report.tool_results)
     assert report.bias_audit["tool_triage_not_usable[expired]"] == 1
     assert report.bias_audit["tool_triage_not_usable[untriageable_tool]"] == 1
+
+
+def test_the_workbench_counts_only_the_alerts_no_triage_rules_on_and_shows_the_ruling(tmp_path):
+    from mara.web import views
+
+    first = _review(tmp_path, enabled=True, results=[_alert(file="app.py", line=1), _alert(rule="python.xss", file="app.py", line=1)])
+    assert views.report_view({}, first, None)["stats"]["tool_results_blocking"] == 2
+    view = views.report_view({}, _review(tmp_path, enabled=True, entries=[_ruling(first)],
+                                         results=[_alert(file="app.py", line=1), _alert(rule="python.xss", file="app.py", line=1)]), None)
+    assert (view["stats"]["tool_results"], view["stats"]["tool_results_blocking"]) == (2, 1)
+    assert [bool(t.get("triage")) for t in view["tool_results"]] == [True, False]

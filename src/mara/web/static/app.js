@@ -1089,10 +1089,13 @@
     const which = h("select", { "aria-label": t("tools.filter") }, h("option", { value: "" }, t("tools.all")), tools.map((x) => h("option", { value: x }, x)));
     const slot = h("div");
     const levelCls = { error: "danger", warning: "warn", note: "info" };
+    // a person's tool triage on this alert (docs/adr/0010-tool-triage.md): the ruling, and who, until when and why on hover
+    const triageChip = (tr) => (tr && typeof tr === "object" ? chip(tCode("triage.", tr.verdict), "ok",
+      t("triage.title", { by: String(tr.decided_by || "—"), until: String(tr.expires || "—"), reason: String(tr.reason || "") })) : null);
     function draw() {
       const rows = view.tool_results.filter((r) => !which.value || r.tool === which.value).slice(0, 500);
       fill(slot, rows.length ? tableWrap(t("tools.results"), [t("col.tool"), t("col.level"), t("col.rule"), t("col.location"), t("col.message")], rows.map((r) =>
-        h("tr", null, h("td", null, mono(r.tool)), h("td", null, chip(tCode("level.", r.level), levelCls[r.level] || "")), h("td", null, mono(r.rule_id)),
+        h("tr", null, h("td", null, mono(r.tool)), h("td", null, chip(tCode("level.", r.level), levelCls[r.level] || ""), triageChip(r.triage)), h("td", null, mono(r.rule_id)),
           h("td", null, mono((r.file || "—") + (r.line ? ":" + r.line : ""))), h("td", null, h("span", { class: "small" }, String(r.message || "").slice(0, 400))))))
         : emptyState(t("tools.none"), "code"));
     }

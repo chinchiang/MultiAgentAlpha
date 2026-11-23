@@ -131,3 +131,8 @@ mutations:
     caught_by: tests/test_tool_triage.py::test_tool_triage_is_off_unless_the_config_turns_it_on_and_its_file_stays_below_the_workspace
     old: '    enabled: bool = Field(default=False, description="Apply the rulings in `file` to this review''s tool alerts")'
     new: '    enabled: bool = Field(default=True, description="Apply the rulings in `file` to this review''s tool alerts")'
+  - name: the workbench counts a triaged alert as blocking
+    file: src/mara/web/views.py
+    caught_by: tests/test_tool_triage.py::test_the_workbench_counts_only_the_alerts_no_triage_rules_on_and_shows_the_ruling
+    old: 'sum(1 for t in tool_results if is_alert(t.get("level")) and not t.get("triage")),'
+    new: 'sum(1 for t in tool_results if is_alert(t.get("level"))),'
