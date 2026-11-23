@@ -174,7 +174,7 @@ def _incomplete_reasons(facts: ReviewFacts, consensus: list[ConsensusResult], to
     if any(c.final_outcome == "needs_human" for c in consensus):
         out.append(UNRESOLVED_HUMAN_REVIEW)
     # Tool evidence remains visible independently of model output. A model's silence or rejection never clears an
-    # unsuppressed tool result; a person's tool triage does (mara.tool_triage), and the alert stays in the report.
+    # tool alert; a person's tool triage does (mara.tool_triage), and the alert stays in the report.
     if any(blocks(t) for t in tool_results):
         out.append(UNRESOLVED_TOOL_FINDINGS)
     return tuple(out)

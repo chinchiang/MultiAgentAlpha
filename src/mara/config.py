@@ -202,10 +202,11 @@ class ToolTriageConfig(BaseModel):
     @field_validator("file")
     @classmethod
     def _below_the_workspace(cls, v: str) -> str:
-        """The file is named relative to the workspace and stays below it: an absolute path or one that climbs out
-        could name a file of the target, whose rulings on itself must never be read."""
+        """The file is named relative to the workspace and stays below it: an absolute path, one with a drive (which
+        a join on Windows takes in place of the workspace) or one that climbs out could name a file of the target, whose
+        rulings on itself must never be read. The pipeline checks where the file really lies (mara.pipeline)."""
         p = PurePosixPath(v.replace("\\", "/"))
-        if not v.strip() or p.is_absolute() or PureWindowsPath(v).is_absolute() or ".." in p.parts:
+        if not v.strip() or p.is_absolute() or PureWindowsPath(v).is_absolute() or ":" in v or ".." in p.parts:
             raise ValueError("tool_triage.file is a path relative to the MARA workspace, with no `..`")
         return v
 

@@ -871,6 +871,9 @@ neutral configuration. With `tool_triage.enabled: true` a person can: `calib/too
 holds dated rulings, and a **triaged alert** stays in the report with its ruling and no longer keeps the review
 incomplete (`docs/adr/0010-tool-triage.md`). It is off in the shipped configs.
 
+Turn it on, review once, then draft from that review's report (a review gives its alerts their fingerprints only when
+tool triage is on):
+
 ```bash
 python scripts/tool_triage.py draft --report out/report.json --decided-by alice   # entry drafts, verdict and reason TODO
 python scripts/tool_triage.py check                                              # which entries are not usable today
@@ -882,6 +885,7 @@ entries:
     tool: osv-scanner
     rule: GHSA-xxxx-xxxx-xxxx   # the alert's rule and file, as the report gives them: no patterns
     file: requirements.txt
+    fingerprints: [3f9a1c0b7d2e4a58]   # the alerts read, as the report gives them: a new or changed alert blocks
     verdict: accepted_risk      # or false_positive
     approval_ref: RISK-2026-014 # an accepted risk names its approval
     reason: no fixed release yet; the vulnerable parser is not reachable from our code
@@ -890,10 +894,11 @@ entries:
     expires: 2027-01-22         # at most tool_triage.max_days (90) after decided_on; then the alert blocks again
 ```
 
-An entry that is malformed, expired, dated in the future, longer than `max_days`, by someone untrained, for a gitleaks
-alert (a secret is removed and rotated, never accepted) or contradicted by another entry triages nothing, and the bias
-audit counts it (`tool_triage_not_usable[<why>]`); a usable one that matches no alert is counted as stale
-(`tool_triage_stale`). An alert ruled a false positive no longer lifts a finding at its place to tier A; an accepted
+An entry that is malformed, expired, dated in the future, longer than `max_days`, by someone untrained, for a secret
+(any gitleaks alert, or a rule with a `secrets` part: a secret is removed and rotated, never accepted) or contradicted
+by another entry triages nothing, and the bias audit counts it (`tool_triage_not_usable[<why>]`); a usable one that
+matches no alert is counted as stale (`tool_triage_stale`). A target with no name of its own (no git origin) takes no
+ruling, and a triage file that lies inside the target is not read. An alert ruled a false positive no longer lifts a finding at its place to tier A; an accepted
 risk still does, and a finding there follows its own path to the gate.
 
 ## Score summary for a team outside the country (CN-3)

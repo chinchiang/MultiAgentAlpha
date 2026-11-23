@@ -22,8 +22,13 @@ TARGET = "t" * 64
 TODAY = dt.date.today()
 
 
-def _result(tool="semgrep", rule="python.sqli", file="app.py", level="error", **more) -> dict:
-    return {"tool": tool, "rule_id": rule, "level": level, "message": "m", "file": file, "line": 3, **more}
+def _result(tool="semgrep", rule="python.sqli", file="app.py", level="error", fingerprint: str | None = "a" * 16, **more) -> dict:
+    """A tool result with a fingerprint unless None is given (a review gives one to its alerts only; the note here
+    has one so that the script's own level check is what leaves it out)."""
+    out = {"tool": tool, "rule_id": rule, "level": level, "message": "m", "file": file, "line": 3, **more}
+    if fingerprint:
+        out["fingerprint"] = fingerprint
+    return out
 
 
 def _report(tmp_path: Path, results: list[dict], target: str | None = TARGET) -> Path:
@@ -34,15 +39,18 @@ def _report(tmp_path: Path, results: list[dict], target: str | None = TARGET) ->
 
 def test_a_draft_is_printed_for_each_untriaged_alert_that_may_be_triaged_once(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("MARA_HOME", str(tmp_path))
-    report = _report(tmp_path, [_result(), _result(), _result(file="./app.py"), _result(rule="python.xss", level="warning"),
+    report = _report(tmp_path, [_result(), _result(), _result(file="./app.py", fingerprint="b" * 16),
+                                _result(rule="python.xss", level="warning"),
                                 _result(rule="python.info", level="note"), _result(tool="gitleaks", rule="generic-api-key"),
+                                _result(rule="generic.secrets.security.detected-key"),
                                 _result(rule="python.done", triage={"verdict": "false_positive"})])
     assert script.main(["draft", "--report", str(report), "--days", "14", "--decided-by", "alice"]) == 0
     out = capsys.readouterr().out
     assert out.splitlines()[0].startswith("# 2 draft(s): ")
     entries = yaml.safe_load(out)["entries"]
     assert [(e["tool"], e["rule"], e["file"]) for e in entries] == [("semgrep", "python.sqli", "app.py"), ("semgrep", "python.xss", "app.py")]
-    assert entries[0] == {"target_id": TARGET, "tool": "semgrep", "rule": "python.sqli", "file": "app.py", "verdict": "TODO",
+    assert entries[0] == {"target_id": TARGET, "tool": "semgrep", "rule": "python.sqli", "file": "app.py",
+                          "fingerprints": ["a" * 16, "b" * 16], "verdict": "TODO",
                           "reason": "TODO", "decided_by": "alice", "decided_on": TODAY.isoformat(),
                           "expires": (TODAY + dt.timedelta(days=14)).isoformat()}
 
@@ -54,6 +62,16 @@ def test_a_draft_is_not_an_entry_until_a_person_has_ruled(tmp_path, capsys, monk
     assert tool_triage.parse(draft) == "verdict is not one of false_positive, accepted_risk"
     ruled = {**draft, "verdict": "false_positive", "reason": "the table name is a constant of the module", "decided_by": "alice"}
     assert isinstance(tool_triage.parse(ruled), tool_triage.Entry)
+
+
+def test_a_report_of_a_review_without_tool_triage_drafts_nothing_and_says_how_to_get_one(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("MARA_HOME", str(tmp_path))
+    report = _report(tmp_path, [_result(fingerprint=None), _result(rule="python.xss", fingerprint=None)])
+    assert script.main(["draft", "--report", str(report)]) == 0
+    out = capsys.readouterr().out
+    assert yaml.safe_load(out)["entries"] == []
+    assert out.splitlines()[0].startswith("# 2 alert(s) carry no fingerprint and are left out: ")
+    assert "tool_triage.enabled: true" in out.splitlines()[0]
 
 
 def test_a_report_with_no_target_or_that_cannot_be_read_drafts_nothing(tmp_path, capsys, monkeypatch):
@@ -70,7 +88,7 @@ def test_a_report_with_no_target_or_that_cannot_be_read_drafts_nothing(tmp_path,
 def _entry(**kw) -> dict:
     d = {"target_id": TARGET, "tool": "semgrep", "rule": "python.sqli", "file": "app.py", "verdict": "false_positive",
          "reason": "the table name is a constant of the module", "decided_by": "alice", "decided_on": TODAY.isoformat(),
-         "expires": (TODAY + dt.timedelta(days=30)).isoformat()}
+         "expires": (TODAY + dt.timedelta(days=30)).isoformat(), "fingerprints": ["a" * 16]}
     d.update(kw)
     return d
 
@@ -102,5 +120,13 @@ def test_check_lists_each_entry_that_is_malformed_or_not_usable_and_exits_1(tmp_
     assert code == 1
     assert lines[:3] == ["NOT USABLE entry 4: reason is shorter than 20 characters",
                          f"NOT USABLE semgrep python.sqli app.py (target {TARGET[:12]}): expired",
-                         f"NOT USABLE gitleaks key app.py (target {TARGET[:12]}): untriageable_tool"]
+                         f"NOT USABLE gitleaks key app.py (target {TARGET[:12]}): secret_alert"]
     assert lines[3].startswith(f"{tmp_path / 'triage.yaml'}: 3 entr(ies), 3 not usable or malformed")
+
+
+def test_check_lists_two_usable_entries_that_disagree_on_one_alert(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("MARA_HOME", str(tmp_path))
+    other = _entry(verdict="accepted_risk", approval_ref="RISK-1")
+    code, lines = _check(tmp_path, [_entry(), other, _entry(rule="python.xss")], capsys)
+    assert code == 1
+    assert lines[:2] == [f"NOT USABLE semgrep python.sqli app.py (target {TARGET[:12]}): contradicted"] * 2

@@ -603,10 +603,14 @@ UNREACHED_NOTE.
 `test_tool_triage.py` reads `mara.tool_triage` at its interface: `parse(raw)`, which returns an `Entry` or the text of
 what is wrong, compared word for word; `load(path)`, a `Loaded` of entries and malformed texts; `usable(entry, today=,
 max_days=, training=)`, the reason an entry is not usable or an empty string, always at a fixed `today`; and
-`apply(results, loaded, target_id=, today=, max_days=, training=)`, which records the ruling on each `ToolResult` it is
-given (`ToolResult.triage`) and returns an `Applied`. The training requirement is a `TrainingRequirement` built by
+`fingerprint(result, content, prefix)` and `stamp(results, content, prefix)`, given a bundle's content as a dict the
+test writes; and `apply(results, loaded, target_id=, target_named=, today=, max_days=, training=)`, which records the
+ruling on each `ToolResult` it is given (`ToolResult.triage`) and returns an `Applied`. The tests hand `apply` results
+that already carry a fingerprint (`_alert`, FP unless given), as a review's do once stamped. The training requirement is a `TrainingRequirement` built by
 keyword, with a register read from a file the test writes. The three readers of a ruling are read where they are:
 `mara.tools.evidence.blocks` and `corroborates`, and `mara.review_status._incomplete_reasons`, an internal seam, with
 `tests/review_facts.py`'s FACTS. The review tests build a `Pipeline` with a workspace of their own (`root=`), a tool
 runner that is given, and the mock config with `tool_triage` and `training` replaced by `model_copy`; the pipeline
-takes the day from the clock, so they date their entries from today.
+takes the day from the clock, so they date their entries from today. Their target is a git repository with an origin
+(`_review` makes it with real git; `origin=False` leaves the origin out), since only a named target takes a ruling, and
+their runner's results carry no fingerprint: the review stamps them.

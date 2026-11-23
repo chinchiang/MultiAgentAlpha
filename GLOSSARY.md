@@ -195,8 +195,12 @@ A tool result at level error or warning: it can corroborate a finding and, until
 _Avoid_: blocking tool result (a blocking finding is a gate rule), tool finding
 
 **Tool triage**:
-A person's dated ruling that one tool alert on one target is a false positive or an accepted risk, kept in the MARA workspace and never read from the target (docs/adr/0010-tool-triage.md). It counts only while usable: for that target, tool, rule and file, inside its dates, by a trained adjudicator where training is required, and never for a secret.
+A person's dated ruling that one tool alert on one target is a false positive or an accepted risk, kept in the MARA workspace and never read from the target (docs/adr/0010-tool-triage.md). It counts only while usable: for that target, which has a name of its own, and for the alerts of that tool, rule and file whose fingerprint it lists; inside its dates; by a trained adjudicator where training is required; and never for a secret.
 _Avoid_: suppression (what a tool's own configuration does, which a review ignores), human decision (a ruling on a finding, bound to the reviewed content), exception (the dated entries of MARA's own scans)
+
+**Alert fingerprint**:
+What ties a tool triage to the alert a person read: a digest of the text of the line the alert names, or of its message when the bundle holds no such line. A shifted line keeps it; a changed line, or another alert of the same rule in the same file, has another.
+_Avoid_: alert id, partial fingerprint (SARIF's `partialFingerprints`, which a review does not read)
 
 **Triaged alert**:
 A tool alert a usable tool triage rules on: it stays in the report with its ruling and no longer keeps the review incomplete. One ruled a false positive no longer corroborates a finding; one accepted as a risk still does.

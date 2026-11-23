@@ -35,11 +35,12 @@ class ReportMetadata:
 
 
 def _tool_result(t: ToolResult) -> dict:
-    """A tool result as a report holds it: its fields, with `triage` only when a tool triage ruled on it, so a report
-    of a review without triage reads as it always did."""
+    """A tool result as a report holds it: its fields, with `fingerprint` only when the review applied tool triage and
+    `triage` only when one ruled on it, so a report of a review without triage reads as it always did."""
     out = asdict(t)
-    if out["triage"] is None:
-        del out["triage"]
+    for key in ("triage", "fingerprint"):
+        if out[key] is None:
+            del out[key]
     return out
 
 
