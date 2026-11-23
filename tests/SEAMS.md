@@ -597,3 +597,16 @@ test file under the working tree's tests/`, `ERROR: git merge-base <base> HEAD: 
 base:`). It imports `scripts/red_on_base.py` as a module (`import red_on_base`) and calls its outcomes on JUnit XML as
 pytest wrote it, relying on outcomes returning, in the order of the XML, triples (status, node id, lines), and on its
 UNREACHED_NOTE.
+
+## Tool triage (`src/mara/tool_triage.py`)
+
+`test_tool_triage.py` reads `mara.tool_triage` at its interface: `parse(raw)`, which returns an `Entry` or the text of
+what is wrong, compared word for word; `load(path)`, a `Loaded` of entries and malformed texts; `usable(entry, today=,
+max_days=, training=)`, the reason an entry is not usable or an empty string, always at a fixed `today`; and
+`apply(results, loaded, target_id=, today=, max_days=, training=)`, which records the ruling on each `ToolResult` it is
+given (`ToolResult.triage`) and returns an `Applied`. The training requirement is a `TrainingRequirement` built by
+keyword, with a register read from a file the test writes. The three readers of a ruling are read where they are:
+`mara.tools.evidence.blocks` and `corroborates`, and `mara.review_status._incomplete_reasons`, an internal seam, with
+`tests/review_facts.py`'s FACTS. The review tests build a `Pipeline` with a workspace of their own (`root=`), a tool
+runner that is given, and the mock config with `tool_triage` and `training` replaced by `model_copy`; the pipeline
+takes the day from the clock, so they date their entries from today.

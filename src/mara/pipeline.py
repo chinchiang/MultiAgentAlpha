@@ -275,11 +275,12 @@ class Pipeline:
         and, by why, the decisions not usable on this content (a decision on other content is not counted)."""
         self.progress.begin("scoring")
         findings = reviewed.findings
+        content = ReviewedContent.of_bundle(ctx)
+        self._triage_tools(tools, content)  # before scoring: an alert ruled a false positive corroborates nothing
         scoring = jury.score(findings, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
                              tool_path_prefix=ctx.repo_prefix)
         self.audit.set(Count.POSITION_FLIPS, scoring.position_flips)
         self.audit.set(Count.FINDER_CORROBORATED_QUORUMS, sum(c.finder_corroborated for c in scoring.rows))
-        content = ReviewedContent.of_bundle(ctx)
         selection = self.select_decisions(content)
         self.audit.set(Count.HUMAN_DECISIONS_APPLIED, settlement.finish(findings, scoring.rows, selection, content,
                                                                         outcome_policy=self.outcome_policy, gate_policy=self.gate_policy))
@@ -292,6 +293,31 @@ class Pipeline:
             dims.append(score_dimension(d, findings, cons_by_id, tools.ran_for(d)))
         return Stages(ctx=ctx, tools=tools, egress=egress, context_view=context_view, reviewed=reviewed, ballots=ballots, scoring=scoring,
                       dimensions=dims, content=content, base_ref=base_ref, over_exchange_limit=over_exchange_limit)
+
+    def _triage_tools(self, tools: ToolEvidence, content: ReviewedContent) -> None:
+        """Apply the workspace's tool triage (GLOSSARY.md) to this review's tool alerts when the config enables it: each
+        alert a usable entry rules on carries the ruling from here on. The audit counts the alerts triaged, the entries
+        for this target that are not usable, by why, and the usable ones that matched nothing."""
+        cfg = self.cfg.tool_triage
+        if not cfg.enabled:
+            return
+        import datetime as dt
+
+        from . import tool_triage
+        from .decisions import TrainingRequirement
+        from .workspace import resolve
+
+        loaded = tool_triage.load(resolve(cfg.file, self.root))
+        applied = tool_triage.apply(tools.results, loaded, target_id=content.target_id, today=dt.date.today(),
+                                    max_days=cfg.max_days, training=TrainingRequirement.from_config(self.cfg.training, self.root))
+        self.audit.set(Count.TOOL_ALERTS_TRIAGED, applied.triaged)
+        self.audit.set(Count.TOOL_TRIAGE_STALE, applied.stale)
+        for why, n in applied.not_usable.items():
+            self.audit.set_reason(Count.TOOL_TRIAGE_NOT_USABLE, why, n)
+        for problem in loaded.malformed:
+            self._say(f"L0: tool triage: {problem}")
+        self._say(f"L0: tool triage: {applied.triaged} alert(s) triaged, {sum(applied.not_usable.values())} entr(ies) not usable, "
+                  f"{applied.stale} stale")
 
     def _assess(self, stages: Stages, fail_on_gate: bool) -> tuple[Assessment, str | None]:
         """The review facts the stages handed in, the ML-BOM signature check among them, and the review status and gate

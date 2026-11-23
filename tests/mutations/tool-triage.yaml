@@ -1,0 +1,133 @@
+focused: [tests/test_tool_triage.py]
+mutations:
+  - name: a triaged alert still keeps the review incomplete
+    file: src/mara/tools/evidence.py
+    caught_by: tests/test_tool_triage.py::test_a_usable_entry_rules_on_the_alert_it_names_and_on_nothing_else
+    old: '    return is_alert(t.level) and t.triage is None'
+    new: '    return is_alert(t.level)'
+  - name: the review status counts a triaged alert as unresolved
+    file: src/mara/review_status.py
+    caught_by: tests/test_tool_triage.py::test_a_review_whose_every_alert_is_triaged_has_no_unresolved_tool_finding_and_one_left_keeps_it
+    old: '    if any(blocks(t) for t in tool_results):'
+    new: '    if any(t.level in ("error", "warning") for t in tool_results):'
+  - name: one triaged alert clears every other alert of the review
+    file: src/mara/review_status.py
+    caught_by: tests/test_tool_triage.py::test_a_review_whose_every_alert_is_triaged_has_no_unresolved_tool_finding_and_one_left_keeps_it
+    old: '    if any(blocks(t) for t in tool_results):'
+    new: '    if all(blocks(t) for t in tool_results):'
+  - name: an alert ruled a false positive still corroborates
+    file: src/mara/tools/evidence.py
+    caught_by: tests/test_tool_triage.py::test_an_alert_ruled_a_false_positive_corroborates_nothing_and_an_accepted_risk_still_does
+    old: '        if not scans(t.tool, f.dimension) or not is_alert(t.level) or ruled_false_positive(t):'
+    new: '        if not scans(t.tool, f.dimension) or not is_alert(t.level):'
+  - name: an accepted risk no longer corroborates
+    file: src/mara/tools/evidence.py
+    caught_by: tests/test_tool_triage.py::test_an_alert_ruled_a_false_positive_corroborates_nothing_and_an_accepted_risk_still_does
+    old: '    return bool(t.triage) and t.triage.get("verdict") == "false_positive"'
+    new: '    return bool(t.triage)'
+  - name: a ruling on a secret is usable
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_is_usable_only_inside_its_window_and_for_a_tool_that_may_be_triaged
+    old: '    if e.tool in UNTRIAGEABLE_TOOLS:'
+    new: '    if False:'
+  - name: an expired ruling is usable
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_is_usable_only_inside_its_window_and_for_a_tool_that_may_be_triaged
+    old: '    if e.expires < today:'
+    new: '    if False:'
+  - name: a ruling stops counting on the day it expires
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_is_usable_only_inside_its_window_and_for_a_tool_that_may_be_triaged
+    old: '    if e.expires < today:'
+    new: '    if e.expires <= today:'
+  - name: a ruling dated in the future is usable
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_is_usable_only_inside_its_window_and_for_a_tool_that_may_be_triaged
+    old: '    if e.decided_on > today:'
+    new: '    if False:'
+  - name: a ruling may run for any number of days
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_is_usable_only_inside_its_window_and_for_a_tool_that_may_be_triaged
+    old: '    if (e.expires - e.decided_on).days > max_days:'
+    new: '    if False:'
+  - name: a ruling of exactly the most days is refused
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_is_usable_only_inside_its_window_and_for_a_tool_that_may_be_triaged
+    old: '    if (e.expires - e.decided_on).days > max_days:'
+    new: '    if (e.expires - e.decided_on).days >= max_days:'
+  - name: an untrained person's ruling is usable where training is required
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_where_training_is_required_only_a_trained_adjudicators_ruling_is_usable
+    old: '    if training.required and not is_trained(training.register, e.decided_by, ADJUDICATOR, e.decided_on):'
+    new: '    if False:'
+  - name: a ruling for another target is applied to this one
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_for_another_target_is_not_this_reviews_and_is_not_counted
+    old: '        if e.target_id != target_id:'
+    new: '        if False:'
+  - name: an entry that is not usable is applied all the same
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_that_is_not_usable_leaves_its_alert_blocking_and_is_counted_by_why
+    old: "        if why:\n            why_not[why] += 1\n        else:"
+    new: "        if why:\n            why_not[why] += 1\n        if True:"
+  - name: of two rulings that disagree the later one wins
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_two_usable_entries_that_disagree_on_one_alert_are_both_set_aside
+    old: '        if len({e.verdict for e in entries}) > 1:'
+    new: '        if False:'
+  - name: an alert's file is compared as the tool spelled it
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_a_file_spelled_with_a_leading_dot_slash_is_the_same_file
+    old: '        alert = (t.tool, t.rule_id, norm_path(t.file))'
+    new: '        alert = (t.tool, t.rule_id, t.file)'
+  - name: a note is triaged like an alert
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_a_usable_entry_rules_on_the_alert_it_names_and_on_nothing_else
+    old: "        if not is_alert(t.level):\n            continue\n        alert = (t.tool"
+    new: "        alert = (t.tool"
+  - name: an accepted risk needs no approval
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_that_is_not_well_formed_says_what_is_wrong_with_it
+    old: '    if raw["verdict"] == ACCEPTED_RISK and not approval.strip():'
+    new: '    if False:'
+  - name: a reason of any length is accepted
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_that_is_not_well_formed_says_what_is_wrong_with_it
+    old: '    if len(raw["reason"].strip()) < MIN_REASON:'
+    new: '    if False:'
+  - name: an entry may carry keys the rule does not read
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_an_entry_that_is_not_well_formed_says_what_is_wrong_with_it
+    old: '    if unknown:'
+    new: '    if False:'
+  - name: a triage file of another shape is read as far as it goes
+    file: src/mara/tool_triage.py
+    caught_by: tests/test_tool_triage.py::test_a_triage_file_is_read_entry_by_entry_and_a_file_of_another_shape_triages_nothing
+    old: '    if not isinstance(data, dict) or not isinstance(data.get("entries"), list) or set(data) != {"entries"}:'
+    new: '    if not isinstance(data, dict) or not isinstance(data.get("entries"), list):'
+  - name: the triage file is applied although the config leaves it off
+    file: src/mara/pipeline.py
+    caught_by: tests/test_tool_triage.py::test_a_review_with_triage_off_is_as_it_was_whatever_the_file_says
+    old: "        cfg = self.cfg.tool_triage\n        if not cfg.enabled:\n            return"
+    new: "        cfg = self.cfg.tool_triage"
+  - name: a review never applies its triage file
+    file: src/mara/pipeline.py
+    caught_by: tests/test_tool_triage.py::test_a_review_with_triage_on_keeps_the_triaged_alert_in_its_report_and_is_no_longer_incomplete_for_it
+    old: '        self._triage_tools(tools, content)  # before scoring: an alert ruled a false positive corroborates nothing'
+    new: '        pass'
+  - name: a report without triage gains an empty triage key on every tool result
+    file: src/mara/report/assembly.py
+    caught_by: tests/test_tool_triage.py::test_a_review_with_triage_off_is_as_it_was_whatever_the_file_says
+    old: "    if out[\"triage\"] is None:\n        del out[\"triage\"]"
+    new: "    pass"
+  - name: the triage file may be named outside the workspace
+    file: src/mara/config.py
+    caught_by: tests/test_tool_triage.py::test_tool_triage_is_off_unless_the_config_turns_it_on_and_its_file_stays_below_the_workspace
+    error: Failed
+    old: '        if not v.strip() or p.is_absolute() or PureWindowsPath(v).is_absolute() or ".." in p.parts:'
+    new: '        if not v.strip():'
+  - name: tool triage is on by default
+    file: src/mara/config.py
+    caught_by: tests/test_tool_triage.py::test_tool_triage_is_off_unless_the_config_turns_it_on_and_its_file_stays_below_the_workspace
+    old: '    enabled: bool = Field(default=False, description="Apply the rulings in `file` to this review''s tool alerts")'
+    new: '    enabled: bool = Field(default=True, description="Apply the rulings in `file` to this review''s tool alerts")'

@@ -86,7 +86,7 @@ def render_markdown(r: ReviewReport) -> str:
     for tr in r.tool_results:
         lines.append(
             f"- {literal(tr.get('tool'))} · {literal(tr.get('rule_id'))} · "
-            f"{literal(tr.get('file'))}:{tr.get('line')} · {literal(tr.get('message'))}"
+            f"{literal(tr.get('file'))}:{tr.get('line')} · {literal(tr.get('message'))}" + _triage_note(tr.get("triage"))
         )
     rejected = [f for f in r.findings if cons.get(f.id) and cons[f.id].final_outcome != "accepted"]
     lines += ["## Rejected or unverified findings", ""]
@@ -152,6 +152,16 @@ def render_markdown(r: ReviewReport) -> str:
     for k, v in r.bias_audit.items():
         lines.append(f"- {k}: {v}")
     return "\n".join(lines) + "\n"
+
+
+def _triage_note(triage: object) -> str:
+    """What a triaged tool alert says after its line: the ruling, who made it and until when, and why. Empty for a
+    result no tool triage ruled on."""
+    if not isinstance(triage, dict):
+        return ""
+    ref = f", approval {literal(triage.get('approval_ref'))}" if triage.get("approval_ref") else ""
+    return (f" · **triaged: {literal(triage.get('verdict'))}** by {literal(triage.get('decided_by'))} on "
+            f"{literal(triage.get('decided_on'))}, until {literal(triage.get('expires'))}{ref}: {literal(triage.get('reason'))}")
 
 
 def write_markdown(r: ReviewReport, path: Path) -> None:

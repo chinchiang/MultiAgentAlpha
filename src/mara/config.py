@@ -5,11 +5,11 @@ from __future__ import annotations
 import datetime as dt
 import os
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from .schemas import DIMENSIONS, SEVERITY_ORDER, EvidenceTier, ModelFamily, RolloutPhase
 
@@ -188,6 +188,28 @@ class MlBomConfig(BaseModel):
     certificate_oidc_issuer: str = Field(default="", description="Expected OIDC issuer for cosign verify-blob (keyless)")
 
 
+class ToolTriageConfig(BaseModel):
+    """Tool triage (docs/adr/0010-tool-triage.md): whether a person's dated rulings on the target's tool alerts, kept
+    in the MARA workspace, are applied. Off by default: with it off every tool alert keeps the review incomplete."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=False, description="Apply the rulings in `file` to this review's tool alerts")
+    file: str = Field(default="calib/tool-triage.yaml", description="The triage file, below the MARA workspace; never read from the target")
+    max_days: int = Field(default=90, ge=1, le=180,
+                          description="The most days a ruling may run from its decision to its expiry; a longer one is not usable")
+
+    @field_validator("file")
+    @classmethod
+    def _below_the_workspace(cls, v: str) -> str:
+        """The file is named relative to the workspace and stays below it: an absolute path or one that climbs out
+        could name a file of the target, whose rulings on itself must never be read."""
+        p = PurePosixPath(v.replace("\\", "/"))
+        if not v.strip() or p.is_absolute() or PureWindowsPath(v).is_absolute() or ".." in p.parts:
+            raise ValueError("tool_triage.file is a path relative to the MARA workspace, with no `..`")
+        return v
+
+
 class TrainingConfig(BaseModel):
     """G-13 (EU AI Act Article 4): the people operating the pipeline hold a valid AI-literacy
     record in training/records.yaml. Human-queue decisions taken by someone without a valid
@@ -303,6 +325,8 @@ class MaraConfig(BaseModel):
     human_queue: HumanQueueConfig = Field(default_factory=HumanQueueConfig, description="G-11: ticketed human queue with decision write-back")
     ml_bom: MlBomConfig = Field(default_factory=MlBomConfig, description="G-7: ML-BOM for the self-hosted model weights")
     training: TrainingConfig = Field(default_factory=TrainingConfig, description="G-13: AI-literacy training register")
+    tool_triage: ToolTriageConfig = Field(default_factory=ToolTriageConfig,
+                                          description="A person's dated rulings on the target's tool alerts (off by default)")
     rollout: RolloutConfig = Field(default_factory=RolloutConfig, description="G-10: rollout phase (shadow / advisory / blocking)")
     limits: LimitsConfig = Field(default_factory=LimitsConfig, description="What one review may spend: the exchange limit")
     model_eval: ModelEvalConfig = Field(default_factory=ModelEvalConfig, description="G-8: quarterly red-team evaluation of the model families")

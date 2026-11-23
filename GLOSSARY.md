@@ -191,8 +191,16 @@ A check of a pull request (a job of `.github/workflows/mara-review.yml`) that th
 _Avoid_: required tool (a tool a review needs to be complete, not a check of a pull request)
 
 **Tool alert**:
-A tool result at level error or warning: it can corroborate a finding and, until the tool's own triage suppresses it, keeps the review incomplete. A note is information, not an alert.
+A tool result at level error or warning: it can corroborate a finding and, until a tool triage rules on it, keeps the review incomplete. A note is information, not an alert.
 _Avoid_: blocking tool result (a blocking finding is a gate rule), tool finding
+
+**Tool triage**:
+A person's dated ruling that one tool alert on one target is a false positive or an accepted risk, kept in the MARA workspace and never read from the target (docs/adr/0010-tool-triage.md). It counts only while usable: for that target, tool, rule and file, inside its dates, by a trained adjudicator where training is required, and never for a secret.
+_Avoid_: suppression (what a tool's own configuration does, which a review ignores), human decision (a ruling on a finding, bound to the reviewed content), exception (the dated entries of MARA's own scans)
+
+**Triaged alert**:
+A tool alert a usable tool triage rules on: it stays in the report with its ruling and no longer keeps the review incomplete. One ruled a false positive no longer corroborates a finding; one accepted as a risk still does.
+_Avoid_: suppressed alert, resolved alert
 
 **Corroboration**:
 A tool alert's independent support for a finding: at the same place, for the same weakness, from a tool that scans the finding's dimension. A corroborated finding has evidence tier A.

@@ -34,7 +34,8 @@ OTHER_NAMES = (
     "findings_deduped", "findings_raw",
     "global_krippendorff_alpha", "human_decisions_applied", "human_decisions_not_usable", "input_tokens", "judge_agreement",
     "output_tokens", "position_flips", "redteam_same_family", "secret_preflight_calibration_exempted", "self_family_fallback_votes",
-    "self_preference_exclusions", "skeptic_same_family", "standard_refs_stripped", "tier_c_blocked_while_tightened", "unknown_cwe",
+    "self_preference_exclusions", "skeptic_same_family", "standard_refs_stripped", "tier_c_blocked_while_tightened", "tool_alerts_triaged",
+    "tool_triage_not_usable", "tool_triage_stale", "unknown_cwe",
 )
 
 
