@@ -110,3 +110,13 @@ The persisted shape stays `ConsensusResult` in `report.json`, so retained report
     every sentence above holds as written. With it on, "Two or three finders. Too few independent judges remain for
     the quorum, so a human decides" holds for three finders, and for two only when the independent judge did not
     confirm it. `tests/test_finder_corroboration.py` pins it.
+- Amended 2026-11-23: a merge now keeps the whole member, not the first member's text. `mara.reviewer_round.dedupe`
+  made the merged finding the first finder's claim with the highest finder's vector; the two came apart, so a weak or
+  fabricated claim that sorted first kept its own title on another finding's severity, and when the judges read that
+  weak claim and dropped it they dropped the severe finding with it, the gate passing. The merge now keeps the member
+  with the highest-scoring vector entire -- its title, provenance and vector together -- so the judges rule on the
+  claim that carries the severity. This makes stale the sentence of "What it does not show" that reads "the judge
+  reads the first finder's claim": the judge reads the highest-vector finder's claim. What still stands: the reports
+  are merged by place, not by claim, so "two families found it" still says two families reported that weakness there,
+  not the same sentence. `tests/test_gate_severity.py::test_a_merged_finding_is_the_highest_vector_member_whole_so_its_title_carries_its_severity`
+  pins it.

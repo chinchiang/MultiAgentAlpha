@@ -25,3 +25,18 @@ mutations:
     caught_by: tests/test_cli_default.py::test_mara_help_says_mara_alone_starts_the_workbench
     old: ' `mara` alone starts the local web workbench, as `mara serve` does.'
     new: ''
+  - name: version does not exit, so the workbench starts
+    file: src/mara/cli.py
+    caught_by: tests/test_cli_default.py::test_version_prints_the_package_version_and_runs_no_command
+    old: '        raise typer.Exit()'
+    new: '        return'
+  - name: version prints nothing
+    file: src/mara/cli.py
+    caught_by: tests/test_cli_default.py::test_version_prints_the_package_version_and_runs_no_command
+    old: '        console.print(__version__)'
+    new: '        pass'
+  - name: python -m mara runs no cli
+    file: src/mara/__main__.py
+    caught_by: tests/test_cli_default.py::test_python_m_mara_runs_the_cli_entry_point
+    old: '    app()'
+    new: '    pass'

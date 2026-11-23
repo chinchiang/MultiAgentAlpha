@@ -19,7 +19,7 @@ mutations:
   - name: deduplication keeps only the first finder of merged findings
     file: src/mara/reviewer_round.py
     caught_by: 'tests/test_reviewer_round.py::test_two_findings_are_merged_exactly_when_they_are_at_one_place_in_one_dimension_and_equally_verified[other0-True]'
-    old: '            finders[match.id].add(f.source_family)'
+    old: '            finders[match].add(f.source_family)'
     new: '            pass'
   - name: G-2's findings are found by one of the judge families
     file: scripts/governance_check.py

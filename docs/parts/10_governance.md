@@ -22,7 +22,7 @@
 
 **G-7 模型權重納入 SBOM 並簽章。** 自架權重的來源、雜湊與授權寫進 CycloneDX 1.6 以上的 ML-BOM【C11.2】；以 cosign 或 NGC 簽章驗證；只載入 safetensors。對應 EU CRA Annex I Part II (1)【C11.9】、A.5.21。負責：平台團隊與 PSIRT。時程：第 2 個月。代價：自架權重的雜湊與簽章需要平台團隊逐版補齊；正式面板的 GLM 在 ML-BOM 中仍是 PENDING（來源、版本、授權與雜湊都待 IEC 平台團隊填入）；DeepSeek V4 的權重已確認發布於 Hugging Face 的官方組織【A78】，但 NGC 之外的來源沒有發行者簽章，只能靠第一次固定的雜湊，而冷備援實際使用的 V4-Flash 權重尚無 ML-BOM 項目。
 
-**G-8 每季對三個家族執行 garak 與 CyberSecEval 4 的 Prompt Injection 與 False Refusal Rate 測試。** 結果寫進校準權重與偏誤稽核。garak 應使用 0.17.0 以上的版本（含 EU AI Act 對照標籤）【B104】；CyberSecEval 自 2025 年 6 月起處於低維護狀態，沒有新的基準版本【B113】。雛型的 `scripts/model_eval.py` 目前只能對直連的 Anthropic API 與 OpenAI 相容端點產生命令；Bedrock 上的 Claude 與 Gemini API 尚無包裝，正式面板中只有自架的 GLM 能跑，G-8 對另外兩個家族維持紅燈。對應 NIST AI 600-1 的 Information Security 類別【B118】、OWASP Agentic Top 10 ASI01【B45】。負責：安全團隊。時程：第 3 個月起每季。代價：每季約一人週。
+**G-8 每季對三個家族執行 garak 與 CyberSecEval 4 的 Prompt Injection 與 False Refusal Rate 測試。** 結果寫進校準權重與偏誤稽核。garak 應使用 0.17.0 以上的版本（含 EU AI Act 對照標籤）【B104】；CyberSecEval 自 2025 年 6 月起處於低維護狀態，沒有新的基準版本【B113】。雛型的 `scripts/model_eval.py` 會為正式面板的三個家族都產生 garak 命令（Bedrock 上的 Claude 用 garak 的 `--target_type bedrock`、Gemini 與自架 GLM 用 OpenAI 相容目標），並為 Gemini 與 GLM 產生 CyberSecEval 的 Prompt Injection 與 MITRE FRR 命令；只有 Claude 的 CyberSecEval 被跳過——釘選版的 CyberSecEval 沒有 Bedrock provider，因此 Claude 這兩項指標缺漏，G-8 以生產面板尚無法完全通過（第 24 章列為待補）。對應 NIST AI 600-1 的 Information Security 類別【B118】、OWASP Agentic Top 10 ASI01【B45】。負責：安全團隊。時程：第 3 個月起每季。代價：每季約一人週。
 
 **G-9 校準迴圈每季重跑，並以 Alternative Annotator Test 作為無監督「不採納」的驗收門檻。** 對應 A.8.29、ISO/IEC 23894 的 AI 風險管理流程【B122】。負責：安全團隊與資料科學。時程：第 3 個月第一次，之後每季。代價：每季約兩人週，且需維護輪替的校準集。
 

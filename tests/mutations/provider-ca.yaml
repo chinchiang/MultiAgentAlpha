@@ -1,0 +1,13 @@
+focused: [tests/test_live_providers.py, tests/test_security_regressions.py]
+mutations:
+  - name: a missing CA bundle is loaded anyway, raising from inside the TLS stack
+    file: src/mara/providers/openai_compatible.py
+    caught_by: tests/test_live_providers.py::test_openai_compatible_a_missing_ca_bundle_is_a_clear_error_not_a_tls_traceback
+    error: FileNotFoundError
+    old: '    if not path.exists():'
+    new: '    if False:'
+  - name: a provider that is not ready is re-raised as a traceback
+    file: src/mara/cli.py
+    caught_by: tests/test_security_regressions.py::test_a_provider_that_is_not_ready_is_a_usage_error_not_a_traceback
+    old: '        raise typer.BadParameter(str(e), param_hint="--config") from e'
+    new: '        raise'
