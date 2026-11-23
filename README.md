@@ -541,10 +541,12 @@ no longer hides a crashed or leaking gitleaks run behind `continue-on-error` (`.
 allowlists exact known synthetic values; all fixture paths remain scanned). Since 2026-09-13 the scan
 itself is `scripts/gitleaks_ci.py` with the gitleaks pinned in `tools/versions.lock` (PR: the PR's
 commits; push: every new commit), not gitleaks-action, so no action downloads its own tool and the
-L0 job needs no `pull-requests` permission. `docs/actions-inventory-2026-10-12.md` is the current run: four real workflows, all rated None and every
-`uses:` pinned to a SHA that still matches its tag comment (several actions have newer releases, listed in its
-section 3, for Dependabot to bump), with no zizmor finding on them (the 2026-10-03 `bot-conditions` finding is gone
-since the Dependabot guard); the seeded fixtures keep their deliberate gaps and stay Critical.
+L0 job needs no `pull-requests` permission. `docs/actions-inventory-2026-10-12.md` is the latest dated inventory:
+four workflows as of its date, all rated None and every `uses:` pinned to a SHA that still matches its tag comment
+(several actions have newer releases, listed in its section 3, for Dependabot to bump), with no zizmor finding on
+them (the 2026-10-03 `bot-conditions` finding is gone since the Dependabot guard). `osv-watch.yml` was added
+2026-10-29 as a fifth workflow, so there are five now; a re-run of the inventory covers it. The seeded fixtures keep
+their deliberate gaps and stay Critical.
 
 ## Pinned, verified L0 tools (Appendix E, prompt 7)
 

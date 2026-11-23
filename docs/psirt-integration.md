@@ -47,6 +47,6 @@ python3 scripts/psirt_ops.py status
 
 ## 握手與驗證界線
 
-`python3 scripts/psirt_ops.py handshake --dry-run` 只顯示測試 payload。正式握手需要組織提供端點與環境變數中的 token；回應僅保存狀態碼及固定錯誤碼，不保存遠端回應本文。
+`python3 scripts/psirt_ops.py handshake --dry-run` 在 `psirt` 區塊啟用後（`webhook_url`、`product`、`token_env`）只顯示測試 payload；出廠設定關閉 PSIRT，此時它印出 `ERROR: psirt.enabled is false; enable the block ... first` 並要求先啟用。正式握手需要組織提供端點與環境變數中的 token；回應僅保存狀態碼及固定錯誤碼，不保存遠端回應本文。
 
 G-12 要求設定完整、近期成功的握手及 ledger 無已知逾期階段。這些檢查不證明組織已辨識所有事件，也不證明法定通報已合規完成。`tests/test_psirt.py` 與 `tests/test_security_regressions.py` 使用合成事件和 MockTransport 驗證時鐘、去重、更新與傳送；本次修正未聯繫真實 PSIRT 或主管機關。
