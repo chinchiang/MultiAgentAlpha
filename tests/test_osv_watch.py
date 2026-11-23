@@ -17,7 +17,7 @@ RUN_URL = "https://github.com/o/r/actions/runs/7"
 
 def finding(vid: str, package: str, version: str, lockfile: str) -> dict:
     """One row as scripts/osv_ci.py's summarize() gives it."""
-    return {"id": vid, "uri": f"file:///w/{lockfile}", "packages": [(package, version)], "suppressed": False}
+    return {"id": vid, "uri": f"file:///w/{lockfile}", "packages": [(package, version)]}
 
 
 class Scans:

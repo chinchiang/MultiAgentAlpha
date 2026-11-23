@@ -72,7 +72,7 @@ def summarize(doc: dict) -> list[dict]:
         for res in run.get("results", []):
             loc = (res.get("locations") or [{}])[0].get("physicalLocation", {})
             rows.append({"id": res.get("ruleId", "?"), "uri": loc.get("artifactLocation", {}).get("uri", "?"),
-                         "packages": packages_in(res, rules.get(res.get("ruleId"))), "suppressed": any(s.get("status") == "accepted" for s in res.get("suppressions", []))})
+                         "packages": packages_in(res, rules.get(res.get("ruleId")))})
     return rows
 
 
@@ -117,12 +117,15 @@ def main() -> int:
     report = a.report.resolve()
     report.unlink(missing_ok=True)
     argv = [str(exe), "scan", "source", "--format", "sarif", "--output-file", str(report), "--no-resolve", "--verbosity", "warn"]
+    clean_note = "no --config"
     if a.config:
         if not a.config.is_file():
             print(f"ERROR: config {a.config} not found", file=sys.stderr)
             return 2
         argv += ["--config", str(a.config.resolve())]
-        ignore_expiry.warn(a.config, ignore_expiry.osv_entries(a.config))
+        entries = ignore_expiry.osv_entries(a.config)
+        ignore_expiry.warn(a.config, entries)
+        clean_note = f"{len(entries)} IgnoredVulns entries in {a.config.as_posix()}"
     for lf in a.lockfile:
         if not lf.is_file():
             print(f"ERROR: lockfile {lf} not found", file=sys.stderr)
@@ -157,11 +160,11 @@ def main() -> int:
     if error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
+    # osv-scanner (2.5.1) leaves a vulnerability its config ignores out of the SARIF: every result is one it does not ignore
     rows = summarize(doc)
-    live = [x for x in rows if not x["suppressed"]]
     for x in rows:
         pk = ", ".join(f"{n}@{v}" for n, v in x["packages"]) or "?"
-        print(f"  {'ignored ' if x['suppressed'] else 'VULN    '}{x['id']}  {pk}  ({x['uri']})")
+        print(f"  VULN    {x['id']}  {pk}  ({x['uri']})")
 
     if a.expect_package:
         hit = [x for x in rows if any(n.lower() == a.expect_package.lower() for n, _ in x["packages"])]
@@ -170,12 +173,13 @@ def main() -> int:
             return 2
         print(f"expected package {a.expect_package} reported vulnerable in {len(hit)} advisory(ies)")
         return 0
-    if live:
-        print(f"VULNERABILITIES: {len(live)} un-ignored advisory(ies); bump the dependency (relock) or add an IgnoredVulns entry with a reason and ignoreUntil")
-        for command in facts_commands([lf.as_posix() for lf in a.lockfile], live):
+    if rows:
+        print(f"VULNERABILITIES: {len(rows)} un-ignored advisory(ies); bump the dependency (relock) or add an IgnoredVulns entry"
+              " with a reason and ignoreUntil")
+        for command in facts_commands([lf.as_posix() for lf in a.lockfile], rows):
             print(f"  the facts for that choice: {command}")
         return 2
-    print(f"no un-ignored known vulnerabilities ({len(rows) - len(live)} ignored)")
+    print(f"no un-ignored known vulnerabilities ({clean_note})")
     return 0
 
 

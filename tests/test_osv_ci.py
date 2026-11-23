@@ -1,6 +1,7 @@
 """osv-scanner wiring, without network: a fake osv-scanner under a temporary MARA_TOOLS_DIR writes a canned
 SARIF and exits like the real one, so the script's version pin, exit-code mapping, package parsing,
---expect-package and IgnoredVulns (suppressions) handling are exercised deterministically."""
+--expect-package and IgnoredVulns handling are exercised deterministically. The SARIF each test gives the stand-in leaves
+out each vulnerability the config ignores, as osv-scanner 2.5.1's does; the stand-in reads no config."""
 
 import json
 import os
@@ -95,8 +96,9 @@ def test_packages_are_parsed_from_the_message_or_the_rule_help_table():
     assert packages_in(_result("CVE-1", "requests", "2.19.0")) == [("requests", "2.19.0")]
     assert packages_in({"message": {"text": "Package 'github.com/x/y@abc1234' is vulnerable to 'GO-1'."}}) == [("github.com/x/y", "abc1234")]
     assert packages_in({"message": {"text": "nothing here"}}) == []
-    rows = summarize(_sarif(_result("CVE-1", "requests", "2.19.0"), _result("GHSA-2", "pyyaml", "3.0", suppressed=True, table_only=True)))
-    assert [(r["id"], r["packages"], r["suppressed"]) for r in rows] == [("CVE-1", [("requests", "2.19.0")], False), ("GHSA-2", [("pyyaml", "3.0")], True)]
+    rows = summarize(_sarif(_result("CVE-1", "requests", "2.19.0"), _result("GHSA-2", "pyyaml", "3.0", table_only=True)))
+    uri = "file:///w/fixtures/vuln-sample/requirements.txt"
+    assert rows == [{"id": "CVE-1", "uri": uri, "packages": [("requests", "2.19.0")]}, {"id": "GHSA-2", "uri": uri, "packages": [("pyyaml", "3.0")]}]
 
 
 def test_fixture_mode_requires_the_expected_package(tmp_path):
@@ -110,18 +112,37 @@ def test_fixture_mode_requires_the_expected_package(tmp_path):
     assert r.returncode == 2 and "expected urllib3 to be reported vulnerable" in r.stderr
 
 
+def _config(tmp_path: Path, *ids: str) -> Path:
+    """An osv-scanner config with one IgnoredVulns entry per id, each far from its expiry."""
+    path = tmp_path / "osv.toml"
+    path.write_text("".join(f'[[IgnoredVulns]]\nid = "{vid}"\nignoreUntil = 2099-01-01\nreason = "r"\n\n' for vid in ids))
+    return path
+
+
 def test_lockfile_mode_fails_on_unignored_advisories_and_passes_when_all_ignored(tmp_path):
-    tools = _tools(tmp_path, _sarif(_result("GHSA-1", "certifi", "2020.1"), _result("GHSA-2", "idna", "2.8", suppressed=True)), exit_code=1)
-    r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--config", "tools/osv-scanner.toml", "--report", str(tmp_path / "o.sarif"))
-    assert r.returncode == 2 and "VULNERABILITIES: 1 un-ignored" in r.stdout and "ignored GHSA-2" in r.stdout and "VULN    GHSA-1  certifi@2020.1" in r.stdout
+    """osv-scanner 2.5.1 leaves a vulnerability its config ignores out of the SARIF, so a clean scan counts the
+    config's IgnoredVulns entries, not ignored results (#410)."""
+    config = _config(tmp_path, "GHSA-2", "GHSA-3")
+    tools = _tools(tmp_path / "a", _sarif(_result("GHSA-1", "certifi", "2020.1")), exit_code=1)
+    r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--config", str(config), "--report", str(tmp_path / "o.sarif"))
+    assert r.returncode == 2 and "VULNERABILITIES: 1 un-ignored" in r.stdout and "VULN    GHSA-1  certifi@2020.1" in r.stdout
     argv = (tools / "argv.txt").read_text()
-    assert "--lockfile" in argv and "osv-scanner.toml" in argv and "--no-resolve" in argv
-    tools = _tools(tmp_path / "b", _sarif(_result("GHSA-2", "idna", "2.8", suppressed=True)), exit_code=1)
-    r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--report", str(tmp_path / "p.sarif"))
-    assert r.returncode == 0 and "no un-ignored known vulnerabilities (1 ignored)" in r.stdout
+    assert "--lockfile" in argv and f"--config {config}" in argv and "--no-resolve" in argv
+    tools = _tools(tmp_path / "b", _sarif(), exit_code=0)
+    r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--config", str(config), "--report", str(tmp_path / "p.sarif"))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.splitlines()[-1] == f"no un-ignored known vulnerabilities (2 IgnoredVulns entries in {config.as_posix()})"
     tools = _tools(tmp_path / "c", _sarif(), exit_code=0)
     r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--report", str(tmp_path / "q.sarif"))
-    assert r.returncode == 0 and "no un-ignored known vulnerabilities (0 ignored)" in r.stdout
+    assert r.returncode == 0 and r.stdout.splitlines()[-1] == "no un-ignored known vulnerabilities (no --config)"
+
+
+def test_a_result_osv_scanner_marks_suppressed_still_fails_the_scan(tmp_path):
+    """osv-scanner 2.5.1 writes no suppressions; a result is a vulnerability the config does not ignore, whatever a later
+    version marks on it, so the scan fails closed."""
+    tools = _tools(tmp_path, _sarif(_result("GHSA-2", "idna", "2.8", suppressed=True)), exit_code=1)
+    r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--report", str(tmp_path / "o.sarif"))
+    assert r.returncode == 2 and "VULNERABILITIES: 1 un-ignored" in r.stdout and "VULN    GHSA-2  idna@2.8" in r.stdout
 
 
 def test_crashes_no_packages_and_version_drift_are_never_green(tmp_path):
@@ -200,11 +221,10 @@ def test_runner_does_not_count_a_failed_osv_scan_as_a_clean_one(tmp_path):
 def test_a_failing_lockfile_scan_names_the_command_that_gathers_the_facts(tmp_path):
     """The un-ignored advisories' packages, with the lockfile scanned, in the scripts/advisory_facts.py command line that
     gathers what a relock or a dated exception needs."""
-    tools = _tools(tmp_path, _sarif(_result("GHSA-1", "certifi", "2020.1"), _result("GHSA-3", "idna", "2.8"),
-                                    _result("GHSA-2", "urllib3", "1.0", suppressed=True)), exit_code=1)
+    tools = _tools(tmp_path, _sarif(_result("GHSA-1", "certifi", "2020.1"), _result("GHSA-3", "idna", "2.8")), exit_code=1)
     r = _run(tools, "--lockfile", "tools/bootstrap-requirements.txt", "--report", str(tmp_path / "o.sarif"))
     assert r.returncode == 2, r.stdout + r.stderr
-    assert "python3 scripts/advisory_facts.py --lockfile tools/bootstrap-requirements.txt certifi idna" in r.stdout
+    assert "python3 scripts/advisory_facts.py --lockfile tools/bootstrap-requirements.txt certifi idna\n" in r.stdout
 
 
 def test_with_several_lockfiles_each_command_names_only_the_packages_found_in_it(tmp_path):
