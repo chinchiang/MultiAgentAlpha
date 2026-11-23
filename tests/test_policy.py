@@ -683,6 +683,14 @@ def test_a_tightening_step_that_crosses_a_value_is_not_warned_of():
     raw["roles"]["judges"].append("m")
     four = MaraConfig.model_validate(raw)
     assert judging_family_counts(four) == {2, 3} and inert_tightening(four) is None
+    # every count of voters the quorum is met on, not only all the independent seats: with one of five voided, four
+    # vote, and a three-to-one vote (0.625) lies between 0.5 and 0.7 where no vote of five does (0.4, 0.7)
+    five = _base(gate={"human_threshold_alpha": 0.5}, **_hq(0.2))
+    for name, fam in (("m", "mistral"), ("q", "qwen"), ("l", "llama")):
+        five["models"].append({"name": name, "family": fam, "provider": "mock", "model": f"mock-{fam}", "data_residency": "on_prem"})
+        five["roles"]["judges"].append(name)
+    five = MaraConfig.model_validate(five, context={"skip_policies": True})
+    assert judging_family_counts(five) == {2, 3, 4, 5} and inert_tightening(five) is None
     raw["human_queue"]["tighten_alpha_step"] = 0.05
     assert inert_tightening(MaraConfig.model_validate(raw)) is not None, "0.4 to 0.45 crosses neither 0.5 nor 1.0"
 

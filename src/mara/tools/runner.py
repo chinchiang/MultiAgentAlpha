@@ -94,10 +94,6 @@ def installed_version(tool: str, *, workspace: Workspace) -> str | None:
     entry = installed_manifest_entry(tool, workspace=workspace)
     return entry.get("version") if entry else None
 
-# The kinds of install whose tool is one file, the binary the runner executes; the installer records its SHA-256 for
-# them (scripts/install_tools.py, `installed_sha256`). semgrep is a virtual environment, its rules a checkout and
-# csp-evaluator a package directory: their files are checked when they are installed, not each time they run.
-SINGLE_FILE_KINDS = ("archive", "binary")
 _HASHED: dict[tuple[str, int, int], str] = {}  # a binary's SHA-256 by its path, modification time and size: read once
 
 
@@ -113,14 +109,16 @@ def _sha256(path: Path) -> str:
     return _HASHED[key]
 
 
-def installed_file_problem(tool: str, exe: Path, entry: dict | None) -> str | None:
-    """Why the binary `exe` of `tool` is not the one its manifest `entry` records, or None when it is, or when the
-    tool's kind is not one file (SINGLE_FILE_KINDS). The installer checks what it downloads against the lock; this
-    checks, each time before the tool runs, that the file in the tool directory is still the one it installed. It is
-    one more thing to get past, not a boundary: whoever can write the tool directory can write its manifest too."""
-    if not entry or entry.get("kind") not in SINGLE_FILE_KINDS:
+def installed_file_problem(tool: str, exe: Path, entry: dict | None, kind: str) -> str | None:
+    """Why the binary `exe` of `tool`, which the lock installs as `kind`, is not the one its manifest `entry` records,
+    or None when it is, or when `kind` is not one file (pins.SINGLE_FILE_KINDS). The kind is the lock's, never the
+    manifest's own word: an entry that names none, or another, is still held to it. The installer checks what it
+    downloads against the lock; this checks, each time before the tool runs, that the file in the tool directory is
+    still the one it installed. It is one more thing to get past, not a boundary: whoever can write the tool directory
+    can write its manifest too."""
+    if kind not in pins.SINGLE_FILE_KINDS:
         return None
-    recorded = entry.get("installed_sha256")
+    recorded = (entry or {}).get("installed_sha256")
     if not isinstance(recorded, str) or not recorded:
         return (f"{tool} was installed before the installer recorded its binary's SHA-256; "
                 f"run scripts/install_tools.py --only {tool}")
@@ -225,7 +223,8 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, wo
     out_dir.mkdir(parents=True, exist_ok=True)
     neutral = neutral_configs(out_dir)
     # the workspace's lock, read once: a tool runs only at the version it pins, as the CI scripts require
-    locked = pins.locked_versions(workspace.root / pins.LOCK)
+    lock = workspace.root / pins.LOCK
+    locked, kinds = pins.locked_versions(lock), pins.locked_kinds(lock)
     runs: list[ToolRun] = []
     wanted = enabled or list(TOOL_DIMENSIONS)
     for tool in wanted:
@@ -239,7 +238,8 @@ def run_all(target: Path, out_dir: Path, enabled: list[str] | None = None, *, wo
         if not_pinned:
             runs.append(ToolRun(tool=tool, ran=False, note=not_pinned))
             continue
-        not_installed_file = installed_file_problem(tool, exe_path, installed_manifest_entry(tool, workspace=workspace))
+        not_installed_file = installed_file_problem(tool, exe_path, installed_manifest_entry(tool, workspace=workspace),
+                                                    kinds.get(tool, ""))
         if not_installed_file:
             runs.append(ToolRun(tool=tool, ran=False, note=not_installed_file))
             continue

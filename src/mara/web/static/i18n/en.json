@@ -556,6 +556,7 @@
  "tool_role.scanner": "scanner",
  "tool_role.verifier": "verifier",
  "tool_status.missing": "not installed",
+ "tool_status.no_file_hash": "reinstall needed (no hash of the binary recorded)",
  "tool_status.ok": "ready",
  "tool_status.unverified": "unverified",
  "tool_status.version_mismatch": "version mismatch",

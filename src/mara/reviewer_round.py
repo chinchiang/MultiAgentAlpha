@@ -45,7 +45,7 @@ def run(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConfig, 
     skipped = egress_blocked or over_exchange_limit
     if skipped:
         progress.skip("reviewers", "source egress blocked by the secret preflight" if egress_blocked
-                      else f"the round's {planned_exchanges(ctx, cfg)} exchanges would pass the exchange limit")
+                      else f"the {planned_exchanges(ctx, cfg)} context and reviewer exchanges would pass the exchange limit")
         raw = []
     else:
         progress.begin("reviewers")
@@ -59,8 +59,11 @@ def run(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConfig, 
 
 
 def planned_exchanges(ctx: RepoContext, cfg: MaraConfig) -> int:
-    """The exchanges the reviewer round makes over `ctx` under `cfg`: one for each batch, dimension and reviewer."""
-    return sum(1 for _ in ctx.batches()) * len(cfg.dimensions) * len(cfg.roles.reviewers)
+    """The exchanges the reviewer round makes over `ctx` under `cfg`, and before it the context agent when a context
+    role is configured: for each batch, one for the context agent (mara.agents.context_agent.run_context_agent) and one
+    for each dimension and reviewer."""
+    batches = sum(1 for _ in ctx.batches())
+    return batches * (int(bool(cfg.roles.context)) + len(cfg.dimensions) * len(cfg.roles.reviewers))
 
 
 def _review(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConfig, providers: Mapping[str, Provider],

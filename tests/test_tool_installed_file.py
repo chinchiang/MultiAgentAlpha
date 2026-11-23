@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from mara.tools import runner
+from mara.tools import pins, runner
 from tests import tool_installs
 
 EMPTY_SARIF = json.dumps({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "gitleaks"}}, "results": []}]})
@@ -85,13 +85,25 @@ def test_a_single_file_tool_whose_manifest_holds_no_hash_of_it_is_not_run(instal
         assert "before the installer recorded" in result.note and "install_tools.py --only gitleaks" in result.note
 
 
-@pytest.mark.parametrize("fields", [{}, {"kind": "pip"}, {"kind": "npm"}, {"kind": "git"}])
-def test_a_tool_that_is_not_one_file_is_run_as_before(installed, fields):
-    """semgrep is a virtual environment, csp-evaluator a package directory, the rules a checkout: none has one file
-    whose hash is the tool's. A manifest entry without a kind is the stand-in of a test (tests/tool_installs.py)."""
+@pytest.mark.parametrize("fields", [{}, {"kind": "pip"}, {"kind": "npm"}, {"kind": "nonsense"}])
+def test_the_kind_is_the_locks_not_the_manifests(installed, fields):
+    """The lock installs gitleaks as an archive. A manifest entry that names no kind, or one that is not a single file,
+    does not take the binary out of the check: it then holds no hash, and the tool is not run."""
     _, set_entry, run, ran = installed
+    assert pins.locked_kinds(tool_installs.REPO_LOCK)["gitleaks"] == "archive"
     set_entry(**fields)
+    result = run()
+    assert ran == [] and not result.ran and "before the installer recorded" in result.note
+    set_entry(**fields, installed_sha256=_sha(BINARY))
     assert run().ran and ran == ["gitleaks"]
+
+
+def test_the_lock_says_which_tools_are_one_file():
+    kinds = pins.locked_kinds(tool_installs.REPO_LOCK)
+    one_file = {t for t, k in kinds.items() if k in pins.SINGLE_FILE_KINDS}
+    assert {"gitleaks", "osv-scanner", "trivy", "zizmor", "cosign", "slsa-verifier"} <= one_file
+    assert kinds["semgrep"] == "pip" and kinds["csp-evaluator"] == "npm" and kinds["semgrep-rules"] == "git"
+    assert not {"semgrep", "csp-evaluator", "semgrep-rules"} & one_file
 
 
 def test_the_version_is_checked_before_the_file(installed):
@@ -105,7 +117,9 @@ def test_what_is_wrong_with_an_installed_file_is_said_by_one_function(tmp_path):
     exe = tmp_path / "tool"
     exe.write_bytes(BINARY)
     problem = runner.installed_file_problem
-    assert problem("t", exe, {"kind": "archive", "installed_sha256": _sha(BINARY)}) is None
-    assert problem("t", exe, None) is None and problem("t", exe, {"kind": "npm"}) is None
-    assert "is not the one" in problem("t", exe, {"kind": "binary", "installed_sha256": _sha(b"x")})
-    assert "cannot be read" in problem("t", tmp_path / "gone", {"kind": "archive", "installed_sha256": _sha(BINARY)})
+    assert problem("t", exe, {"installed_sha256": _sha(BINARY)}, "archive") is None
+    for kind in ("pip", "npm", "git", ""):
+        assert problem("t", exe, None, kind) is None and problem("t", exe, {"installed_sha256": "x"}, kind) is None
+    assert "before the installer recorded" in problem("t", exe, None, "binary")
+    assert "is not the one" in problem("t", exe, {"installed_sha256": _sha(b"x")}, "binary")
+    assert "cannot be read" in problem("t", tmp_path / "gone", {"installed_sha256": _sha(BINARY)}, "archive")

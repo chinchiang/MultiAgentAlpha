@@ -17,7 +17,7 @@ mutations:
     new: '                pass'
   - name: a round that exactly meets the limit is not covered
     file: src/mara/providers/budget.py
-    caught_by: tests/test_exchange_limit.py::test_a_budget_says_what_it_still_covers
+    caught_by: tests/test_exchange_limit.py::test_the_context_agent_is_counted_once_for_each_batch_like_the_reviewers
     old: '        return self.limit is None or self.used + exchanges <= self.limit'
     new: '        return self.limit is None or self.used + exchanges < self.limit'
   - name: the models a limited provider served are not the provider's
@@ -35,11 +35,16 @@ mutations:
     caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them
     old: '        over_limit = not egress.blocked and not self.budget.covers(planned)'
     new: '        over_limit = False'
-  - name: the context call is not counted with the reviewer round
-    file: src/mara/pipeline.py
+  - name: the context agent is not counted with the reviewer round
+    file: src/mara/reviewer_round.py
     caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them
-    old: '        planned = int(bool(self.cfg.roles.context)) + reviewer_round.planned_exchanges(ctx, self.cfg)'
-    new: '        planned = reviewer_round.planned_exchanges(ctx, self.cfg)'
+    old: '    return batches * (int(bool(cfg.roles.context)) + len(cfg.dimensions) * len(cfg.roles.reviewers))'
+    new: '    return batches * (len(cfg.dimensions) * len(cfg.roles.reviewers))'
+  - name: the context agent is counted once however many batches it is asked
+    file: src/mara/reviewer_round.py
+    caught_by: tests/test_exchange_limit.py::test_the_context_agent_is_counted_once_for_each_batch_like_the_reviewers
+    old: '    return batches * (int(bool(cfg.roles.context)) + len(cfg.dimensions) * len(cfg.roles.reviewers))'
+    new: '    return int(bool(cfg.roles.context)) + batches * (len(cfg.dimensions) * len(cfg.roles.reviewers))'
   - name: the context call is made although the round is over the limit
     file: src/mara/pipeline.py
     caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them

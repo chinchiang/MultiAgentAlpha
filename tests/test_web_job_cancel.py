@@ -100,6 +100,24 @@ def test_a_job_that_ends_in_time_is_recorded_by_its_exit_code_and_its_timer_is_d
     assert reg._timed_out == set() and reg.get(job["id"])["status"] == "failed"
 
 
+def test_a_job_that_exits_by_itself_as_its_timeout_fires_is_recorded_as_it_ended(registry):
+    """The timer marks the job before it stops it. A job that exited by itself in between was read as timed out by the
+    waiter recording its exit, with the exit code 0 of a job that had finished."""
+    reg, started, code = registry
+    code[0] = "pass"
+    reg.timeouts["check_config"] = 600
+    job = _job(reg)
+    assert _until(lambda: reg.get(job["id"])["status"] == "finished")
+    with reg._lock:
+        reg._timed_out.add(job["id"])  # as _time_out does, before it finds nothing left to stop
+    reg._record_exit(job["id"], 0, False)  # the waiter's call for a child that was not stopped
+    assert reg.get(job["id"])["status"] == "finished" and reg._timed_out == set()
+    with reg._lock:
+        reg._timed_out.add(job["id"])
+    reg._record_exit(job["id"], -15, True)  # and for one the timeout's stop ended
+    assert reg.get(job["id"])["status"] == "timed_out"
+
+
 def test_every_kind_of_job_has_a_timeout():
     from typing import get_args
 

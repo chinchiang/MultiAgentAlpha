@@ -556,6 +556,7 @@
  "tool_role.scanner": "掃描工具",
  "tool_role.verifier": "驗證工具",
  "tool_status.missing": "未安裝",
+ "tool_status.no_file_hash": "需重新安裝（未記錄二進位檔的雜湊）",
  "tool_status.ok": "就緒",
  "tool_status.unverified": "簽章未驗證",
  "tool_status.version_mismatch": "版本不符",

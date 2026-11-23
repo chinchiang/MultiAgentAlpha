@@ -43,3 +43,8 @@ mutations:
     caught_by: tests/test_web_job_cancel.py::test_the_page_stops_a_job_through_the_server
     old: '                case "POST", ["jobs", job_id, "cancel"]:'
     new: '                case "POST", ["jobs", job_id, "cancel-off"]:'
+  - name: a job that exited by itself as its timeout fired is recorded timed out
+    file: src/mara/web/jobs.py
+    caught_by: tests/test_web_job_cancel.py::test_a_job_that_exits_by_itself_as_its_timeout_fires_is_recorded_as_it_ended
+    old: '            timed_out = stopped and job_id in self._timed_out'
+    new: '            timed_out = job_id in self._timed_out'

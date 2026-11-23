@@ -1190,7 +1190,7 @@
     if (running) every(RUN_POLL_MS, () => { if (seq === renderSeq) drawJob(); });
 
     const rows = env.tools.rows;
-    const statusCls = { ok: "ok", missing: "warn", version_mismatch: "danger", unverified: "warn" };
+    const statusCls = { ok: "ok", missing: "warn", version_mismatch: "danger", no_file_hash: "danger", unverified: "warn" };
     const scanners = rows.filter((r) => r.role !== "verifier");
     const missing = rows.filter((r) => r.status !== "ok").map((r) => r.name);
     const actions = env.actions || {};

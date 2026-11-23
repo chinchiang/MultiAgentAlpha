@@ -58,8 +58,8 @@ gate:
   finder_corroboration: true
 
 # What one review may spend. An exchange is one prompt sent to a model. A repository at the bundle's size limit (16M
-# characters, about 40 batches) takes about 1,500 for the context and reviewer calls (batches x dimensions x
-# reviewers) and a few hundred for the ballots; twice that is the limit. A review that would pass it makes no
+# characters, about 40 batches) takes about 1,500 for the context and reviewer calls (for each batch, one for
+# the context agent and one for each dimension and reviewer) and a few hundred for the ballots; twice that is the limit. A review that would pass it makes no
 # reviewer call, one that reaches it later has the calls left refused, and either is incomplete, never short of a check.
 limits:
   max_exchanges: 3000

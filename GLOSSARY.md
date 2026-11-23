@@ -64,7 +64,7 @@ The part of a review in which every ballot role rules on the deduplicated findin
 _Avoid_: L3/L4 (layer numbers, not a concept), jury round (the jury is the judges alone)
 
 **Exchange limit**:
-How many exchanges one review may make (`limits.max_exchanges`; none unless the config sets one). The context call and the reviewer round are counted before either is made, and when they would pass the limit none of them is made; the ballot round is held call by call, each call past the limit refused as a provider error without reaching a model. Either way the review is incomplete with `exchange_limit_reached`. It counts exchanges, not HTTP requests (a provider's own retries are inside one) and not tokens.
+How many exchanges one review may make (`limits.max_exchanges`; none unless the config sets one). The context agent's calls and the reviewer round (one exchange for each batch for the context agent, and one for each batch, dimension and reviewer) are counted before any is made, and when they would pass the limit none of them is made; the ballot round is held call by call, each call past the limit refused as a provider error without reaching a model. Either way the review is incomplete with `exchange_limit_reached`. A refused ballot call is a provider error like any other: a finding left short of votes needs a human, and on a panel with judges to spare a finding can keep its quorum on the votes that were cast. It counts exchanges, not HTTP requests (a provider's own retries are inside one) and not tokens.
 _Avoid_: quota, budget (the vendor's), rate limit (that is the provider's, and a provider error of its own)
 
 **Truncation**:
@@ -129,7 +129,7 @@ The judges of a review as their votes are counted: one judge family each, the we
 _Avoid_: panel (see Panel: every model the config names, reviewers included), judges (the judges are the models; the jury is how their votes count)
 
 **Finder corroboration**:
-How a finding that two or more families found reaches its quorum on fewer independent judges than the jury asks for, when the config turns it on: every judge family independent of its finders, at least one, voted true positive in both passes, no family that found it voted, and a skeptic outside its finders neither refuted it nor abstained. It can only complete a quorum for acceptance; anything else leaves the finding to a human. The consensus row records it, and the audit counts such quorums.
+How a finding that two or more families found reaches its quorum on fewer independent judges than the jury asks for, when the config turns it on: every judge family independent of its finders, at least one, voted true positive in both passes, no family that found it voted, and a skeptic outside its finders neither refuted it nor abstained. It can only complete a quorum for acceptance; anything else leaves the finding to a human. The consensus row records it and the Markdown report says so on the finding; the audit counts the quorums met this way, which is more than the findings accepted when one of them needs a human for another reason (an unverified quote).
 _Avoid_: finder vote (the finders do not vote on it), tool corroboration (a tool result at the finding's place: see Corroboration)
 
 **Panel**:

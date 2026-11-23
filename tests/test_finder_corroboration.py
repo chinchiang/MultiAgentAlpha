@@ -189,7 +189,8 @@ def test_the_ballot_round_asks_none_of_the_finders_families_to_judge_it(tmp_path
     assert {v.judge_family for v in ballots.votes} == {N} and not any(v.self_family for v in ballots.votes)
     (row,) = jury.score([f], ballots, [], jury=jury.Jury.from_config(ON), policy=scored_rows.policy(ON)).rows
     assert ballots.skeptic[f.id].source_family == N, "the skeptic is the family outside its finders too"
-    assert row.finder_corroborated == (ballots.skeptic[f.id].verdict != "refuted")
+    assert ballots.skeptic[f.id].verdict != "refuted", "the mock skeptic lets this finding stand: the row below is the corroborated one"
+    assert row.finder_corroborated and row.jury_outcome == "accepted"
 
 
 def test_a_voided_reply_of_the_independent_judge_sends_it_to_a_human(tmp_path):
@@ -238,6 +239,13 @@ def test_a_review_of_the_seeded_fixture_accepts_what_two_families_found_and_one_
         else:
             assert c.jury_outcome == was, f"{c.finding_id}: a finding of one family or of all three is judged as before"
     assert sum(c.jury_outcome == "accepted" for c in on.consensus) > sum(c.jury_outcome == "accepted" for c in off.consensus)
+    # the report says how such a finding met its quorum, on the finding itself
+    from mara.report.markdown_out import render_markdown
+
+    accepted = next(c for c in corroborated if c.final_outcome == "accepted")
+    section = render_markdown(on).split(f"### {accepted.finding_id} ")[1].split("###")[0]
+    assert "quorum by finder corroboration (1 independent judge(s))" in section
+    assert "finder corroboration" not in render_markdown(off)
     assert len(on.human_queue) < len(off.human_queue)
 
 

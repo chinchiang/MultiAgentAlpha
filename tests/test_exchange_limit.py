@@ -58,14 +58,38 @@ def test_a_limit_the_review_stays_within_changes_nothing(tmp_path, unlimited):
 
 @pytest.mark.parametrize("limit", [0, 1, 33])
 def test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them(tmp_path, limit):
-    """34 are needed (1 context, 11 dimensions x 3 reviewers x 1 batch). Asked in part, the round would have spent the
-    limit on a review in which some reviewer never read some dimension."""
+    """34 are needed: the fixture is one batch, so 1 context exchange and 11 dimensions x 3 reviewers. Asked in part, the
+    round would have spent the limit on a review in which some reviewer never read some dimension."""
     pipe, panel, report = _review(tmp_path, limit)
     assert panel.exchanges == [] and pipe.budget.used == 0 and _calls(report) == 0
     assert report.review_status == "incomplete" and EXCHANGE_LIMIT_REACHED in report.incomplete_reasons
     assert "context_view_incomplete" not in report.incomplete_reasons, "no context call was made: the view did not fail"
     assert report.findings == [] and report.overall_score is None and not report.gate_passed
     assert any("the exchange limit is" in line for line in pipe.log)
+
+
+def test_the_context_agent_is_counted_once_for_each_batch_like_the_reviewers(tmp_path, monkeypatch):
+    """The context agent asks once for each batch of the bundle, as every reviewer does. Counted once in all, a bundle
+    of three batches passed the check with 100 exchanges planned, the context agent took 3, and the last 2 reviewer
+    exchanges were refused: the round was asked in part, at the cost of the 98 before them."""
+    import mara.context.repo_map as repo_map
+    from mara import reviewer_round
+    from mara.context.repo_map import build_context
+
+    monkeypatch.setattr(repo_map, "MAX_TOTAL_CHARS", 3000)
+    cfg = _cfg(None)
+    batches = sum(1 for _ in build_context(FIXTURE).batches())
+    assert batches > 1, "the fixture must be more than one batch at this size for the test to mean anything"
+    planned = reviewer_round.planned_exchanges(build_context(FIXTURE), cfg)
+    assert planned == batches * (1 + len(cfg.dimensions) * len(cfg.roles.reviewers))
+
+    pipe, panel, report = _review(tmp_path, planned - 1, "short")
+    assert panel.exchanges == [] and EXCHANGE_LIMIT_REACHED in report.incomplete_reasons, "one exchange short: none is made"
+
+    pipe, panel, report = _review(tmp_path, planned, "exact")
+    asked = [ex.role for ex in panel.exchanges]
+    assert asked.count("context") == batches and asked.count("reviewer") == planned - batches
+    assert report.bias_audit["reviewer_errors"] == 0 and report.bias_audit["context_errors"] == 0, "the whole round was asked"
 
 
 def test_a_review_that_reaches_the_limit_in_the_ballot_round_has_the_calls_left_refused_and_decides_nothing_for_it(tmp_path, unlimited):

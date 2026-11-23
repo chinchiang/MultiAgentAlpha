@@ -67,7 +67,7 @@ def tools(root: Path) -> dict[str, Any]:
         installed = (tdir / name).is_dir() if kind == "git" else tool_path(name, workspace=ws) is not None
         locked = str(spec.get("version", ""))
         have = str(entry.get("version")) if entry and entry.get("version") is not None else None
-        status = pins.install_status(locked, entry, installed=installed)
+        status = pins.install_status(locked, entry, installed=installed, kind=kind)
         rows.append({
             "name": name,
             "role": str(spec.get("role", "scanner")),

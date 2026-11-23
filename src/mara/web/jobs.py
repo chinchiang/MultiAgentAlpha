@@ -123,7 +123,8 @@ class JobRegistry:
         server's exit), else finished or failed by its exit code."""
         self._forget_timer(job_id)
         with self._lock:
-            timed_out = job_id in self._timed_out
+            # only a job the timeout's own stop ended: one that exited by itself as the timer fired ended as it ended
+            timed_out = stopped and job_id in self._timed_out
             self._timed_out.discard(job_id)
         d = self.jobs_dir / job_id
         job = procs.read_json(d / "job.json") or {"id": job_id}

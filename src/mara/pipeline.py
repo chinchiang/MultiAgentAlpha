@@ -167,10 +167,10 @@ class Pipeline:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = self._bundle(target, base_ref)
         tools, egress = self._tools(target, sarif_dir, provider_mode, answer_key)
-        # The context call and the reviewer round are counted before either is made: a round asked in part leaves some
+        # The context calls and the reviewer round are counted before any is made: a round asked in part leaves some
         # of the bundle unread by some reviewer, at the cost of every exchange it did make. What the ballot round needs
         # depends on the findings, so it is held by the budget alone, call by call.
-        planned = int(bool(self.cfg.roles.context)) + reviewer_round.planned_exchanges(ctx, self.cfg)
+        planned = reviewer_round.planned_exchanges(ctx, self.cfg)
         over_limit = not egress.blocked and not self.budget.covers(planned)
         if over_limit:
             self._say(f"L2: the context and reviewer calls need {planned} exchange(s), the exchange limit is {self.budget.limit}: none is made")

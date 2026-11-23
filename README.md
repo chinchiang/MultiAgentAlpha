@@ -107,7 +107,7 @@ any file that reads as text whatever its extension: only a binary is excluded as
 change cannot hide code from the models in a directory or under a name the bundle used to skip. Live
 model calls require a current local secret preflight, even when other SARIF was pre-recorded; the only
 exception is `--calibration-sample` (see Live mode). `limits.max_exchanges` (3000 in
-`config/mara.yaml`) bounds what one review may spend: a review whose context and reviewer calls would pass it
+`config/mara.yaml`) bounds what one review may spend: a review whose context and reviewer calls (counted for every batch) would pass it
 makes none of them, one that reaches it in the ballot round has the calls left refused, and either is
 incomplete (`exchange_limit_reached`); it counts prompts sent, not tokens. Use
 HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
@@ -496,7 +496,7 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 | P6 psirt-scope | when the PSIRT hand-off is enabled: HTTPS webhook, product set, token from the environment, trigger tiers within A/B and severities within Critical/High |
 | P7 ml-bom | when `ml_bom.required`: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature method), signed when `require_signature` (P7 checks offline that the bundle's digest is the BOM's; each review verifies the signature with the locked cosign, `ml_bom_signature_unverified` otherwise) |
 | P8 unsupervised-reject | `gate.unsupervised_reject_allowed` may be `true` only while `calib/latest.json` records a passing Alternative Annotator Test (current method: chance-corrected agreement and a bounded miss rate on the rejections themselves, see Calibration) on a live calibration within 90 days; while `false` every rejected non-D finding goes to the human queue |
-| P9 in-country | when `site: prc` (an in-country pipeline, CN-1): every non-mock model is `openai_compatible`, `on_prem` and on a private host, `allow_source_code_to_non_on_prem` is not set (P5 takes it; P9 does not), `human_queue.ticketing` is `none`, and an enabled PSIRT hand-off goes to a private host. It cannot tell whose code a target is: the site runs with an in-country config (`config/examples/prc-site.yaml`) |
+| P9 in-country | when `site: prc` (an in-country pipeline, CN-1): every non-mock model is `openai_compatible`, `on_prem` and on a private host, `allow_source_code_to_non_on_prem` is not set (P5 takes it; P9 does not), `human_queue.ticketing` is `none`, and an enabled PSIRT hand-off goes to a private host. "Private" is checked as P2 and P5 check it, not where the host stands, and it cannot tell whose code a target is: the site runs with an in-country config (`config/examples/prc-site.yaml`) whose endpoints are in the country |
 
 `config/examples/violating.yaml` breaks the first five and is what the tests run against. Every
 section of the config refuses unknown keys, not only the top level and `gate`: a misspelt

@@ -83,6 +83,7 @@ sys.exit({exit_code})
                         f"[ -n \"$out\" ] && cp {tools}/canned.sarif \"$out\"\nexit {exit_code}\n")
         fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     (tools / "manifest.json").write_text(json.dumps({"tools": {"osv-scanner": {"version": version}}}))
+    tool_installs.record_installed(tools, "osv-scanner")
     return tools
 
 

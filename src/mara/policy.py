@@ -356,8 +356,10 @@ def p9_in_country(cfg: MaraConfig) -> PolicyResult:
     """An in-country pipeline (`site: prc`; report chapter 26, CN-1) sends neither source nor findings out of the
     country. Every model that is not a mock is self-hosted: `openai_compatible`, `on_prem`, on a private host, which no
     setting overrides (`allow_source_code_to_non_on_prem` is refused, where P5 takes it). Findings do not leave as
-    tickets on a hosted tracker, and a PSIRT hand-off goes to a private host. What the config cannot say is whose code
-    a target is: a site that reviews in-country code with another config is not caught here."""
+    tickets on a hosted tracker, and a PSIRT hand-off goes to a private host. "Private" is what is checked, as P2 and
+    P5 check it (an RFC 1918 or loopback address, a .internal/.local/.lan name, a zone the config declares): it is not
+    a check of where the host stands, and a private name that resolves to a gateway outside the country passes. Nor
+    can the config say whose code a target is: a site that reviews in-country code with another config is not caught."""
     if cfg.site != "prc":
         return PolicyResult("P9", "in-country", True, f"site {cfg.site}: no in-country rule applies")
     problems = []
@@ -448,9 +450,11 @@ def _independent_seats(cfg: MaraConfig) -> list[tuple[int, int]]:
 
 def judging_family_counts(cfg: MaraConfig) -> set[int]:
     """How many judge families can vote on one finding with its quorum met, over every set of reviewer families that
-    could have found it: the counts the agreement proxy is ever read on. A finding short of its quorum goes to a human
-    whatever its agreement, so those counts are left out; fewer than two families have no agreement to read."""
-    return {seats for _finders, seats in _independent_seats(cfg) if seats >= max(2, cfg.gate.min_independent_judges)}
+    could have found it, every seat independent of them voting or some of them voided: the counts the agreement proxy
+    is ever read on. A finding short of its quorum goes to a human whatever its agreement, so those counts are left
+    out; fewer than two families have no agreement to read."""
+    least = max(2, cfg.gate.min_independent_judges)  # a voided judge leaves fewer voting, the quorum still met
+    return {n for _finders, seats in _independent_seats(cfg) for n in range(least, seats + 1)}
 
 
 def unreachable_quorum(cfg: MaraConfig) -> str | None:
