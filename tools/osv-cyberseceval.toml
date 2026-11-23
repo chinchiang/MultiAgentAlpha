@@ -10,53 +10,58 @@
 #    started at all: the prompt-injection and mitre-frr benchmarks do not call it. Remove them with the entries there.
 #  - setuptools 81.0.0 is the newest release with pkg_resources, which benchmark/autopatching_benchmark.py and arvo_utils.py
 #    import (removed in setuptools 82.0.0), so the closure cannot take the fixed 83.0.0 / 84.1.0.
+#
+# Renewed 2026-11-23, all ten, from 2026-12-31 to 2027-03-31, with tools/osv-semgrep.toml and for the same cause: no
+# semgrep release relaxes a pin (1.186.0, the newest, read from PyPI that day), and setuptools 82.0.0 through 84.2.1
+# (the newest) ship no pkg_resources (their wheels were listed that day). Reviewed in
+# docs/osv-exception-review-2026-11-23.md.
 
 [[IgnoredVulns]]
 id = "CVE-2026-59951"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "MCP Python SDK unbounded session accumulation in the StreamableHTTP transport (GHSA-84m7-p3x7-pcfv, CVSS 4.0 VA:L); fixed in mcp 1.30.0, but semgrep 1.179.0-1.181.0 pin mcp==1.29.0 so the closure cannot take it. MARA runs semgrep scan only and never starts semgrep's MCP server, so the transport is not reached. Re-check at a semgrep release that relaxes the pin."
 
 [[IgnoredVulns]]
 id = "CVE-2026-114603"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "OpenTelemetry Python unbounded tracestate parsing in opentelemetry-api (GHSA-xcq7-p3pf-p88h, CVSS 3.1 A:L); fixed in opentelemetry-api 1.45.1, but semgrep 1.179.0-1.182.1 pin opentelemetry-api~=1.37.0 so the closure cannot take it. The parser (TraceState.from_header) runs only on a carrier holding a tracestate. semgrep 1.179.0 extracts a context only in Telemetry.extract(), only under --trace (no envvar, no auto envvar prefix), from a carrier holding a traceparent it builds from SEMGREP_TRACE_PARENT_TRACE_ID and SEMGREP_TRACE_PARENT_SPAN_ID and never a tracestate. MARA runs semgrep scan without --trace, with runner.tool_env, which passes no SEMGREP_* or OTEL_* variable, and never semgrep ci or mcp. Re-check at a semgrep release that relaxes the pin."
 
 [[IgnoredVulns]]
 id = "CVE-2026-126360"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "OpenTelemetry Python API denial of service through quadratic-time traceparent parsing (GHSA-mf5v-w3w3-f6cg); fixed in opentelemetry-api 1.45.2, but semgrep 1.179.0 pins opentelemetry-api~=1.37.0 (and opentelemetry-sdk 1.37.0 and opentelemetry-semantic-conventions 0.58b0 pin ==1.37.0) so the closure cannot take it. The parser (TraceContextTextMapPropagator.extract, through propagate.extract) runs only in Telemetry.extract(), which configure_tracing calls only when tracing is enabled, that is only under --trace (no envvar, no auto envvar prefix), on a traceparent semgrep builds from SEMGREP_TRACE_PARENT_TRACE_ID and SEMGREP_TRACE_PARENT_SPAN_ID; semgrep mcp only reads the current span. MARA runs semgrep scan without --trace, with runner.tool_env, which passes no SEMGREP_* or OTEL_* variable, and never semgrep ci or mcp. Re-check at a semgrep release that relaxes the pin."
 
 [[IgnoredVulns]]
 id = "CVE-2026-116684"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "MCP Python SDK server bearer-token authentication accepts a token issued for another resource server (GHSA-w4fh-qvv9-3v23, CVSS 3.1 6.8); fixed in mcp 1.30.0, but semgrep 1.179.0-1.182.1 pin mcp==1.29.0 so the closure cannot take it. semgrep builds the auth settings and token verifier only in setup_mcp_server(), under semgrep mcp; semgrep scan imports the mcp server modules but runs none of it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."
 
 [[IgnoredVulns]]
 id = "CVE-2026-116685"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "MCP Python SDK client HTTP transports follow cross-origin redirects carrying custom headers and bodies (GHSA-5h93-6whr-6q8j, CVSS 3.1 5.9); fixed in mcp 1.30.0, but semgrep 1.179.0-1.182.1 pin mcp==1.29.0 so the closure cannot take it. semgrep contains no MCP client code (no ClientSession, streamablehttp_client or sse_client), so no semgrep command reaches it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."
 
 [[IgnoredVulns]]
 id = "CVE-2026-116686"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "MCP Python SDK client fetches server-chosen $ref URLs while validating tool output schemas (GHSA-rwrf-2pqf-9j8j, CVSS 3.1 6.5); fixed in mcp 1.30.0, but semgrep 1.179.0-1.182.1 pin mcp==1.29.0 so the closure cannot take it. semgrep contains no MCP client code (no ClientSession, streamablehttp_client or sse_client), so no semgrep command reaches it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."
 
 [[IgnoredVulns]]
 id = "CVE-2026-115563"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "MCP Python SDK OAuth client could send credentials to an authorization server chosen by the MCP server (GHSA-qx49-fqc8-xw99); fixed in mcp 1.30.0, but semgrep 1.179.0-1.186.0 pin mcp==1.29.0 so the closure cannot take it. The flaw is in the client's OAuth flow (mcp.client); semgrep imports only mcp.server, mcp.shared and mcp.types and contains no MCP client code, so no semgrep command reaches it, and MARA runs semgrep scan only. Re-check at a semgrep release that relaxes the pin."
 
 [[IgnoredVulns]]
 id = "CVE-2026-59890"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "setuptools MANIFEST.in exclusion bypass in an sdist through a Unicode normalization collision (NFC/NFD) on macOS APFS/HFS+ (GHSA-h35f-9h28-mq5c); fixed in setuptools 83.0.0, but 82.0.0 removed pkg_resources, which CyberSecEval imports, so the closure stays on 81.0.0. This closure is installed from wheels on Linux; setuptools builds no sdist in it and no macOS file system is involved. Re-check when CyberSecEval stops importing pkg_resources."
 
 [[IgnoredVulns]]
 id = "GHSA-xmj3-9gf7-h52w"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "setuptools Windows path escape through namespace_packages.txt during a legacy wheel installation; fixed in setuptools 84.1.0, but the closure stays on 81.0.0 because 82.0.0 removed pkg_resources, which CyberSecEval imports. The closure is installed with pip from wheels on Linux, never on Windows. Re-check when CyberSecEval stops importing pkg_resources."
 
 [[IgnoredVulns]]
 id = "CVE-2026-132276"
-ignoreUntil = 2026-12-31
+ignoreUntil = 2027-03-31
 reason = "wcmatch polynomial-time ReDoS when matching untrusted names against multi-star patterns (GHSA-53pm-wgxf-c6qf); fixed in wcmatch 11.2, but semgrep 1.179.0-1.186.0 pin wcmatch~=8.3 so the closure cannot take it. semgrep calls wcmatch only in TargetManager, globmatch of each target path against the path include and exclude patterns of the rules it runs; the reviewed repository controls the paths but no pattern (MARA passes --x-ignore-semgrepignore-files, and the pinned rules are hash-locked). Those rules hold at most two single stars in a segment; their 224 globs against crafted paths (a 4000-byte path, the advisory's 255-byte names) took at most 0.024 s a match (wcmatch 8.5.2, 2026-11-21). Re-check at a semgrep release that relaxes the pin, or when the pinned rules change."
