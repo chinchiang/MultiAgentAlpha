@@ -2,13 +2,12 @@
 amended 2026-11-22): a tool install or a database download that stalled ran for good, and while it ran admission
 refused every review. Real `python -c` children stand in for the scripts."""
 
+import http.client
 import json
 import os
 import signal
 import sys
 import time
-import urllib.error
-import urllib.request
 
 import pytest
 
@@ -121,14 +120,14 @@ def test_the_page_stops_a_job_through_the_server(tmp_path, monkeypatch):
     thread.start()
 
     def call(method: str, path: str, body: dict | None = None):
-        data = None if body is None else json.dumps(body).encode()
-        req = urllib.request.Request(httpd.url.rstrip("/") + path, data=data, method=method, headers={
-            "X-MARA-Token": httpd.token, "Origin": httpd.url.rstrip("/"), "Content-Type": "application/json"})
+        conn = http.client.HTTPConnection("127.0.0.1", httpd.port, timeout=30)
         try:
-            with urllib.request.urlopen(req, timeout=30) as res:
-                return res.status, json.loads(res.read())
-        except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read())
+            conn.request(method, path, body=None if body is None else json.dumps(body).encode(), headers={
+                "X-MARA-Token": httpd.token, "Origin": httpd.url.rstrip("/"), "Content-Type": "application/json"})
+            res = conn.getresponse()
+            return res.status, json.loads(res.read())
+        finally:
+            conn.close()
 
     try:
         status, made = call("POST", "/api/jobs", {"kind": "check_config", "config": "config/mara.yaml"})
