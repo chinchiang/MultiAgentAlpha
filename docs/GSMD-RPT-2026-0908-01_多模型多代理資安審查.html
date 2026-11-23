@@ -56,7 +56,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,.tablewrap:focus-visibl
 <a class="skip" href="#content">跳至內文</a>
 <header class="topbar"><button id="menu" aria-label="開啟目次" aria-expanded="false" aria-controls="navigation">☰ 目次</button><span class="meta">GSMD-RPT-2026-0908-01</span></header>
 <div class="layout">
-<nav id="navigation" aria-label="目次"><p class="brand">GSMD-RPT-2026-0908-01 · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits" aria-live="polite"></div><ol id="toc"><li class="h1"><a href="#s0">以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查</a></li><li class="h2"><a href="#s1">目次</a></li><li class="h1"><a href="#s2">第一部　管理階層摘要</a></li><li class="h2"><a href="#s3">第 1 章　決策者需要知道的事</a></li><li class="h3"><a href="#s4">1.1 問題</a></li><li class="h3"><a href="#s5">1.2 建議的架構，一句話</a></li><li class="h3"><a href="#s6">1.3 這個架構解決了什麼</a></li><li class="h3"><a href="#s7">1.4 三個需要決策的事項</a></li><li class="h3"><a href="#s8">1.5 成本與代價</a></li><li class="h3"><a href="#s9">1.6 這份報告不能告訴你的事</a></li><li class="h3"><a href="#s10">1.7 建議的批准事項</a></li><li class="h1"><a href="#s11">第二部　背景與問題定義</a></li><li class="h2"><a href="#s12">第 2 章　Vibe Coding 帶來的安全債：實證現況</a></li><li class="h3"><a href="#s13">2.1 什麼是 Vibe Coding，以及它為什麼改變了審查的前提</a></li><li class="h3"><a href="#s14">2.2 AI 生成程式碼的安全性：可查證的量化證據</a></li><li class="h3"><a href="#s15">2.3 供應鏈面的新型風險：套件幻覺</a></li><li class="h3"><a href="#s16">2.4 對跨國 ODM/EMS 的意義</a></li><li class="h2"><a href="#s17">第 3 章　單一 LLM 審查的四類失效</a></li><li class="h3"><a href="#s18">3.1 失效一：幻覺與不可重現</a></li><li class="h3"><a href="#s19">3.2 失效二：偏誤</a></li><li class="h3"><a href="#s20">3.3 失效三：Prompt Injection</a></li><li class="h3"><a href="#s21">3.4 失效四：覆蓋盲區與拒答</a></li><li class="h2"><a href="#s22">第 4 章　為什麼是 Multi-Agent，而不是「一個更強的模型」</a></li><li class="h3"><a href="#s23">4.1 反方證據先講</a></li><li class="h3"><a href="#s24">4.2 增益在哪裡：壓誤報與壓評論量，不是提召回</a></li><li class="h3"><a href="#s25">4.3 「LLM + 確定性工具」的證據為什麼一致偏正</a></li><li class="h3"><a href="#s26">4.4 異質性作為設計原則</a></li><li class="h3"><a href="#s27">4.5 本報告的定位</a></li><li class="h1"><a href="#s28">第三部　技術架構</a></li><li class="h2"><a href="#s29">第 5 章　六層架構總覽</a></li><li class="h3"><a href="#s30">5.1 為什麼是六層而不是一個 agentic loop</a></li><li class="h3"><a href="#s31">5.2 對抗的是誰</a></li><li class="h2"><a href="#s32">第 6 章　各層設計</a></li><li class="h3"><a href="#s33">6.1 L0：確定性錨定層</a></li><li class="h3"><a href="#s34">6.2 L1：情境建構層</a></li><li class="h3"><a href="#s35">6.3 L2：專家審查層</a></li><li class="h3"><a href="#s36">6.4 L3：對抗驗證層</a></li><li class="h3"><a href="#s37">6.5 L4：陪審裁決層</a></li><li class="h3"><a href="#s38">6.6 L5：評分與輸出層</a></li><li class="h2"><a href="#s39">第 7 章　模型家族與部署拓樸</a></li><li class="h3"><a href="#s40">7.1 正式面板的三個家族與冷備援</a></li><li class="h3"><a href="#s41">7.2 OpenAI 相容端點作為自架模型的共通介面</a></li><li class="h3"><a href="#s42">7.3 可抽換性是採購需求，不是工程偏好</a></li><li class="h2"><a href="#s43">第 8 章　資料流與信任邊界</a></li><li class="h2"><a href="#s44">第 9 章　Prompt Injection 防線</a></li><li class="h1"><a href="#s45">第四部　核心功能與能力</a></li><li class="h2"><a href="#s46">第 10 章　十一個審查面向</a></li><li class="h3"><a href="#s47">10.1 Application architecture</a></li><li class="h3"><a href="#s48">10.2 Security vulnerabilities（一般弱點）</a></li><li class="h3"><a href="#s49">10.3 XSS</a></li><li class="h3"><a href="#s50">10.4 CSP</a></li><li class="h3"><a href="#s51">10.5 Authentication and authorization</a></li><li class="h3"><a href="#s52">10.6 Dependency and supply-chain security（依賴）</a></li><li class="h3"><a href="#s53">10.7 GitHub Actions security</a></li><li class="h3"><a href="#s54">10.8 Secret exposure</a></li><li class="h3"><a href="#s55">10.9 Input validation</a></li><li class="h3"><a href="#s56">10.10 Insecure error handling</a></li><li class="h3"><a href="#s57">10.11 Supply-chain security（廣義）</a></li><li class="h3"><a href="#s58">10.12 十一個面向的交叉關係</a></li><li class="h2"><a href="#s59">第 11 章　評分方法</a></li><li class="h3"><a href="#s60">11.1 設計原則：分數由程式算，模型只提供判斷的輸入</a></li><li class="h3"><a href="#s61">11.2 單一 finding 的四個維度</a></li><li class="h3"><a href="#s62">11.3 為什麼不用 DREAD，也不只用 OWASP Risk Rating</a></li><li class="h3"><a href="#s63">11.4 面向分數與閘門</a></li><li class="h3"><a href="#s64">11.5 校準：從 seeded benchmark 到家族權重</a></li><li class="h2"><a href="#s65">第 12 章　資料可信度模型</a></li><li class="h3"><a href="#s66">12.1 問題的兩個層次</a></li><li class="h3"><a href="#s67">12.2 輸入資料的三種來源與各自的信任規則</a></li><li class="h3"><a href="#s68">12.3 來源證據的三要件</a></li><li class="h3"><a href="#s69">12.4 模型輸出的三重驗證</a></li><li class="h3"><a href="#s70">12.5 拒答與棄權的處理</a></li><li class="h3"><a href="#s71">12.6 本報告自身的證據分級</a></li><li class="h2"><a href="#s72">第 13 章　去偏誤機制目錄</a></li><li class="h1"><a href="#s73">第五部　使用流程</a></li><li class="h2"><a href="#s74">第 14 章　三種觸發模式</a></li><li class="h3"><a href="#s75">14.1 PR 觸發：增量審查</a></li><li class="h3"><a href="#s76">14.2 夜間全庫審查</a></li><li class="h3"><a href="#s77">14.3 手動深度審查</a></li><li class="h2"><a href="#s78">第 15 章　人工裁決佇列與校準迴圈</a></li><li class="h3"><a href="#s79">15.1 什麼會進人工佇列</a></li><li class="h3"><a href="#s80">15.2 審查疲勞與自動核准的陷阱</a></li><li class="h3"><a href="#s81">15.3 校準迴圈</a></li><li class="h3"><a href="#s82">15.4 導入的三個階段</a></li><li class="h1"><a href="#s83">第六部　資安風險</a></li><li class="h2"><a href="#s84">第 16 章　審查系統的六類風險</a></li><li class="h3"><a href="#s85">16.1 原始碼外洩</a></li><li class="h3"><a href="#s86">16.2 Prompt Injection 操縱審查結果</a></li><li class="h3"><a href="#s87">16.3 模型供應鏈</a></li><li class="h3"><a href="#s88">16.4 審查系統自己的 GitHub Actions</a></li><li class="h3"><a href="#s89">16.5 過度信任與責任稀釋</a></li><li class="h3"><a href="#s90">16.6 成本失控與可用性</a></li><li class="h2"><a href="#s91">第 17 章　與 OWASP LLM Top 10 2025 的對應</a></li><li class="h1"><a href="#s92">第七部　方案比較</a></li><li class="h2"><a href="#s93">第 18 章　架構層級的比較</a></li><li class="h2"><a href="#s94">第 19 章　商用與開源方案的比較</a></li><li class="h2"><a href="#s95">第 20 章　正式面板的三個家族與冷備援在此用途上的適配性</a></li><li class="h1"><a href="#s96">第八部　實務應用</a></li><li class="h2"><a href="#s97">第 21 章　跨國 ODM/EMS 的部署拓樸</a></li><li class="h3"><a href="#s98">21.1 共用管線：台北、桃園、休士頓、Brno/Blučina</a></li><li class="h3"><a href="#s99">21.2 隔離管線：上海浦東與重慶</a></li><li class="h3"><a href="#s100">21.3 客戶稽核時的說明</a></li><li class="h2"><a href="#s101">第 22 章　成本模型</a></li><li class="h3"><a href="#s102">22.1 變數</a></li><li class="h3"><a href="#s103">22.2 估算（以區間呈現）</a></li><li class="h3"><a href="#s104">22.3 成本與去偏誤的取捨</a></li><li class="h2"><a href="#s105">第 23 章　從雛型到生產的差距</a></li><li class="h1"><a href="#s106">第九部　限制</a></li><li class="h2"><a href="#s107">第 24 章　本報告不涵蓋什麼，以及結論的邊界條件</a></li><li class="h3"><a href="#s108">24.1 範圍限制</a></li><li class="h3"><a href="#s109">24.2 方法上的弱點</a></li><li class="h3"><a href="#s110">24.3 查證上的限制</a></li><li class="h3"><a href="#s111">24.4 模型版本漂移</a></li><li class="h3"><a href="#s112">24.5 兩套「證據級別」的混淆風險</a></li><li class="h1"><a href="#s113">第十部　治理建議</a></li><li class="h2"><a href="#s114">第 25 章　全球管線的治理建議</a></li><li class="h3"><a href="#s115">25.1 政策層</a></li><li class="h3"><a href="#s116">25.2 技術層</a></li><li class="h3"><a href="#s117">25.3 流程層</a></li><li class="h3"><a href="#s118">25.4 對應總表</a></li><li class="h2"><a href="#s119">第 26 章　上海浦東與重慶廠區的單獨建議</a></li><li class="h1"><a href="#s120">附錄A　引用來源清單</a></li><li class="h2"><a href="#s121">A 組：工具、產品與文獻</a></li><li class="h2"><a href="#s122">B 組：LLM 評審偏誤、共識方法、模型現況、治理框架</a></li><li class="h2"><a href="#s123">C 組：十一面向的標準、工具與事件</a></li><li class="h1"><a href="#s124">附錄B　查證缺口清單</a></li><li class="h2"><a href="#s125">B-1 方法與環境層缺口</a></li><li class="h2"><a href="#s126">B-2 工具與產品（A 組）</a></li><li class="h2"><a href="#s127">B-3 偏誤與模型（B 組）</a></li><li class="h2"><a href="#s128">B-4 標準與事件（C 組）</a></li><li class="h2"><a href="#s129">B-5 雛型自身的缺口</a></li><li class="h1"><a href="#s130">附錄C　術語對照表</a></li><li class="h1"><a href="#s131">附錄D　成熟度自評問卷（60 題）</a></li><li class="h2"><a href="#s132">L0 確定性錨定層</a></li><li class="h2"><a href="#s133">L1 情境建構層</a></li><li class="h2"><a href="#s134">L2 專家審查層</a></li><li class="h2"><a href="#s135">L3 對抗驗證層</a></li><li class="h2"><a href="#s136">L4 陪審裁決層</a></li><li class="h2"><a href="#s137">L5 評分與輸出層</a></li><li class="h2"><a href="#s138">計分</a></li><li class="h1"><a href="#s139">附錄E　落地 Prompt 套件（Claude Code + GitHub）</a></li></ol></nav>
+<nav id="navigation" aria-label="目次"><p class="brand">GSMD-RPT-2026-0908-01 · v0.1.0 · 2026-09-08</p><input id="q" type="search" placeholder="搜尋全文（至少 2 字）" aria-label="搜尋"><div id="hits" class="hits" aria-live="polite"></div><ol id="toc"><li class="h1"><a href="#s0">以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查</a></li><li class="h2"><a href="#s1">目次</a></li><li class="h1"><a href="#s2">第一部　管理階層摘要</a></li><li class="h2"><a href="#s3">第 1 章　決策者需要知道的事</a></li><li class="h3"><a href="#s4">1.1 問題</a></li><li class="h3"><a href="#s5">1.2 建議的架構，一句話</a></li><li class="h3"><a href="#s6">1.3 這個架構解決了什麼</a></li><li class="h3"><a href="#s7">1.4 三個需要決策的事項</a></li><li class="h3"><a href="#s8">1.5 成本與代價</a></li><li class="h3"><a href="#s9">1.6 這份報告不能告訴你的事</a></li><li class="h3"><a href="#s10">1.7 建議的批准事項</a></li><li class="h1"><a href="#s11">第二部　背景與問題定義</a></li><li class="h2"><a href="#s12">第 2 章　Vibe Coding 帶來的安全債：實證現況</a></li><li class="h3"><a href="#s13">2.1 什麼是 Vibe Coding，以及它為什麼改變了審查的前提</a></li><li class="h3"><a href="#s14">2.2 AI 生成程式碼的安全性：可查證的量化證據</a></li><li class="h3"><a href="#s15">2.3 供應鏈面的新型風險：套件幻覺</a></li><li class="h3"><a href="#s16">2.4 對跨國 ODM/EMS 的意義</a></li><li class="h2"><a href="#s17">第 3 章　單一 LLM 審查的四類失效</a></li><li class="h3"><a href="#s18">3.1 失效一：幻覺與不可重現</a></li><li class="h3"><a href="#s19">3.2 失效二：偏誤</a></li><li class="h3"><a href="#s20">3.3 失效三：Prompt Injection</a></li><li class="h3"><a href="#s21">3.4 失效四：覆蓋盲區與拒答</a></li><li class="h2"><a href="#s22">第 4 章　為什麼是 Multi-Agent，而不是「一個更強的模型」</a></li><li class="h3"><a href="#s23">4.1 反方證據先講</a></li><li class="h3"><a href="#s24">4.2 增益在哪裡：壓誤報與壓評論量，不是提召回</a></li><li class="h3"><a href="#s25">4.3 「LLM + 確定性工具」的證據為什麼一致偏正</a></li><li class="h3"><a href="#s26">4.4 異質性作為設計原則</a></li><li class="h3"><a href="#s27">4.5 本報告的定位</a></li><li class="h1"><a href="#s28">第三部　技術架構</a></li><li class="h2"><a href="#s29">第 5 章　六層架構總覽</a></li><li class="h3"><a href="#s30">5.1 為什麼是六層而不是一個 agentic loop</a></li><li class="h3"><a href="#s31">5.2 對抗的是誰</a></li><li class="h2"><a href="#s32">第 6 章　各層設計</a></li><li class="h3"><a href="#s33">6.1 L0：確定性錨定層</a></li><li class="h3"><a href="#s34">6.2 L1：情境建構層</a></li><li class="h3"><a href="#s35">6.3 L2：專家審查層</a></li><li class="h3"><a href="#s36">6.4 L3：對抗驗證層</a></li><li class="h3"><a href="#s37">6.5 L4：陪審裁決層</a></li><li class="h3"><a href="#s38">6.6 L5：評分與輸出層</a></li><li class="h2"><a href="#s39">第 7 章　模型家族與部署拓樸</a></li><li class="h3"><a href="#s40">7.1 正式面板的三個家族與冷備援</a></li><li class="h3"><a href="#s41">7.2 OpenAI 相容端點作為自架模型的共通介面</a></li><li class="h3"><a href="#s42">7.3 可抽換性是採購需求，不是工程偏好</a></li><li class="h2"><a href="#s43">第 8 章　資料流與信任邊界</a></li><li class="h2"><a href="#s44">第 9 章　Prompt Injection 防線</a></li><li class="h1"><a href="#s45">第四部　核心功能與能力</a></li><li class="h2"><a href="#s46">第 10 章　十一個審查面向</a></li><li class="h3"><a href="#s47">10.1 Application architecture</a></li><li class="h3"><a href="#s48">10.2 Security vulnerabilities（一般弱點）</a></li><li class="h3"><a href="#s49">10.3 XSS</a></li><li class="h3"><a href="#s50">10.4 CSP</a></li><li class="h3"><a href="#s51">10.5 Authentication and authorization</a></li><li class="h3"><a href="#s52">10.6 Dependency and supply-chain security（依賴）</a></li><li class="h3"><a href="#s53">10.7 GitHub Actions security</a></li><li class="h3"><a href="#s54">10.8 Secret exposure</a></li><li class="h3"><a href="#s55">10.9 Input validation</a></li><li class="h3"><a href="#s56">10.10 Insecure error handling</a></li><li class="h3"><a href="#s57">10.11 Supply-chain security（廣義）</a></li><li class="h3"><a href="#s58">10.12 十一個面向的交叉關係</a></li><li class="h2"><a href="#s59">第 11 章　評分方法</a></li><li class="h3"><a href="#s60">11.1 設計原則：分數由程式算，模型只提供判斷的輸入</a></li><li class="h3"><a href="#s61">11.2 單一 finding 的四個維度</a></li><li class="h3"><a href="#s62">11.3 為什麼不用 DREAD，也不只用 OWASP Risk Rating</a></li><li class="h3"><a href="#s63">11.4 面向分數與閘門</a></li><li class="h3"><a href="#s64">11.5 校準：從 seeded benchmark 到家族權重</a></li><li class="h2"><a href="#s65">第 12 章　資料可信度模型</a></li><li class="h3"><a href="#s66">12.1 問題的兩個層次</a></li><li class="h3"><a href="#s67">12.2 輸入資料的三種來源與各自的信任規則</a></li><li class="h3"><a href="#s68">12.3 來源證據的三要件</a></li><li class="h3"><a href="#s69">12.4 模型輸出的三重驗證</a></li><li class="h3"><a href="#s70">12.5 拒答與棄權的處理</a></li><li class="h3"><a href="#s71">12.6 本報告自身的證據分級</a></li><li class="h2"><a href="#s72">第 13 章　去偏誤機制目錄</a></li><li class="h1"><a href="#s73">第五部　使用流程</a></li><li class="h2"><a href="#s74">第 14 章　三種觸發模式</a></li><li class="h3"><a href="#s75">14.1 PR 觸發：增量審查</a></li><li class="h3"><a href="#s76">14.2 夜間全庫審查</a></li><li class="h3"><a href="#s77">14.3 手動深度審查</a></li><li class="h2"><a href="#s78">第 15 章　人工裁決佇列與校準迴圈</a></li><li class="h3"><a href="#s79">15.1 什麼會進人工佇列</a></li><li class="h3"><a href="#s80">15.2 審查疲勞與自動核准的陷阱</a></li><li class="h3"><a href="#s81">15.3 校準迴圈</a></li><li class="h3"><a href="#s82">15.4 導入的三個階段</a></li><li class="h1"><a href="#s83">第六部　資安風險</a></li><li class="h2"><a href="#s84">第 16 章　審查系統的六類風險</a></li><li class="h3"><a href="#s85">16.1 原始碼外洩</a></li><li class="h3"><a href="#s86">16.2 Prompt Injection 操縱審查結果</a></li><li class="h3"><a href="#s87">16.3 模型供應鏈</a></li><li class="h3"><a href="#s88">16.4 審查系統自己的 GitHub Actions</a></li><li class="h3"><a href="#s89">16.5 過度信任與責任稀釋</a></li><li class="h3"><a href="#s90">16.6 成本失控與可用性</a></li><li class="h2"><a href="#s91">第 17 章　與 OWASP LLM Top 10 2025 的對應</a></li><li class="h1"><a href="#s92">第七部　方案比較</a></li><li class="h2"><a href="#s93">第 18 章　架構層級的比較</a></li><li class="h2"><a href="#s94">第 19 章　商用與開源方案的比較</a></li><li class="h2"><a href="#s95">第 20 章　正式面板的三個家族與冷備援在此用途上的適配性</a></li><li class="h1"><a href="#s96">第八部　實務應用</a></li><li class="h2"><a href="#s97">第 21 章　跨國 ODM/EMS 的部署拓樸</a></li><li class="h3"><a href="#s98">21.1 共用管線：台北、桃園、休士頓、Brno/Blučina</a></li><li class="h3"><a href="#s99">21.2 隔離管線：上海浦東與重慶</a></li><li class="h3"><a href="#s100">21.3 客戶稽核時的說明</a></li><li class="h2"><a href="#s101">第 22 章　成本模型</a></li><li class="h3"><a href="#s102">22.1 變數</a></li><li class="h3"><a href="#s103">22.2 估算（以區間呈現）</a></li><li class="h3"><a href="#s104">22.3 成本與去偏誤的取捨</a></li><li class="h2"><a href="#s105">第 23 章　從雛型到生產的差距</a></li><li class="h1"><a href="#s106">第九部　限制</a></li><li class="h2"><a href="#s107">第 24 章　本報告不涵蓋什麼，以及結論的邊界條件</a></li><li class="h3"><a href="#s108">24.1 範圍限制</a></li><li class="h3"><a href="#s109">24.2 方法上的弱點</a></li><li class="h3"><a href="#s110">24.3 查證上的限制</a></li><li class="h3"><a href="#s111">24.4 模型版本漂移</a></li><li class="h3"><a href="#s112">24.5 兩套「證據級別」的混淆風險</a></li><li class="h3"><a href="#s113">24.6 門檻的保守性與導入成本</a></li><li class="h1"><a href="#s114">第十部　治理建議</a></li><li class="h2"><a href="#s115">第 25 章　全球管線的治理建議</a></li><li class="h3"><a href="#s116">25.1 政策層</a></li><li class="h3"><a href="#s117">25.2 技術層</a></li><li class="h3"><a href="#s118">25.3 流程層</a></li><li class="h3"><a href="#s119">25.4 對應總表</a></li><li class="h2"><a href="#s120">第 26 章　上海浦東與重慶廠區的單獨建議</a></li><li class="h1"><a href="#s121">附錄A　引用來源清單</a></li><li class="h2"><a href="#s122">A 組：工具、產品與文獻</a></li><li class="h2"><a href="#s123">B 組：LLM 評審偏誤、共識方法、模型現況、治理框架</a></li><li class="h2"><a href="#s124">C 組：十一面向的標準、工具與事件</a></li><li class="h1"><a href="#s125">附錄B　查證缺口清單</a></li><li class="h2"><a href="#s126">B-1 方法與環境層缺口</a></li><li class="h2"><a href="#s127">B-2 工具與產品（A 組）</a></li><li class="h2"><a href="#s128">B-3 偏誤與模型（B 組）</a></li><li class="h2"><a href="#s129">B-4 標準與事件（C 組）</a></li><li class="h2"><a href="#s130">B-5 雛型自身的缺口</a></li><li class="h1"><a href="#s131">附錄C　術語對照表</a></li><li class="h1"><a href="#s132">附錄D　成熟度自評問卷（60 題）</a></li><li class="h2"><a href="#s133">L0 確定性錨定層</a></li><li class="h2"><a href="#s134">L1 情境建構層</a></li><li class="h2"><a href="#s135">L2 專家審查層</a></li><li class="h2"><a href="#s136">L3 對抗驗證層</a></li><li class="h2"><a href="#s137">L4 陪審裁決層</a></li><li class="h2"><a href="#s138">L5 評分與輸出層</a></li><li class="h2"><a href="#s139">計分</a></li><li class="h1"><a href="#s140">附錄E　落地 Prompt 套件（Claude Code + GitHub）</a></li></ol></nav>
 <main id="content" tabindex="-1"><h1 id="s0">以多模型 Multi-Agent 架構進行 Vibe-Coded 軟體的深度資安與架構審查</h1>
 <p><strong>文件編號：GSMD-RPT-2026-0908-01</strong>（登錄簿配號 2026-09-10）
 <strong>版本：v0.4.3</strong>　<strong>日期：2026-10-07</strong>（正文最後一次實質修改；初版 v0.1.0，2026-09-08；之後各版見 <code>docs/CHANGELOG.md</code>）　<strong>類型：RPT 研究報告／專業教學手冊</strong>
@@ -911,26 +911,31 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <p>Opus 5.5 另帶來一種新的漂移：Anthropic 公告寫明多數資安任務會被透明地轉給另一個模型處理<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span>。同一個模型 ID 背後實際回答的模型因此不固定，而校準量測的是「家族的行為」，前提是模型固定。雛型自 v0.4.1 起把 Claude 預設改為 Opus 5.5，並把每次回應自報的模型 ID 記進報告的 provider manifest（<code>served_models</code>）。但公告沒有說明轉送後 API 回應裡的模型欄位會不會跟著改變；如果不會，這項紀錄就看不出轉送。改版時也還沒有以 Opus 5.5 做 live 校準，在那之前，Claude 家族的權重與門檻都不是針對 Opus 5.5 量出來的。</p>
 <h3 id="s112">24.5 兩套「證據級別」的混淆風險</h3>
 <p>本報告同時使用「finding 的證據層級 A 到 D」與「引用來源的證據四級」。兩者的名稱相似但意義不同：前者是審查輸出的可信度，後者是本文引用的可信度。讀者、稽核者與工具整合者都可能混淆；治理建議要求在任何對外文件中把前者稱為「evidence tier」、後者稱為「source grade」。</p>
-<h1 id="s113">第十部　治理建議</h1>
+<h3 id="s113">24.6 門檻的保守性與導入成本</h3>
+<p>門禁刻意偏向 fail-closed：任何一處不確定都讓審查「不完整」而擋下合併。這是設計取向，不是缺陷，但它有實際的導入成本，採用前應先理解。</p>
+<p><strong>任一 L0 工具警示都擋門，且目標端沒有豁免路徑。</strong> 只要確定性工具（semgrep、osv-scanner、trivy、gitleaks、csp-evaluator）在被審目標上報出一條警示級以上的結果，審查就標記 <code>unresolved_tool_findings</code> 而擋門；模型的沉默或否決都不會清除它（這是刻意的：確定性工具是地板）。被審目標自帶的工具抑制設定一律不被採信。後果是：在任何帶有既有工具發現的真實儲存庫上，門禁實際上不會變綠，除非團隊把那些發現修掉。MARA 對「自己的」儲存庫掃描有分流檔（<code>tools/trivyignore.yaml</code>、<code>tools/csp-triage.yaml</code>，附到期日與審查），但對「被審目標」的工具發現，目前沒有一個讓人工具名記錄「已審、誤報或接受風險」的分流機制。要補這個機制，應比照模型 finding 的人工決定（<code>mara.decisions</code>：綁定被審內容、具名、具日期的人工記錄，報告中仍然可見、不隱藏），而不是放寬門禁；但它同時是一個流程取向的決定（團隊要以何種工作流接受 L0 的誤報），屬於需由負責人定方向的項目。</p>
+<p><strong>人工決定綁定到當次被審內容，任何變動都會讓工單重開。</strong> 一筆人工「誤報」決定只對逐位元組相同的 bundle 有效（<code>mara.reviewed_content</code>）；被審目標只要多一個不相關檔案，決定就不再適用，對應 finding 回到佇列、門禁重新擋下。這確保決定不會被張冠李戴到另一份程式，但代價是：在尚未達成無監督「不採納」（政策 P8 尚未解鎖）之前，每次提交都可能讓既有工單重開。對頻繁變動的分支，這會持續產生人工負擔。</p>
+<p>這兩項與 24.2 的「三個家族在數學上不夠」同屬一類：門禁寧可多擋、多送人工，也不放行。它們合起來意味著，以目前的設定，門禁適合當「觀察與把關」而非「全自動放行」，這也與第 15 章的三階段導入（前兩個月只觀察不擋）一致。</p>
+<h1 id="s114">第十部　治理建議</h1>
 <p>每條建議標明對應的標準或法規條文、負責角色、時程與明示的代價。上海與重慶廠區的條目單獨列於第 26 章。控制項編號依 ISO/IEC 27001:2022 Annex A；本次研究無法讀取標準原文，控制項標題依實務通用引用，5.19 到 5.21、8.8 與 8.32 的標題尚未對照正本<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜C13.1、C13.2</span></span>，採用前應對照購買的標準文本。</p>
-<h2 id="s114">第 25 章　全球管線的治理建議</h2>
-<h3 id="s115">25.1 政策層</h3>
+<h2 id="s115">第 25 章　全球管線的治理建議</h2>
+<h3 id="s116">25.1 政策層</h3>
 <p><strong>G-1 把自動審查定義為安全測試的一部分，而非取代。</strong> 對應 ISO/IEC 27001:2022 A.8.29（開發與驗收中的安全測試）、A.8.25（安全開發生命週期）；IEC 62443-4-1 SVV 實務；NIST SSDF PW.7、PW.8。負責：產品安全長（PSO）。時程：導入第 1 個月內以政策文件確立。代價：無法以「AI 審查通過」取代人工安全測試，人力節省的預期需下修。</p>
 <p><strong>G-2 家族數不低於三、反序 pass 不關閉、judge 不見分數，列為政策。</strong> 對應 NIST AI 600-1 的「Harmful Bias and Homogenization」風險類別<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B118</span></span>與 ISO/IEC 42001:2023 的 AI 管理系統要求<span class="ev ev-u" title="證據級別：尚未證實">尚未證實<span class="ev-src">｜B121</span></span>。負責：PSO 與 AI 治理委員會。時程：第 1 個月。代價：成本下限被鎖定，第 22 章的裁減空間縮小約三分之一。</p>
 <p><strong>G-3 資料主權規則寫進設定檔的驗證邏輯。</strong> 原始碼只送往 on-prem 或 ZDR 的模型，或附核准單號的有限期保留模型；Fable 系列不用於審查；DeepSeek 與 GLM 只自架、不經其廠商 API；送往 Claude 的呼叫不走 Batch API 與 code execution 等不在 ZDR 範圍內的功能，因為 API 本身不會擋下它們<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜B81</span></span>；每次回應實際使用的模型要記錄下來，因為 Opus 5.5 會把部分資安請求轉給另一個模型<span class="ev ev-v" title="證據級別：廠商主張">廠商主張<span class="ev-src">｜B125</span></span>（雛型自 v0.4.1 起記錄回應自報的模型 ID；轉送是否反映在這個欄位，官方沒有說明）。v0.4.2 新增 <code>vendor_api_retained</code> 一類，指廠商會保留資料一段期間、但不用於訓練的 API，只在該模型自己附有核准單號時放行，正式設定的 Gemini 即屬此類；經 Bedrock 的 Claude 仍標為 <code>vendor_api_zdr</code>，依據的是 AWS 的承諾而非 Anthropic 的 ZDR 協議，須由法務確認。對應 A.5.19 到 A.5.21（供應商關係與 ICT 供應鏈，標題待對照）、A.8.10（資訊刪除）；Anthropic 的資料保留條款【B81】。負責：CISO 與法務。時程：第 1 個月。代價：放棄 Anthropic 最強的 Fable 模型；GLM（以及冷備援的 DeepSeek）需自備 GPU；Gemini 的有限期保留要逐模型核准，換模型或換方案時重新核准。</p>
 <p><strong>G-4 模型可抽換性作為採購條件。</strong> 任何家族必須能在一週內被替換而不改變流程；替代家族（Llama 4、Mistral、Qwen 的自架版本）預先部署為冷備。雛型自 v0.4.2 起的三份冷備設定（<code>standby-for-{anthropic,gemini,glm}.yaml</code>）各以地端 DeepSeek 取代正式面板的一個家族，mock 排練已記錄，實地演練尚未進行。對應 A.5.20（供應商協議）、NIST CSF 2.0 GV.SC<span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">｜C13.4</span></span>。負責：採購與平台團隊。時程：第 3 個月前完成冷備。代價：額外的 GPU 與維運成本；Qwen 同屬中國關聯來源，替代 DeepSeek 時不解決稽核問題；同理，以 DeepSeek 替代 GLM 也不解決「排除中國關聯模型」的客戶要求，這種要求需要另備一個非中國關聯的自架家族。</p>
-<h3 id="s116">25.2 技術層</h3>
+<h3 id="s117">25.2 技術層</h3>
 <p><strong>G-5 L0 工具固定版本並簽章驗證。</strong> semgrep、gitleaks、OSV-Scanner、zizmor、Scorecard 的版本寫進 lockfile；TruffleHog 只在隔離 runner 執行（Shai-Hulud 曾濫用它搜尋機密【C6.15】）。對應 A.8.8（技術弱點管理，標題待對照）、SLSA v1.2 Build L2【C11.1】。負責：平台團隊。時程：第 2 個月。代價：工具升版需走變更管理。</p>
 <p><strong>G-6 審查 workflow 本身套用組織層級的 SHA pinning 政策與 <code>pull_request</code> 限制。</strong> 對應 GitHub 2025 年 8 月的政策功能【C7.8】、OpenSSF Scorecard Dangerous-Workflow 與 Pinned-Dependencies【C7.13】、A.8.32（變更管理，標題待對照）。負責：平台團隊。時程：第 1 個月。代價：所有既有 workflow 都要重新固定 SHA。</p>
 <p><strong>G-7 模型權重納入 SBOM 並簽章。</strong> 自架權重的來源、雜湊與授權寫進 CycloneDX 1.6 以上的 ML-BOM【C11.2】；以 cosign 或 NGC 簽章驗證；只載入 safetensors。對應 EU CRA Annex I Part II (1)【C11.9】、A.5.21。負責：平台團隊與 PSIRT。時程：第 2 個月。代價：自架權重的雜湊與簽章需要平台團隊逐版補齊；正式面板的 GLM 在 ML-BOM 中仍是 PENDING（來源、版本、授權與雜湊都待 IEC 平台團隊填入）；DeepSeek V4 的權重已確認發布於 Hugging Face 的官方組織【A78】，但 NGC 之外的來源沒有發行者簽章，只能靠第一次固定的雜湊，而冷備援實際使用的 V4-Flash 權重尚無 ML-BOM 項目。</p>
 <p><strong>G-8 每季對三個家族執行 garak 與 CyberSecEval 4 的 Prompt Injection 與 False Refusal Rate 測試。</strong> 結果寫進校準權重與偏誤稽核。garak 應使用 0.17.0 以上的版本（含 EU AI Act 對照標籤）【B104】；CyberSecEval 自 2025 年 6 月起處於低維護狀態，沒有新的基準版本【B113】。雛型的 <code>scripts/model_eval.py</code> 會為正式面板的三個家族都產生 garak 命令（Bedrock 上的 Claude 用 garak 的 <code>--target_type bedrock</code>、Gemini 與自架 GLM 用 OpenAI 相容目標），並為 Gemini 與 GLM 產生 CyberSecEval 的 Prompt Injection 與 MITRE FRR 命令；只有 Claude 的 CyberSecEval 被跳過——釘選版的 CyberSecEval 沒有 Bedrock provider，因此 Claude 這兩項指標缺漏，G-8 以生產面板尚無法完全通過（第 24 章列為待補）。對應 NIST AI 600-1 的 Information Security 類別【B118】、OWASP Agentic Top 10 ASI01【B45】。負責：安全團隊。時程：第 3 個月起每季。代價：每季約一人週。</p>
 <p><strong>G-9 校準迴圈每季重跑，並以 Alternative Annotator Test 作為無監督「不採納」的驗收門檻。</strong> 對應 A.8.29、ISO/IEC 23894 的 AI 風險管理流程【B122】。負責：安全團隊與資料科學。時程：第 3 個月第一次，之後每季。代價：每季約兩人週，且需維護輪替的校準集。</p>
-<h3 id="s117">25.3 流程層</h3>
+<h3 id="s118">25.3 流程層</h3>
 <p><strong>G-10 三階段導入：影子（2 個月）、建議（3 個月）、門檻阻擋（第 6 個月起）。</strong> 對應 A.8.25、IEC 62443-4-1 SM 實務。負責：PSO。時程：如述。代價：前五個月沒有阻擋效果。</p>
 <p><strong>G-11 人工佇列接工單系統，裁決結果回寫校準集；佇列超量時收緊門檻而非加速核准。</strong> 對應 A.8.29、NIST SSDF RV.1。負責：安全團隊。時程：第 2 個月。代價：安全團隊每週需保留固定時段處理佇列。</p>
 <p><strong>G-12 A 級 Critical finding 若涉及已出貨產品，直接接入 PSIRT 的 CRA 第 14 條通報流程。</strong> 24 小時預警義務已於 2026 年 9 月 11 日生效，通報經 ENISA Single Reporting Platform 提交【C11.9、C11.15】；PSIRT 須先取得該平台的帳號。對應 IEC 62443-4-1 DM 與 SUM 實務。負責：PSIRT。時程：立即。代價：審查管線的誤報會消耗 PSIRT 的判斷時間，因此只限 A 級。</p>
 <p><strong>G-13 AI 素養訓練。</strong> EU AI Act 第 4 條自 2025 年 2 月 2 日起對所有 deployer 課以 AI 素養義務，不論風險等級；2026 年 7 月 27 日生效的 AI Omnibus 修正後，義務由「確保足夠的 AI 素養」改為「採取措施支持 AI 素養的發展」，不要求保證特定程度<span class="ev ev-t" title="證據級別：第三方評論">第三方評論<span class="ev-src">（修正條文經彙整網站讀取，EUR-Lex 原文未讀到）｜B123</span></span><span class="ev ev-a" title="證據級別：已證實">已證實<span class="ev-src">（生效日期）｜B133</span></span>。義務變輕不代表訓練可以省略：審查管線的使用者（開發者、安全團隊、人工裁決者）都需要理解證據層級、偏誤稽核與「通過不等於安全」。負責：人資與 PSO。時程：第 2 個月起。代價：每人約半天。</p>
-<h3 id="s118">25.4 對應總表</h3>
+<h3 id="s119">25.4 對應總表</h3>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 7"><table>
 <thead>
 <tr>
@@ -1050,16 +1055,16 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tbody>
 </table></div>
 <p>標 * 者的控制項標題尚未對照 ISO 正本（附錄B）。</p>
-<h2 id="s119">第 26 章　上海浦東與重慶廠區的單獨建議</h2>
+<h2 id="s120">第 26 章　上海浦東與重慶廠區的單獨建議</h2>
 <p>以下條目依 CSL、DSL 與 PIPL 的資料出境規則單獨處理，不併入第 25 章的任何 action item。</p>
 <p><strong>CN-1 境內管線完全獨立。</strong> repo、runner、L0 工具、三個家族的部署與報告全部在境內；原始碼、SARIF、校準資料與人工裁決結果不出境。對應 DSL 的資料分類分級與出境安全評估、PIPL 的個人資訊出境規定。負責：中國區 IT 與法務。時程：與全球管線同步規劃，但獨立驗收。代價：境內管線的家族數可能只有兩個、無 Claude、校準資料不與全球共用，能力低於全球管線。雛型把其中設定檔能決定的部分寫成政策 P9：設定標明 <code>site: prc</code> 時，每個非 mock 的模型必須是自架、<code>on_prem</code> 且位於私有主機，不接受任何讓原始碼出境的覆寫設定，人工佇列不得開成境外託管的工單，PSIRT 交付只能送到私有主機；不符即拒絕載入。這裡的「私有主機」是位址或名稱上的判斷（RFC 1918、loopback、<code>.internal</code> 之類的名稱或設定自行宣告的網域），不是地理位置的判斷：解析到境外閘道的私有名稱一樣會通過，境內閘道是否真的在境內由廠區負責。這不等於 CN-1 已落實：設定檔無從得知受審的是誰的程式碼，拿別的設定去審境內程式碼不會被擋下，報告、校準資料與人工裁決存放在哪裡仍由廠區自行安排。</p>
 <p><strong>CN-2 境內自架的中國關聯模型仍適用敏感詞校準。</strong> 第 13 章第 14 項的配對樣本測試在境內管線同樣執行（DeepSeek 之外，GLM 若進入境內管線也一樣），結果留在境內。負責：中國區安全團隊。代價：校準集需在境內獨立維護。</p>
 <p><strong>CN-3 全球安全團隊只接收面向分數的彙總，不接收 finding 明細。</strong> 明細若需跨境，走 DSL 與 PIPL 的出境評估程序。雛型以 <code>mara export-summary</code> 從境內已寫出的審查報告另外產出分數彙總（score summary）：欄位採白名單，只含面向分數、整體分數、審查狀態與受審對象的假名（以境內保管的金鑰做 HMAC，境外無法反查是哪個 repo），不含檔案、行號、引用、CWE 等明細；完整報告照常留在境內（<code>docs/adr/0004-score-summary.md</code>）。負責：中國區法務。代價：全球團隊對境內程式碼的可見度降低，需以境內團隊的裁決為準。</p>
 <p><strong>CN-4 境內管線的稽核對應以中國標準為主。</strong> 等保 2.0 與 GB/T 相關標準的對應由境內團隊另行製作，本報告不代為對應。負責：中國區合規。代價：兩套稽核文件。</p>
-<h1 id="s120">附錄A　引用來源清單</h1>
+<h1 id="s121">附錄A　引用來源清單</h1>
 <p><strong>核對規則（2026-09-18 修正）：來源類型與聲明真偽分開記錄。僅見摘要者一律待核實；既有「已證實」不代表本次已讀原文。缺少逐項核對摘錄、日期及審查人者，不升級為已核對。機器可讀登錄簿見 <code>docs/source-verification.json</code>。</strong></p>
 <p>編號規則：A 開頭為工具與文獻調查（第二、四、七部主要引用），B 開頭為 LLM 評審偏誤、模型現況與治理框架，C 開頭為十一面向的標準與事件（C 後的第一個數字是面向編號）。「讀取」欄標示本次研究是否直接讀到原頁：是＝直接讀取；摘要＝原頁被出口代理伺服器封鎖，題名、日期與數字來自搜尋引擎摘要。日期無法驗證者列於附錄B。2026-10-06 複核後：「是（arXiv API）」表示經 arXiv 官方 API 讀取題名、作者、日期與摘要；核對狀態「原文核對（2026-10-06）」表示該次已逐條留下摘錄（見登錄簿的 <code>claim_excerpt</code>），核對者為 Claude Code 代理，未經人工複核。</p>
-<h2 id="s121">A 組：工具、產品與文獻</h2>
+<h2 id="s122">A 組：工具、產品與文獻</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 8"><table>
 <thead>
 <tr>
@@ -1686,7 +1691,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<h2 id="s122">B 組：LLM 評審偏誤、共識方法、模型現況、治理框架</h2>
+<h2 id="s123">B 組：LLM 評審偏誤、共識方法、模型現況、治理框架</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 9"><table>
 <thead>
 <tr>
@@ -2613,7 +2618,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<h2 id="s123">C 組：十一面向的標準、工具與事件</h2>
+<h2 id="s124">C 組：十一面向的標準、工具與事件</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 10"><table>
 <thead>
 <tr>
@@ -3581,16 +3586,16 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tbody>
 </table></div>
 <p>另：FIRST CVSS v4.0 參考計算器原始碼（BSD-2-Clause）<a href="https://github.com/FIRSTdotorg/cvss-v4-calculator" rel="noopener noreferrer">https://github.com/FIRSTdotorg/cvss-v4-calculator</a> 於本次直接讀取並移植，見雛型 <code>src/mara/scoring/cvss4.py</code>。</p>
-<h1 id="s124">附錄B　查證缺口清單</h1>
+<h1 id="s125">附錄B　查證缺口清單</h1>
 <p>每項列出：無法查證什麼、為什麼、要查證需要什麼、暫時採用了哪一級證據。前置說明：本次研究環境的出口代理伺服器封鎖了以下一手網域：arxiv.org、anthropic.com、openai.com、deepmind.google、github.blog、docs.github.com、nist.gov 全系（含 csrc、nvlpubs）、owasp.org、genai.owasp.org、cwe.mitre.org、capec.mitre.org、atlas.mitre.org、cisa.gov、w3.org、first.org、slsa.dev、oasis-open.org、developer.mozilla.org、iso.org、artificialintelligenceact.eu、huggingface.co、nvidianews.nvidia.com、developer.nvidia.com、crowdstrike.com、blogs.cisco.com、garanteprivacy.it、moda.gov.tw、ey.gov.tw、veracode.com、semgrep.dev、api-docs.deepseek.com、thehackernews.com、dl.acm.org、wikipedia。三個研究 agent 的搜尋配額（各 200 次）亦已用盡。以下缺口中標「代理封鎖」者，其題名、日期與數字來自搜尋引擎摘要，未直接讀取原頁；關閉方式一律是在不受封鎖的環境開啟該 URL 核對。2026-10-06 的複核已能讀取上列大部分網域（iso.org、EUR-Lex、usenix.org 的 PDF 與 NVD 仍讀不到），逐項結果記在附錄A 的狀態欄與 <code>docs/source-verification.json</code>；複核由 Claude Code 代理以 WebFetch、官方 API 與 <code>gh api</code> 執行，未經人工複核。以下各項的「2026-10-06」附記即該次結果。</p>
-<h2 id="s125">B-1 方法與環境層缺口</h2>
+<h2 id="s126">B-1 方法與環境層缺口</h2>
 <ol>
 <li><strong>arXiv 全部條目未直接讀取。</strong> 原因：代理封鎖。需要：開啟每個 arXiv 頁核對題名、作者、日期與數字。暫採：第三方評論（preprint）。2026-10-06 部分核對：被引用的 arXiv 條目已以 arXiv API 讀取題名、作者、日期與摘要，並另查發表場次；確認已刊於同儕審查場次的改為已證實（如 A85、A115、A122、B1、B8、B17），仍是 preprint 的維持第三方評論。摘要以外的數字（表格內的值）多數未逐一比對全文，不關閉。</li>
 <li><strong>NIST 全部文件未直接讀取</strong>（AI RMF 1.0、AI 600-1、SP 800-218/218A、SP 800-63-4、SP 800-160、SP 800-204D、CAISI 兩份評估、NVD 政策）。原因：代理封鎖。暫採：已證實（政府出版物，依出版者強度），數字標「摘要」。2026-10-06 部分核對：SP 800-63-4、SP 800-160 Vol.1 Rev.1、SP 800-204D、SP 800-218 與其 Rev.1 草案、CSF 2.0、NVD 政策公告、CAISI 兩份評估已直接讀取（C 組與 B95、B96）；AI RMF 1.0 與 AI 600-1 本次未讀，不關閉。</li>
 <li><strong>OWASP 官網未直接讀取</strong>，但 OWASP 的 GitHub 官方 repo（ASVS、Top10、API-Security、CheatSheetSeries）可讀，本報告以 repo 為一手。原因：代理封鎖。暫採：已證實（repo）。2026-10-06 附記：owasp.org 與 genai.owasp.org 已可讀；Top 10:2025 的正式網址已改為 top10.owasp.org/2025，Risk Rating Methodology 轉址到 community.owasp.org。Input Validation Cheat Sheet 於 2026-10-03 大幅改寫，第 10.9 節已依新版改寫。</li>
 <li><strong>Anthropic 官方公告頁全部未讀取</strong>（安全審查公告、Claude Code Security、Glasswing、Opus 5 系統卡）；platform.claude.com 的文件可讀。暫採：公告為廠商主張（依二手）；文件為已證實。2026-10-06 部分核對：Claude Code Security 公告（A7）、Claude Security public beta（B134）、Opus 5.5 公告（B125）已直接讀取；Opus 5 系統卡只找到 PDF 位址（B85），內容仍未讀，不關閉。</li>
 </ol>
-<h2 id="s126">B-2 工具與產品（A 組）</h2>
+<h2 id="s127">B-2 工具與產品（A 組）</h2>
 <ol>
 <li><strong>LLMSmith</strong> 找不到任何相符結果；可能名稱有誤。暫採：未引用。</li>
 <li><strong>PentestGPT 原始論文</strong>未取得 arXiv 編號與發表場次。暫採：未引用。</li>
@@ -3621,7 +3626,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <li><strong>DVDR-LLM（ETASR 期刊）發表日期</strong>未取得。暫採：未引用。</li>
 <li><strong>Anthropic security-review 的精確率或召回率</strong>：公告無測量數據。暫採：無數字可引。</li>
 </ol>
-<h2 id="s127">B-3 偏誤與模型（B 組）</h2>
+<h2 id="s128">B-3 偏誤與模型（B 組）</h2>
 <ol>
 <li><strong>「Large Language Models Share Representations…」</strong>作為集成多樣性論文不存在；同名者為多語言可解釋性論文（arXiv:2501.06346）。暫採：改引 B17、B18、B19。</li>
 <li><strong>OWASP Agentic Top 10 2026 的 ASI04 到 ASI10</strong>未確認。暫採：只引 ASI01 到 03。</li>
@@ -3640,7 +3645,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <li><strong>Anthropic Opus 5 系統卡的 cyber 評估內容</strong>未讀。暫採：尚未證實。2026-10-06 附記：已找到 PDF 位址並寫入附錄A（B85），內容仍未讀，不關閉；Opus 5.5 另有自己的系統卡，也未讀。</li>
 <li><strong>Krippendorff&#x27;s α 在本雛型的「單一 finding」層級是簡化的代理指標</strong>（見 <code>pipeline._agreement_proxy</code>：每個 judge 家族取一個裁決，計算眾數占比並對三類裁決做機遇校正；評審家族少於兩個時為未定義；2026-09-18 起報告欄位改名為 <code>agreement_proxy</code>，2026-10-03 起不再輸出恆為空的 <code>krippendorff_alpha</code> 欄位），不是嚴格的 α；嚴格的 α 只在語料層級計算（2026-10-06 起每個 finding 每個家族只計一個標籤，全部標籤相同時為未定義；此前正反序被當成兩個評分者，數值有偏差）。暫採：正文第 11.2 節與程式碼註解已標示。</li>
 </ol>
-<h2 id="s128">B-4 標準與事件（C 組）</h2>
+<h2 id="s129">B-4 標準與事件（C 組）</h2>
 <ol>
 <li><strong>CWE 與 CAPEC 目錄的當前版本號與日期</strong>未驗。暫採：未引用版本。</li>
 <li><strong>SARIF 2.1.0 的 OASIS 批准日</strong>（2020-03-27）與 2.2 時程：A 組來源給出批准與公告日，C 組未能驗，兩組不矛盾。暫採：已證實（A142）。</li>
@@ -3665,7 +3670,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <li><strong>Bybit 2025 事件細節</strong>：只在 OWASP A03:2025 內引用。暫採：OWASP 主張已證實，事件本身未獨立驗。</li>
 <li><strong>NVD「僅 15 到 20% CVE 受 enrichment」的業界估計</strong>。暫採：第三方評論，正文未引數字。</li>
 </ol>
-<h2 id="s129">B-5 雛型自身的缺口</h2>
+<h2 id="s130">B-5 雛型自身的缺口</h2>
 <ol>
 <li><strong>真實模型的精確率與召回率</strong>：雛型原只在 mock 家族上驗證行為。關閉方式：以真實三家族在 seeded benchmark 上跑第一次校準（附錄E prompt 4）。進度（2026-10-12，部分關閉）：第一次 live 校準已於 2026-10-08 完成（<code>docs/calibration-2026-10-08.md</code>；Bedrock 上的 Claude Opus 5.5、Gemini 3.8 Flash、自架 GLM；五個樣本、51 個標籤），precision／recall／F1 為 anthropic 0.45／0.82／0.58、gemini 0.58／0.55／0.57、glm 0.41／0.80／0.54，治理檢查 G-9 通過。仍未關閉的部分：五個合成樣本、51 個標籤只能視為方向而非量測；Alternative Annotator Test 因尚無人工裁決（G-13 沒有受訓裁決者）而未通過，P8 仍把每個非 D 級的「不採納」送人工；建議權重未寫入設定。</li>
 <li><strong>bias sensitivity 測試</strong>（第 13 章第 16 項）未實作。</li>
@@ -3677,7 +3682,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <li><strong>Gemini API 付費層的保留天數</strong>：條款只寫「有限期間」【B139】，沒有天數；常被引用的 55 天是 AI Studio 中開發者自有紀錄的預設上限，不是濫用偵測紀錄。需要：Google 的書面確認或企業資料處理協議。暫採：尚未證實；核准單號 20261006-GISMD-Approve-01 依據的保留條件應附在核准紀錄中。</li>
 <li><strong>GLM 的安全面獨立評估</strong>：CAISI 對 GLM-5.2 的評估只給定性結論【B147】，對 GLM-5.3 的評估只含能力、未涵蓋 Flash 版本【B146】；本次未找到 CrowdStrike、Cisco 等對 GLM 的 jailbreak 或敏感詞研究，也未找到台灣對智譜或 GLM 的公務機關限制。需要：上述研究或政府文件，以及治理檢查 G-8 對 IEC 端點實際執行的 garak 與 CyberSecEval 結果。暫採：尚未證實。</li>
 </ol>
-<h1 id="s130">附錄C　術語對照表</h1>
+<h1 id="s131">附錄C　術語對照表</h1>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 11"><table>
 <thead>
 <tr>
@@ -3989,9 +3994,9 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<h1 id="s131">附錄D　成熟度自評問卷（60 題）</h1>
+<h1 id="s132">附錄D　成熟度自評問卷（60 題）</h1>
 <p>五級評分：0 = 沒有做；1 = 臨時或個案；2 = 有文件但未全面；3 = 全面執行且有紀錄；4 = 全面執行、有量測、有持續改善。題目問「有沒有做、做到什麼程度」，不問「你覺得夠不夠好」。依六層架構分組，每組 10 題。總分 240。附屬雛型最近一次以本問卷自評的結果見 <code>docs/assessment-2026-10-12.md</code>（173／240；L0 29、L5 24、L1 到 L4 各 30；第一次 live 校準後的重跑，2026-10-13 修訂：repo 恢復公開後 Scorecard 與 code scanning 上傳恢復執行，第 5、9 題由 2 分升為 3 分），自評只代表雛型的機制完備度；live 校準只有一期、五個合成樣本，也不代表真實模型在真實 repo 上的效能。</p>
-<h2 id="s132">L0 確定性錨定層</h2>
+<h2 id="s133">L0 確定性錨定層</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 12"><table>
 <thead>
 <tr>
@@ -4053,7 +4058,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<h2 id="s133">L1 情境建構層</h2>
+<h2 id="s134">L1 情境建構層</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 13"><table>
 <thead>
 <tr>
@@ -4115,7 +4120,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<h2 id="s134">L2 專家審查層</h2>
+<h2 id="s135">L2 專家審查層</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 14"><table>
 <thead>
 <tr>
@@ -4177,7 +4182,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<h2 id="s135">L3 對抗驗證層</h2>
+<h2 id="s136">L3 對抗驗證層</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 15"><table>
 <thead>
 <tr>
@@ -4239,7 +4244,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<h2 id="s136">L4 陪審裁決層</h2>
+<h2 id="s137">L4 陪審裁決層</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 16"><table>
 <thead>
 <tr>
@@ -4301,7 +4306,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<h2 id="s137">L5 評分與輸出層</h2>
+<h2 id="s138">L5 評分與輸出層</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 17"><table>
 <thead>
 <tr>
@@ -4363,7 +4368,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tr>
 </tbody>
 </table></div>
-<h2 id="s138">計分</h2>
+<h2 id="s139">計分</h2>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 18"><table>
 <thead>
 <tr>
@@ -4419,7 +4424,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 </tbody>
 </table></div>
 <p>解讀：合計低於 60 為「未開始」；60 到 120 為「工具階段」（通常 L0 高、其餘低）；120 到 180 為「單模型階段」；180 以上為「異質多代理階段」。任何一層低於 20 都應優先處理該層，因為六層是串聯的，最弱的一層決定整體的可信度。</p>
-<h1 id="s139">附錄E　落地 Prompt 套件（Claude Code + GitHub）</h1>
+<h1 id="s140">附錄E　落地 Prompt 套件（Claude Code + GitHub）</h1>
 <p>八組 prompt 的完整內容在 repo 的 <code>docs/prompts/</code> 目錄，每組一個檔案，可直接貼入 Claude Code 執行；每組都能單獨執行，不假設前一組已跑過。以下為索引與各組的產出物與驗收條件。</p>
 <div class="tablewrap" tabindex="0" role="region" aria-label="表格 19"><table>
 <thead>
