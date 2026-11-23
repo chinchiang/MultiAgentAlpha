@@ -41,6 +41,8 @@ Amended 2026-11-22: the gate has a fifth reason and a third finding code, `human
 
 Amended 2026-11-22: the module writes one more incomplete reason, `exchange_limit_reached`, second after `source_egress_blocked_by_secret_preflight` (GLOSSARY.md: exchange limit; `mara.providers.budget`). `ReviewFacts` gains `exchange_limit_reached`, which the pipeline sets when the context and reviewer calls were not made because they would pass `limits.max_exchanges`, or when a call was refused at the limit; like a blocked egress, it keeps a missing context view from being reported as a view that failed. A refused call is also a provider error of its role, so the role's `*_errors` counter makes the review incomplete as it does for any failed call. No sentence of the decision is stale.
 
+Amended 2026-11-23: `unresolved_tool_findings` is written for a tool alert no **tool triage** rules on (GLOSSARY.md; docs/adr/0010-tool-triage.md), where it was written for every tool alert. The module asks `mara.tools.evidence.blocks` of each tool result; the pipeline records the rulings on the results before scoring, and only when the config turns tool triage on, so with it off the reason is written exactly as before. What stands: a model's silence or rejection clears no alert, a human decision on a finding leaves tool results untouched (docs/adr/0003-human-resolution.md), and the reason keeps its name and its place in the order. No sentence of the decision is stale.
+
 ## Considered options
 
 - **Keep `blocking_reason` in the pipeline:** rejected. The gate's rules would stay split between the pipeline and the module.
