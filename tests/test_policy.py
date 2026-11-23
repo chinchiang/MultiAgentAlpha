@@ -174,7 +174,9 @@ def test_a_ca_bundle_adds_trust_and_never_disables_verification(tmp_path):
     spec = ModelSpec(name="z", family="glm", provider="openai_compatible", model="glm-5", base_url="https://llm.iec.inventec/v1",
                      data_residency="on_prem", ca_bundle=str(pem))
     assert OpenAICompatibleProvider(spec).client is not None
-    with pytest.raises(FileNotFoundError):
+    # a configured CA bundle whose file is absent is a clear ProviderConfigError, not a FileNotFoundError from the load
+    from mara.providers.base import ProviderConfigError
+    with pytest.raises(ProviderConfigError, match="does not exist"):
         _trust(str(tmp_path / "missing.pem"))
 
 
