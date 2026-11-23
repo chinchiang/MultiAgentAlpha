@@ -74,6 +74,13 @@ def test_installs_and_writes_manifest(assets, tmp_path):
     assert manifest["tools"]["tool-a"]["signature_verified"] is False
     assert "SKIPPED" in manifest["tools"]["tool-b"]["verified_by"]
     assert json.loads((dest / "manifest.json").read_text())["tools"]["tool-b"]["version"] == "2.0"
+    # the binary as installed, which the review's runner checks before it runs it (tests/test_tool_installed_file.py):
+    # for the archive it is not the hash of what was downloaded
+    for name in ("tool-a", "tool-b"):
+        entry = manifest["tools"][name]
+        assert entry["installed_sha256"] == hashlib.sha256((dest / "bin" / name).read_bytes()).hexdigest(), name
+    assert manifest["tools"]["tool-a"]["installed_sha256"] == manifest["tools"]["tool-a"]["sha256"], "a binary is installed as downloaded"
+    assert manifest["tools"]["tool-b"]["installed_sha256"] != manifest["tools"]["tool-b"]["sha256"], "an archive is not the file that runs"
 
 
 def test_wrong_sha256_aborts_and_installs_nothing(assets, tmp_path):

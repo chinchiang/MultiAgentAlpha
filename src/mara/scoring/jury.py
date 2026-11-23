@@ -33,6 +33,7 @@ class Jury:
     weights: dict[ModelFamily, float]
     min_independent_judges: int
     self_judge_discount: float
+    finder_corroboration: bool = False
 
     @classmethod
     def from_config(cls, cfg: MaraConfig) -> Jury:
@@ -40,7 +41,7 @@ class Jury:
         # last - a reviewer-only model used to replace it
         judges = [cfg.model_by_name(n) for n in cfg.roles.judges]
         return cls(weights={m.family: m.weight for m in judges}, min_independent_judges=cfg.gate.min_independent_judges,
-                   self_judge_discount=cfg.gate.self_judge_discount)
+                   self_judge_discount=cfg.gate.self_judge_discount, finder_corroboration=cfg.gate.finder_corroboration)
 
 
 @dataclass(frozen=True)
@@ -77,7 +78,6 @@ def score(findings: list[Finding], ballots: Ballots, tool_results: list[ToolResu
         valid_families = {fam for fam in jury.weights if counts[(fam, "forward")] == counts[(fam, "reverse")] == 1}
         fv = [v.model_copy(update={"self_family": v.judge_family in finders[f.id]}) for v in raw_votes if v.judge_family in valid_families]
         independent = valid_families - finders[f.id]
-        quorum_ok = len(independent) >= jury.min_independent_judges
 
         weighted, tp, fp, human, agreeing, consistent = weighted_consensus(fv, jury.weights, jury.self_judge_discount)
         flips += int(not consistent and bool(fv))
@@ -85,6 +85,19 @@ def score(findings: list[Finding], ballots: Ballots, tool_results: list[ToolResu
         sk = ballots.skeptic.get(f.id)
         refuted = bool(sk and sk.verdict == "refuted")
         unchallenged = f.id in ballots.unchallenged
+        # Finder corroboration (GLOSSARY.md): the families that found it stand in for the judges it is short of, when
+        # every seat independent of them voted, in both passes, that it is a true positive, no other vote is in its
+        # score, and a skeptic outside its finders neither refuted it nor abstained. It can only complete a quorum
+        # for acceptance: a vote against, a pass that is missing or a family of its finders voting leaves it short.
+        seats = set(jury.weights) - finders[f.id]
+        by_finders = (
+            corroborable(len(finders[f.id]), len(seats), jury.min_independent_judges, jury.finder_corroboration)
+            and valid_families == seats
+            and all(v.verdict == "true_positive" for v in fv)
+            and sk is not None and sk.source_family not in finders[f.id] and not refuted and not unchallenged
+            and weighted >= policy.accept_threshold
+        )
+        quorum_ok = len(independent) >= jury.min_independent_judges or by_finders
         prov_ok = bool(f.provenance) and all(p.verified for p in f.provenance)
         corroborated = corroborates(f, tool_results, tool_path_prefix)
         fams = set(agreeing) | (finders[f.id] if weighted >= policy.accept_threshold else set())
@@ -135,10 +148,30 @@ def score(findings: list[Finding], ballots: Ballots, tool_results: list[ToolResu
                 independent_judges=len(independent),
                 agreement_proxy=alpha,
                 operational_severity=operational,
+                finder_corroborated=by_finders,
             )
         )
     return JuryScoring(rows=rows, position_flips=flips, global_alpha=krippendorff_alpha_nominal(_alpha_units(findings, ballots.votes)),
                        family_agreement=pairwise_family_agreement(ballots.votes))
+
+
+def corroborable(finder_families: int, independent_seats: int, min_independent_judges: int, enabled: bool) -> bool:
+    """Whether a finding may reach its quorum by finder corroboration (GLOSSARY.md), going by the counts alone:
+    `gate.finder_corroboration` is on, at least two families found it, and the judge seats independent of them are at
+    least one and fewer than the quorum asks for. The ballot round then asks none of the finders' families to judge
+    it (mara.ballot_round), and score() says whether its independent judges and its skeptic bore it out."""
+    return enabled and finder_families >= 2 and 1 <= independent_seats < min_independent_judges
+
+
+def attainable_agreement(judge_families: int) -> tuple[float, ...]:
+    """Every value the agreement proxy can take on a finding that `judge_families` families voted on, lowest first; none
+    for fewer than two, where it is undefined. Each family gives one of three labels, so the values are few: 0.25 and
+    1.0 for two families, 0.0, 0.5 and 1.0 for three. A threshold moved between two neighbouring values changes no
+    outcome (mara.policy.inert_tightening)."""
+    if judge_families < 2:
+        return ()
+    lowest_modal = -(-judge_families // 3)  # the modal label of n votes over three labels holds at least ceil(n / 3)
+    return tuple(round((modal / judge_families - 1 / 3) / (1 - 1 / 3), 3) for modal in range(lowest_modal, judge_families + 1))
 
 
 def _agreement_proxy(votes: list[JudgeVote]) -> float | None:

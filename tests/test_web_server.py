@@ -894,7 +894,7 @@ def test_the_environment_lists_every_locked_tool_and_never_a_credential_value(se
     res, cfgs, body2 = c.request("GET", "/api/configs")
     by_path = {x["path"]: x for x in cfgs["configs"]}
     mock = by_path["config/mara.mock.yaml"]
-    assert mock["loadable"] and mock["provider_mode"] == "mock" and len(mock["policies"]) == 8
+    assert mock["loadable"] and mock["provider_mode"] == "mock" and len(mock["policies"]) == 9
     assert not by_path["config/examples/violating.yaml"]["loadable"]
     gemini = next(m for m in by_path["config/mara.yaml"]["models"] if m["family"] == "gemini")
     assert gemini["credential"] == {"kind": "env", "env": "GEMINI_API_KEY", "present": True}
@@ -987,7 +987,7 @@ def test_a_check_config_job_runs_the_command_line(server):
             break
         time.sleep(0.3)
     assert data["job"]["status"] == "finished" and data["job"]["exit_code"] == 0
-    assert re.search(r"8/8 policies pass", data["job"]["log_tail"])
+    assert re.search(r"9/9 policies pass", data["job"]["log_tail"])
     res, err, _ = c.request("POST", "/api/jobs", body={"kind": "install_tools", "only": ["curl"]})
     assert res.status == 400 and _error(err) == "unknown_tool"
     res, err, _ = c.request("POST", "/api/jobs", body={"kind": "shell", "argv": ["id"]})

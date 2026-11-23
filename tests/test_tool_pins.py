@@ -119,6 +119,13 @@ def test_each_ci_script_reads_its_tools_version_from_the_repositorys_lock(tool):
 
 def test_the_workbench_names_each_tools_install_status_as_the_runner_judges_it():
     assert pins.install_status("8.24.3", None, installed=False) == "missing"
+    recorded = {"version": "8.24.3", "signature_verified": True}
+    for kind in pins.SINGLE_FILE_KINDS:
+        assert pins.install_status("8.24.3", recorded, installed=True, kind=kind) == "no_file_hash"
+        assert pins.install_status("8.24.3", {**recorded, "installed_sha256": "ab" * 32}, installed=True, kind=kind) == "ok"
+        assert pins.install_status("8.24.2", recorded, installed=True, kind=kind) == "version_mismatch", "the version comes first"
+    for kind in ("pip", "npm", "git", ""):
+        assert pins.install_status("8.24.3", recorded, installed=True, kind=kind) == "ok", "not one file: no hash to hold"
     assert pins.install_status("8.24.3", {"version": "8.24.3"}, installed=False) == "missing"
     assert pins.install_status("8.24.3", {"version": "8.24.2", "signature_verified": True}, installed=True) == "version_mismatch"
     assert pins.install_status("8.24.3", {"version": "8.24.3", "signature_verified": False}, installed=True) == "unverified"
@@ -161,12 +168,16 @@ def test_the_workbench_shows_a_tool_installed_at_another_version_as_a_version_mi
 
     home, tools = tmp_path / "home", tmp_path / "tools"
     tool_installs.lock_into(home)
-    tool_installs.manifest(tools, "gitleaks")
-    (tools / "bin").mkdir()
+    (tools / "bin").mkdir(parents=True)
     (tools / "bin" / "gitleaks").write_text("#!/bin/sh\n", encoding="utf-8")
     (tools / "bin" / "gitleaks").chmod(0o755)
+    tool_installs.manifest(tools, "gitleaks")  # after the binary, as the installer writes it: with the binary's hash
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tools))
     assert {r["name"]: r["status"] for r in env.tools(home)["rows"]}["gitleaks"] == "ok"
+    # an install made before the installer recorded the binary's hash: the page says what the runner will say
+    (tools / "manifest.json").write_text(json.dumps({"tools": {"gitleaks": {"version": tool_installs.locked("gitleaks"),
+                                                                            "signature_verified": True}}}), encoding="utf-8")
+    assert {r["name"]: r["status"] for r in env.tools(home)["rows"]}["gitleaks"] == "no_file_hash"
     (tools / "manifest.json").write_text(json.dumps({"tools": {"gitleaks": {"version": "0.0.1", "signature_verified": True}}}),
                                          encoding="utf-8")
     assert {r["name"]: r["status"] for r in env.tools(home)["rows"]}["gitleaks"] == "version_mismatch"

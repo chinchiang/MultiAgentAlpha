@@ -106,10 +106,17 @@ target every tracked file is in scope, a tracked `build/`, `dist/` or `node_modu
 any file that reads as text whatever its extension: only a binary is excluded as `unsupported_format`, so a
 change cannot hide code from the models in a directory or under a name the bundle used to skip. Live
 model calls require a current local secret preflight, even when other SARIF was pre-recorded; the only
-exception is `--calibration-sample` (see Live mode). Use
+exception is `--calibration-sample` (see Live mode). `limits.max_exchanges` (3000 in
+`config/mara.yaml`) bounds what one review may spend: a review whose context and reviewer calls (counted for every batch) would pass it
+makes none of them, one that reaches it in the ballot round has the calls left refused, and either is
+incomplete (`exchange_limit_reached`); it counts prompts sent, not tokens. Use
 HTTPS for self-hosted endpoints; HTTP is accepted only on loopback. The three-family example can
 lack two independent judge families when several reviewers find the same issue; add independently
-operated families or complete human review instead of weakening the quorum.
+operated families or complete human review instead of weakening the quorum. `gate.finder_corroboration`
+(on in `config/mara.yaml`) lets a finding two families found stand on the third family alone, when that
+family's skeptic let it stand and its judge confirmed it in both passes; it can only accept, never reject or
+drop, and a finding all three found still goes to a human (docs/adr/0005-jury-outcome.md). `mara check-config`
+warns of a panel on which no finding can reach its quorum, and of a tightening step that changes no outcome.
 
 ## Architecture
 
@@ -129,7 +136,7 @@ flowchart LR
   ci --> cli
 
   subgraph ws["MARA workspace (MARA_HOME)"]
-    cfg["config/*.yaml<br/>policies P1–P8"]
+    cfg["config/*.yaml<br/>policies P1–P9"]
     dec["calib/decisions<br/>training register"]
     bom["ML-BOM, model evaluations,<br/>calib/latest.json"]
   end
@@ -253,14 +260,14 @@ red team, jury, scoring, report) and then shows the findings with their evidence
 outcome, the model panel per role with each family's calls and failures, the counts the run used, the reasons the review is
 incomplete, the dimension scores, the tool results, the human queue and the logs, and offers every report for download;
 **工具與執行環境 / Tools & environment** shows each tool of `tools/versions.lock` against what is installed, the trivy database,
-every config's models, data residency, credential variables (set or not, never their values) and policies P1–P8, and runs the
+every config's models, data residency, credential variables (set or not, never their values) and policies P1–P9, and runs the
 workspace's `scripts/install_tools.py`, `scripts/trivy_db.py` or `mara check-config` as a job.
 
 Each run is a `mara review` subprocess with its own directory `out/runs/<run-id>/` (`--out` moves the root): the request, the argv,
 the roles and models of the config at launch in `run.json`, the child's output in `run.log`, every report the command line writes,
 and `progress.json`, which `mara review --progress-file` rewrites at every stage boundary. Every check of the command line still
 decides, and the server repeats them before it starts the child only to name the refusal on the page. One review runs at a time,
-and never while a job replaces the tools or the trivy database; stopping the server (Ctrl-C, SIGTERM, SIGHUP) cancels it, and a server that starts first stops any review or job an earlier server left running (a killed server; Linux only, where `/proc` says which command a pid runs). The PSIRT options stay on the command line, because they start legal clocks. A plain
+and never while a job replaces the tools or the trivy database; stopping the server (Ctrl-C, SIGTERM, SIGHUP) cancels it, a maintenance job can be stopped from the page and is stopped after its timeout (thirty minutes for an install or a download), and a server that starts first stops any review or job an earlier server left running (a killed server; Linux only, where `/proc` says which command a pid runs). The PSIRT options stay on the command line, because they start legal clocks. A plain
 `mara review` into `out/` appears read-only in the list.
 
 The server listens on a loopback address only (`--host 127.0.0.1`, `localhost` or `::1`; reach a remote one through an SSH tunnel,
@@ -476,7 +483,7 @@ the current method.
 
 ## Policies enforced by the config
 
-`mara check-config <yaml>` evaluates eight policies and exits non-zero if any fails; `MaraConfig`
+`mara check-config <yaml>` evaluates nine policies and exits non-zero if any fails; `MaraConfig`
 refuses to load a violating file, so the pipeline cannot run outside policy:
 
 | Policy | Rule |
@@ -489,6 +496,7 @@ refuses to load a violating file, so the pipeline cannot run outside policy:
 | P6 psirt-scope | when the PSIRT hand-off is enabled: HTTPS webhook, product set, token from the environment, trigger tiers within A/B and severities within Critical/High |
 | P7 ml-bom | when `ml_bom.required`: every self-hosted model has a complete CycloneDX ML-BOM component (safetensors hashes, licence, source, signature method), signed when `require_signature` (P7 checks offline that the bundle's digest is the BOM's; each review verifies the signature with the locked cosign, `ml_bom_signature_unverified` otherwise) |
 | P8 unsupervised-reject | `gate.unsupervised_reject_allowed` may be `true` only while `calib/latest.json` records a passing Alternative Annotator Test (current method: chance-corrected agreement and a bounded miss rate on the rejections themselves, see Calibration) on a live calibration within 90 days; while `false` every rejected non-D finding goes to the human queue |
+| P9 in-country | when `site: prc` (an in-country pipeline, CN-1): every non-mock model is `openai_compatible`, `on_prem` and on a private host, `allow_source_code_to_non_on_prem` is not set (P5 takes it; P9 does not), `human_queue.ticketing` is `none`, and an enabled PSIRT hand-off goes to a private host. "Private" is checked as P2 and P5 check it, not where the host stands, and it cannot tell whose code a target is: the site runs with an in-country config (`config/examples/prc-site.yaml`) whose endpoints are in the country |
 
 `config/examples/violating.yaml` breaks the first five and is what the tests run against. Every
 section of the config refuses unknown keys, not only the top level and `gate`: a misspelt
@@ -550,7 +558,11 @@ and installs into `.mara-tools/bin`, writing `.mara-tools/manifest.json`. Any mi
 `mara/tools/runner.py` executes tools only from that directory, and only at the version the workspace's
 `tools/versions.lock` pins, as `manifest.json` records the install (`mara/tools/pins.py`, the rule the CI scripts
 apply too). A tool missing, or installed at another version, is recorded as not run with the reason, which keeps the
-review incomplete; re-run `scripts/install_tools.py` after a relock. PATH is never consulted. `docs/tools-provenance.md` records source, licence, what each verification
+review incomplete; re-run `scripts/install_tools.py` after a relock. For a tool that is one binary (gitleaks,
+osv-scanner, trivy, zizmor) the installer also records the SHA-256 of the file it installed, and the runner compares
+it each time before it runs the tool: a binary that changed since, or one installed before this was recorded, is not
+run. It is one more thing to get past, not a boundary, since whoever can write `.mara-tools` can write its manifest;
+semgrep's virtual environment and csp-evaluator's package directory are checked only when installed. PATH is never consulted. `docs/tools-provenance.md` records source, licence, what each verification
 proves and the remaining gaps (gitleaks, semgrep and csp-evaluator publish no signature). CI installs and verifies
 the whole set on every run. The lock also has a `git` kind: `semgrep-rules` is a checkout of
 `semgrep/semgrep-rules` at a pinned commit, verified by commit id, by a SHA-256 digest over every

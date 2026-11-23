@@ -1,0 +1,73 @@
+focused: [tests/test_tool_installed_file.py, tests/test_install_tools.py, tests/test_tool_integrity.py, tests/test_tool_pins.py]
+mutations:
+  - name: a binary that is not the recorded one is run
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_binary_that_is_not_the_one_the_installer_recorded_is_not_run
+    old: '    if actual != recorded:'
+    new: '    if False:'
+  - name: a single-file tool with no recorded hash is run
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_single_file_tool_whose_manifest_holds_no_hash_of_it_is_not_run
+    old: '    if not isinstance(recorded, str) or not recorded:'
+    new: '    if False:'
+  - name: a binary install is not checked, only an archive
+    file: src/mara/tools/pins.py
+    caught_by: tests/test_tool_installed_file.py::test_the_lock_says_which_tools_are_one_file
+    old: 'SINGLE_FILE_KINDS = ("archive", "binary")'
+    new: 'SINGLE_FILE_KINDS = ("archive",)'
+  - name: the manifest's word for its kind takes a binary out of the check
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_the_kind_is_the_locks_not_the_manifests
+    old: '    if kind not in pins.SINGLE_FILE_KINDS:'
+    new: '    if (entry or {}).get("kind", kind) not in pins.SINGLE_FILE_KINDS:'
+  - name: a tool that is not one file is held to a hash it has none of
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_what_is_wrong_with_an_installed_file_is_said_by_one_function
+    old: '    if kind not in pins.SINGLE_FILE_KINDS:'
+    new: '    if False:'
+  - name: the runner does not check the installed file
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_binary_that_is_not_the_one_the_installer_recorded_is_not_run
+    old: '        if not_installed_file:'
+    new: '        if False:'
+  - name: a binary's hash is kept although the file changed
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_binary_that_is_not_the_one_the_installer_recorded_is_not_run
+    old: '    key = (str(path), st.st_mtime_ns, st.st_size)'
+    new: '    key = (str(path), 0, 0)'
+  - name: a binary that cannot be read is taken as the recorded one
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_what_is_wrong_with_an_installed_file_is_said_by_one_function
+    error: TypeError
+    old: '        return f"{tool}: the installed binary cannot be read ({type(e).__name__})"'
+    new: '        return None'
+  - name: the installer does not record the installed binary's hash
+    file: scripts/install_tools.py
+    caught_by: tests/test_install_tools.py::test_installs_and_writes_manifest
+    error: KeyError
+    old: '        if spec["kind"] not in ("pip", "git", "npm"):'
+    new: '        if False:'
+  - name: the installer records the hash of what it downloaded as the binary's
+    file: scripts/install_tools.py
+    caught_by: tests/test_install_tools.py::test_installs_and_writes_manifest
+    old: '            entry["installed_sha256"] = sha256_file(Path(entry["path"]))'
+    new: '            entry["installed_sha256"] = entry["sha256"]'
+  - name: cosign's word is taken from a binary that is not the recorded one
+    file: src/mara/mlbom.py
+    caught_by: tests/test_tool_integrity.py::test_cosign_verifies_the_signature_and_a_failure_blocks_the_review
+    old: |-
+      if not_installed_file:
+              return False, not_installed_file
+    new: |-
+      if False:
+              return False, not_installed_file
+  - name: the environment page calls ready a single-file tool with no hash recorded
+    file: src/mara/tools/pins.py
+    caught_by: tests/test_tool_pins.py::test_the_workbench_names_each_tools_install_status_as_the_runner_judges_it
+    old: '    if kind in SINGLE_FILE_KINDS and not entry.get("installed_sha256"):'
+    new: '    if False:'
+  - name: the environment page is not told the tool's kind
+    file: src/mara/web/env.py
+    caught_by: tests/test_tool_pins.py::test_the_workbench_shows_a_tool_installed_at_another_version_as_a_version_mismatch
+    old: 'status = pins.install_status(locked, entry, installed=installed, kind=kind)'
+    new: 'status = pins.install_status(locked, entry, installed=installed)'

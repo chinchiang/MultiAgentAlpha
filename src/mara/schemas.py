@@ -202,6 +202,9 @@ class ConsensusResult(BaseModel):
                                         "decision, key, issue, decided_by, decided_at")
     unsupervised_reject_unverified: bool = Field(default=False, description="A rejected or dropped finding under rejection review "
                                                  "(policy P8, docs/adr/0005-jury-outcome.md); false in reports written before it")
+    finder_corroborated: bool = Field(default=False, description="The finding reached its quorum by finder corroboration "
+                                      "(docs/adr/0005-jury-outcome.md): found by two or more families and confirmed by every "
+                                      "judge family independent of them; false in reports written before it")
     blocking_reason: BlockingReason | None = Field(default=None, description="Why this blocking finding blocks the gate "
                                         "(docs/adr/0007-review-status-and-gate.md); null on every other finding and in reports "
                                         "written before it")

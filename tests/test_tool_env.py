@@ -75,6 +75,7 @@ def every_tool(tmp_path, monkeypatch, parent_env):
 
     monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
     monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
+    tool_installs.stand_in_binaries(monkeypatch)
     tool_installs.manifest(tmp_path / "tools", *runner.TOOL_DIMENSIONS)  # each at its locked version
     rules = tmp_path / "rules"
     rules.mkdir()

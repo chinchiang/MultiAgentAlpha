@@ -112,6 +112,13 @@ class GateConfig(BaseModel):
         "records a passing Alternative Annotator Test (live mode) within 90 days; when false every rejected non-D "
         "finding is queued for a human instead",
     )
+    finder_corroboration: bool = Field(
+        default=False,
+        description="Finder corroboration (GLOSSARY.md, docs/adr/0005-jury-outcome.md): a finding at least two families "
+        "found reaches its quorum on fewer independent judges than min_independent_judges, when every judge family "
+        "independent of its finders, at least one, confirmed it in both passes and a skeptic outside its finders "
+        "neither refuted it nor abstained. It can only accept: anything else still goes to a human",
+    )
 
     @model_validator(mode="after")
     def _valid_block_lists(self) -> GateConfig:
@@ -194,6 +201,19 @@ class TrainingConfig(BaseModel):
                                       description="Roles that must each have a valid record for governance check G-13")
 
 
+class LimitsConfig(BaseModel):
+    """What one review may spend (GLOSSARY.md: exchange limit)."""
+
+    model_config = {"extra": "forbid"}
+
+    max_exchanges: int | None = Field(
+        default=None, ge=0,
+        description="The exchanges (prompts sent to a model, a provider's own retries inside each) one review may make; "
+        "null for no limit. A review that would pass it makes no reviewer call at all, and one that reaches it later "
+        "has the calls left refused; either way the review is incomplete (exchange_limit_reached), never short of a check",
+    )
+
+
 class RolloutConfig(BaseModel):
     """G-10: three-phase rollout (report section 15.4). shadow: the pipeline runs and records, the
     gate is not enforced; advisory: blocking findings are marked, not enforced; blocking: `mara review`
@@ -259,6 +279,13 @@ class MaraConfig(BaseModel):
         default="", description="Policy P1: reference of the authorization (ticket, contract clause)"
     )
     reduced_panel_reason: str = Field(default="", description="Policy P3: why only two model families are available (e.g. PRC in-country pipeline)")
+    site: Literal["global", "prc"] = Field(
+        default="global",
+        description="Policy P9: where the code this config reviews is held. `prc`: an in-country pipeline (report chapter "
+        "26, CN-1), from which neither source nor findings may leave the country, so every model is self-hosted on a "
+        "private host and no ticket or hand-off goes to a service outside. The config cannot know whose code a target "
+        "is: an in-country site runs with an in-country config",
+    )
     private_dns_suffixes: list[str] = Field(
         default_factory=list,
         description="Policies P2/P5: the organisation's private DNS zones (e.g. .iec.inventec), treated like .internal; each needs two labels",
@@ -277,6 +304,7 @@ class MaraConfig(BaseModel):
     ml_bom: MlBomConfig = Field(default_factory=MlBomConfig, description="G-7: ML-BOM for the self-hosted model weights")
     training: TrainingConfig = Field(default_factory=TrainingConfig, description="G-13: AI-literacy training register")
     rollout: RolloutConfig = Field(default_factory=RolloutConfig, description="G-10: rollout phase (shadow / advisory / blocking)")
+    limits: LimitsConfig = Field(default_factory=LimitsConfig, description="What one review may spend: the exchange limit")
     model_eval: ModelEvalConfig = Field(default_factory=ModelEvalConfig, description="G-8: quarterly red-team evaluation of the model families")
 
     def model_by_name(self, name: str) -> ModelSpec:

@@ -1,6 +1,6 @@
 # Cold standby for the anthropic family (G-4): the self-hosted DeepSeek on the IEC gateway (`deepseek`) takes over
 # every seat claude-reviewer holds in config/mara.yaml; every other section is a copy of that file (tests/test_governance_templates.py
-# checks it). Generated from config/mara.yaml; regenerate after changing it. Passes P1-P8. Confirm the served model id and
+# checks it). Generated from config/mara.yaml; regenerate after changing it. Passes P1-P9. Confirm the served model id and
 # base path against the deployment before a live drill and record the drill in ops/model-swap-drills.yaml.
 standby_for: anthropic
 models:
@@ -67,6 +67,9 @@ gate:
   min_dimension_score: 60
   accept_threshold: 0.6
   human_threshold_alpha: 0.4
+  finder_corroboration: true
+limits:
+  max_exchanges: 3000
 allow_source_code_to_non_on_prem: false
 anthropic_covered_models_authorized: false
 anthropic_covered_models_authorization_ref: ''
@@ -93,7 +96,7 @@ human_queue:
   label: mara-human-queue
   backlog_limit: 20
   backlog_file: calib/decisions/backlog.json
-  tighten_alpha_step: 0.1
+  tighten_alpha_step: 0
   tighten_exclude_tier_c: true
   queue_tier_c_min_severity: High
 ml_bom:

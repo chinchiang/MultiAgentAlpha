@@ -22,6 +22,7 @@ from .invocation import ProviderMode, calibration_answer_key, check_base, check_
 from .progress import Progress
 from .providers import make_provider
 from .providers.base import Provider
+from .providers.budget import ExchangeBudget, Limited
 from .report.assembly import ReportMetadata, assemble
 from .review_status import Assessment, GatePolicy, ReviewFacts, SecretPreflight, assess, secret_preflight
 from .reviewed_content import ReviewedContent
@@ -58,6 +59,7 @@ class Stages:
     dimensions: list[DimensionScore]
     content: ReviewedContent
     base_ref: str | None
+    over_exchange_limit: bool = False  # the context and reviewer calls were not made: they would pass the exchange limit
 
 
 class Pipeline:
@@ -79,6 +81,8 @@ class Pipeline:
         self.progress = progress if progress is not None else Progress()
         self.out_dir = out_dir or self.root / "out"  # below the root, like `mara review --out`
         self.providers: dict[str, Provider] = {m.name: make_provider(m, mock_fixtures) for m in cfg.models}
+        # the exchanges this review may make (GLOSSARY.md: exchange limit); run() puts every provider under it
+        self.budget = ExchangeBudget(cfg.limits.max_exchanges)
         # Counters (default 0) and the jury's statistics; becomes the report's bias_audit (GLOSSARY.md: bias audit)
         self.audit = Audit()
         self.log: list[str] = []
@@ -147,6 +151,12 @@ class Pipeline:
             fail_on_gate: bool = False) -> ReviewReport:
         # the providers it will call, not the config's models: tests replace self.providers after Pipeline(cfg)
         check_provider_mode({p.spec.provider for p in self.providers.values()}, provider_mode)
+        if self.budget.limit is not None:
+            # here, not in __init__: the providers a review calls are the ones in place when it starts, and every call
+            # of each then counts against the one budget, whoever makes it (mara.providers.budget)
+            self.providers = {n: p if isinstance(p, Limited) else Limited(p, self.budget) for n, p in self.providers.items()}
+        if self.cfg.site != "global":
+            self._say(f"L0: site {self.cfg.site}: an in-country review under policy P9, nothing of it is to leave the country")
         target = Path(target).resolve()
         # before anything runs: the tools come from, and P8/the backlog were read from, the MARA
         # workspace; none of it may be supplied by the repository under review
@@ -157,12 +167,22 @@ class Pipeline:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         ctx = self._bundle(target, base_ref)
         tools, egress = self._tools(target, sarif_dir, provider_mode, answer_key)
-        context_view = self._context(ctx, egress)
+        # The context calls and the reviewer round are counted before any is made: a round asked in part leaves some
+        # of the bundle unread by some reviewer, at the cost of every exchange it did make. What the ballot round needs
+        # depends on the findings, so it is held by the budget alone, call by call.
+        planned = reviewer_round.planned_exchanges(ctx, self.cfg)
+        over_limit = not egress.blocked and not self.budget.covers(planned)
+        if over_limit:
+            self._say(f"L2: the context and reviewer calls need {planned} exchange(s), the exchange limit is {self.budget.limit}: none is made")
+        context_view = self._context(ctx, egress, over_limit)
         reviewed = reviewer_round.run(ctx, context_view, cfg=self.cfg, providers=self.providers, audit=self.audit, say=self._say,
-                                      progress=self.progress, egress_blocked=egress.blocked)
+                                      progress=self.progress, egress_blocked=egress.blocked, over_exchange_limit=over_limit)
         ballots = ballot_round.run(ctx, reviewed.findings, cfg=self.cfg, providers=self.providers, audit=self.audit,
                                    say=self._say, progress=self.progress)
-        stages = self._score(ctx, tools, egress, context_view, reviewed, ballots, base_ref)
+        if self.budget.refused:
+            self.audit.set(Count.EXCHANGES_REFUSED_AT_LIMIT, self.budget.refused)
+            self._say(f"L5: {self.budget.refused} exchange(s) refused: the exchange limit of {self.budget.limit} was reached")
+        stages = self._score(ctx, tools, egress, context_view, reviewed, ballots, base_ref, over_limit)
         assessment, signature = self._assess(stages, fail_on_gate)
         self.progress.begin("report")
         report = assemble(stages, assessment, self._metadata(signature), cfg=self.cfg, target=target, provider_mode=provider_mode,
@@ -230,11 +250,13 @@ class Pipeline:
                   + ("; source egress blocked by the secret preflight" if egress.blocked else ""))
         return tools, egress
 
-    def _context(self, ctx: RepoContext, egress: SecretPreflight) -> ContextView | None:
+    def _context(self, ctx: RepoContext, egress: SecretPreflight, over_exchange_limit: bool = False) -> ContextView | None:
         prog = self.progress
-        # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked
-        if egress.blocked or not self.cfg.roles.context:
-            prog.skip("context", "source egress blocked by the secret preflight" if egress.blocked else "no context role configured")
+        # L1.5: the C4-lite context view is one provider call; it must not run when egress is blocked, nor when it and
+        # the reviewer round together would pass the exchange limit
+        if egress.blocked or over_exchange_limit or not self.cfg.roles.context:
+            prog.skip("context", "source egress blocked by the secret preflight" if egress.blocked
+                      else "the exchange limit would be passed" if over_exchange_limit else "no context role configured")
             context_view = None
         else:
             prog.begin("context")
@@ -246,7 +268,8 @@ class Pipeline:
         return context_view
 
     def _score(self, ctx: RepoContext, tools: ToolEvidence, egress: SecretPreflight, context_view: ContextView | None,
-               reviewed: ReviewerFindings, ballots: ballot_round.Ballots, base_ref: str | None) -> Stages:
+               reviewed: ReviewerFindings, ballots: ballot_round.Ballots, base_ref: str | None,
+               over_exchange_limit: bool = False) -> Stages:
         """The jury scoring with its rows finished (mara.settlement) by the usable decisions on the reviewed content, and
         the dimension scores, with everything the stages before handed in. The audit counts the rows a decision settled
         and, by why, the decisions not usable on this content (a decision on other content is not counted)."""
@@ -255,6 +278,7 @@ class Pipeline:
         scoring = jury.score(findings, ballots, tools.results, jury=self.jury, policy=self.outcome_policy,
                              tool_path_prefix=ctx.repo_prefix)
         self.audit.set(Count.POSITION_FLIPS, scoring.position_flips)
+        self.audit.set(Count.FINDER_CORROBORATED_QUORUMS, sum(c.finder_corroborated for c in scoring.rows))
         content = ReviewedContent.of_bundle(ctx)
         selection = self.select_decisions(content)
         self.audit.set(Count.HUMAN_DECISIONS_APPLIED, settlement.finish(findings, scoring.rows, selection, content,
@@ -267,7 +291,7 @@ class Pipeline:
         for d in self.cfg.dimensions:
             dims.append(score_dimension(d, findings, cons_by_id, tools.ran_for(d)))
         return Stages(ctx=ctx, tools=tools, egress=egress, context_view=context_view, reviewed=reviewed, ballots=ballots, scoring=scoring,
-                      dimensions=dims, content=content, base_ref=base_ref)
+                      dimensions=dims, content=content, base_ref=base_ref, over_exchange_limit=over_exchange_limit)
 
     def _assess(self, stages: Stages, fail_on_gate: bool) -> tuple[Assessment, str | None]:
         """The review facts the stages handed in, the ML-BOM signature check among them, and the review status and gate
@@ -285,7 +309,8 @@ class Pipeline:
                             required_tools_ran=tools.complete_for(self.cfg.dimensions), ml_bom_signature=signed,
                             context_view_missing=bool(self.cfg.roles.context) and stages.context_view is None,
                             incomplete_counters=tuple(self.audit.incomplete_reasons()),  # audit.INCOMPLETE_COUNTERS: the one list
-                            rollout_phase=self.cfg.rollout.phase, fail_on_gate=fail_on_gate)
+                            rollout_phase=self.cfg.rollout.phase, fail_on_gate=fail_on_gate,
+                            exchange_limit_reached=stages.over_exchange_limit or self.budget.refused > 0)
         consensus = stages.scoring.rows
         assessment = assess(facts, consensus, tools.results, stages.dimensions, self.outcome_policy, self.gate_policy)
         if assessment.tier_c_blocked_while_tightened:

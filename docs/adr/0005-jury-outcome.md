@@ -74,3 +74,39 @@ The persisted shape stays `ConsensusResult` in `report.json`, so retained report
   read by nothing; one reviewer's vector, which no judge sees, alone decided whether an accepted finding blocked. A
   reviewer's vector now carries base metrics only (`mara.agents.reviewer.base_vector_only`), and merged findings
   keep the highest vector any finder gave (`mara.reviewer_round.dedupe`). `decide()`'s interface does not change.
+- Amended 2026-11-22, the owner's call on the open question above ("add a fourth judge family ... change how agreement
+  is read with two judges ..."): **finder corroboration** (GLOSSARY.md), `gate.finder_corroboration`, off unless a
+  config turns it on, and on in `config/mara.yaml`, `config/mara.test.yaml` and the standby configs. A finding that
+  two or more families found, with at least one judge seat independent of them and fewer than
+  `gate.min_independent_judges`, reaches its quorum when every such seat voted true positive in both passes, no
+  family that found it voted, and a skeptic outside its finders neither refuted it nor abstained. The ballot round
+  asks none of the finders' families to judge such a finding, where the fallback above asked them at a discount.
+  - **It can only accept.** A quorum merely lowered to one seat would let one family reject or drop what two
+    families found, and scored with the finders' discounted votes a true positive of the independent judge against
+    two false positives of the finders is 0.5 at tier D with no reason, which is dropped. So the finders do not
+    vote, and any vote but a true positive, a pass that is missing or a voided reply leaves the finding one judge
+    short, with a human, as before.
+  - **What it rests on.** With three families the one independent judge and the skeptic are the same family (it is
+    the only one outside the finders), so the claim is "all three families concur": two by reporting it, the third
+    by letting it stand and confirming it twice. That is as much as one finder and two judges, the case the jury
+    already accepts.
+  - **What it does not show.** The finders' reports were merged by place, not by claim (`mara.reviewer_round.dedupe`:
+    one file, one weakness, lines at most three apart), and the judge reads the first finder's claim, so "two
+    families found it" says two families reported that weakness there, not the same sentence. A family is what the
+    config calls one: two models of one lineage declared as two families count as two, which no policy can tell. And
+    a family that is not asked gives no vote to flip between passes, so the position flips the audit counts no
+    longer include those of a finder on its own finding; `config/mara.mock.yaml` keeps the setting off, because the
+    one position flip its fixture shows is such a vote.
+  - **What it changes for a review.** A finding it accepts no longer keeps the review incomplete, and blocks the
+    gate or lowers a dimension score as any accepted finding does. A finding all the judge families found still has
+    no independent seat and still goes to a human; a fourth judge family remains the way out of that.
+  - `mara check-config` now warns, without failing, of two settings that change nothing: a panel on which no finding
+    can reach its quorum (`policy.unreachable_quorum`; `config/examples/prc-site.yaml` is one, two families with a
+    quorum of two), and a `human_queue.tighten_alpha_step` that moves the agreement threshold across no value the
+    agreement proxy takes (`policy.inert_tightening`). With one finder and two judges the proxy is 0.25 or 1.0, so no
+    step the config allows changed an outcome on the shipped panel; the shipped configs now set the step to 0, and
+    tightening there leaves tier C to the jury and does nothing else. The proxy and its name stay as they are.
+  - What stands: who may judge is planned before any reply and the quorum counts valid votes; with the setting off,
+    every sentence above holds as written. With it on, "Two or three finders. Too few independent judges remain for
+    the quorum, so a human decides" holds for three finders, and for two only when the independent judge did not
+    confirm it. `tests/test_finder_corroboration.py` pins it.

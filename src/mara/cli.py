@@ -222,7 +222,7 @@ def check_config(
     config: Path | None = typer.Argument(None, show_default=False, help="default: <workspace>/config/mara.yaml"),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
 ):
-    """Check a config file: its structure, then every configuration policy (P1-P8); exit non-zero when the structure is
+    """Check a config file: its structure, then every configuration policy (P1-P9); exit non-zero when the structure is
     invalid or any policy fails."""
     from rich.markup import escape
 
@@ -256,8 +256,12 @@ def check_config(
     summary = f"{len(results) - len(failed)}/{len(results)} policies pass; families {sorted({m.family.value for m in cfg.models})}"
     if as_json:
         typer.echo(summary, err=True)  # stdout stays one JSON document
+        for w in check.warnings:
+            typer.echo(f"warning: {w}", err=True)
     else:
         console.print(summary)
+        for w in check.warnings:  # a setting that changes nothing: said, never a failure (policy.config_warnings)
+            console.print(f"[yellow]warning:[/yellow] {escape(w)}")
     if failed:
         raise typer.Exit(code=1)
 

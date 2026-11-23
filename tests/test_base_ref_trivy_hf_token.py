@@ -112,6 +112,7 @@ def trivy_env(tmp_path, monkeypatch):
     tool_installs.manifest(tmp_path / "tools", "trivy")
     workspace = Workspace(tmp_path / "ws", tools_dir=tmp_path / "tools", trivy_cache=tmp_path / "cache")
     monkeypatch.setattr(runner, "tool_path", lambda tool, workspace=None: tmp_path / "bin" / tool)
+    tool_installs.stand_in_binaries(monkeypatch)
     monkeypatch.setattr(runner, "_run", fake_run)
     target = tmp_path / "target"
     target.mkdir()

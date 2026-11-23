@@ -545,7 +545,8 @@ def verify_signature(cfg: MaraConfig, root: Path | str, runner=None) -> tuple[bo
     (ok, reason); a missing cosign, bundle or identity is a failure, never a pass."""
     import subprocess
 
-    from .tools.runner import tool_env
+    from .tools import pins
+    from .tools.runner import installed_file_problem, installed_manifest_entry, tool_env
     from .workspace import Workspace
 
     mb = cfg.ml_bom
@@ -558,6 +559,13 @@ def verify_signature(cfg: MaraConfig, root: Path | str, runner=None) -> tuple[bo
         cmd = cosign_verify_blob_cmd(bom, bundle, mb.certificate_identity, mb.certificate_oidc_issuer, Workspace.from_env().tools_dir)
     except (FileNotFoundError, ValueError) as e:
         return False, str(e)
+    # cosign is a single-file tool like the scanners: its word that the signature holds is taken only from the binary
+    # the installer recorded (mara.tools.runner.installed_file_problem)
+    workspace = Workspace.from_env()
+    not_installed_file = installed_file_problem("cosign", Path(cmd[0]), installed_manifest_entry("cosign", workspace=workspace),
+                                                pins.locked_kinds(Path(root) / pins.LOCK).get("cosign", ""))
+    if not_installed_file:
+        return False, not_installed_file
     run = runner or subprocess.run
     try:
         cp = run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180, check=False, env=tool_env())

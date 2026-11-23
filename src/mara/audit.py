@@ -102,6 +102,8 @@ class Count(StrEnum):
     BUNDLE_FILES_RELATED = "bundle_files_related"
     CONTEXT_VIEW_ITEMS = "context_view_items"
     EXCHANGE_VERSION = "exchange_version"
+    EXCHANGES_REFUSED_AT_LIMIT = "exchanges_refused_at_limit"
+    FINDER_CORROBORATED_QUORUMS = "finder_corroborated_quorums"
     FINDINGS_DEDUPED = "findings_deduped"
     FINDINGS_RAW = "findings_raw"
     GLOBAL_KRIPPENDORFF_ALPHA = "global_krippendorff_alpha"  # a number, or "n/a" when the jury had none

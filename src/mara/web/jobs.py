@@ -14,6 +14,7 @@ reads the workspace and reads and writes the files under `<out>/jobs/`.
 from __future__ import annotations
 
 import sys
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -27,6 +28,11 @@ from .admission import LaunchError
 from .runs import resolve_config
 
 JobKind = Literal["install_tools", "trivy_db_download", "trivy_db_status", "check_config"]
+# How long a job may run before it is stopped and recorded timed_out. A tool install or a database download that has
+# stalled (a held connection, a mirror that stopped answering) otherwise ran for good, and while it ran admission
+# refused every review (mara.web.admission): only a restart of the server ended it.
+TIMEOUT_SECONDS: dict[str, float] = {"install_tools": 30 * 60, "trivy_db_download": 30 * 60, "trivy_db_status": 5 * 60,
+                                     "check_config": 5 * 60}
 SCRIPTS = {"install_tools": "scripts/install_tools.py", "trivy_db_download": "scripts/trivy_db.py", "trivy_db_status": "scripts/trivy_db.py"}
 
 
@@ -54,6 +60,10 @@ class JobRegistry:
         self.root = root.resolve()
         self.jobs_dir = out_dir.resolve() / "jobs"
         self.children = procs.Children("job", self._record_exit, start=start, table=table)
+        self.timeouts = dict(TIMEOUT_SECONDS)  # by kind; a test shortens one
+        self._timers: dict[str, threading.Timer] = {}
+        self._timed_out: set[str] = set()
+        self._lock = threading.Lock()
 
     def argv(self, req: JobRequest) -> list[str]:
         if req.kind in SCRIPTS and not available(self.root)[req.kind]:
@@ -78,12 +88,48 @@ class JobRegistry:
 
         job_id, job = self.children.launch(req.kind, self.jobs_dir, record="job.json", log="job.log", cwd=self.root,
                                            env=procs.child_env(self.root), prepare=record)
+        timer = threading.Timer(self.timeouts[req.kind], self._time_out, [job_id])
+        timer.daemon = True  # never keeps the server alive; the exit stops the job itself (ChildTable.shutdown)
+        with self._lock:
+            self._timers[job_id] = timer
+        timer.start()
+        if not self.children.running(job_id):  # it exited before its timer was there to be cancelled
+            self._forget_timer(job_id)
         return self.get(job_id) or job
 
+    def _forget_timer(self, job_id: str) -> None:
+        with self._lock:
+            timer = self._timers.pop(job_id, None)
+        if timer is not None:
+            timer.cancel()
+
+    def _time_out(self, job_id: str) -> None:
+        """Stop a job that ran for its kind's timeout; its exit is then recorded timed_out."""
+        with self._lock:
+            self._timed_out.add(job_id)
+        if self.children.stop(job_id) != "stopped":  # it exited by itself meanwhile: recorded as it ended
+            with self._lock:
+                self._timed_out.discard(job_id)
+
+    def cancel(self, job_id: str) -> dict[str, Any]:
+        """Stop a running job and its process group, as a review is cancelled (RunRegistry.cancel); a job that is not
+        running, or that exited by itself meanwhile, is refused with job_not_running (409)."""
+        if not procs.ID_RE.match(job_id) or self.children.stop(job_id) != "stopped":
+            raise LaunchError("job_not_running", f"job {job_id} is not running", status=409)
+        return self.get(job_id) or {"id": job_id, "status": "cancelled"}
+
     def _record_exit(self, job_id: str, code: int, stopped: bool) -> None:
+        """Record how a job ended: timed_out when its timeout stopped it, cancelled when anything else did (a cancel, the
+        server's exit), else finished or failed by its exit code."""
+        self._forget_timer(job_id)
+        with self._lock:
+            # only a job the timeout's own stop ended: one that exited by itself as the timer fired ended as it ended
+            timed_out = stopped and job_id in self._timed_out
+            self._timed_out.discard(job_id)
         d = self.jobs_dir / job_id
         job = procs.read_json(d / "job.json") or {"id": job_id}
-        job.update(status="finished" if code == 0 else "failed", exit_code=code, finished_at=procs.now())
+        status = "timed_out" if timed_out else "cancelled" if stopped else "finished" if code == 0 else "failed"
+        job.update(status=status, exit_code=code, finished_at=procs.now())
         procs.write_json(d / "job.json", job)
 
     def stop_survivors(self, grace: float = procs.STOP_GRACE_SECONDS) -> list[str]:

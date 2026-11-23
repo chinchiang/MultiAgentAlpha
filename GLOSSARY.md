@@ -63,6 +63,10 @@ _Avoid_: L2 (a layer number, not a concept), review (the review is every stage, 
 The part of a review in which every ballot role rules on the deduplicated findings: the skeptic, then the red team on the findings the skeptic did not refute, then each judge in a forward and a mirrored reverse pass. A voided reply worth it is asked once more. Its result, the ballots (the skeptic's verdicts, the red team's notes and the judges' votes), is what the jury outcome is scored from.
 _Avoid_: L3/L4 (layer numbers, not a concept), jury round (the jury is the judges alone)
 
+**Exchange limit**:
+How many exchanges one review may make (`limits.max_exchanges`; none unless the config sets one). The context agent's calls and the reviewer round (one exchange for each batch for the context agent, and one for each batch, dimension and reviewer) are counted before any is made, and when they would pass the limit none of them is made; the ballot round is held call by call, each call past the limit refused as a provider error without reaching a model. Either way the review is incomplete with `exchange_limit_reached`. A refused ballot call is a provider error like any other: a finding left short of votes needs a human, and on a panel with judges to spare a finding can keep its quorum on the votes that were cast. It counts exchanges, not HTTP requests (a provider's own retries are inside one) and not tokens.
+_Avoid_: quota, budget (the vendor's), rate limit (that is the provider's, and a provider error of its own)
+
 **Truncation**:
 A reply the vendor stopped at the output limit; a budget problem, never charged to the model, and never evidence of a canary echo.
 _Avoid_: cut-off for unparseable replies
@@ -123,6 +127,10 @@ _Avoid_: valid decision (ambiguous between well-formed and usable)
 **Jury**:
 The judges of a review as their votes are counted: one judge family each, the weight each family's vote carries, the discount on a vote from a family among the finding's finders, and how many families independent of its finders a finding needs for a quorum.
 _Avoid_: panel (see Panel: every model the config names, reviewers included), judges (the judges are the models; the jury is how their votes count)
+
+**Finder corroboration**:
+How a finding that two or more families found reaches its quorum on fewer independent judges than the jury asks for, when the config turns it on: every judge family independent of its finders, at least one, voted true positive in both passes, no family that found it voted, and a skeptic outside its finders neither refuted it nor abstained. It can only complete a quorum for acceptance; anything else leaves the finding to a human. The consensus row records it and the Markdown report says so on the finding; the audit counts the quorums met this way, which is more than the findings accepted when one of them needs a human for another reason (an unverified quote).
+_Avoid_: finder vote (the finders do not vote on it), tool corroboration (a tool result at the finding's place: see Corroboration)
 
 **Panel**:
 The models a config names, each with the role it plays in a review (context builder, reviewer, skeptic, red team, judge). The workbench shows it three ways: a run's record holds the panel of its config at launch, the environment page lists the panel of each config, and, for a report without a run record, the models the report's provider manifest lists, each under the roles the report's audit counted its family calling for, since the report holds no roles. Of a model's endpoint the workbench shows the host and nothing else.

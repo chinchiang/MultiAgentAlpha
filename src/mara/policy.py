@@ -352,6 +352,42 @@ def p8_unsupervised_reject(cfg: MaraConfig, workspace: Workspace, today: dt.date
     )
 
 
+def p9_in_country(cfg: MaraConfig) -> PolicyResult:
+    """An in-country pipeline (`site: prc`; report chapter 26, CN-1) sends neither source nor findings out of the
+    country. Every model that is not a mock is self-hosted: `openai_compatible`, `on_prem`, on a private host, which no
+    setting overrides (`allow_source_code_to_non_on_prem` is refused, where P5 takes it). Findings do not leave as
+    tickets on a hosted tracker, and a PSIRT hand-off goes to a private host. "Private" is what is checked, as P2 and
+    P5 check it (an RFC 1918 or loopback address, a .internal/.local/.lan name, a zone the config declares): it is not
+    a check of where the host stands, and a private name that resolves to a gateway outside the country passes. Nor
+    can the config say whose code a target is: a site that reviews in-country code with another config is not caught."""
+    if cfg.site != "prc":
+        return PolicyResult("P9", "in-country", True, f"site {cfg.site}: no in-country rule applies")
+    problems = []
+    for m in cfg.models:
+        if m.provider == "mock":
+            continue
+        if m.provider != "openai_compatible" or m.data_residency != "on_prem":
+            problems.append(f"{m.name}: provider {m.provider}, data_residency {m.data_residency}; an in-country model is "
+                            "openai_compatible and on_prem")
+            continue
+        ok, why = _host_is_private(m.base_url or "", tuple(cfg.private_dns_suffixes))
+        if not ok:
+            problems.append(f"{m.name}: {why}")
+    if cfg.allow_source_code_to_non_on_prem:
+        problems.append("allow_source_code_to_non_on_prem is set: no setting lets source leave an in-country site")
+    if cfg.human_queue.enabled and cfg.human_queue.ticketing != "none":
+        problems.append(f"human_queue.ticketing is {cfg.human_queue.ticketing}: findings would leave the country as tickets; "
+                        "set it to none and decide them from out/human_queue.md")
+    if cfg.psirt.enabled:
+        ok, why = _host_is_private(cfg.psirt.webhook_url, tuple(cfg.private_dns_suffixes))
+        if not ok:
+            problems.append(f"psirt.webhook_url: {why}")
+    if problems:
+        return PolicyResult("P9", "in-country", False, "; ".join(problems))
+    return PolicyResult("P9", "in-country", True, "site prc: every model is self-hosted on a private host, and no ticket or "
+                        "hand-off leaves the country")
+
+
 # a function of the config alone: MaraConfig refuses to build a config one of them fails
 CONFIG_POLICIES = (
     p1_covered_models,
@@ -360,11 +396,12 @@ CONFIG_POLICIES = (
     p4_gate_bounds,
     p5_data_residency,
     p6_psirt_scope,
+    p9_in_country,
 )
 
 
 def config_policies(cfg: MaraConfig) -> list[PolicyResult]:
-    """P1 to P6, which read nothing but the config."""
+    """P1 to P6 and P9, which read nothing but the config."""
     return [p(cfg) for p in CONFIG_POLICIES]
 
 
@@ -374,19 +411,20 @@ def workspace_policies(cfg: MaraConfig, workspace: Workspace, today: dt.date | N
 
 
 def evaluate_policies(cfg: MaraConfig, workspace: Workspace, today: dt.date | None = None) -> list[PolicyResult]:
-    """Every policy result, P1 to P8 in order."""
-    return config_policies(cfg) + workspace_policies(cfg, workspace, today)
+    """Every policy result, P1 to P9 in order."""
+    return sorted(config_policies(cfg) + workspace_policies(cfg, workspace, today), key=lambda r: int(r.id[1:]))
 
 
 @dataclass(frozen=True)
 class ConfigCheck:
     """A config file as `mara check-config` and the workbench's environment page read it: the config, or why its
-    structure is invalid (`error`, the exception's text as it is), and the eight policy results when it is not.
+    structure is invalid (`error`, the exception's text as it is), and the nine policy results when it is not.
     `passed` holds exactly when `load_config` accepts the file."""
 
     config: MaraConfig | None
     error: str
     policies: tuple[PolicyResult, ...]
+    warnings: tuple[str, ...] = ()  # config_warnings: what the config says that changes nothing; no policy fails for it
 
     @property
     def structure_ok(self) -> bool:
@@ -397,6 +435,70 @@ class ConfigCheck:
         return self.config is not None and all(r.passed for r in self.policies)
 
 
+def _independent_seats(cfg: MaraConfig) -> list[tuple[int, int]]:
+    """(finder families, judge families independent of them) for every set of reviewer families that could find one
+    finding."""
+    by_name = {m.name: m.family for m in cfg.models}
+    judges = {by_name[n] for n in cfg.roles.judges}
+    reviewers = sorted({by_name[n] for n in cfg.roles.reviewers}, key=lambda fam: fam.value)
+    out = []
+    for mask in range(1, 2 ** len(reviewers)):
+        finders = {fam for i, fam in enumerate(reviewers) if mask >> i & 1}
+        out.append((len(finders), len(judges - finders)))
+    return out
+
+
+def judging_family_counts(cfg: MaraConfig) -> set[int]:
+    """How many judge families can vote on one finding with its quorum met, over every set of reviewer families that
+    could have found it, every seat independent of them voting or some of them voided: the counts the agreement proxy
+    is ever read on. A finding short of its quorum goes to a human whatever its agreement, so those counts are left
+    out; fewer than two families have no agreement to read."""
+    least = max(2, cfg.gate.min_independent_judges)  # a voided judge leaves fewer voting, the quorum still met
+    return {n for _finders, seats in _independent_seats(cfg) for n in range(least, seats + 1)}
+
+
+def unreachable_quorum(cfg: MaraConfig) -> str | None:
+    """Why no finding can reach its quorum under `cfg`, or None when one can: whichever families find it, fewer judge
+    families than `gate.min_independent_judges` are independent of them, and finder corroboration, when it is on, does
+    not apply either. Every finding then needs a human, and no review of a target with a finding is complete without
+    one ruling each."""
+    from .scoring.jury import corroborable
+
+    gate = cfg.gate
+    if any(seats >= gate.min_independent_judges or corroborable(finders, seats, gate.min_independent_judges, gate.finder_corroboration)
+           for finders, seats in _independent_seats(cfg)):
+        return None
+    return (f"no finding can reach its quorum: gate.min_independent_judges is {gate.min_independent_judges}, and whichever "
+            f"reviewer families find a finding, fewer judge families are independent of them, so every finding needs a "
+            f"human; add a judge family that does not review, or decide every finding by hand knowingly")
+
+
+def inert_tightening(cfg: MaraConfig) -> str | None:
+    """Why `human_queue.tighten_alpha_step` changes no outcome under `cfg`, or None when it does or is 0. The agreement
+    proxy takes few values (mara.scoring.jury.attainable_agreement): a tightened threshold that no value lies between
+    it and the base sends the same findings to a human as the base does."""
+    from .scoring.jury import attainable_agreement
+
+    hq, base = cfg.human_queue, cfg.gate.human_threshold_alpha
+    if not hq.enabled or hq.tighten_alpha_step == 0:
+        return None
+    tightened = min(1.0, round(base + hq.tighten_alpha_step, 4))
+    counts = sorted(judging_family_counts(cfg))
+    moved = [n for n in counts if any(base <= v < tightened for v in attainable_agreement(n))]
+    if moved:
+        return None
+    values = "; ".join(f"{n} judge families: {', '.join(str(v) for v in attainable_agreement(n))}" for n in counts)
+    return (f"human_queue.tighten_alpha_step {hq.tighten_alpha_step} changes no outcome: it moves the agreement threshold from "
+            f"{base} to {tightened}, and the agreement proxy takes no value between them with this panel"
+            + (f" ({values})" if values else " (no finding can reach its quorum on two or more judge families)")
+            + "; set it to 0, or to a step that crosses one of those values")
+
+
+def config_warnings(cfg: MaraConfig) -> tuple[str, ...]:
+    """What `cfg` sets that has no effect. A warning fails no policy and refuses no config: `mara check-config` prints it."""
+    return tuple(w for w in (unreachable_quorum(cfg), inert_tightening(cfg)) if w)
+
+
 def check_config_file(path: str | Path, workspace: Workspace) -> ConfigCheck:
     """The structure of the config file `path` and every policy result, whether or not a policy fails, P7 and P8 read
     from `workspace`. A file that cannot be read, is not YAML or fails validation (config.INVALID_FILE_ERRORS) is an invalid
@@ -405,4 +507,4 @@ def check_config_file(path: str | Path, workspace: Workspace) -> ConfigCheck:
         cfg = load_config(path, workspace, enforce_policies=False)
     except INVALID_FILE_ERRORS as e:
         return ConfigCheck(None, str(e), ())
-    return ConfigCheck(cfg, "", tuple(evaluate_policies(cfg, workspace)))
+    return ConfigCheck(cfg, "", tuple(evaluate_policies(cfg, workspace)), config_warnings(cfg))

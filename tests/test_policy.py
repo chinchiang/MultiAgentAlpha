@@ -350,10 +350,10 @@ def test_check_config_lists_every_violation(root):
     assert res.output.count("FAIL") == 5
     ok = runner.invoke(app, ["check-config", str(root / "config" / "mara.yaml")])
     assert ok.exit_code == 0, ok.output
-    assert "8/8 policies pass" in _plain(ok.output)
+    assert "9/9 policies pass" in _plain(ok.output)
     js = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml"), "--json"])
     assert js.exit_code == 1 and any(not r["passed"] for r in json.loads(js.stdout))
-    assert "3/8 policies pass" in js.stderr, "the summary stays off stdout, which a parser reads"
+    assert "4/9 policies pass" in js.stderr, "the summary stays off stdout, which a parser reads"
 
 
 def test_json_output_is_plain_even_on_a_colour_terminal(monkeypatch, root):
@@ -366,13 +366,13 @@ def test_json_output_is_plain_even_on_a_colour_terminal(monkeypatch, root):
     monkeypatch.setattr(cli, "console", Console(force_terminal=True, color_system="truecolor", width=30))
     runner = CliRunner()
     js = runner.invoke(app, ["check-config", str(root / "config" / "examples" / "violating.yaml"), "--json"])
-    assert "\x1b" not in js.stdout and len(json.loads(js.stdout)) == 8
+    assert "\x1b" not in js.stdout and len(json.loads(js.stdout)) == 9
     v = runner.invoke(app, ["cvss", "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"])
     assert v.exit_code == 0 and json.loads(v.stdout)["score"] == 9.3
 
 
 def _plain(text: str) -> str:
-    """CLI output without rich's colour codes (FORCE_COLOR splits "8/8" into styled pieces)."""
+    """CLI output without rich's colour codes (FORCE_COLOR splits "9/9" into styled pieces)."""
     return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
 
 
@@ -559,7 +559,7 @@ def test_a_config_file_passes_the_check_exactly_when_load_config_accepts_it(path
 def test_a_config_that_violates_policies_has_a_valid_structure_and_says_which_policies_fail():
     check = policy.check_config_file(ROOT / "config" / "examples" / "violating.yaml", Workspace(ROOT))
     assert check.structure_ok and check.config is not None and check.error == "" and not check.passed
-    assert len(check.policies) == 8 and {r.id for r in check.policies if not r.passed} >= {"P1", "P2", "P3"}
+    assert len(check.policies) == 9 and {r.id for r in check.policies if not r.passed} >= {"P1", "P2", "P3"}
 
 
 def test_a_structure_error_is_kept_whole_and_there_is_nothing_to_evaluate(tmp_path):
@@ -645,3 +645,168 @@ def test_a_config_file_is_checked_against_the_workspace_it_is_given_not_the_envi
     (environment / "calib" / "latest.json").write_text(json.dumps(record), encoding="utf-8")
     check = policy.check_config_file(config, Workspace(given))
     assert check.structure_ok and not check.passed and [r.id for r in check.policies if not r.passed] == ["P8"]
+
+
+# ---------------------------------------------------------------- warnings: what a config sets that changes nothing
+
+
+def _cfg(**over):
+    return MaraConfig.model_validate(_base(**over))
+
+
+def _hq(step):
+    return {"human_queue": {"tighten_alpha_step": step}}
+
+
+def test_a_tightening_step_that_crosses_no_value_the_agreement_proxy_takes_is_warned_of():
+    """Three families that review and judge: a finding of one family has two judges, whose agreement is 0.25 or 1.0, so
+    no step from 0.4 below 0.6 sends another finding to a human, and the largest step allowed is 0.5."""
+    from mara.policy import config_warnings, inert_tightening, judging_family_counts
+
+    assert judging_family_counts(_cfg()) == {2}
+    for step in (0.1, 0.2, 0.5):
+        why = inert_tightening(_cfg(**_hq(step)))
+        assert why is not None and "changes no outcome" in why and "2 judge families: 0.25, 1.0" in why, step
+    assert inert_tightening(_cfg(**_hq(0))) is None, "a step of 0 says it changes nothing"
+    assert inert_tightening(_cfg(human_queue={"enabled": False, "tighten_alpha_step": 0.1})) is None, "nothing is tightened"
+    assert config_warnings(_cfg(**_hq(0.1))) == (inert_tightening(_cfg(**_hq(0.1))),)
+    assert config_warnings(_cfg(**_hq(0))) == ()
+
+
+def test_a_tightening_step_that_crosses_a_value_is_not_warned_of():
+    """A fourth judge family that does not review: a finding of one family has three judges, whose agreement is 0, 0.5
+    or 1.0, and a step from 0.4 to 0.6 sends a two-to-one vote to a human."""
+    from mara.policy import inert_tightening, judging_family_counts
+
+    raw = _base(**_hq(0.2))
+    raw["models"].append({"name": "m", "family": "mistral", "provider": "mock", "model": "mock-mistral", "data_residency": "on_prem"})
+    raw["roles"]["judges"].append("m")
+    four = MaraConfig.model_validate(raw)
+    assert judging_family_counts(four) == {2, 3} and inert_tightening(four) is None
+    # every count of voters the quorum is met on, not only all the independent seats: with one of five voided, four
+    # vote, and a three-to-one vote (0.625) lies between 0.5 and 0.7 where no vote of five does (0.4, 0.7)
+    five = _base(gate={"human_threshold_alpha": 0.5}, **_hq(0.2))
+    for name, fam in (("m", "mistral"), ("q", "qwen"), ("l", "llama")):
+        five["models"].append({"name": name, "family": fam, "provider": "mock", "model": f"mock-{fam}", "data_residency": "on_prem"})
+        five["roles"]["judges"].append(name)
+    five = MaraConfig.model_validate(five, context={"skip_policies": True})
+    assert judging_family_counts(five) == {2, 3, 4, 5} and inert_tightening(five) is None
+    raw["human_queue"]["tighten_alpha_step"] = 0.05
+    assert inert_tightening(MaraConfig.model_validate(raw)) is not None, "0.4 to 0.45 crosses neither 0.5 nor 1.0"
+
+
+def test_a_panel_on_which_no_finding_can_reach_its_quorum_is_warned_of():
+    """Two families that review and judge, a quorum of two: a finding of one family has one independent judge, a
+    finding of both none (config/examples/prc-site.yaml). Every finding needs a human."""
+    from mara.policy import check_config_file, unreachable_quorum
+
+    assert unreachable_quorum(_cfg()) is None, "three families: a finding of one of them has its two judges"
+    prc = check_config_file(ROOT / "config" / "examples" / "prc-site.yaml", Workspace(ROOT))
+    assert prc.passed and prc.config is not None, "a warning fails no policy"
+    why = unreachable_quorum(prc.config)
+    assert why is not None and "no finding can reach its quorum" in why and why in prc.warnings
+    one_judge_enough = prc.config.model_copy(update={"gate": prc.config.gate.model_copy(update={"min_independent_judges": 1})})
+    assert unreachable_quorum(one_judge_enough) is None
+
+
+def test_finder_corroboration_makes_a_quorum_reachable_only_where_it_applies():
+    from mara.policy import unreachable_quorum
+
+    raw = _base(gate={"min_independent_judges": 3})  # three families, a quorum of three: never three independent judges
+    assert unreachable_quorum(MaraConfig.model_validate(raw)) is not None
+    raw["gate"]["finder_corroboration"] = True  # a finding of two families now stands on the third
+    assert unreachable_quorum(MaraConfig.model_validate(raw)) is None
+
+
+def test_check_config_prints_a_warning_and_still_passes():
+    runner = CliRunner()
+    res = runner.invoke(app, ["check-config", str(ROOT / "config" / "mara.mock.yaml")])
+    out = " ".join(res.output.split())
+    assert res.exit_code == 0 and "9/9 policies pass" in out
+    assert "warning: human_queue.tighten_alpha_step 0.1 changes no outcome" in out
+    shipped = runner.invoke(app, ["check-config", str(ROOT / "config" / "mara.yaml")])
+    assert shipped.exit_code == 0 and "warning" not in shipped.output, "the shipped config sets nothing that changes nothing"
+    as_json = runner.invoke(app, ["check-config", str(ROOT / "config" / "mara.mock.yaml"), "--json"])
+    assert as_json.exit_code == 0 and "warning" not in as_json.stdout and "warning: human_queue" in " ".join(as_json.stderr.split())
+
+
+# ---------------------------------------------------------------- P9 in-country
+
+
+IN_COUNTRY = {"provider": "openai_compatible", "data_residency": "on_prem"}
+
+
+def _prc(**over):
+    """A three-family in-country panel that passes every policy: each model self-hosted on a private host, no ticket
+    filed outside."""
+    raw = _base(site="prc", human_queue={"ticketing": "none"})
+    for m, fam, host in zip(raw["models"], ("deepseek", "glm", "qwen"), ("10.20.30.40", "10.20.30.41", "10.20.30.42"), strict=True):
+        m.update(IN_COUNTRY, family=fam, model=fam, base_url=f"https://{host}:8000/v1")
+    raw.update(over)
+    return raw
+
+
+def _p9(raw) -> policy.PolicyResult:
+    cfg = MaraConfig.model_validate(raw, context={"skip_policies": True})
+    return next(r for r in evaluate_policies(cfg, Workspace(ROOT)) if r.id == "P9")
+
+
+def test_p9_a_site_that_is_not_in_country_is_not_judged():
+    assert _base().get("site") is None and MaraConfig.model_validate(_base()).site == "global"
+    result = _p9(_base())
+    assert result.passed and "no in-country rule applies" in result.reason
+
+
+def test_p9_an_in_country_pipeline_of_self_hosted_models_passes():
+    assert _p9(_prc()).passed
+    MaraConfig.model_validate(_prc())  # and loads: no other policy is in its way
+    shipped = load_config(ROOT / "config" / "examples" / "prc-site.yaml", Workspace(ROOT))
+    assert shipped.site == "prc" and all(r.passed for r in evaluate_policies(shipped, Workspace(ROOT)))
+
+
+@pytest.mark.parametrize("why, change, says", [
+    ("a vendor API", lambda raw: raw["models"][0].update(provider="anthropic", family="anthropic", model="claude-opus-5-5",
+                                                         data_residency="vendor_api_zdr", base_url=None), "provider anthropic"),
+    ("a vendor API declared on_prem", lambda raw: raw["models"][0].update(provider="gemini", family="gemini", model="gemini-3.8-flash",
+                                                                          base_url=None), "provider gemini"),
+    ("a self-hosted model on a public host", lambda raw: raw["models"][1].update(base_url="https://llm.example.com/v1"), "is neither"),
+    ("a self-hosted model not declared on_prem", lambda raw: raw["models"][1].update(data_residency="vendor_api_zdr"),
+     "data_residency vendor_api_zdr"),
+    ("the override P5 takes", lambda raw: raw.update(allow_source_code_to_non_on_prem=True), "allow_source_code_to_non_on_prem"),
+    ("tickets on a hosted tracker", lambda raw: raw.update(human_queue={"ticketing": "github_issues"}), "human_queue.ticketing"),
+    ("a PSIRT hand-off to a public host", lambda raw: raw.update(psirt={"enabled": True, "webhook_url": "https://psirt.example.com/in",
+                                                                         "product": "p"}), "psirt.webhook_url"),
+])
+def test_p9_what_would_take_source_or_findings_out_of_the_country_fails(why, change, says):
+    raw = _prc()
+    change(raw)
+    result = _p9(raw)
+    assert not result.passed and says in result.reason, (why, result.reason)
+    with pytest.raises(ValueError, match="P9 in-country"):
+        MaraConfig.model_validate(raw)
+
+
+def test_p9_what_stays_in_the_country_passes():
+    raw = _prc(human_queue={"enabled": False, "ticketing": "github_issues"})  # no queue: no ticket is filed
+    assert _p9(raw).passed
+    raw = _prc(psirt={"enabled": True, "webhook_url": "https://psirt.internal/in", "product": "p"})
+    assert _p9(raw).passed
+    raw = _prc()
+    raw["models"][0].update(provider="mock", model="mock-x", base_url=None)  # a mock sends nothing anywhere
+    assert _p9(raw).passed
+
+
+def test_p9_the_production_panel_cannot_be_run_as_an_in_country_site():
+    raw = yaml.safe_load((ROOT / "config" / "mara.yaml").read_text(encoding="utf-8"))
+    raw["site"] = "prc"
+    with pytest.raises(ValueError, match="P9 in-country") as refused:
+        MaraConfig.model_validate(raw)
+    for name in ("claude-reviewer", "gemini-reviewer", "human_queue.ticketing"):
+        assert name in str(refused.value)
+    assert "glm-reviewer" not in str(refused.value).split("P9 in-country")[1], "the self-hosted family is in order"
+
+
+def test_the_policies_come_in_the_order_of_their_numbers():
+    cfg = load_config(ROOT / "config" / "mara.mock.yaml", Workspace(ROOT))
+    assert [r.id for r in evaluate_policies(cfg, Workspace(ROOT))] == [f"P{i}" for i in range(1, 10)]
+

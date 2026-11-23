@@ -15,6 +15,7 @@ import yaml
 from mara.config import MaraConfig
 from mara.tools import csp_eval, runner
 from mara.tools.sarif import scan_complete
+from tests import tool_installs  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -120,6 +121,7 @@ def test_cosign_verifies_the_signature_and_a_failure_blocks_the_review(tmp_path,
     (tools / "bin").mkdir(parents=True)
     exe = tools / "bin" / ("cosign.exe" if sys.platform == "win32" else "cosign")
     exe.write_text("fake")
+    tool_installs.record_installed(tools, "cosign")
     monkeypatch.setenv("MARA_TOOLS_DIR", str(tools))
     bom = tmp_path / "bom.json"
     bom.write_text("{}", encoding="utf-8")
@@ -138,6 +140,13 @@ def test_cosign_verifies_the_signature_and_a_failure_blocks_the_review(tmp_path,
     assert ok and seen[-1][1:3] == ["verify-blob", "--bundle"] and "--certificate-identity" in seen[-1]
     ok, why = mlbom.verify_signature(cfg, ROOT, runner=cosign(1))
     assert not ok and "none of the expected identities" in why
+    # cosign's word is taken only from the binary the installer recorded: a changed one is not asked at all
+    asked = len(seen)
+    exe.write_text("fake, and changed since it was installed")
+    ok, why = mlbom.verify_signature(cfg, ROOT, runner=cosign(0))
+    assert not ok and "is not the one the installer recorded" in why and len(seen) == asked
+    exe.write_text("fake")
+    assert mlbom.verify_signature(cfg, ROOT, runner=cosign(0))[0]
     exe.unlink()
     assert not mlbom.verify_signature(cfg, ROOT, runner=cosign(0))[0], "no cosign is a failure, never a pass"
 

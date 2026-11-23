@@ -65,7 +65,9 @@ def render_markdown(r: ReviewReport) -> str:
             + (f" · gate severity **{c.gate_severity}** (judges)" if c.gate_severity != c.cvss4_severity else "")
             + f" · tier **{c.tier.value}** · consensus {c.weighted_score}",
             f"- Families agreeing: {', '.join(x.value for x in c.families_agreeing) or '-'} · tool corroborated: {c.tool_corroborated}"
-            f" · skeptic refuted: {c.skeptic_refuted} · position-consistent: {c.position_consistent}",
+            # how it met its quorum with fewer independent judges than the jury asks for (GLOSSARY.md: finder corroboration)
+            + (f" · quorum by finder corroboration ({c.independent_judges} independent judge(s))" if c.finder_corroborated else "")
+            + f" · skeptic refuted: {c.skeptic_refuted} · position-consistent: {c.position_consistent}",
             f"- Evidence: {code(f'{p.file}:{p.line}')} — {code(p.quote[:160])}",
             f"- Reachability ({f.reachability}): {literal(f.reachability_argument)}",
             f"- Attacker path: {literal(f.exploit_sketch)}",

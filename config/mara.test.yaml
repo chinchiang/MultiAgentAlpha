@@ -56,6 +56,14 @@ gate:
   min_dimension_score: 60
   accept_threshold: 0.6
   human_threshold_alpha: 0.4
+  finder_corroboration: true
+
+# What one review may spend. An exchange is one prompt sent to a model. A repository at the bundle's size limit (16M
+# characters, about 40 batches) takes about 1,500 for the context and reviewer calls (for each batch, one for
+# the context agent and one for each dimension and reviewer) and a few hundred for the ballots; twice that is the limit. A review that would pass it makes no
+# reviewer call, one that reaches it later has the calls left refused, and either is incomplete, never short of a check.
+limits:
+  max_exchanges: 3000
 
 allow_source_code_to_non_on_prem: false
 
@@ -101,8 +109,10 @@ psirt:
 # scripts/human_queue_issues.py turns them into GitHub issues (one per stable key, label below) and brings
 # the decisions on closed tickets back into calib/decisions/, which scripts/calibrate.py reads as labels.
 # When calib/decisions/backlog.json says more tickets are open than backlog_limit, the pipeline tightens:
-# the alpha threshold rises by tighten_alpha_step and tier C stops being queued; an accepted tier C finding
-# at queue_tier_c_min_severity then blocks the gate instead of passing unseen. It never loosens.
+# tier C stops being queued; an accepted tier C finding at queue_tier_c_min_severity then blocks the gate instead
+# of passing unseen. It never loosens. tighten_alpha_step would also raise the alpha threshold, and is 0 here: a
+# finding with one finder has two judges, whose agreement proxy is 0.25 or 1.0, so no step below 0.6 moves the
+# threshold past a value the proxy takes, and raising it would send more to the humans already behind.
 # See docs/human-queue.md.
 human_queue:
   enabled: true
@@ -110,7 +120,7 @@ human_queue:
   label: mara-human-queue
   backlog_limit: 20                   # open tickets above this tighten the gate
   backlog_file: calib/decisions/backlog.json
-  tighten_alpha_step: 0.1
+  tighten_alpha_step: 0               # 0: with this panel no step changes an outcome (`mara check-config` says so of one that would not)
   tighten_exclude_tier_c: true
   queue_tier_c_min_severity: High     # High | Critical: tier C findings at or above this are queued
 

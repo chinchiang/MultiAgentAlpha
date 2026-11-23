@@ -191,7 +191,7 @@ Needed only for reviews with real models. `config/mara.yaml` documents the topol
 ```bash
 export AWS_PROFILE=...                      # Bedrock (after `aws sso login --profile ...`)
 export GEMINI_API_KEY=... GLM_LOCAL_KEY=...
-mara check-config config/mara.yaml          # the eight policy checks first / 先過八條政策檢查
+mara check-config config/mara.yaml          # the nine policy checks first / 先過九條政策檢查
 mara review path/to/repo --config config/mara.yaml --out out
 ```
 
@@ -208,12 +208,14 @@ Non-loopback inference endpoints must be HTTPS with certificate validation; the 
 - **`--require-hashes` 失敗，訊息提到 hash 不符或找不到 wheel**：平台或 Python 版本與閉包不同，見 2.3 節。
 - **系統 Python 上出現 `Cannot uninstall PyYAML`**：沒有用 venv。建 venv 後重來。
 - **`mara review` 說某工具 "not installed"**：第 3 節沒做，或該工具不在 `.mara-tools/bin`。離線 mock 模式不需要。
+- **`mara review` 說某工具 "was installed before the installer recorded its binary's SHA-256" 或 "is not the one the installer recorded"**：v0.15.0 起，單一二進位的工具（gitleaks、osv-scanner、trivy、zizmor）執行前會比對安裝時記錄的雜湊。舊的安裝沒有這筆紀錄，重跑 `python scripts/install_tools.py` 即可；若重裝後仍說不符，表示 `.mara-tools/bin` 裡的檔案在安裝後被改過，先查原因。
 - **防毒或 secret scanner 對 `fixtures/` 與 `calib/samples/` 告警**：那些是刻意植入漏洞與假憑證的教材，屬預期；不要部署它們。
 - **`import mara` 讀到別的目錄**：`-e .` 是可編輯安裝，指向安裝時的 repo 路徑；搬移 repo 後重跑 `pip install --no-deps --no-build-isolation -e .`。
 
 - **`--require-hashes` fails with a hash mismatch or no matching wheel**: the platform or Python version differs from the closure; see section 2.3.
 - **`Cannot uninstall PyYAML` on the system Python**: no venv was used. Create one and start over.
 - **`mara review` reports a tool as "not installed"**: section 3 was skipped, or the tool is not under `.mara-tools/bin`. The offline mock mode does not need it.
+- **`mara review` says a tool "was installed before the installer recorded its binary's SHA-256" or "is not the one the installer recorded"**: since v0.15.0 a tool that is one binary (gitleaks, osv-scanner, trivy, zizmor) is compared, before it runs, with the hash recorded when it was installed. An older install holds no such record: rerun `python scripts/install_tools.py`. If it still says the binary is not the recorded one after that, a file under `.mara-tools/bin` was changed after the install; find out why first.
 - **Antivirus or a secret scanner flags `fixtures/` and `calib/samples/`**: these are teaching materials with deliberately planted vulnerabilities and fake credentials; expected. Never deploy them.
 - **`import mara` resolves to another directory**: `-e .` is an editable install pointing at the repository path at install time; after moving the repository, rerun `pip install --no-deps --no-build-isolation -e .`.
 

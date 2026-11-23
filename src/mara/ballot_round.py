@@ -21,6 +21,7 @@ from .context.repo_map import MAX_TOTAL_CHARS, RepoContext, bundle_cost
 from .progress import Progress
 from .providers.base import Provider
 from .schemas import Finding, JudgeVote, ModelFamily, RedTeamNote, SkepticVerdict
+from .scoring import jury
 
 T = TypeVar("T")
 
@@ -197,6 +198,12 @@ class _Round:
         def independent(f: Finding) -> int:
             return sum(1 for fam in judge_fams if fam not in finders[f.id])
 
+        def left_to_its_independent_judges(f: Finding) -> bool:
+            # finder corroboration (mara.scoring.jury.corroborable): the finders' families are not asked, so that the
+            # finding stands or goes to a human on its independent judges alone and no discounted vote of a finder
+            # is in its score
+            return jury.corroborable(len(finders[f.id]), independent(f), min_ind, self.cfg.gate.finder_corroboration)
+
         for name in self.cfg.roles.judges:
             prov = self.providers[name]
             fam = prov.family.value
@@ -206,7 +213,7 @@ class _Round:
             for f in findings:
                 if prov.family not in finders[f.id]:
                     eligible.append(f)
-                elif independent(f) < min_ind:
+                elif independent(f) < min_ind and not left_to_its_independent_judges(f):
                     eligible.append(f)
                     self_ids.add(f.id)
                 else:

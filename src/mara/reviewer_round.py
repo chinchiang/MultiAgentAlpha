@@ -35,23 +35,35 @@ class ReviewerFindings:
 
 
 def run(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConfig, providers: Mapping[str, Provider],
-        audit: Audit, say: Callable[[str], None], progress: Progress, egress_blocked: bool) -> ReviewerFindings:
+        audit: Audit, say: Callable[[str], None], progress: Progress, egress_blocked: bool,
+        over_exchange_limit: bool = False) -> ReviewerFindings:
     """The reviewer round over the bundle `ctx`, the reviewers shown `context_view` when there is one; none of them is
-    asked when the secret preflight blocked source egress (`egress_blocked`), and the reviewers stage is then reported
-    as skipped. The replies are counted in `audit`, with the raw and deduplicated finding counts; every pipeline log
-    line goes to `say`."""
-    if egress_blocked:
-        progress.skip("reviewers", "source egress blocked by the secret preflight")
+    asked when the secret preflight blocked source egress (`egress_blocked`) or when the round would pass the review's
+    exchange limit (`over_exchange_limit`: a round asked in part would leave some of the bundle unread by some
+    reviewer), and the reviewers stage is then reported as skipped. The replies are counted in `audit`, with the raw
+    and deduplicated finding counts; every pipeline log line goes to `say`."""
+    skipped = egress_blocked or over_exchange_limit
+    if skipped:
+        progress.skip("reviewers", "source egress blocked by the secret preflight" if egress_blocked
+                      else f"the {planned_exchanges(ctx, cfg)} context and reviewer exchanges would pass the exchange limit")
         raw = []
     else:
         progress.begin("reviewers")
         raw = _review(ctx, context_view, cfg=cfg, providers=providers, audit=audit, say=say)
     findings = dedupe(raw)
-    if not egress_blocked:
+    if not skipped:
         progress.done("reviewers", f"{len(raw)} raw finding(s), {len(findings)} after deduplication")
     audit.set(Count.FINDINGS_RAW, len(raw))
     audit.set(Count.FINDINGS_DEDUPED, len(findings))
     return ReviewerFindings(raw_count=len(raw), findings=findings)
+
+
+def planned_exchanges(ctx: RepoContext, cfg: MaraConfig) -> int:
+    """The exchanges the reviewer round makes over `ctx` under `cfg`, and before it the context agent when a context
+    role is configured: for each batch, one for the context agent (mara.agents.context_agent.run_context_agent) and one
+    for each dimension and reviewer."""
+    batches = sum(1 for _ in ctx.batches())
+    return batches * (int(bool(cfg.roles.context)) + len(cfg.dimensions) * len(cfg.roles.reviewers))
 
 
 def _review(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConfig, providers: Mapping[str, Provider],

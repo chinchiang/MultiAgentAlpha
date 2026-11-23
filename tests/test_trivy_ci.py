@@ -39,6 +39,7 @@ def _setup(tmp_path: Path, sarif: str, hours_old: float = 2, said: tuple[str, ..
     tools = tmp_path / "tools"
     _fake_trivy(tools, _now_iso(hours_old), said=said, exit_code=exit_code)
     (tools / "canned.sarif").write_text(sarif)
+    tool_installs.record_installed(tools, "trivy")
     cache = tmp_path / "cache"
     env = {**os.environ, "MARA_TOOLS_DIR": str(tools), "MARA_TRIVY_CACHE_DIR": str(cache)}
     r = subprocess.run([sys.executable, str(ROOT / "scripts" / "trivy_db.py"), "download", "--repository", "example.invalid/x/db:2",

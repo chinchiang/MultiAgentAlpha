@@ -1,0 +1,82 @@
+focused: [tests/test_exchange_limit.py]
+mutations:
+  - name: a call past the limit reaches the model
+    file: src/mara/providers/budget.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_that_reaches_the_limit_in_the_ballot_round_has_the_calls_left_refused_and_decides_nothing_for_it
+    old: '        if not self.budget.take():'
+    new: '        if not self.budget.take() and False:'
+  - name: the limit is one exchange too generous
+    file: src/mara/providers/budget.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_that_reaches_the_limit_in_the_ballot_round_has_the_calls_left_refused_and_decides_nothing_for_it
+    old: '            if self.limit is not None and self.used >= self.limit:'
+    new: '            if self.limit is not None and self.used > self.limit:'
+  - name: a refused call is not counted
+    file: src/mara/providers/budget.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_that_reaches_the_limit_in_the_ballot_round_has_the_calls_left_refused_and_decides_nothing_for_it
+    old: '                self.refused += 1'
+    new: '                pass'
+  - name: a round that exactly meets the limit is not covered
+    file: src/mara/providers/budget.py
+    caught_by: tests/test_exchange_limit.py::test_the_context_agent_is_counted_once_for_each_batch_like_the_reviewers
+    old: '        return self.limit is None or self.used + exchanges <= self.limit'
+    new: '        return self.limit is None or self.used + exchanges < self.limit'
+  - name: the models a limited provider served are not the provider's
+    file: src/mara/providers/budget.py
+    caught_by: tests/test_exchange_limit.py::test_a_provider_under_a_budget_is_refused_once_it_is_spent_and_is_otherwise_the_provider
+    old: '        self.served_models = inner.served_models  # one set: the provider manifest reads the wrapper'
+    new: '        pass'
+  - name: a review with a limit runs its providers outside it
+    file: src/mara/pipeline.py
+    caught_by: tests/test_exchange_limit.py::test_a_limit_the_review_stays_within_changes_nothing
+    old: '        if self.budget.limit is not None:'
+    new: '        if False:'
+  - name: the reviewer round is asked in part
+    file: src/mara/pipeline.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them
+    old: '        over_limit = not egress.blocked and not self.budget.covers(planned)'
+    new: '        over_limit = False'
+  - name: the context agent is not counted with the reviewer round
+    file: src/mara/reviewer_round.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them
+    old: '    return batches * (int(bool(cfg.roles.context)) + len(cfg.dimensions) * len(cfg.roles.reviewers))'
+    new: '    return batches * (len(cfg.dimensions) * len(cfg.roles.reviewers))'
+  - name: the context agent is counted once however many batches it is asked
+    file: src/mara/reviewer_round.py
+    caught_by: tests/test_exchange_limit.py::test_the_context_agent_is_counted_once_for_each_batch_like_the_reviewers
+    old: '    return batches * (int(bool(cfg.roles.context)) + len(cfg.dimensions) * len(cfg.roles.reviewers))'
+    new: '    return int(bool(cfg.roles.context)) + batches * (len(cfg.dimensions) * len(cfg.roles.reviewers))'
+  - name: the context call is made although the round is over the limit
+    file: src/mara/pipeline.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them
+    old: '        if egress.blocked or over_exchange_limit or not self.cfg.roles.context:'
+    new: '        if egress.blocked or not self.cfg.roles.context:'
+  - name: a review over the limit is not incomplete for it
+    file: src/mara/review_status.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them
+    old: |-
+      if facts.exchange_limit_reached:
+              out.append(EXCHANGE_LIMIT_REACHED)
+    new: |-
+      if False:
+              out.append(EXCHANGE_LIMIT_REACHED)
+  - name: a refused call does not make the review say the limit was reached
+    file: src/mara/pipeline.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_that_reaches_the_limit_in_the_ballot_round_has_the_calls_left_refused_and_decides_nothing_for_it
+    old: '                            exchange_limit_reached=stages.over_exchange_limit or self.budget.refused > 0)'
+    new: '                            exchange_limit_reached=stages.over_exchange_limit)'
+  - name: a context view not asked for is reported as one that failed
+    file: src/mara/review_status.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them
+    old: '    if facts.context_view_missing and not facts.egress_blocked and not facts.exchange_limit_reached:'
+    new: '    if facts.context_view_missing and not facts.egress_blocked:'
+  - name: the audit does not count the refused exchanges
+    file: src/mara/pipeline.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_that_reaches_the_limit_in_the_ballot_round_has_the_calls_left_refused_and_decides_nothing_for_it
+    error: KeyError
+    old: '            self.audit.set(Count.EXCHANGES_REFUSED_AT_LIMIT, self.budget.refused)'
+    new: '            pass'
+  - name: the reviewers are asked although the round would pass the limit
+    file: src/mara/reviewer_round.py
+    caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them
+    old: '    skipped = egress_blocked or over_exchange_limit'
+    new: '    skipped = egress_blocked'

@@ -1166,10 +1166,14 @@
         const data = await api("GET", "/api/jobs/" + enc(watching));
         if (seq !== renderSeq) return;
         const j = data.job;
-        const cls = { running: "info", finished: "ok", failed: "danger", interrupted: "warn" }[j.status] || "";
+        const cls = { running: "info", finished: "ok", failed: "danger", interrupted: "warn", cancelled: "warn", timed_out: "danger" }[j.status] || "";
+        const stop = j.status !== "running" ? null : btn(t("action.cancel_job"), { kind: "danger", small: true, icon: "stop", onClick: async (ev) => {
+          ev.currentTarget.disabled = true;
+          try { await api("POST", "/api/jobs/" + enc(j.id) + "/cancel"); state.env = null; render(false); } catch (e) { showError(e); }
+        } });
         fill(jobSlot, h("div", { class: "stack" },
           h("div", { class: "row" }, chip(tCode("job.", j.kind)), chip(tCode("job_status.", j.status), cls), h("span", { class: "small muted" }, fmtTime(j.started_at, true)),
-            j.exit_code !== null && j.exit_code !== undefined ? chip(t("env.job.exit", { code: j.exit_code })) : null),
+            j.exit_code !== null && j.exit_code !== undefined ? chip(t("env.job.exit", { code: j.exit_code })) : null, stop),
           h("pre", { class: "log", tabindex: "0" }, j.argv.join(" ")), h("pre", { class: "log", tabindex: "0" }, j.log_tail || t("log.empty"))));
         if (j.status !== "running" && running && running.id === j.id) { state.env = null; render(false); }
       } catch (e) { fill(jobSlot, emptyState(tCode("error.", e.code), "alert")); }
@@ -1186,7 +1190,7 @@
     if (running) every(RUN_POLL_MS, () => { if (seq === renderSeq) drawJob(); });
 
     const rows = env.tools.rows;
-    const statusCls = { ok: "ok", missing: "warn", version_mismatch: "danger", unverified: "warn" };
+    const statusCls = { ok: "ok", missing: "warn", version_mismatch: "danger", no_file_hash: "danger", unverified: "warn" };
     const scanners = rows.filter((r) => r.role !== "verifier");
     const missing = rows.filter((r) => r.status !== "ok").map((r) => r.name);
     const actions = env.actions || {};
