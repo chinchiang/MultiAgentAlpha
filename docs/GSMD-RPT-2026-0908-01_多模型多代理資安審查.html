@@ -3596,7 +3596,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <li><strong>PentestGPT 原始論文</strong>未取得 arXiv 編號與發表場次。暫採：未引用。</li>
 <li><strong>Socket AI 與 Amplify Security 的發布日期</strong>未找到。暫採：日期不可驗證。</li>
 <li><strong>ARVO 的 arXiv 編號與日期</strong>只有二手描述。暫採：未引用。</li>
-<li><strong>gitleaks 與 Trivy 的官方 SARIF 文件頁</strong>未取得，只有二手部落格。暫採：尚未證實（功能普遍認知為真）。2026-10-06 部分核對：本 repo 以 <code>tools/versions.lock</code> 鎖定的 gitleaks 8.30.1 與 trivy 0.74.0 實際輸出 SARIF，並經 <code>scripts/code_scanning_prep.py</code> 上傳 GitHub Code Scanning（<code>docs/tools-provenance.md</code>）；功能已實測，官方文件頁仍未讀取，不關閉。</li>
+<li><strong>gitleaks 與 Trivy 的官方 SARIF 文件頁</strong>未取得，只有二手部落格。暫採：尚未證實（功能普遍認知為真）。2026-10-06 部分核對：本 repo 以 <code>tools/versions.lock</code> 鎖定的 gitleaks 8.30.1 與 trivy 0.74.0 實際輸出 SARIF，並經 <code>scripts/code_scanning_prep.py</code> 上傳 GitHub Code Scanning（<code>docs/tools-provenance.md</code>）；功能已實測，官方文件頁仍未讀取，不關閉。已於 2026-11-23 關閉：兩個工具的官方文件都已讀取，讀的是 <code>tools/versions.lock</code> 鎖定版本的 tag。<code>gitleaks/gitleaks</code> tag v8.30.1 的 <code>README.md</code> 在用法中列出 <code>-f, --report-format string   output format (json, csv, junit, sarif, template)</code>，並寫明內建 sarif 報告格式；<code>aquasecurity/trivy</code> tag v0.74.0 的 <code>docs/guide/configuration/reporting.md</code> 有「SARIF」一節，寫明以 <code>--format sarif</code> 產生符合 SARIF 2.1.0 OASIS 標準的報告，可上傳 GitHub code scanning。兩個檔案的 SHA-256 見 <code>docs/groundtruth-diff-2026-11-23.md</code>。</li>
 <li><strong>Copilot Autofix 的獨立第三方評測</strong>未取得內容（arXiv:2509.13650 僅連結）。暫採：未引用。</li>
 <li><strong>DARPA AIxCC 2025 決賽結果</strong>未查（配額用盡）。暫採：未引用；建議補查。</li>
 <li><strong>claude-code-security-review Action 的正式 release 日期</strong>：倉庫無 tag，2025-08-06 依三家媒體交叉。暫採：第三方評論。</li>
@@ -3658,7 +3658,7 @@ L5  評分與輸出層   程式計算 CVSS 4.0 / SSVC / 共識分數 / 家族一
 <li><strong>ua-parser-js（2021）與 event-stream（2018）事件</strong>未研究。暫採：未引用。</li>
 <li><strong>Uber 2022 與 Toyota 憑證外洩事件</strong>未研究。暫採：未引用。</li>
 <li><strong>「Kong」GitHub Actions 事件</strong>未找到。暫採：未引用。</li>
-<li><strong>OWASP LLM Top 10 2026 版</strong>（疑似 2026-08-04 發布）未驗；若存在，LLM01:2025 的引用需更新。暫採：引 2025 版。2026-09-21 部分核對：官方 GitHub 倉庫（99f4395，2026-08-05）沒有 2026 版目錄；<code>genai.owasp.org</code> 封鎖，不能排除官網另行發布，仍引 2025 版。2026-10-06 附記：genai.owasp.org 已可讀，LLM01 現行頁面仍是 2025 版（B43、C9.6），不關閉。</li>
+<li><strong>OWASP LLM Top 10 2026 版</strong>（疑似 2026-08-04 發布）未驗；若存在，LLM01:2025 的引用需更新。暫採：引 2025 版。2026-09-21 部分核對：官方 GitHub 倉庫（99f4395，2026-08-05）沒有 2026 版目錄；<code>genai.owasp.org</code> 封鎖，不能排除官網另行發布，仍引 2025 版。2026-10-06 附記：genai.owasp.org 已可讀，LLM01 現行頁面仍是 2025 版（B43、C9.6），不關閉。已於 2026-11-23 關閉：截至當日沒有 2026 版。官網清單頁 <code>https://genai.owasp.org/llm-top-10/</code> 只列 LLM01:2025 到 LLM10:2025（頁面上唯一的「2026」是活動公告），官方 GitHub 倉庫仍停在 99f4395（2026-08-05），沒有 2026 版目錄；「疑似 2026-08-04 發布」不成立，繼續引 2025 版。之後若發布新版，由季度更新（附錄E prompt 2 第 4 點）處理。</li>
 <li><strong>ISO/IEC 27001:2022 條文</strong>付費牆；5.19 到 5.21、8.8、8.32 的標題依實務通用引用。暫採：尚未證實，第十部標 *。</li>
 <li><strong>SEMI E187 的發布日期與修訂版</strong>未驗。暫採：未引用日期。</li>
 <li><strong>IEC 62443-4-1 各實務的活動計數</strong>（SM-1 到 SM-13 等）來自 arXiv:2105.13413 而非標準本身。暫採：第三方評論。</li>

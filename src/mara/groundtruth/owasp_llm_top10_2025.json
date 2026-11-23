@@ -1,5 +1,5 @@
 {
-  "_source": "OWASP Top 10 for LLM Applications 2025 (v2025, published 2024-11). Only LLM01 is used by MARA (prompt injection as an input-validation class). Re-verified 2026-09-21 against OWASP/www-project-top-10-for-large-language-model-applications 99f4395 (2_0_vulns/): identical; the repository holds no 2026 edition (genai.owasp.org unreachable from the verifying environment).",
+  "_source": "OWASP Top 10 for LLM Applications 2025 (v2025, published 2024-11). Only LLM01 is used by MARA (prompt injection as an input-validation class). Re-verified 2026-09-21 against OWASP/www-project-top-10-for-large-language-model-applications 99f4395 (2_0_vulns/): identical; the repository holds no 2026 edition (genai.owasp.org unreachable from the verifying environment). Re-verified 2026-11-23: the repository is still at 99f4395 and identical; https://genai.owasp.org/llm-top-10/, now reachable, lists LLM01:2025 to LLM10:2025 and no 2026 edition.",
   "categories": {
     "LLM01": "Prompt Injection",
     "LLM02": "Sensitive Information Disclosure",

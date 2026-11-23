@@ -8,6 +8,8 @@
 #     statement: "not reachable from semgrep's CLI use; tracked in issue #NN until the upstream fix is released"
 #     expired_at: 2026-12-31
 vulnerabilities:
+  # Renewed 2026-11-23, every entry below, from 2026-12-31 to 2027-03-31, with tools/osv-semgrep.toml and
+  # tools/osv-cyberseceval.toml, whose entries these mirror: docs/osv-exception-review-2026-11-23.md.
   # The thirteen PyJWT entries scoped to tools/semgrep-requirements.txt were removed on 2026-10-03:
   # semgrep 1.179.0 relaxed the pyjwt[crypto]~=2.13.0 pin, the closure relocked to pyjwt 2.15.1, and the
   # fixed releases (2.14.0 / 2.15.0) cover every advisory. See tools/osv-semgrep.toml.
@@ -21,7 +23,7 @@ vulnerabilities:
       a semgrep release that relaxes the pin.
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
   - id: CVE-2026-114603
     paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
@@ -33,7 +35,7 @@ vulnerabilities:
       semgrep release that relaxes the pin.
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
   - id: CVE-2026-126360
     paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
@@ -45,7 +47,7 @@ vulnerabilities:
       tools/osv-semgrep.toml; re-check at a semgrep release that relaxes the pin.
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
   - id: CVE-2026-116684
     paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
@@ -56,7 +58,7 @@ vulnerabilities:
       release that relaxes the pin.
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
   - id: CVE-2026-116685
     paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
@@ -67,7 +69,7 @@ vulnerabilities:
       release that relaxes the pin.
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
   - id: CVE-2026-116686
     paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
@@ -78,7 +80,7 @@ vulnerabilities:
       release that relaxes the pin.
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
   - id: CVE-2026-115563
     paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
@@ -89,7 +91,7 @@ vulnerabilities:
       semgrep release that relaxes the pin.
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
   - id: CVE-2026-132276
     paths: ["tools/semgrep-requirements.txt", "tools/cyberseceval-requirements.txt"]
     statement: >-
@@ -101,7 +103,7 @@ vulnerabilities:
       release that relaxes the pin.
       The same version is in tools/cyberseceval-requirements.txt, which holds semgrep only so that CodeShield finds semgrep-core;
       mirrors tools/osv-cyberseceval.toml.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
   - id: CVE-2026-59890
     paths: ["tools/cyberseceval-requirements.txt"]
     statement: >-
@@ -110,7 +112,7 @@ vulnerabilities:
       which CyberSecEval imports (benchmark/autopatching_benchmark.py, arvo_utils.py), so relocking cannot reach the fix. The
       closure is installed from wheels on Linux: setuptools builds no sdist in it. Mirrors tools/osv-cyberseceval.toml;
       re-check when CyberSecEval stops importing pkg_resources.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
   - id: GHSA-xmj3-9gf7-h52w
     paths: ["tools/cyberseceval-requirements.txt"]
     statement: >-
@@ -118,5 +120,5 @@ vulnerabilities:
       installation, fixed in setuptools 84.1.0. The closure stays on 81.0.0 because 82.0.0 removed pkg_resources, which
       CyberSecEval imports. It is installed with pip from wheels on Linux, never on Windows. Mirrors tools/osv-cyberseceval.toml;
       re-check when CyberSecEval stops importing pkg_resources.
-    expired_at: 2026-12-31
+    expired_at: 2027-03-31
 misconfigurations: []
