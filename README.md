@@ -558,7 +558,11 @@ and installs into `.mara-tools/bin`, writing `.mara-tools/manifest.json`. Any mi
 `mara/tools/runner.py` executes tools only from that directory, and only at the version the workspace's
 `tools/versions.lock` pins, as `manifest.json` records the install (`mara/tools/pins.py`, the rule the CI scripts
 apply too). A tool missing, or installed at another version, is recorded as not run with the reason, which keeps the
-review incomplete; re-run `scripts/install_tools.py` after a relock. PATH is never consulted. `docs/tools-provenance.md` records source, licence, what each verification
+review incomplete; re-run `scripts/install_tools.py` after a relock. For a tool that is one binary (gitleaks,
+osv-scanner, trivy, zizmor) the installer also records the SHA-256 of the file it installed, and the runner compares
+it each time before it runs the tool: a binary that changed since, or one installed before this was recorded, is not
+run. It is one more thing to get past, not a boundary, since whoever can write `.mara-tools` can write its manifest;
+semgrep's virtual environment and csp-evaluator's package directory are checked only when installed. PATH is never consulted. `docs/tools-provenance.md` records source, licence, what each verification
 proves and the remaining gaps (gitleaks, semgrep and csp-evaluator publish no signature). CI installs and verifies
 the whole set on every run. The lock also has a `git` kind: `semgrep-rules` is a checkout of
 `semgrep/semgrep-rules` at a pinned commit, verified by commit id, by a SHA-256 digest over every

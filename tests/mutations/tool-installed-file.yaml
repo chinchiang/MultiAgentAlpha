@@ -1,0 +1,49 @@
+focused: [tests/test_tool_installed_file.py, tests/test_install_tools.py]
+mutations:
+  - name: a binary that is not the recorded one is run
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_binary_that_is_not_the_one_the_installer_recorded_is_not_run
+    old: '    if actual != recorded:'
+    new: '    if False:'
+  - name: a single-file tool with no recorded hash is run
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_single_file_tool_whose_manifest_holds_no_hash_of_it_is_not_run
+    old: '    if not isinstance(recorded, str) or not recorded:'
+    new: '    if False:'
+  - name: a binary install is not checked, only an archive
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_binary_that_is_not_the_one_the_installer_recorded_is_not_run
+    old: 'SINGLE_FILE_KINDS = ("archive", "binary")'
+    new: 'SINGLE_FILE_KINDS = ("archive",)'
+  - name: a tool that is not one file is held to a hash it has none of
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_tool_that_is_not_one_file_is_run_as_before
+    old: '    if not entry or entry.get("kind") not in SINGLE_FILE_KINDS:'
+    new: '    if not entry:'
+  - name: the runner does not check the installed file
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_binary_that_is_not_the_one_the_installer_recorded_is_not_run
+    old: '        if not_installed_file:'
+    new: '        if False:'
+  - name: a binary's hash is kept although the file changed
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_a_binary_that_is_not_the_one_the_installer_recorded_is_not_run
+    old: '    key = (str(path), st.st_mtime_ns, st.st_size)'
+    new: '    key = (str(path), 0, 0)'
+  - name: a binary that cannot be read is taken as the recorded one
+    file: src/mara/tools/runner.py
+    caught_by: tests/test_tool_installed_file.py::test_what_is_wrong_with_an_installed_file_is_said_by_one_function
+    error: TypeError
+    old: '        return f"{tool}: the installed binary cannot be read ({type(e).__name__})"'
+    new: '        return None'
+  - name: the installer does not record the installed binary's hash
+    file: scripts/install_tools.py
+    caught_by: tests/test_install_tools.py::test_installs_and_writes_manifest
+    error: KeyError
+    old: '        if spec["kind"] not in ("pip", "git", "npm"):'
+    new: '        if False:'
+  - name: the installer records the hash of what it downloaded as the binary's
+    file: scripts/install_tools.py
+    caught_by: tests/test_install_tools.py::test_installs_and_writes_manifest
+    old: '            entry["installed_sha256"] = sha256_file(Path(entry["path"]))'
+    new: '            entry["installed_sha256"] = entry["sha256"]'

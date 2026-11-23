@@ -577,6 +577,11 @@ def install(lock: dict, *, install_dir: Path, only: list[str] | None = None, no_
             entry = install_npm(n, spec, install_dir=install_dir, bin_dir=bin_dir, cache=cache)
         else:
             entry = install_binary_or_archive(n, spec, bin_dir=bin_dir, cache=cache, no_signature_check=no_signature_check)
+        if spec["kind"] not in ("pip", "git", "npm"):
+            # the binary as it now lies in the tool directory, which the review's runner checks each time before it
+            # runs it (mara.tools.runner.installed_file_problem): `sha256` above is the downloaded asset's, and for an
+            # archive that is not the file that runs
+            entry["installed_sha256"] = sha256_file(Path(entry["path"]))
         entry["installed_at"] = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
         manifest["tools"][n] = entry
         manifest["lock_sha256"] = lock.get("_sha256")
