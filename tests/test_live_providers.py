@@ -166,6 +166,19 @@ def test_openai_compatible_ignores_proxy_environment_variables(monkeypatch):
     assert default._transport_for_url(httpx.URL("http://127.0.0.1:8000/v1"))._pool.__class__.__name__ == "HTTPProxy"
 
 
+def test_openai_compatible_a_missing_ca_bundle_is_a_clear_error_not_a_tls_traceback(tmp_path):
+    """A configured ca_bundle whose file is absent -- the common first-run case, the internal CA not exported yet --
+    is a ProviderConfigError naming the path, raised when the provider is built, not a FileNotFoundError from inside
+    the TLS load. An existing bundle (certifi's own) builds without that error."""
+    import certifi
+
+    from mara.providers.base import ProviderConfigError
+
+    with pytest.raises(ProviderConfigError, match=r"ca_bundle .* does not exist"):
+        OpenAICompatibleProvider(_spec(ca_bundle=str(tmp_path / "inventec-ca.pem")))
+    OpenAICompatibleProvider(_spec(ca_bundle=certifi.where()))  # a real bundle: no ProviderConfigError
+
+
 def test_openai_compatible_invalid_json_with_stop_finish_is_unparseable_not_a_truncation():
     """It used to be filed as a truncation: a budget problem. It ended normally, so it is the model's invalid output."""
     c = _call(_oai(lambda req: _chat("Sure! Here is the JSON: {\"findings\": [")))

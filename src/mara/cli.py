@@ -129,12 +129,18 @@ def _review(admitted: AdmittedInvocation) -> tuple[ReviewReport, bool]:
     failed). These are click's usage errors, each on the option it names: a usage error of the pipeline's own checks,
     a --psirt-event that is not a readable JSON event, and a workspace inside the target (on TARGET). Any other
     exception is not."""
+    from .providers.base import ProviderConfigError
     from .workspace import WorkspaceInsideTarget, resolve
 
     inv, cfg, progress = admitted.invocation, admitted.config, admitted.progress
     target, out, psirt_event, base = inv.target, inv.out, inv.psirt_event, inv.base
-    pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress,
-                    root=admitted.root)
+    try:
+        pipe = Pipeline(cfg, mock_fixtures=str(inv.mock_fixtures) if inv.mock_fixtures else None, out_dir=out, progress=progress,
+                        root=admitted.root)
+    except ProviderConfigError as e:
+        # a provider is not ready in this environment (a configured CA bundle whose file is absent): one clear line,
+        # not a traceback. check-config passes on policies and never builds a provider, so the review is where it shows.
+        raise typer.BadParameter(str(e), param_hint="--config") from e
     event = None
     if psirt_event:
         # read before the review, and handed to it: the notifications are built once, and the report's psirt holds these

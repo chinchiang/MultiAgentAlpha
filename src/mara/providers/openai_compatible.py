@@ -33,7 +33,7 @@ import httpx
 
 from ..config import ModelSpec
 from ..credentials import key_env
-from .base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, RawReply, wire_schema
+from .base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, ProviderConfigError, RawReply, wire_schema
 
 MAX_ATTEMPTS = 3
 BACKOFF_BASE = 2.0  # seconds before the second attempt; doubled for each further one, plus up to 1 s of jitter
@@ -57,12 +57,16 @@ def retry_delay(attempt: int, retry_after: str | None) -> float:
 
 def _trust(ca_bundle: str | None) -> ssl.SSLContext | bool:
     """Verification stays on: the default trust (certifi, or SSL_CERT_FILE / SSL_CERT_DIR), plus the
-    organisation's CA chain when the endpoint is signed by an internal CA (ModelSpec.ca_bundle)."""
+    organisation's CA chain when the endpoint is signed by an internal CA (ModelSpec.ca_bundle). A configured CA
+    bundle whose file is absent is a clear ProviderConfigError, not a FileNotFoundError from inside the TLS load."""
     if not ca_bundle:
         return True
     from ..workspace import resolve_user_path
 
     path = resolve_user_path(ca_bundle)
+    if not path.exists():
+        raise ProviderConfigError(f"ca_bundle {ca_bundle} ({path}) does not exist: export the internal CA chain to "
+                                  "that path, or remove ca_bundle for a publicly trusted endpoint")
     ctx = ssl.create_default_context(cafile=os.environ.get("SSL_CERT_FILE") or certifi.where())
     ctx.load_verify_locations(cafile=str(path))
     return ctx

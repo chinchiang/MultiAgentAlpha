@@ -410,6 +410,29 @@ def test_missing_config_is_a_usage_error_not_a_traceback(tmp_path, monkeypatch):
         assert "config file not found" in res.output
 
 
+def test_a_provider_that_is_not_ready_is_a_usage_error_not_a_traceback(tmp_path, monkeypatch):
+    """check-config passes on policies and never builds a provider, so a configured CA bundle whose file is absent
+    first bites when the review builds the provider. The command line turns that ProviderConfigError into one clear
+    line on --config, not a traceback."""
+    from typer.testing import CliRunner
+
+    from mara import cli
+    from mara.providers.base import ProviderConfigError
+
+    monkeypatch.setenv("MARA_HOME", str(tmp_path))
+    target = tmp_path / "target"
+    target.mkdir()
+
+    def not_ready(*a, **k):
+        raise ProviderConfigError("ca_bundle ~/.mara/inventec-ca.pem (/root/.mara/inventec-ca.pem) does not exist: "
+                                  "export the internal CA chain to that path, or remove ca_bundle")
+
+    monkeypatch.setattr(cli, "Pipeline", not_ready)
+    res = CliRunner().invoke(cli.app, ["review", str(target), "--provider", "mock", "-c", str(ROOT / "config/mara.mock.yaml")])
+    assert res.exit_code == 2 and not isinstance(res.exception, ProviderConfigError), res.output
+    assert "ca_bundle" in res.output and "does not exist" in res.output
+
+
 def test_skeptic_refusal_is_an_abstention_not_invalid_output(tmp_path):
     pipe = pipeline(tmp_path, run_tools=lambda *_a, **_k: [ToolRun(t, True) for t in ("semgrep", "gitleaks", "osv-scanner", "zizmor", "trivy")])
     (tmp_path / "app.py").write_text("unsafe()")

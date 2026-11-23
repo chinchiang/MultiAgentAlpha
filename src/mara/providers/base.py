@@ -15,6 +15,13 @@ STOP_REFUSAL = "refusal"  # the vendor or the model declined (refusal stop, cont
 STOPS = (STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL)
 
 
+class ProviderConfigError(ValueError):
+    """A provider cannot be built because its configuration is not ready in this environment: a configured CA bundle
+    whose file is absent, say. A ValueError so existing handlers still catch it; raised at provider construction, so a
+    review fails with one clear line instead of a traceback from deep in the TLS stack. mara.cli catches it on the
+    option it is about."""
+
+
 @dataclass
 class RawReply:
     """What a provider adapter saw, before anyone judged it: the adapter maps its vendor's stop reason to one of
