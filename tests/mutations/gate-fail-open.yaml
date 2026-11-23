@@ -32,10 +32,10 @@ mutations:
     caught_by: tests/test_gate_severity.py::test_a_reviewers_finding_whose_vector_zeroes_itself_is_an_invalid_item_not_a_finding_of_no_severity
     old: 'cvss4_vector=base_vector_only(raw["cvss4_vector"]), model_confidence'
     new: 'cvss4_vector=raw["cvss4_vector"], model_confidence'
-  - name: merged findings keep the first finder's vector
+  - name: the stronger claim does not become the merged finding
     file: src/mara/reviewer_round.py
-    caught_by: tests/test_gate_severity.py::test_merged_findings_keep_the_highest_vector_whichever_finder_comes_first
-    old: '            if cvss4.score(f.cvss4_vector) > cvss4.score(vectors[match.id]):'
+    caught_by: tests/test_gate_severity.py::test_a_merged_finding_is_the_highest_vector_member_whole_so_its_title_carries_its_severity
+    old: '            if cvss4.score(f.cvss4_vector) > cvss4.score(reps[match].cvss4_vector):'
     new: '            if False:'
   - name: the gate severity is the vector's alone
     file: src/mara/schemas.py

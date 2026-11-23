@@ -81,22 +81,30 @@ def test_a_reviewers_finding_whose_vector_zeroes_itself_is_an_invalid_item_not_a
     assert "invalid_findings_dropped" in audit.incomplete_reasons(), "and the review is incomplete for it"
 
 
-# ---------------------------------------------------------------- merged findings keep the highest vector
+# ----------------------------------------------- merged findings take the whole highest-vector member, title and all
 
 
-def _f(fid: str, vector: str, fam: ModelFamily, line: int = 10) -> Finding:
-    return Finding(id=fid, dimension="vulnerabilities", title="t", cwe="CWE-89",
+def _f(fid: str, vector: str, fam: ModelFamily, line: int = 10, title: str = "t") -> Finding:
+    return Finding(id=fid, dimension="vulnerabilities", title=title, cwe="CWE-89",
                    provenance=[Provenance(file="app.py", line=line, quote="unsafe()", verified=True)],
                    reachability="reachable", reachability_argument="a", exploit_sketch="b", cvss4_vector=vector,
                    model_confidence=0.5, source_family=fam, source_model="m")
 
 
-def test_merged_findings_keep_the_highest_vector_whichever_finder_comes_first():
-    low_first = reviewer_round.dedupe([_f("F-1", LOW, ModelFamily.ANTHROPIC, 10), _f("F-2", BASE, ModelFamily.DEEPSEEK, 11),
-                                       _f("F-3", BASE, ModelFamily.NEMOTRON, 12)])
-    high_first = reviewer_round.dedupe([_f("F-1", BASE, ModelFamily.ANTHROPIC, 10), _f("F-2", LOW, ModelFamily.DEEPSEEK, 11)])
-    assert [(k.id, k.cvss4_vector, len(k.finder_families)) for k in low_first] == [("F-1", BASE, 3)]
-    assert [(k.id, k.cvss4_vector) for k in high_first] == [("F-1", BASE)]
+def test_a_merged_finding_is_the_highest_vector_member_whole_so_its_title_carries_its_severity():
+    """The member with the highest-scoring vector becomes the merged finding entire -- id, title, line and vector --
+    so the judges rule on the claim that carries the severity. A weak claim at the same place that sorts first no
+    longer keeps its title on the strong finding's vector, where the judges, reading the weak claim, would drop the
+    strong finding with it."""
+    low_first = reviewer_round.dedupe([_f("F-1", LOW, ModelFamily.ANTHROPIC, 10, title="weak"),
+                                       _f("F-2", BASE, ModelFamily.DEEPSEEK, 11, title="real"),
+                                       _f("F-3", BASE, ModelFamily.NEMOTRON, 12, title="real too")])
+    high_first = reviewer_round.dedupe([_f("F-1", BASE, ModelFamily.ANTHROPIC, 10, title="real"),
+                                        _f("F-2", LOW, ModelFamily.DEEPSEEK, 11, title="weak")])
+    # the title and the vector come from one finding; the merged line is that finding's
+    assert [(k.id, k.title, k.cvss4_vector, k.provenance[0].line, len(k.finder_families)) for k in low_first] \
+        == [("F-2", "real", BASE, 11, 3)]
+    assert [(k.id, k.title, k.cvss4_vector) for k in high_first] == [("F-1", "real", BASE)]
 
 
 def test_a_finding_that_is_not_merged_keeps_its_own_vector():

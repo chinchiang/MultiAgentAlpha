@@ -1,8 +1,9 @@
 """The reviewer round (GLOSSARY.md: reviewer round, extraction role, ballot round): every reviewer reports findings on
 each batch of the bundle for each dimension, one exchange each with a canary of its own (mara.agents.base). The
 findings are numbered in content order and their unknown standard references stripped, then the findings of one
-dimension at one place (mara.identity.same_place), equally verified, are merged, each kept with the families that
-found it. Every reply is counted through mara.audit (docs/adr/0008-reply-accounting.md). Its result, the reviewers'
+dimension at one place (mara.identity.same_place), equally verified, are merged into the one with the highest-scoring
+vector, kept whole with the families that found the place. Every reply is counted through mara.audit
+(docs/adr/0008-reply-accounting.md). Its result, the reviewers'
 findings, is what the ballot round (mara.ballot_round) rules on. Not pure: run asks the reviewers' providers, counts
 in the audit, logs through `say` and reports to `progress`; dedupe is pure.
 """
@@ -97,32 +98,31 @@ def _review(ctx: RepoContext, context_view: ContextView | None, *, cfg: MaraConf
 
 def dedupe(findings: list[Finding]) -> list[Finding]:
     """Merge findings of one dimension at one place (mara.identity.same_place: one file, one CWE, lines at most
-    NEAR_LINES apart), the first one kept with the families that found it as its `finder_families`, sorted by name,
-    and with the highest-scoring CVSS vector any of them gave (the first of them on a tie), so that which reviewer's
-    finding sorts first does not decide the severity; an unverified finding is never merged into a verified one, nor a
-    verified one into an unverified one."""
-    kept: list[Finding] = []
-    finders: dict[str, set[ModelFamily]] = {}
-    vectors: dict[str, str] = {}
+    NEAR_LINES apart). The merged finding is the member with the highest-scoring CVSS vector, the first of them on a
+    tie, kept whole: its title, provenance, quote and vector together, with the families that found the place as its
+    `finder_families`, sorted by name. Keeping the member whole, not the first member's text under the highest vector,
+    means the judges rule on the claim that carries the severity: a weak claim at the same place can no longer keep its
+    own title on a stronger finding's severity and take that finding down when the judges read the weak claim. An
+    unverified finding (possibly fabricated) is never merged into a verified one, nor a verified one into an unverified
+    one: it would inherit the other's acceptance and hide the fabrication."""
+    reps: list[Finding] = []
+    finders: list[set[ModelFamily]] = []
     for f in findings:
         p = f.provenance[0]
         match = None
         f_ok = all(x.verified for x in f.provenance)
-        for k in kept:
+        for i, k in enumerate(reps):
             q = k.provenance[0]
             k_ok = all(x.verified for x in k.provenance)
-            # never merge an unverified (possibly fabricated) finding into a verified one:
-            # it would inherit the verified finding's acceptance and hide the fabrication
             if k.dimension == f.dimension and k_ok == f_ok and same_place(q.file, q.line, k.cwe, p.file, p.line, f.cwe):
-                match = k
+                match = i
                 break
         if match is None:
-            kept.append(f)
-            finders[f.id] = {f.source_family}
-            vectors[f.id] = f.cvss4_vector
+            reps.append(f)
+            finders.append({f.source_family})
         else:
-            finders[match.id].add(f.source_family)
-            if cvss4.score(f.cvss4_vector) > cvss4.score(vectors[match.id]):
-                vectors[match.id] = f.cvss4_vector
-    return [k.model_copy(update={"finder_families": sorted(finders[k.id], key=lambda x: x.value), "cvss4_vector": vectors[k.id]})
-            for k in kept]
+            finders[match].add(f.source_family)
+            if cvss4.score(f.cvss4_vector) > cvss4.score(reps[match].cvss4_vector):
+                reps[match] = f  # the stronger claim becomes the merged finding, its text and its severity together
+    return [k.model_copy(update={"finder_families": sorted(fam, key=lambda x: x.value)})
+            for k, fam in zip(reps, finders, strict=True)]
