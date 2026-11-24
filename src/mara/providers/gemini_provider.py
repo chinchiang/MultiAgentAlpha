@@ -8,7 +8,8 @@ Stop mapping (RawReply): `finishReason` MAX_TOKENS is the output limit even with
 blocked prompt (`promptFeedback.blockReason`) or a SAFETY / RECITATION / PROHIBITED_CONTENT /
 BLOCKLIST / SPII finish is a refusal; mara.exchange classifies the rest (an empty answer is an empty reply).
 Thought parts (thinking models) are skipped. Transient failures (timeouts and other transport
-errors, 408, 429, 500, 502, 503, 504) are retried exactly like the OpenAI-compatible provider.
+errors, 408, 429, 500, 502, 503, 504) are retried with the OpenAI-compatible provider's backoff, up to
+its default number of attempts (MAX_ATTEMPTS): a Gemini model sets no max_attempts of its own.
 
 Data handling: the paid Gemini API tier does not train on prompts but keeps them for a limited time
 for abuse monitoring, so such a model is `vendor_api_retained` and policy P5 admits it only with a

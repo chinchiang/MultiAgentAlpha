@@ -13,8 +13,9 @@ worse under it (GLM-5.3: an empty skeptic list after ~15k reasoning tokens, thre
 three; with the schema as guidance only, every finding answered); a single ```json fence is tolerated
 for every family (mara.exchange).
 
-Transient failures (timeouts and other transport errors, 408, 429, 500, 502, 503, 504, 529) are retried
-up to MAX_ATTEMPTS calls in total, with exponential backoff plus jitter, or the server's Retry-After in
+Each HTTP request waits the model's `timeout_seconds` (ModelSpec) in each phase. Transient failures
+(timeouts and other transport errors, 408, 429, 500, 502, 503, 504, 529) are retried up to the model's
+`max_attempts` requests in all, with exponential backoff plus jitter, or the server's Retry-After in
 seconds, capped at RETRY_AFTER_CAP. Any other status is a configuration or request error and fails at
 once. After the last attempt the sanitised code is raised as before, and the agent layer records it as
 a provider error, not a refusal. (The Anthropic SDK retries on its own, so that provider adds nothing.)
@@ -31,11 +32,11 @@ from collections.abc import Callable
 import certifi
 import httpx
 
-from ..config import ModelSpec
+from ..config import OPENAI_COMPATIBLE_MAX_ATTEMPTS, ModelSpec
 from ..credentials import key_env
 from .base import STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL, Provider, ProviderConfigError, RawReply, wire_schema
 
-MAX_ATTEMPTS = 3
+MAX_ATTEMPTS = OPENAI_COMPATIBLE_MAX_ATTEMPTS  # the Gemini adapter's fixed count (mara.providers.gemini_provider)
 BACKOFF_BASE = 2.0  # seconds before the second attempt; doubled for each further one, plus up to 1 s of jitter
 RETRY_AFTER_CAP = 30.0
 RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504, 529})
@@ -73,10 +74,9 @@ def _trust(ca_bundle: str | None) -> ssl.SSLContext | bool:
 
 
 class OpenAICompatibleProvider(Provider):
-    def __init__(self, spec: ModelSpec, timeout: float = 600.0, client: httpx.Client | None = None,
-                 max_attempts: int = MAX_ATTEMPTS, sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, spec: ModelSpec, client: httpx.Client | None = None, sleep: Callable[[float], None] = time.sleep):
         super().__init__(spec)
-        self.max_attempts, self.sleep = max(1, max_attempts), sleep
+        self.max_attempts, self.sleep = spec.max_attempts, sleep
         if not spec.base_url:
             raise ValueError(f"model {spec.name}: base_url required for openai_compatible provider")
         name = key_env(spec.provider, spec.api_key_env)
@@ -87,7 +87,7 @@ class OpenAICompatibleProvider(Provider):
         # transport still honours SSL_CERT_FILE / SSL_CERT_DIR for an internal CA): these endpoints are
         # on-prem, and a proxy in between would receive the source code - in cleartext for the
         # loopback-only http:// case that ModelSpec approved as never leaving the host.
-        self.client = client or httpx.Client(base_url=spec.base_url, headers=headers, timeout=timeout,
+        self.client = client or httpx.Client(base_url=spec.base_url, headers=headers, timeout=spec.timeout_seconds,
                                              transport=httpx.HTTPTransport(verify=_trust(spec.ca_bundle)))
 
     def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = MAX_TOKENS) -> RawReply:

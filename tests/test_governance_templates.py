@@ -222,6 +222,21 @@ def test_drill_cli_rehearse_record_check(tmp_path):
     assert r.returncode == 2 and "same form" in r.stderr and "Traceback" not in r.stderr
 
 
+def test_drill_cli_rehearses_a_standby_whose_openai_compatible_model_sets_the_fields_only_that_provider_takes(tmp_path):
+    """rehearse runs the standby panel on the mock provider; a field only openai_compatible takes (strict_schema,
+    timeout_seconds, max_attempts: #413) left on the mock copy refused the whole standby when it loaded."""
+    drills = tmp_path / "drills.yaml"
+    shutil.copy(ROOT / "ops" / "model-swap-drills.yaml", drills)
+    raw = yaml.safe_load((ROOT / "config" / "examples" / "standby-for-glm.yaml").read_text(encoding="utf-8"))
+    (deepseek,) = [m for m in raw["models"] if m["provider"] == "openai_compatible"]
+    deepseek.update(strict_schema=False, timeout_seconds=1800, max_attempts=1)
+    standby = tmp_path / "standby-for-glm.yaml"
+    standby.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "model_swap_drill.py"), "--drills", str(drills), "--today", "2026-09-12",
+                        "rehearse", "--standby", str(standby)], capture_output=True, text=True)
+    assert r.returncode == 0 and "replaces glm with deepseek" in r.stdout, r.stdout + r.stderr
+
+
 def test_drill_cli_rehearse_reads_the_family_a_standby_document_declares(tmp_path):
     """A standby may be a document whose front matter says `standby_for` (mara.govdocs.read_front_matter reads it): the
     family it names is the one rehearse checks against the production families, before it looks at anything else."""
