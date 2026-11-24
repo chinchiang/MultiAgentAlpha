@@ -50,7 +50,8 @@ def _mockify(cfg_path: Path) -> Path:
     for m in raw["models"]:
         m["provider"] = "mock"
         m["model"] = f"mock-{m['family']}"
-        for k in ("base_url", "api_key_env", "data_residency"):
+        # and what only an openai_compatible model takes, which the mock provider refuses (mara.config.ModelSpec)
+        for k in ("base_url", "api_key_env", "data_residency", "strict_schema", "timeout_seconds", "max_attempts"):
             m.pop(k, None)
     tmp = Path(tempfile.mkdtemp(prefix="mara-rehearsal-")) / "standby.mock.yaml"
     tmp.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
