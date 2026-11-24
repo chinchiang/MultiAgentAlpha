@@ -85,8 +85,9 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
 
 Agent tests drive an agent through a `Provider` subclass of their own that overrides `complete(*, system, user, schema,
 role, max_tokens=16000) -> RawReply` (`test_live_providers.py` also drives a real `OpenAICompatibleProvider` over a fake
-HTTP reply). Many of them take `**kwargs` and read only `user`, so the agents call `complete` with keywords and the
-prompt the tests inspect is `user`. The entry points the tests call directly, each with such a provider:
+HTTP reply; it takes its request timeout and attempts from the spec, `timeout_seconds` and `max_attempts`, and besides
+the spec only the `client` and `sleep` those tests pass). Many of them take `**kwargs` and read only `user`, so the
+agents call `complete` with keywords and the prompt the tests inspect is `user`. The entry points the tests call directly, each with such a provider:
 
 - `reviewer.review_dimension(provider, ctx, dimension, canary=None, context_view=None)`: tests hand in an
   `exchange.Canary()` of their own, to know the token a canary echo would carry.

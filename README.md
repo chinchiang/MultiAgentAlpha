@@ -324,6 +324,10 @@ then treat like `.internal`; a zone needs two labels and lower case, so `.com` o
 refused. An endpoint signed by an internal CA names its PEM chain in `ca_bundle` (`~` and
 workspace-relative paths): it is added to the default trust store and never replaces or disables
 verification. A gateway that expects the key in another header (`apikey`) sets `api_key_header`.
+Each HTTP request to an `openai_compatible` endpoint waits `timeout_seconds` (600 by default, at
+most 7200) and a transient failure is tried `max_attempts` times in all (3 by default, at most 10),
+set per model: a slow self-hosted model may need more than 600 seconds for one prompt. Either, set
+on another provider to anything but its default, is refused.
 An `openai_compatible` model declared `vendor_api_zdr` or `vendor_api_retained` sends the code (and its
 `api_key_env` value as the bearer token) to whatever `base_url` names, so P5 admits it only when that
 host is listed, exactly, in `vendor_api_hosts` (the vendor endpoints the organisation's contract covers);

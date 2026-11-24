@@ -63,6 +63,25 @@ def test_bedrock_needs_a_region_and_no_base_url():
         _bedrock_spec(strict_schema=False)
 
 
+@pytest.mark.parametrize("field, value", [("timeout_seconds", 900), ("max_attempts", 1)])
+@pytest.mark.parametrize("spec", [
+    {"provider": "bedrock", "family": "anthropic", "model": "global.anthropic.claude-opus-5-5", "region": "ap-southeast-1"},
+    {"provider": "anthropic", "family": "anthropic", "model": "claude-opus-5-5"},
+    {"provider": "gemini", "family": "gemini", "model": "gemini-3.8-flash"},
+], ids=["bedrock", "anthropic", "gemini"])
+def test_the_request_timeout_and_attempts_are_refused_on_a_provider_other_than_openai_compatible(spec, field, value):
+    """Only the openai_compatible adapter reads them (#413): set on another provider, they would change nothing."""
+    with pytest.raises(ValueError, match=f"{field} is only valid with provider openai_compatible"):
+        ModelSpec(name="m", data_residency="vendor_api_zdr", **spec, **{field: value})
+
+
+def test_a_model_of_another_provider_dumped_and_validated_again_is_not_refused():
+    """A dump carries the defaults of timeout_seconds and max_attempts; validating it again (tests/scored_rows.py builds
+    the four-judge panel so) must not read them as set."""
+    spec = _bedrock_spec()
+    assert ModelSpec.model_validate(spec.model_dump(mode="json")) == spec
+
+
 def _tool(data, name="submit_result"):
     return SimpleNamespace(type="tool_use", name=name, input=data)
 

@@ -18,6 +18,12 @@ if TYPE_CHECKING:
     from .workspace import Workspace
 
 
+# The defaults of ModelSpec.timeout_seconds and ModelSpec.max_attempts, which the openai_compatible adapter reads from
+# the spec; mara.providers.openai_compatible.MAX_ATTEMPTS, the Gemini adapter's fixed count, is the second one.
+OPENAI_COMPATIBLE_TIMEOUT_SECONDS = 600.0
+OPENAI_COMPATIBLE_MAX_ATTEMPTS = 3
+
+
 class ModelSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -39,6 +45,13 @@ class ModelSpec(BaseModel):
                                   "added to the default trust store (never replaces or disables verification); ~ and workspace-relative paths")
     strict_schema: bool = Field(default=True, description="openai_compatible: ask for grammar-constrained decoding (json_schema "
                                 "strict); false sends the schema as guidance only. Every answer is re-validated either way")
+    timeout_seconds: float = Field(default=OPENAI_COMPATIBLE_TIMEOUT_SECONDS, ge=1, le=7200,
+                                   description="openai_compatible: seconds each phase of one HTTP request (connect, write, read, "
+                                   "pool) may wait before it is a transient failure; for a reply that is not streamed, how long "
+                                   "the model may take to answer (a slow self-hosted model may need more than the default)")
+    max_attempts: int = Field(default=OPENAI_COMPATIBLE_MAX_ATTEMPTS, ge=1, le=10,
+                              description="openai_compatible: HTTP requests one exchange may make for a transient failure, "
+                              "the first included; the backoff between them is unchanged")
     model_env: str | None = Field(default=None, description="Environment variable that, when set and non-empty, replaces `model` "
                                   "(config/mara.test.yaml: AWS_MODEL). Applied before validation, so the policies judge the model used")
     weight: float = Field(default=1.0, ge=0.0, le=2.0, description="Vote weight; updated by calibration")
@@ -59,6 +72,10 @@ class ModelSpec(BaseModel):
     def _secure_endpoint(self):
         if not self.strict_schema and self.provider != "openai_compatible":
             raise ValueError(f"model {self.name}: strict_schema is only valid with provider openai_compatible")
+        # by value, as strict_schema: a config dumped and validated again carries the defaults, and they change nothing
+        for field, default in (("timeout_seconds", OPENAI_COMPATIBLE_TIMEOUT_SECONDS), ("max_attempts", OPENAI_COMPATIBLE_MAX_ATTEMPTS)):
+            if getattr(self, field) != default and self.provider != "openai_compatible":
+                raise ValueError(f"model {self.name}: {field} is only valid with provider openai_compatible")
         if self.provider == "bedrock" and not self.region:
             raise ValueError(f"model {self.name}: provider bedrock needs region (e.g. ap-southeast-1)")
         if self.provider in ("bedrock", "gemini") and self.base_url:

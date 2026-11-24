@@ -238,6 +238,40 @@ def test_openai_compatible_retries_a_transient_failure_then_succeeds(first):
     assert len(sleeps) == 1 and 2.0 <= sleeps[0] < 3.0, "first backoff: 2 s plus up to 1 s of jitter"
 
 
+def test_the_request_timeout_and_attempts_default_to_600_seconds_and_3_and_are_bounded():
+    """Left out, a model keeps what every config had before #413; a value past a bound is refused when the config loads."""
+    spec = _spec()
+    assert (spec.timeout_seconds, spec.max_attempts) == (600.0, 3)
+    for field, accepted, refused in (("timeout_seconds", (1, 7200), (0.5, 7201)), ("max_attempts", (1, 10), (0, 11))):
+        for value in accepted:
+            assert getattr(_spec(**{field: value}), field) == value
+        for value in refused:
+            with pytest.raises(ValueError, match=field):
+                _spec(**{field: value})
+
+
+@pytest.mark.parametrize("kw, seconds", [({}, 600.0), ({"timeout_seconds": 1800}, 1800.0)], ids=["default", "set"])
+def test_the_client_the_adapter_builds_waits_the_timeout_the_spec_sets(kw, seconds):
+    """A slow self-hosted model (Nemotron Super on LM Studio, 2026-11-23) needed more than 600 s per reviewer prompt (#413)."""
+    timeout = OpenAICompatibleProvider(_spec(**kw)).client.timeout
+    assert (timeout.connect, timeout.read, timeout.write, timeout.pool) == (seconds,) * 4
+
+
+@pytest.mark.parametrize("failure", [httpx.Response(503, text="still loading"), httpx.ReadTimeout("timed out")], ids=["503", "timeout"])
+@pytest.mark.parametrize("attempts, backoff", [(1, []), (5, [(2.0, 3.0), (4.0, 5.0), (8.0, 9.0), (16.0, 17.0)])], ids=["one", "five"])
+def test_the_adapter_makes_as_many_attempts_as_the_spec_sets_with_the_same_backoff(failure, attempts, backoff):
+    """One exchange makes `max_attempts` requests for a transient failure, the first included (#413): one, so a stuck
+    prompt costs one timeout; more, for a gateway that answers 503 while it loads a model."""
+    spec, sleeps = _spec(max_attempts=attempts), []
+    handler, calls = _sequence(failure)
+    p = OpenAICompatibleProvider(spec, client=httpx.Client(base_url=spec.base_url, transport=httpx.MockTransport(handler)),
+                                 sleep=sleeps.append)
+    with pytest.raises(RuntimeError, match=r"^provider_(http_error:503|connection_failed)$"):
+        _call(p)
+    assert len(calls) == attempts
+    assert len(sleeps) == len(backoff) and all(low <= s < high for s, (low, high) in zip(sleeps, backoff, strict=True))
+
+
 def test_openai_compatible_gives_up_after_three_attempts_with_growing_backoff():
     handler, calls = _sequence(httpx.Response(503, text="still loading"))
     sleeps = []
