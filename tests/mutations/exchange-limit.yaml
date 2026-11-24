@@ -80,3 +80,8 @@ mutations:
     caught_by: tests/test_exchange_limit.py::test_a_review_whose_context_and_reviewer_calls_would_pass_the_limit_makes_none_of_them
     old: '    skipped = egress_blocked or over_exchange_limit'
     new: '    skipped = egress_blocked'
+  - name: a review under a limit asks every model for 16,000 output tokens
+    file: src/mara/providers/budget.py
+    caught_by: tests/test_exchange_limit.py::test_every_exchange_asks_for_the_output_limit_of_its_own_provider_whether_or_not_the_review_has_a_limit
+    old: '            return self.inner.complete(system=system, user=user, schema=schema, role=role)'
+    new: '            return self.inner.complete(system=system, user=user, schema=schema, role=role, max_tokens=16000)'

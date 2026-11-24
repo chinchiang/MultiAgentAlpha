@@ -51,8 +51,9 @@ Each seam: how tests use it; what the code keeps for them to still reach it; the
   `test_pipeline_workspace.py`, `test_pipeline_workspace.py::test_a_pipeline_runs_the_tools_installed_in_the_workspace_it_is_given_not_below_mara_home`.
 - `Pipeline.providers`: the dict, or its items, replaced after `Pipeline(cfg)` and before `run()`. `Pipeline.run`
   reads them when it runs (the provider mode check, binding the target, the reviewer round, the ballot round, the provider
-  manifest); nothing built in `Pipeline.__init__` holds them. `fake_panel.py`, `test_exchange.py`, `test_audit.py`,
-  `test_redteam_strip.py`, `test_security_regressions.py`.
+  manifest); nothing built in `Pipeline.__init__` holds them. A review with an exchange limit wraps each of them in a
+  `Limited` first, and the dict holds the wrappers once it has run. `fake_panel.py`, `test_exchange.py`, `test_audit.py`,
+  `test_redteam_strip.py`, `test_security_regressions.py`, `test_exchange_limit.py`.
 - `reviewer_round.run(ctx, context_view, *, cfg, providers, audit, say, progress, egress_blocked)`: called directly with a
   dict of providers of the test's own, which it reads by the config's reviewer names, so a test needs no `Pipeline`;
   `reviewer_round.dedupe(findings)`: pure, called directly. `test_reviewer_round.py`, `test_core_review_fixes_8_13.py`.
