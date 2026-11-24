@@ -60,7 +60,10 @@ class Provider(abc.ABC):
     @abc.abstractmethod
     def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> RawReply:
         """Ask for JSON matching `schema`; return the reply as the vendor gave it. `role` is a hint ('reviewer:xss',
-        'judge', ...) for mocks/logging. A failed call raises RuntimeError with a sanitised provider_* code."""
+        'judge', ...) for mocks/logging. A failed call raises RuntimeError with a sanitised provider_* code.
+        `max_tokens` is the output limit asked for. Each live provider defaults it to its own MAX_TOKENS, so the 16,000
+        here is no provider's limit, and a provider that wraps another passes on the caller's limit, not one of its own
+        (`Limited`)."""
 
 
 def wire_schema(schema: dict) -> dict:

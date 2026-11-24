@@ -161,3 +161,36 @@ def test_the_limit_is_a_number_of_exchanges_or_none():
     raw["limits"] = {"max_exchanges": 0, "max_tokens": 1}
     with pytest.raises(ValueError, match="max_tokens"):
         MaraConfig.model_validate(raw)
+
+
+OWN_LIMIT = 24576  # an output limit of the provider's own, neither the 16,000 of Provider.complete nor a live provider's
+
+
+class _OwnLimit(Provider):
+    """`inner` behind a `complete` whose own default output limit is OWN_LIMIT, as each live provider's is its
+    MAX_TOKENS; it records the limit every exchange reached it with in `asked`."""
+
+    def __init__(self, inner: Provider, asked: list[int]) -> None:
+        super().__init__(inner.spec)
+        self.inner, self.asked = inner, asked
+        self.served_models = inner.served_models
+
+    def bind_target(self, root) -> None:
+        self.inner.bind_target(root)
+
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = OWN_LIMIT) -> RawReply:
+        self.asked.append(max_tokens)
+        return self.inner.complete(system=system, user=user, schema=schema, role=role)
+
+
+@pytest.mark.parametrize("limit", [None, 3000])
+def test_every_exchange_asks_for_the_output_limit_of_its_own_provider_whether_or_not_the_review_has_a_limit(tmp_path, limit):
+    """The exchange limit counts exchanges, not tokens: a review under one asks each model for the output limit its
+    provider sets, as a review without one does, and the wrapper that counts (Limited) passes no limit of its own."""
+    pipe = Pipeline(_cfg(limit), mock_fixtures=str(ROOT / "fixtures" / "mock-responses"), out_dir=tmp_path / "out")
+    asked: list[int] = []
+    pipe.providers = {n: _OwnLimit(p, asked) for n, p in pipe.providers.items()}
+    report = pipe.run(FIXTURE, sarif_dir=SARIF, provider_mode="mock")
+    assert all(isinstance(p, Limited) for p in pipe.providers.values()) == (limit is not None)
+    assert len(asked) == _calls(report) == 53
+    assert set(asked) == {OWN_LIMIT}

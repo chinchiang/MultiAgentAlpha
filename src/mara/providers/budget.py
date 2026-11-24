@@ -45,7 +45,8 @@ class ExchangeBudget:
 
 class Limited(Provider):
     """`inner` under `budget`: every call takes one exchange of it, and is refused with LIMIT_REACHED once none is
-    left. Everything else is the inner provider's: its spec, the models it served, the target it is bound to."""
+    left. Everything else is the inner provider's: its spec, its output limit (a `max_tokens` the caller gives is passed
+    on, and none is passed when it gives none), the models it served, the target it is bound to."""
 
     def __init__(self, inner: Provider, budget: ExchangeBudget) -> None:
         super().__init__(inner.spec)
@@ -56,7 +57,9 @@ class Limited(Provider):
     def bind_target(self, root) -> None:
         self.inner.bind_target(root)
 
-    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int = 16000) -> RawReply:
+    def complete(self, *, system: str, user: str, schema: dict, role: str, max_tokens: int | None = None) -> RawReply:
         if not self.budget.take():
             raise RuntimeError(LIMIT_REACHED)
+        if max_tokens is None:
+            return self.inner.complete(system=system, user=user, schema=schema, role=role)
         return self.inner.complete(system=system, user=user, schema=schema, role=role, max_tokens=max_tokens)
