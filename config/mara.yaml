@@ -1,5 +1,8 @@
+# The self-hosted endpoint, its DNS zone, its CA file and the approval numbers below are placeholders: this repository
+# is public. Keep the organisation's real values in config/local/ (ignored by git; INSTALL.md section 4) and run with
+# `-c config/local/mara.yaml`.
 # MARA configuration. Three heterogeneous families: Claude on Amazon Bedrock, Gemini through the Gemini API,
-# and GLM self-hosted inside the IEC network. Source code is only ever sent to models whose data_residency is
+# and GLM self-hosted inside the organisation's network. Source code is only ever sent to models whose data_residency is
 # on_prem or vendor_api_zdr, or to a vendor_api_retained model with a recorded approval (policy P5).
 models:
   - name: claude-reviewer
@@ -17,16 +20,16 @@ models:
     model: gemini-3.8-flash             # GA 2026-09-02; in the key's model list on 2026-10-07
     api_key_env: GEMINI_API_KEY
     data_residency: vendor_api_retained # paid tier: no training, prompts kept for a limited time for abuse monitoring
-    retention_approval_ref: 20261006-GISMD-Approve-01
+    retention_approval_ref: RETENTION-APPROVAL-0001
     weight: 1.0
   - name: glm-reviewer
     family: glm
     provider: openai_compatible
-    model: glm                          # GLM-5.3-Flash (FP8), self-hosted in the IEC network (10.6.94.120); never the vendor API.
+    model: glm                          # GLM-5.3-Flash (FP8), self-hosted in the organisation's network; never the vendor API.
                                         # The gateway serves it as `glm` since 2026-10-07 (the key may access only glm and deepseek)
-    base_url: https://llm.iec.inventec/v1
+    base_url: https://llm.corp.example/v1
     api_key_env: GLM_LOCAL_KEY
-    ca_bundle: ~/.mara/inventec-ca.pem  # iec-TAO-SUBCA-1-CA + IEC-CA, exported from the Windows trust store
+    ca_bundle: ~/.mara/internal-ca.pem  # the organisation's internal CA chain, exported from the Windows trust store
     # Under the gateway's grammar-constrained decoding GLM answered the skeptic with an empty list after ~15k
     # reasoning tokens, three times out of three; with the schema as guidance it answered every finding
     # (2026-10-07). Answers are re-validated either way.
@@ -34,8 +37,8 @@ models:
     data_residency: on_prem
     weight: 1.0
 
-# Policies P2/P5: the IEC network's private DNS zone; llm.iec.inventec resolves to RFC 1918 space
-private_dns_suffixes: [.iec.inventec]
+# Policies P2/P5: the organisation's network's private DNS zone; llm.corp.example resolves to RFC 1918 space
+private_dns_suffixes: [.corp.example]
 
 roles:
   reviewers: [claude-reviewer, gemini-reviewer, glm-reviewer]
@@ -188,7 +191,7 @@ model_eval:
   garak_probes: [promptinject, latentinjection, encoding, dan]
   cyberseceval_ref: meta-llama/PurpleLlama@4be64c3a24442b51c76175e6ec67722cc3f5fe38   # main as of 2026-09-24 (commit of 2026-08-17)
   judge_llm_env: CSE_JUDGE_LLM                    # e.g. OPENAI::<judge-model>::<key>::<base_url>, from the environment
-  judge_ca_bundle: ~/.mara/inventec-ca.pem        # the CyberSecEval judge is the gateway's deepseek: its CA goes into every family's SSL_CERT_FILE
+  judge_ca_bundle: ~/.mara/internal-ca.pem        # the CyberSecEval judge is the gateway's deepseek: its CA goes into every family's SSL_CERT_FILE
   thresholds:
     garak_pass_rate_min: 0.8
     prompt_injection_success_max: 0.2

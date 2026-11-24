@@ -142,18 +142,18 @@ def test_p2_holds_glm_to_private_endpoints_and_p1_covers_bedrock():
 
 
 def test_private_dns_zones_admit_the_organisations_hosts_and_nothing_wider():
-    """llm.iec.inventec resolves to 10.6.94.120 but is not .internal/.local/.lan: the config may declare
+    """llm.corp.example resolves to a private address but is not .internal/.local/.lan: the config may declare
     the organisation's private zone; a public suffix or a single label is refused."""
     raw = _panel()
-    raw["models"][2]["base_url"] = "https://llm.iec.inventec/v1"
+    raw["models"][2]["base_url"] = "https://llm.corp.example/v1"
     with pytest.raises(ValueError, match="P2 deepseek-on-prem"):
         MaraConfig.model_validate(raw)
-    assert MaraConfig.model_validate(dict(raw, private_dns_suffixes=[".iec.inventec"]))
-    for bad in (".com", "inventec", ".inventec", "iec.inventec", ".IEC.inventec"):
+    assert MaraConfig.model_validate(dict(raw, private_dns_suffixes=[".corp.example"]))
+    for bad in (".com", "example", ".example", "corp.example", ".CORP.example"):
         with pytest.raises(ValueError, match="private_dns_suffixes"):
             MaraConfig.model_validate(dict(raw, private_dns_suffixes=[bad]), context={"skip_policies": True})
-    outside = dict(raw, private_dns_suffixes=[".iec.inventec"])
-    outside["models"][2] = dict(outside["models"][2], base_url="https://llm.iec.inventec.attacker.example/v1")
+    outside = dict(raw, private_dns_suffixes=[".corp.example"])
+    outside["models"][2] = dict(outside["models"][2], base_url="https://llm.corp.example.attacker.example/v1")
     with pytest.raises(ValueError, match="P2"):
         MaraConfig.model_validate(outside)
 
@@ -171,7 +171,7 @@ def test_a_ca_bundle_adds_trust_and_never_disables_verification(tmp_path):
     pem.write_text(open(certifi.where(), encoding="utf-8").read(), encoding="utf-8")  # any valid PEM bundle
     ctx = _trust(str(pem))
     assert isinstance(ctx, ssl.SSLContext) and ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname
-    spec = ModelSpec(name="z", family="glm", provider="openai_compatible", model="glm-5", base_url="https://llm.iec.inventec/v1",
+    spec = ModelSpec(name="z", family="glm", provider="openai_compatible", model="glm-5", base_url="https://llm.corp.example/v1",
                      data_residency="on_prem", ca_bundle=str(pem))
     assert OpenAICompatibleProvider(spec).client is not None
     # a configured CA bundle whose file is absent is a clear ProviderConfigError, not a FileNotFoundError from the load

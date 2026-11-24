@@ -306,7 +306,7 @@ used for training: keep the account's model invocation logging off, or that log 
 structured outputs and a forced tool choice for Opus 5.x, so the answer comes back as the input of one `submit_result`
 tool call), Gemini through the
 Gemini API on the paid tier (`provider: gemini`, the key in the `x-goog-api-key` header, never the
-URL; structured output through `responseJsonSchema`), and a GLM model self-hosted on the IEC network
+URL; structured output through `responseJsonSchema`), and a GLM model self-hosted on the organisation's network
 behind an OpenAI-compatible endpoint (`on_prem`; the gateway serves it as `model: glm`, and the same endpoint and
 key serve the standby DeepSeek as `model: deepseek`). The Gemini API keeps prompts for a limited period
 and is not ZDR, so the model is declared `vendor_api_retained` and policy P5 admits it only with
@@ -319,7 +319,7 @@ models answered in the live calibration of 2026-10-08. Check a new id the same w
 CyberSecEval against Gemini and GLM; CyberSecEval has no Bedrock provider (see G-8 below). See the report, Part VIII, for the
 site-by-site deployment pattern and the separate handling of 上海／重慶.
 
-The organisation's private DNS zones go in `private_dns_suffixes` (`.iec.inventec`), which P2 and P5
+The organisation's private DNS zones go in `private_dns_suffixes` (`.corp.example`), which P2 and P5
 then treat like `.internal`; a zone needs two labels and lower case, so `.com` or a single label is
 refused. An endpoint signed by an internal CA names its PEM chain in `ca_bundle` (`~` and
 workspace-relative paths): it is added to the default trust store and never replaces or disables

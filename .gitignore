@@ -25,3 +25,6 @@ calib-out/
 # uv's lock file: CI and INSTALL.md install from the hash-pinned pip closures under tools/; a uv.lock would be a
 # second, unscanned lock that drifts from them, so it stays local
 /uv.lock
+# the organisation's own configs: the real endpoint, DNS zone, CA bundle and approval numbers that the shipped
+# configs replace with placeholders (INSTALL.md). The repository is public; these never are.
+/config/local/

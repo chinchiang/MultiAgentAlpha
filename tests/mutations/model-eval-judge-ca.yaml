@@ -68,5 +68,5 @@ mutations:
 - name: the shipped config names no chain for the judge
   file: config/mara.yaml
   caught_by: tests/test_model_eval.py::test_the_config_names_the_ca_of_the_gateway_the_judge_sits_behind
-  old: '  judge_ca_bundle: ~/.mara/inventec-ca.pem'
+  old: '  judge_ca_bundle: ~/.mara/internal-ca.pem'
   new: '  judge_ca_bundle: ""'

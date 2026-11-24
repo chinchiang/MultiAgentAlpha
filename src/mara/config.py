@@ -328,7 +328,7 @@ class MaraConfig(BaseModel):
     )
     private_dns_suffixes: list[str] = Field(
         default_factory=list,
-        description="Policies P2/P5: the organisation's private DNS zones (e.g. .iec.inventec), treated like .internal; each needs two labels",
+        description="Policies P2/P5: the organisation's private DNS zones (e.g. .corp.example), treated like .internal; each needs two labels",
     )
     vendor_api_hosts: list[str] = Field(
         default_factory=list,
@@ -371,9 +371,9 @@ class MaraConfig(BaseModel):
             if d not in DIMENSIONS:
                 raise ValueError(f"unknown dimension {d!r}")
         for suffix in self.private_dns_suffixes:
-            # ".iec.inventec" names a zone; ".com" or "inventec" alone would make the whole internet "private"
+            # ".corp.example" names a zone; ".com" or "example" alone would make the whole internet "private"
             if not suffix.startswith(".") or len([p for p in suffix.split(".") if p]) < 2 or suffix != suffix.lower().strip():
-                raise ValueError(f"private_dns_suffixes: {suffix!r} must be a lower-case zone with at least two labels, like .iec.inventec")
+                raise ValueError(f"private_dns_suffixes: {suffix!r} must be a lower-case zone with at least two labels, like .corp.example")
         for host in self.vendor_api_hosts:
             # a host name, compared exactly: no scheme, port, path or wildcard that would widen it
             if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+", host):

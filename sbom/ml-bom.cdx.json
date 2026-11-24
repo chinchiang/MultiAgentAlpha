@@ -61,7 +61,7 @@
         },
         {
           "name": "mara:serving",
-          "value": "openai-compatible endpoint https://llm.iec.inventec/v1 (IEC network)"
+          "value": "openai-compatible endpoint https://llm.corp.example/v1 (internal network)"
         },
         {
           "name": "mara:signature",
@@ -81,7 +81,7 @@
         },
         {
           "name": "mara:note",
-          "value": "PENDING. The production on-prem family since 2026-10-06 (config/mara.yaml glm-reviewer). The platform team that runs llm.iec.inventec must record the official source, revision, licence and per-file SHA-256 of the deployed weights; nothing here is filled in from guesswork. GLM is PRC-affiliated, so policy P2 keeps it on-prem. Since 2026-10-07 the gateway serves it under the alias `glm` (model_id follows config/mara.yaml `model`)."
+          "value": "PENDING. The production on-prem family since 2026-10-06 (config/mara.yaml glm-reviewer). The platform team that runs llm.corp.example must record the official source, revision, licence and per-file SHA-256 of the deployed weights; nothing here is filled in from guesswork. GLM is PRC-affiliated, so policy P2 keeps it on-prem. Since 2026-10-07 the gateway serves it under the alias `glm` (model_id follows config/mara.yaml `model`)."
         }
       ]
     },
