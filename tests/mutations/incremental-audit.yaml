@@ -15,11 +15,13 @@ mutations:
   - name: the changed files are not counted
     file: src/mara/pipeline.py
     caught_by: tests/test_context_increment.py::test_an_incremental_review_counts_its_changed_and_its_related_files_in_the_bias_audit
+    error: KeyError
     old: '            self.audit.set(Count.BUNDLE_FILES_CHANGED, len(changed))'
     new: '            pass'
   - name: the related files are not counted
     file: src/mara/pipeline.py
     caught_by: tests/test_context_increment.py::test_an_incremental_review_counts_its_changed_and_its_related_files_in_the_bias_audit
+    error: KeyError
     old: '            self.audit.set(Count.BUNDLE_FILES_RELATED, len(related))'
     new: '            pass'
   - name: a review of the whole target counts zero changed files
