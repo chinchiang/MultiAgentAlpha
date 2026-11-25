@@ -160,6 +160,43 @@ def test_the_log_tags_say_what_the_record_counts():
     assert tags("reviewer", exchange.OK, canary_echoes=1, canary_reports=1) == " [CANARY ECHOED] [CANARY REPORTED]"
 
 
+@pytest.mark.parametrize("role", list(ROLES))
+def test_a_window_truncation_is_a_truncation_counted_once_more_by_its_cause(role):
+    """#417: the review status is a truncation's; the window truncations say how many of them the server's context
+    window ended, and the log tag says so."""
+    ordinary, window = Audit(), Audit()
+    ordinary.record(_record(role, exchange.TRUNCATION))
+    window.record(_record(role, exchange.TRUNCATION, window_truncated=True, output_tokens=5545, output_limit=32768))
+    assert window.incomplete_reasons() == ordinary.incomplete_reasons(), "a window truncation makes the review incomplete once"
+    truncations = ROLES[role].truncations
+    assert (window[truncations], window[f"{truncations}[glm]"]) == (1, 1)
+    assert (window[f"{role}_window_truncations"], window[f"{role}_window_truncations[glm]"]) == (1, 1)
+    assert ordinary[f"{role}_window_truncations"] == 0, "every counter of the role is written, 0 when nothing was counted"
+    tagged = _record(role, exchange.TRUNCATION, window_truncated=True, output_tokens=5545, output_limit=32768)
+    assert log_tags(tagged) == " [TRUNCATED AT THE CONTEXT WINDOW: 5545 of 32768 output tokens]"
+    second = _record(role, exchange.TRUNCATION, window_truncated=True, output_tokens=6100, output_limit=16000)
+    assert log_tags(tagged, second) == " [TRUNCATED AT THE CONTEXT WINDOW: 5545 of 32768, 6100 of 16000 output tokens]"
+
+
+def test_a_classified_window_truncation_reaches_the_audit():
+    from mara.providers.base import STOP_MAX_TOKENS, RawReply
+
+    a = Audit()
+    for used in (5545, 32768):  # LM Studio's 8192-token window (#417), then the output limit itself
+        outcome = exchange.classify(RawReply(STOP_MAX_TOKENS, output_tokens=used, output_limit=32768), {})
+        rec = ReplyRecord.of(outcome, "reviewer", "nemotron")
+        a.record(rec)
+    assert (a["reviewer_truncations[nemotron]"], a["reviewer_window_truncations[nemotron]"]) == (2, 1)
+    assert (rec.output_tokens, rec.output_limit) == (32768, 32768), "the record carries the output limit the request sent"
+
+
+def test_only_a_truncation_below_its_output_limit_can_be_a_window_truncation():
+    with pytest.raises(ValueError, match="window truncation"):
+        ReplyRecord(role="reviewer", family="glm", kind=exchange.OK, window_truncated=True, output_tokens=5545, output_limit=32768)
+    with pytest.raises(ValueError, match="0 of 0 output tokens is no window truncation"):
+        ReplyRecord(role="reviewer", family="glm", kind=exchange.TRUNCATION, window_truncated=True)
+
+
 def test_the_per_family_counters_are_read_back_from_their_names():
     a = Audit()
     a.add("judge_refusals", "glm", 2)

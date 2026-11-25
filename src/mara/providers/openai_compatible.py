@@ -125,9 +125,10 @@ class OpenAICompatibleProvider(Provider):
         finish = choice.get("finish_reason", "")
         usage = payload.get("usage", {}) or {}
         tokens = {"input_tokens": usage.get("prompt_tokens", 0), "output_tokens": usage.get("completion_tokens", 0),
-                  "served_model": str(payload.get("model") or "")[:200]}
+                  "served_model": str(payload.get("model") or "")[:200], "output_limit": max_tokens}
         if finish == "length":
-            # The server stopped at max_tokens: the JSON is cut off, or never started when a reasoning
+            # The server stopped at max_tokens, or at its context window below it (a window truncation, told by
+            # mara.exchange from output_limit): the JSON is cut off, or never started when a reasoning
             # model spent the whole budget thinking (vLLM's reasoning parser then returns empty content).
             # A truncation even with empty text: never a refusal (mara.exchange).
             return RawReply(STOP_MAX_TOKENS, answer_text=text, **tokens)

@@ -10,7 +10,7 @@ from typing import Any
 from ..config import ModelSpec
 
 STOP_END = "end"  # the model finished its answer
-STOP_MAX_TOKENS = "max_tokens"  # the vendor stopped it at the output limit
+STOP_MAX_TOKENS = "max_tokens"  # the vendor stopped it at the output limit, or at the server's context window
 STOP_REFUSAL = "refusal"  # the vendor or the model declined (refusal stop, content filter, blocked prompt)
 STOPS = (STOP_END, STOP_MAX_TOKENS, STOP_REFUSAL)
 
@@ -25,8 +25,9 @@ class ProviderConfigError(ValueError):
 @dataclass
 class RawReply:
     """What a provider adapter saw, before anyone judged it: the adapter maps its vendor's stop reason to one of
-    STOPS and hands over the text, and mara.exchange classifies the reply (docs/adr/0001-reply-outcome-accounting.md).
-    An adapter never parses JSON, clips strings or decides whether a reply was truncated or unusable."""
+    STOPS and hands over the text, and the output limit the request sent when it reports one (`openai_compatible`),
+    and mara.exchange classifies the reply (docs/adr/0001-reply-outcome-accounting.md). An adapter never parses JSON,
+    clips strings or decides whether a reply was truncated or unusable."""
 
     stop: str
     answer_text: str = ""  # the text that should hold the structured answer (parsed by mara.exchange)
@@ -35,6 +36,7 @@ class RawReply:
     input_tokens: int = 0
     output_tokens: int = 0
     served_model: str = ""  # model the response names as its producer; can differ from the configured id
+    output_limit: int = 0  # the max_tokens the request sent, 0 when the adapter does not report it
 
     def __post_init__(self) -> None:
         if self.stop not in STOPS:

@@ -83,5 +83,5 @@ mutations:
   - name: a role's retry counter is left out of its names
     file: src/mara/audit.py
     caught_by: tests/test_audit_names.py::test_the_persisted_names_are_the_ones_the_reports_hold
-    old: '        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid, self.retries)'
-    new: '        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid)'
+    old: '        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid, self.retries,'
+    new: '        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid,'

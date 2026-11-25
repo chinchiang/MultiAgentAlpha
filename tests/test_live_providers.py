@@ -150,6 +150,27 @@ def test_openai_compatible_empty_content_at_the_length_limit_is_truncation_not_r
         assert c.truncated and not c.refused and c.data is None
 
 
+def test_openai_compatible_length_finish_below_the_output_limit_is_a_window_truncation():
+    """LM Studio with a model loaded at 8192 tokens of context stopped a reviewer at 8191 tokens with
+    finish_reason "length", some 5,500 output tokens into a request that allowed 32768 (2026-11-24, #417)."""
+    window = _chat(TRUNCATED_TEXT, finish_reason="length", usage={"prompt_tokens": 2646, "completion_tokens": 5545})
+    c = _call(_oai(lambda req: window))
+    assert c.truncated and c.window_truncated, "stopped well short of the output limit sent: the server's context window"
+    at_limit = _chat(TRUNCATED_TEXT, finish_reason="length", usage={"prompt_tokens": 2646, "completion_tokens": 32768})
+    c = _call(_oai(lambda req: at_limit))
+    assert c.truncated and not c.window_truncated, "stopped at the output limit sent: an ordinary truncation"
+
+
+def test_openai_compatible_window_truncation_reads_the_limit_sent_and_never_guesses():
+    """The output limit compared with is the one this request sent, and a reply without usage is an ordinary truncation."""
+    at_its_limit = _chat(TRUNCATED_TEXT, finish_reason="length", usage={"prompt_tokens": 11, "completion_tokens": 16000})
+    raw = _oai(lambda req: at_its_limit).complete(system="s", user="u", schema=SCHEMA, role="reviewer:xss", max_tokens=16000)
+    assert not exchange.classify(raw, SCHEMA).window_truncated, "16000 of the 16000 sent is the output limit, not a window"
+    no_usage = httpx.Response(200, json={"choices": [{"message": {"content": TRUNCATED_TEXT}, "finish_reason": "length"}]})
+    c = _call(_oai(lambda req: no_usage))
+    assert c.truncated and not c.window_truncated, "no completion_tokens: the cause is not known"
+
+
 def test_openai_compatible_ignores_proxy_environment_variables(monkeypatch):
     """The endpoints are on-prem: HTTP(S)_PROXY must never route the source code (and the bearer key)
     through a proxy, least of all in cleartext for an approved http://127.0.0.1 endpoint."""

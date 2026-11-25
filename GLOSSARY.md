@@ -68,8 +68,12 @@ How many exchanges one review may make (`limits.max_exchanges`; none unless the 
 _Avoid_: quota, budget (the vendor's), rate limit (that is the provider's, and a provider error of its own)
 
 **Truncation**:
-A reply the vendor stopped at the output limit; a budget problem, never charged to the model, and never evidence of a canary echo.
+A reply the vendor stopped at the output limit, or at the server's context window (a window truncation); a budget problem, never charged to the model, and never evidence of a canary echo.
 _Avoid_: cut-off for unparseable replies
+
+**Window truncation**:
+A truncation whose reported output tokens are below the output limit the request sent, so the server's context window ended it rather than the limit: a self-hosted model loaded with a small context (LM Studio's default 8192), where raising `max_tokens` changes nothing. Counted in `<role>_window_truncations` beside the role's truncations, which already make the review incomplete, so the count itself does not; the pipeline log tags the reply `[TRUNCATED AT THE CONTEXT WINDOW: <output tokens> of <output limit> output tokens]`, the limit being the `max_tokens` the request sent. Only an adapter that reports the output limit it sent and the output tokens used can tell it (`openai_compatible`); for the others every truncation is an ordinary one.
+_Avoid_: context truncation (`context_truncations` are the context agent's truncations), context overflow
 
 **Unparseable reply**:
 A reply that ended normally but is not the structured answer asked for; invalid output, charged to the model.

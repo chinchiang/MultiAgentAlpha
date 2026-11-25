@@ -1,0 +1,59 @@
+focused: [tests/test_live_providers.py, tests/test_audit.py]
+mutations:
+  - name: a reply at the output limit is a window truncation
+    file: src/mara/exchange.py
+    caught_by: tests/test_live_providers.py::test_openai_compatible_length_finish_below_the_output_limit_is_a_window_truncation
+    old: '        return self.truncated and 0 < self.output_tokens < self.output_limit'
+    new: '        return self.truncated and 0 < self.output_tokens <= self.output_limit'
+  - name: a reply without usage is a window truncation
+    file: src/mara/exchange.py
+    caught_by: tests/test_live_providers.py::test_openai_compatible_window_truncation_reads_the_limit_sent_and_never_guesses
+    old: '        return self.truncated and 0 < self.output_tokens < self.output_limit'
+    new: '        return self.truncated and self.output_tokens < self.output_limit'
+  - name: the adapter reports its default output limit, not the one the request sent
+    file: src/mara/providers/openai_compatible.py
+    caught_by: tests/test_live_providers.py::test_openai_compatible_window_truncation_reads_the_limit_sent_and_never_guesses
+    old: '"output_limit": max_tokens}'
+    new: '"output_limit": MAX_TOKENS}'
+  - name: the adapter reports no output limit
+    file: src/mara/providers/openai_compatible.py
+    caught_by: tests/test_live_providers.py::test_openai_compatible_length_finish_below_the_output_limit_is_a_window_truncation
+    old: '"output_limit": max_tokens}'
+    new: '"output_limit": 0}'
+  - name: the reply record drops the window truncation
+    file: src/mara/audit.py
+    caught_by: tests/test_audit.py::test_a_classified_window_truncation_reaches_the_audit
+    old: '                   output_tokens=outcome.output_tokens, window_truncated=outcome.window_truncated,'
+    new: '                   output_tokens=outcome.output_tokens, window_truncated=False,'
+  - name: the audit never counts a window truncation
+    file: src/mara/audit.py
+    caught_by: tests/test_audit.py::test_a_window_truncation_is_a_truncation_counted_once_more_by_its_cause
+    old: '        self.add(c.window_truncations, fam, int(rec.window_truncated))'
+    new: '        self.add(c.window_truncations, fam, 0)'
+  - name: a window truncation makes the review incomplete a second time
+    file: src/mara/audit.py
+    caught_by: tests/test_audit.py::test_the_incomplete_counters_are_the_old_ones_in_their_old_order_and_the_context_canary_echoes
+    old: '        fixed = (self.refusals, self.truncations, self.errors,'
+    new: '        fixed = (self.refusals, self.truncations, self.window_truncations, self.errors,'
+  - name: a reply of another kind is recorded as a window truncation
+    file: src/mara/audit.py
+    caught_by: tests/test_audit.py::test_only_a_truncation_below_its_output_limit_can_be_a_window_truncation
+    error: Failed
+    old: '        if self.window_truncated and not (self.kind == TRUNCATION and 0 < self.output_tokens < self.output_limit):'
+    new: '        if self.window_truncated and not (0 < self.output_tokens < self.output_limit):'
+  - name: a window truncation is also tagged an ordinary truncation
+    file: src/mara/audit.py
+    caught_by: tests/test_audit.py::test_a_window_truncation_is_a_truncation_counted_once_more_by_its_cause
+    old: '(any(r.kind == TRUNCATION and not r.window_truncated for r in records), "TRUNCATED"),'
+    new: '(any(r.kind == TRUNCATION for r in records), "TRUNCATED"),'
+  - name: the window truncation tag names only the first reply
+    file: src/mara/audit.py
+    caught_by: tests/test_audit.py::test_a_window_truncation_is_a_truncation_counted_once_more_by_its_cause
+    old: '    window = ", ".join(f"{r.output_tokens} of {r.output_limit}" for r in records if r.window_truncated)'
+    new: '    window = ", ".join([f"{r.output_tokens} of {r.output_limit}" for r in records if r.window_truncated][:1])'
+  - name: a truncation with no output limit is recorded as a window truncation
+    file: src/mara/audit.py
+    caught_by: tests/test_audit.py::test_only_a_truncation_below_its_output_limit_can_be_a_window_truncation
+    error: Failed
+    old: '        if self.window_truncated and not (self.kind == TRUNCATION and 0 < self.output_tokens < self.output_limit):'
+    new: '        if self.window_truncated and not (self.kind == TRUNCATION):'

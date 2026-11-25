@@ -27,6 +27,9 @@ ROLE_NAMES = (
     "reviewer_refusals", "reviewer_truncations", "reviewer_unparseable_replies", "skeptic_calls", "skeptic_canary_echoes",
     "skeptic_canary_reports", "skeptic_errors", "skeptic_invalid_items", "skeptic_items", "skeptic_refusals", "skeptic_refuted",
     "skeptic_retries", "skeptic_truncations", "skeptic_unparseable_replies", "skeptic_unverified_controls",
+    # #417
+    "context_window_truncations", "judge_window_truncations", "redteam_window_truncations", "reviewer_window_truncations",
+    "skeptic_window_truncations",
 )
 OTHER_NAMES = (
     "bundle_files_changed", "bundle_files_related", "context_view_items", "exchange_version", "exchanges_refused_at_limit",
