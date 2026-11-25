@@ -1,0 +1,27 @@
+focused: [tests/test_web_server.py, tests/test_web_static.py]
+mutations:
+  - name: a member reads its family's truncations as its window truncations
+    file: src/mara/web/views.py
+    caught_by: tests/test_web_server.py::test_a_members_window_truncations_are_shown_apart_from_its_failures
+    old: '"window_truncations": _num(counters, ROLES[audit_role].window_truncations),'
+    new: '"window_truncations": _num(counters, ROLES[audit_role].truncations),'
+  - name: every role's member reads the reviewers' window truncations
+    file: src/mara/web/views.py
+    caught_by: tests/test_web_server.py::test_a_members_window_truncations_are_shown_apart_from_its_failures
+    old: '"window_truncations": _num(counters, ROLES[audit_role].window_truncations),'
+    new: '"window_truncations": _num(counters, ROLES["reviewer"].window_truncations),'
+  - name: the window truncations are counted again in the failures
+    file: src/mara/web/views.py
+    caught_by: tests/test_web_server.py::test_a_members_window_truncations_are_shown_apart_from_its_failures
+    old: 'ROLES[r].errors, ROLES[r].invalid) for role'
+    new: 'ROLES[r].errors, ROLES[r].invalid, ROLES[r].window_truncations) for role'
+  - name: the page names a chip text the dictionaries do not hold
+    file: src/mara/web/static/app.js
+    caught_by: tests/test_web_static.py::test_every_key_the_page_names_exists
+    old: 't("member.window_truncations", { n: m.window_truncations })'
+    new: 't("member.window_truncation", { n: m.window_truncations })'
+  - name: the page names a chip tooltip the dictionaries do not hold
+    file: src/mara/web/static/app.js
+    caught_by: tests/test_web_static.py::test_every_key_the_page_names_exists
+    old: 't("member.window_truncations_d")'
+    new: 't("member.window_truncation_d")'
