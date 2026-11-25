@@ -315,6 +315,8 @@
  "member.reassigned_d": "此家族不在設定的角色中，但因 finding 的發現家族而被指派（Skeptic 與紅隊必須來自不同家族）。",
  "member.served": "實際模型 {models}",
  "member.waiting": "等待中",
+ "member.window_truncations": "{n} 次在 context window 截斷",
+ "member.window_truncations_d": "伺服器的 context window 在送出的輸出上限之前就停下了這些回覆；要調大的是伺服器的 context 大小，不是 max_tokens。",
  "mode.live": "實際評估",
  "mode.mixed": "混合（無法執行）",
  "mode.mock": "離線示範",

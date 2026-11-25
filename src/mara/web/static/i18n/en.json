@@ -315,6 +315,8 @@
  "member.reassigned_d": "Not configured for this role, but assigned because of a finding's finder families (the skeptic and the red team must come from another family).",
  "member.served": "served {models}",
  "member.waiting": "waiting",
+ "member.window_truncations": "window truncations: {n}",
+ "member.window_truncations_d": "The server's context window stopped these replies below the output limit sent, so raise the server's context size, not max_tokens.",
  "mode.live": "Live review",
  "mode.mixed": "Mixed (cannot run)",
  "mode.mock": "Offline demo",

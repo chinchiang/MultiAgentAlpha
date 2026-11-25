@@ -836,6 +836,7 @@
         if (view) {
           side.push(m.calls ? chip(t("member.calls", { n: m.calls }), "ok") : chip(t("member.no_calls")));
           if (fails) side.push(chip(t("member.failures", { n: fails }), "warn", Object.entries(m.failures).filter(([, v]) => v).map(([k, v]) => k + " " + v).join(", ")));
+          if (m.window_truncations) side.push(chip(t("member.window_truncations", { n: m.window_truncations }), "warn", t("member.window_truncations_d")));
           if (!m.configured) side.push(chip(t("member.reassigned"), "info", t("member.reassigned_d")));
         } else {
           side.push(chip(ACTIVE.includes(run.status) ? t("member.waiting") : "—"));

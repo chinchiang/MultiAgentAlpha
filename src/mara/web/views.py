@@ -1,7 +1,7 @@
 """What the workbench shows of a review (GLOSSARY.md: workbench, run, progress record, review scope, review status,
-incomplete reason, gate, tool evidence, tool alert, exchange, ballot role, reply outcome, refusal, truncation, invalid
-item, canary echo, jury outcome, final outcome, rejected finding, dropped finding, human-resolved finding, human queue,
-human reason, queue tightening, bias audit, report metadata): the report as the run page reads it
+incomplete reason, gate, tool evidence, tool alert, exchange, ballot role, reply outcome, refusal, truncation, window
+truncation, invalid item, canary echo, jury outcome, final outcome, rejected finding, dropped finding, human-resolved
+finding, human queue, human reason, queue tightening, bias audit, report metadata): the report as the run page reads it
 (docs/adr/0001-reply-outcome-accounting.md, docs/adr/0005-jury-outcome.md, docs/adr/0006-local-web-workbench.md,
 docs/adr/0007-review-status-and-gate.md, docs/adr/0008-reply-accounting.md, docs/adr/0009-report-metadata.md).
 
@@ -119,6 +119,8 @@ def _member(spec: dict[str, Any], served: dict[str, Any] | None, counters: dict[
         "calls": _num(counters, ROLES[audit_role].calls),
         "failures": failures,
         "canary_echoes": echoes,
+        # a subset of the truncations in `failures`, so kept out of them (GLOSSARY.md: window truncation)
+        "window_truncations": _num(counters, ROLES[audit_role].window_truncations),
         "configured": configured_member,
     }
 
