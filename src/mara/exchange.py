@@ -1,12 +1,14 @@
 """Exchange: one prompt sent to one model, and its reply classified and screened (GLOSSARY.md).
 
-The provider adapters only report what the vendor returned (`RawReply`: a stop reason and the text). Everything
-that judges a reply happens here, once, for every family:
+The provider adapters only report what the vendor returned and what they sent (`RawReply`: a stop reason, the text,
+the token counts and, for an adapter that reports it, the output limit the request sent). Everything that judges a
+reply happens here, once, for every family:
 
   * `classify` turns a RawReply into an `Outcome` of one kind - ok, truncation, unparseable, empty, refusal or
     error - by the rules of docs/adr/0001-reply-outcome-accounting.md: a truncation is a reply stopped at the
-    output limit (a budget problem, never charged to the model), an unparseable reply ended normally without
-    the structured answer (invalid output, charged to the model), an empty reply has no answer, neither text
+    output limit or at the server's context window (a budget problem, never charged to the model), a window
+    truncation being one that stopped below the output limit the request sent (`Outcome.window_truncated`), an
+    unparseable reply ended normally without the structured answer (invalid output, charged to the model), an empty reply has no answer, neither text
     nor structured data;
   * `call` makes the provider call and maps any exception to a sanitised error code;
   * `Canary` plants the injection canary and screens an Outcome for a canary echo or a canary report;
@@ -92,6 +94,7 @@ class Outcome:
     input_tokens: int = 0
     output_tokens: int = 0
     served_model: str = ""
+    output_limit: int = 0  # the max_tokens the request sent (RawReply.output_limit), 0 when not known
 
     def __post_init__(self) -> None:
         if self.kind not in KINDS:
@@ -106,6 +109,13 @@ class Outcome:
     @property
     def truncated(self) -> bool:
         return self.kind == TRUNCATION
+
+    @property
+    def window_truncated(self) -> bool:
+        """A window truncation (GLOSSARY.md): a truncation whose reported output stopped below the output limit the request
+        sent, so the server's context window, not the limit, ended it. False when the output limit or the output tokens
+        are not known (0)."""
+        return self.truncated and 0 < self.output_tokens < self.output_limit
 
     @property
     def unparseable(self) -> bool:
@@ -129,7 +139,8 @@ def classify(raw: RawReply, schema: dict) -> Outcome:
     """The one reply classification (docs/adr/0001-reply-outcome-accounting.md)."""
     structured_text = json.dumps(raw.structured, ensure_ascii=False) if raw.structured is not None else ""
     common: dict[str, Any] = {"text": "\n".join(p for p in (raw.answer_text, structured_text, raw.aside) if p), "aside": raw.aside,
-              "input_tokens": raw.input_tokens, "output_tokens": raw.output_tokens, "served_model": raw.served_model}
+              "input_tokens": raw.input_tokens, "output_tokens": raw.output_tokens, "served_model": raw.served_model,
+              "output_limit": raw.output_limit}
     if raw.stop == STOP_REFUSAL:
         return Outcome(REFUSAL, **common)
     if raw.stop == STOP_MAX_TOKENS:

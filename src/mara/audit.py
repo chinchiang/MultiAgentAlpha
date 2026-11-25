@@ -49,6 +49,7 @@ class RoleCounters:
     errors: str
     unparseable: str
     invalid: str
+    window_truncations: str  # the truncations of `truncations` that were window truncations; never makes a review incomplete
     canary: CanaryCounters | None = None
     retries: str | None = None
     local: Mapping[str, tuple[str, bool]] = field(default_factory=dict)
@@ -56,7 +57,8 @@ class RoleCounters:
 
     def names(self) -> tuple[str, ...]:
         """Every persisted name of this role, whether or not it makes the review incomplete."""
-        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid, self.retries)
+        fixed = (self.calls, self.refusals, self.truncations, self.errors, self.unparseable, self.invalid, self.retries,
+                 self.window_truncations)
         canary = (self.canary.echoes, self.canary.reports) if self.canary else ()
         return tuple(n for n in fixed if n) + canary + tuple(name for name, _ in self.local.values())
 
@@ -70,7 +72,7 @@ def _ballot(role: str, *, canary: bool, local: Mapping[str, tuple[str, bool]]) -
     return RoleCounters(role_type="ballot", calls=f"{role}_calls", refusals=f"{role}_refusals", truncations=f"{role}_truncations",
                         errors=f"{role}_errors", unparseable=f"{role}_unparseable_replies", invalid=f"{role}_invalid_items",
                         canary=CanaryCounters(f"{role}_canary_echoes", f"{role}_canary_reports") if canary else None,
-                        retries=f"{role}_retries",
+                        retries=f"{role}_retries", window_truncations=f"{role}_window_truncations",
                         local={"findings": (f"{role}_items", False), **local})
 
 
@@ -79,11 +81,13 @@ ROLES: Mapping[Role, RoleCounters] = {
     "reviewer": RoleCounters(role_type="extraction", calls="reviewer_calls", refusals="reviewer_refusals",
                              truncations="reviewer_truncations", errors="reviewer_errors",
                              unparseable="reviewer_unparseable_replies", invalid="invalid_findings_dropped",
+                             window_truncations="reviewer_window_truncations",
                              canary=CanaryCounters("canary_echoes", "canary_reports"),
                              local={"unverified_quotes": ("findings_with_unverified_quotes", False)}, tokens=True),
     "context": RoleCounters(role_type="extraction", calls="context_calls", refusals="context_refusals",
                             truncations="context_truncations", errors="context_errors",
                             unparseable="context_unparseable_replies", invalid="context_invalid_items",
+                            window_truncations="context_window_truncations",
                             canary=CanaryCounters("context_canary_echoes", "context_canary_reports"),
                             local={"unverified": ("context_unverified_items", True)}, tokens=True),
     "skeptic": _ballot("skeptic", canary=True, local={"unverified_controls": ("skeptic_unverified_controls", False),
@@ -168,12 +172,17 @@ class ReplyRecord:
     input_tokens: int = 0
     output_tokens: int = 0
     log_codes: tuple[str, ...] = ()
+    window_truncated: bool = False  # a window truncation (exchange.Outcome.window_truncated)
+    output_limit: int = 0  # the max_tokens the request sent (exchange.Outcome.output_limit), 0 when not known
 
     def __post_init__(self) -> None:
         if self.role not in ROLES:
             raise ValueError(f"unknown role {self.role!r}; one of {tuple(ROLES)}")
         if self.kind not in KINDS:
             raise ValueError(f"unknown reply outcome kind {self.kind!r}; one of {KINDS}")
+        if self.window_truncated and not (self.kind == TRUNCATION and 0 < self.output_tokens < self.output_limit):
+            raise ValueError(f"a reply of kind {self.kind} with {self.output_tokens} of {self.output_limit} output tokens "
+                             "is no window truncation")
         counters = ROLES[self.role]
         undeclared = sorted(set(self.counts) - set(counters.local))
         if undeclared:
@@ -190,10 +199,11 @@ class ReplyRecord:
 
     @classmethod
     def of(cls, outcome: Outcome, role: Role, family: str, *, log_codes: tuple[str, ...] = (), **fields: Any) -> ReplyRecord:
-        """The record of one classified reply: its kind, tokens and provider error code come from the outcome, the
-        rest from `fields`."""
+        """The record of one classified reply: its kind, tokens, output limit, whether it was a window truncation and
+        provider error code come from the outcome, the rest from `fields`."""
         return cls(role=role, family=family, kind=outcome.kind, input_tokens=outcome.input_tokens,
-                   output_tokens=outcome.output_tokens, log_codes=((outcome.error,) if outcome.error else ()) + log_codes, **fields)
+                   output_tokens=outcome.output_tokens, window_truncated=outcome.window_truncated, output_limit=outcome.output_limit,
+                   log_codes=((outcome.error,) if outcome.error else ()) + log_codes, **fields)
 
 
 def worth_retrying(rec: ReplyRecord) -> bool:
@@ -211,8 +221,12 @@ def _abstained(rec: ReplyRecord) -> bool:
 
 
 def log_tags(*records: ReplyRecord) -> str:
-    """The pipeline log's tags for one or more replies, as their counters read them: [REFUSED] when any abstained, ..."""
-    flags = ((any(_abstained(r) for r in records), "REFUSED"), (any(r.kind == TRUNCATION for r in records), "TRUNCATED"),
+    """The pipeline log's tags for one or more replies, as their counters read them: [REFUSED] when any abstained,
+    [TRUNCATED] for a truncation that is not a window truncation and [TRUNCATED AT THE CONTEXT WINDOW: <output tokens>
+    of <output limit> output tokens] for a window truncation, one pair for each such reply, ..."""
+    window = ", ".join(f"{r.output_tokens} of {r.output_limit}" for r in records if r.window_truncated)
+    flags = ((any(_abstained(r) for r in records), "REFUSED"), (any(r.kind == TRUNCATION and not r.window_truncated for r in records), "TRUNCATED"),
+             (bool(window), f"TRUNCATED AT THE CONTEXT WINDOW: {window} output tokens"),
              (any(r.kind == ERROR for r in records), "PROVIDER ERROR"), (any(r.canary_echoes for r in records), "CANARY ECHOED"),
              (any(r.canary_reports for r in records), "CANARY REPORTED"))
     return "".join(f" [{tag}]" for on, tag in flags if on)
@@ -269,6 +283,7 @@ class Audit(defaultdict[str, Any]):
         self.add(c.calls, fam)
         self.add(c.refusals, fam, int(_abstained(rec)))
         self.add(c.truncations, fam, int(kind == TRUNCATION))
+        self.add(c.window_truncations, fam, int(rec.window_truncated))
         self.add(c.errors, fam, int(kind == ERROR))
         self.add(c.unparseable, fam, int(kind == UNPARSEABLE))
         self.add(c.invalid, fam, int(invalid_reply) + rec.invalid_items)

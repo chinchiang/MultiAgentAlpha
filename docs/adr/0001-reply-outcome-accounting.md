@@ -16,6 +16,8 @@ Refusal, invalid and truncation counts change meaning at this decision. Calibrat
 
 From exchange version 5, how each outcome is counted for each role is decided in one module, and the context agent's canary echoes and reports are counted apart from the reviewers' (docs/adr/0008-reply-accounting.md).
 
+Amended 2026-11-25 (#417): a server can stop a reply at its context window, below the output limit the request sent, and report the same stop reason as for the output limit (LM Studio with a model loaded at 8192 tokens of context, 2026-11-24). Such a reply is still a truncation, counted, charged and screened as this decision says, and no outcome changes kind, so the exchange version stays. What changed: an adapter that knows it also reports the output limit the request sent (`openai_compatible`), and a truncation whose reported output is below that limit is a **window truncation** (`GLOSSARY.md`), counted once more under `<role>_window_truncations`, which does not make a review incomplete. Two sentences above are stale: "A **truncation** is a reply the vendor stopped at the output limit" now holds for a truncation that is not a window truncation, a window truncation having been stopped by the server's context window; and the adapters "only report the stop reason" now holds with the output limit the request sent besides it.
+
 ## Considered options
 
 - **Treat any token in a truncation as an echo:** rejected on the 2026-10-08 evidence.
