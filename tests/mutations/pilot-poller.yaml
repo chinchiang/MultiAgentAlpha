@@ -46,7 +46,7 @@ mutations:
   - name: the review's output is put in the clones directory
     file: scripts/pilot_poller.py
     caught_by: tests/test_pilot_poller.py::test_a_review_is_incremental_against_the_merge_base_with_the_config_given_and_its_output_in_the_workspace
-    old: '        out = self.root / "pilot" / "reviews" / str(number) / head'
+    old: '        out = self.root / PILOT_REVIEWS / str(number) / head'
     new: '        out = self.clones / "reviews" / str(number) / head'
   - name: a workspace inside the clones is not refused
     file: scripts/pilot_poller.py

@@ -274,6 +274,8 @@ def test_g13_names_the_decisions_that_wait_for_a_trained_adjudicator(tmp_path):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
     from governance_check import check_g13
 
+    from mara.workspace import Workspace
+
     (tmp_path / "training").mkdir()
     (tmp_path / "training" / "curriculum.md").write_text("# curriculum\n", encoding="utf-8")
     (tmp_path / "training" / "records.yaml").write_text(
@@ -284,7 +286,7 @@ def test_g13_names_the_decisions_that_wait_for_a_trained_adjudicator(tmp_path):
     ddir.mkdir(parents=True)
     write(ddir, record(line=10))
     write(ddir, record(line=20, by="mallory", adjudicator_trained=True))
-    r = check_g13(tmp_path, dt.date(2026, 10, 13))
+    r = check_g13(tmp_path, dt.date(2026, 10, 13), workspace=Workspace(tmp_path))
     assert "#20 by mallory" in r.evidence and "#10" not in r.evidence
 
 

@@ -722,8 +722,8 @@ makes the script exit non-zero. `.github/workflows/governance.yml` runs it every
 the table to a `governance-check` tracking issue. The first run (2026-09-12) had G-2, G-3, G-5, G-6 pass; G-7 (ML-BOM), G-8 (garak/CyberSecEval), G-9 (a live
 calibration), G-11 (human-queue ticketing), G-12 (PSIRT hook) and G-13 (AI-literacy records) failed
 on that first run; G-1, G-4 and G-10 needed human evidence. Since then every item has a mechanism
-and is machine-decidable: G-11 requires the config to file GitHub issues, a workflow step running the ticket sync and evidence
-that it ran for real (a backlog it wrote or a decision it recorded; it fails while the job stays in dry-run); G-12 requires a successful endpoint handshake and no overdue confirmed stage;
+and is machine-decidable: G-11 requires the config to file GitHub issues, a runner of the ticket sync (a workflow step, or the Pilot
+poller's Sync record in the MARA workspace) and evidence that it ran for real (a backlog it wrote or a decision it recorded; it fails while the job stays in dry-run); G-12 requires a successful endpoint handshake and no overdue confirmed stage;
 G-7 once the platform team has hashed and signed the weights (`docs/ml-bom.md`); G-13 once one
 person per role holds a valid training record (`docs/ai-literacy-training.md`); G-1, G-4 and G-10
 once the policy is approved, live swap drills are recorded and the rollout has started
@@ -731,7 +731,10 @@ once the policy is approved, live swap drills are recorded and the rollout has s
 endpoints (`docs/model-eval-runbook.md`). G-9 passes since the first live calibration (2026-10-08,
 `docs/calibration-2026-10-08.md`: Claude Opus 5.5 on Bedrock, Gemini 3.8 Flash and GLM on the five labelled
 samples, 51 labels; its Alternative Annotator Test has no human decisions to compare yet, so P8 keeps every
-rejected non-D finding in the human queue). Nothing is
+rejected non-D finding in the human queue). G-10, G-11 and G-13 read their evidence (the baseline
+report, the backlog and decision records, the Sync record, the training register) from the MARA workspace: on the
+shadow phase's host the Weekly governance check (`scripts/governance_weekly.py`, `docs/pilot-runbook.md` section 6)
+judges them, and this repository's tracking issue keeps showing them failing. Nothing is
 marked passed before the fact. `docs/governance-check-2026-09-12.md` was regenerated in place as those
 mechanisms landed (last on 2026-09-17), so it shows the later state rather than the first run;
 `docs/governance-check-2026-09-26.md` was likewise regenerated in place on 2026-10-03 and still shows the

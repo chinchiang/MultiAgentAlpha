@@ -1,0 +1,90 @@
+focused: [tests/test_governance_workspace.py]
+# governance checks G-10, G-11 and G-13 reading their evidence from the MARA workspace (scripts/governance_check.py):
+# which of its files each reads and which stay the root's, the Sync record G-11 takes and the shapes it refuses,
+# what run_all hands them, and how the workspace's path is shown; each mutation breaks one
+mutations:
+- name: the backlog is read from the root
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_reads_the_backlog_in_the_workspace_and_not_the_one_in_the_root
+  old: '    backlog = ws / hq.backlog_file'
+  new: '    backlog = root / hq.backlog_file'
+- name: G-11 reads the decision records in the root
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_reads_the_decision_records_in_the_workspace_and_not_the_ones_in_the_root
+  old: '    decisions_dir = ws / "calib" / "decisions"'
+  new: '    decisions_dir = root / "calib" / "decisions"'
+- name: a Sync record does not stand for the sync step
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_takes_the_pilot_pollers_sync_record_in_the_workspace_for_the_sync_step
+  old: '    if not steps and not isinstance(record, dict):'
+  new: '    if not steps:'
+- name: no step and no Sync record passes
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_takes_the_pilot_pollers_sync_record_in_the_workspace_for_the_sync_step
+  old: '    if not steps and not isinstance(record, dict):'
+  new: '    if not steps and isinstance(record, str):'
+- name: the evidence does not name the Sync record
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_takes_the_pilot_pollers_sync_record_in_the_workspace_for_the_sync_step
+  old: "    if isinstance(record, dict):\n        have.append("
+  new: "    if False:\n        have.append("
+- name: the evidence leaves out the sync's exit
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_takes_the_pilot_pollers_sync_record_in_the_workspace_for_the_sync_step
+  old: '                    f"exit {record[''exit'']}")'
+  new: '                    f"")'
+- name: a time with no time zone is taken as one
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_does_not_take_a_sync_record_not_of_the_shape_the_poller_writes
+  old: '    return when if when is not None and when.tzinfo is not None else None'
+  new: '    return when if when is not None else None'
+- name: a Sync record whose repository is not owner/repo is taken
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_does_not_take_a_sync_record_not_of_the_shape_the_poller_writes
+  old: '    if not isinstance(repo, str) or not REPO_NAME.fullmatch(repo):'
+  new: '    if not isinstance(repo, str):'
+- name: a Sync record whose exit is not an integer is taken
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_does_not_take_a_sync_record_not_of_the_shape_the_poller_writes
+  old: '    if not isinstance(code, int) or isinstance(code, bool):'
+  new: '    if isinstance(code, bool):'
+- name: a Sync record whose exit is a boolean is taken
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_does_not_take_a_sync_record_not_of_the_shape_the_poller_writes
+  old: '    if not isinstance(code, int) or isinstance(code, bool):'
+  new: '    if not isinstance(code, int):'
+- name: G-13 reads the register in the root
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g13_reads_the_register_in_the_workspace_and_not_the_one_in_the_root
+  old: '    register_path = ws / "training" / "records.yaml"'
+  new: '    register_path = root / "training" / "records.yaml"'
+- name: G-13 reads the curriculum in the workspace
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g13_reads_the_curriculum_in_the_root_and_not_the_one_in_the_workspace
+  old: '    curriculum = root / "training" / "curriculum.md"'
+  new: '    curriculum = ws / "training" / "curriculum.md"'
+- name: G-13 names the decisions in the root
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g13_names_the_decisions_in_the_workspace_that_wait_for_a_trained_adjudicator
+  old: '    waiting = [d for d in load_decisions(ws / "calib" / "decisions").decisions'
+  new: '    waiting = [d for d in load_decisions(root / "calib" / "decisions").decisions'
+- name: G-10 looks for the baseline report in the root
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g10_finds_the_baseline_report_in_the_workspace_and_not_in_the_root
+  old: '    st = rollout_status(cfg, ws.root, today)'
+  new: '    st = rollout_status(cfg, root, today)'
+- name: run_all gives G-11 no workspace
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_run_all_hands_g10_g11_and_g13_the_workspace_it_is_given_not_the_environments
+  old: check_g11(root, config_path, ws), check_g12
+  new: check_g11(root, config_path), check_g12
+- name: run_all gives G-13 no workspace
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_run_all_hands_g10_g11_and_g13_the_workspace_it_is_given_not_the_environments
+  old: check_g13(root, today, config_path, ws),
+  new: check_g13(root, today, config_path),
+- name: the missing backlog is shown by the workspace's path
+  file: scripts/governance_check.py
+  caught_by: tests/test_governance_workspace.py::test_g11_reads_the_backlog_in_the_workspace_and_not_the_one_in_the_root
+  old: '`{_shown(backlog, ws)}`'
+  new: '`{_shown(backlog, root)}`'

@@ -250,7 +250,7 @@ code that writes it, so it changes with that code:
   `rollout_phase` and `model_eval` put it on the parsed arguments, as their `workspace` attribute, so a subcommand's
   function reads it from there and its signature stays `(a)`; the others (`csp_ci`, `gitleaks_ci`, `osv_ci`,
   `scorecard_ci`, `semgrep_ci`, `zizmor_ci`, `trivy_ci`, `live_smoke`, `calibration_run`, `calibrate`,
-  `human_queue_issues`, `training_register`, `governance_check`, `pilot_poller`) hold it in `main` and pass it down; `compare_reviews`
+  `human_queue_issues`, `training_register`, `governance_check`, `governance_weekly`, `pilot_poller`) hold it in `main` and pass it down; `compare_reviews`
   builds it where it loads the one config, in its `tightened` scenario. A function a script's tests call takes it as a
   parameter: `check_pins(workspace)` of `scripts/semgrep_ci.py` and of `scripts/csp_ci.py`, `pinned_trivy(workspace)` of
   `scripts/trivy_db.py`, `anchor_paths(workspace)`, `load_model_eval(workspace)` and `training_requirement(workspace,
@@ -266,9 +266,13 @@ code that writes it, so it changes with that code:
   `make_server` without `root=`) and the import of `mara.workspace.root`, and a test of the scan itself says what it sees and what it leaves alone (a
   script's own `load_config`, one imported from another script).
 - `governance_check` is the exception among the scripts. `check_g2`, `check_g3`, `check_g4`, `check_g7`, `check_g8`,
-  `check_g9`, `check_g10` and `_production_families` take `workspace` as an optional keyword and read the environment's
-  when it is left out, because their tests call them directly with a root and a config path only (about 45 calls in eight
-  files); `run_all` builds the workspace once and hands it to the seven, and `main` hands `run_all` its own. `check_g5`
+  `check_g9`, `check_g10`, `check_g11`, `check_g13` and `_production_families` take `workspace` as an optional keyword
+  and read the environment's when it is left out, because their tests call them directly with a root and a config path
+  only (about 45 calls in eight files); `run_all` builds the workspace once and hands it to the nine, and `main` hands
+  `run_all` its own. `check_g10`, `check_g11` and `check_g13` read their evidence below the workspace's root (the
+  baseline report, the backlog, the decision records, the Sync record, the training register), so a test that puts that
+  evidence below the root it passes, apart from the environment's workspace, passes `workspace=Workspace(root)`;
+  `test_governance_workspace.py` gives a workspace apart from the root. `check_g5`
   reads the tool directory of `Workspace.from_env(root=root)`, as `tools_dir(root)` did. `check_g4` hands the workspace it
   judges against to `govdocs.drill_status(..., workspace=...)`, which loads each standby config in it (policies P7 and P8
   read its files), as `scripts/model_swap_drill.py` does with the workspace on its parsed arguments; both are required there
@@ -532,6 +536,20 @@ The lock is the file `.pilot-poller.lock` in the clones directory, taken with fc
 run holds it itself. The poller imports DECISION_LABELS, MARKER_RE and `queue_settings` from
 `scripts/human_queue_issues.py` by name, so a ticket's marker and decision labels have one definition, and a rename
 there breaks the poller's import.
+
+## The weekly governance check (`scripts/governance_weekly.py`)
+
+`test_governance_weekly.py` drives `main(argv)` with MARA_HOME a directory below `tmp_path`, the root this checkout and
+`config/mara.mock.yaml` as the config, so `run_all` runs as it does on the host, and reads what `main` prints. The
+week's reports are report.json files it writes below `pilot/reviews/<pull request>/<head>/` with `generated_at` and
+the `input_tokens` and `output_tokens` counts of `bias_audit`, which `mara.govdocs.report_tokens` reads. GitHub is the
+hidden `--gh`: a shell script in `tmp_path` that runs a stand-in gh, a Python script the test writes, which appends each
+call's arguments and, for a `--body-file -`, its stdin to calls.jsonl beside it, answers `issue list` from open.json,
+`issue create` with an issue URL, `label create` and `issue comment` with nothing, refuses a comment when a file
+`fail-comment` is beside it, and fails loudly on any other call. A test that gives no `--gh` gets one that refuses every
+call, so no run, and no mutant of a dry run, reaches the real gh. The tests read the calls by their first two arguments
+and each option's value; a change to those argument shapes is a change to the stand-in. The shell script makes these
+tests POSIX only.
 
 ## The result lines `scripts/pr_checks.py` copies
 

@@ -519,13 +519,13 @@ def test_report_and_governance_g11(tmp_path):
     shutil.copytree(ROOT / ".github", repo / ".github")
     shutil.copytree(ROOT / "config", repo / "config")
     (repo / "calib" / "decisions").mkdir(parents=True)
-    assert check_g11(repo, repo / "config" / "mara.yaml").status == FAIL
+    assert check_g11(repo, repo / "config" / "mara.yaml", workspace=Workspace(repo)).status == FAIL
     (repo / "calib" / "decisions" / "backlog.json").write_text('{"open": 3}', encoding="utf-8")
-    assert check_g11(repo, repo / "config" / "mara.yaml").status == PASS
+    assert check_g11(repo, repo / "config" / "mara.yaml", workspace=Workspace(repo)).status == PASS
     # a workflow that only names the human queue, without running the sync, is no integration
     for wf in (repo / ".github" / "workflows").glob("*.yml"):
         wf.write_text(wf.read_text(encoding="utf-8").replace("--sync-decisions", ""), encoding="utf-8")
-    assert check_g11(repo, repo / "config" / "mara.yaml").status == FAIL
+    assert check_g11(repo, repo / "config" / "mara.yaml", workspace=Workspace(repo)).status == FAIL
     cfg = MaraConfig.model_validate(json.loads(json.dumps({
         "models": [{"name": "a", "family": "anthropic", "provider": "mock", "model": "m", "data_residency": "on_prem"},
                    {"name": "d", "family": "deepseek", "provider": "mock", "model": "m", "data_residency": "on_prem"},

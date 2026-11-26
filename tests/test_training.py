@@ -138,17 +138,18 @@ def test_governance_g13_fails_here_and_passes_with_a_trained_person_per_role(tmp
     (root / "training" / "curriculum.md").write_text("# curriculum\n", encoding="utf-8")
     (root / "config" / "mara.yaml").write_text(yaml.safe_dump({"training": {"required_roles": ["developer", "security", "adjudicator"]}}), encoding="utf-8")
     reg = _register(root / "training")
-    r = gc.check_g13(root, TODAY, root / "config" / "mara.yaml")
+    r = gc.check_g13(root, TODAY, root / "config" / "mara.yaml", workspace=Workspace(root))
     assert r.status == gc.FAIL
     loaded = training.load_register(reg)
     for person, role in (("a", "developer"), ("b", "security"), ("c", "adjudicator")):
         training.add_record(loaded, person, role, TODAY - dt.timedelta(days=350), score=1.0, assessor="quiz", evidence="quiz")
     training.save_register(loaded)
-    r = gc.check_g13(root, TODAY, root / "config" / "mara.yaml")
+    r = gc.check_g13(root, TODAY, root / "config" / "mara.yaml", workspace=Workspace(root))
     assert r.status == gc.PASS and "adjudicator：1 筆有效（c）" in r.evidence and "30 天內到期" in r.evidence
-    assert gc.check_g13(root, TODAY + dt.timedelta(days=20), root / "config" / "mara.yaml").status == gc.FAIL, "all expired"
+    later = TODAY + dt.timedelta(days=20)
+    assert gc.check_g13(root, later, root / "config" / "mara.yaml", workspace=Workspace(root)).status == gc.FAIL, "all expired"
     (root / "training" / "curriculum.md").unlink()
-    assert "curriculum.md" in gc.check_g13(root, TODAY, root / "config" / "mara.yaml").evidence
+    assert "curriculum.md" in gc.check_g13(root, TODAY, root / "config" / "mara.yaml", workspace=Workspace(root)).evidence
 
 
 def test_config_training_block():

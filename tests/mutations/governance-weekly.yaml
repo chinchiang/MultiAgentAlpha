@@ -1,0 +1,105 @@
+focused: [tests/test_governance_weekly.py]
+# the Weekly governance check (scripts/governance_weekly.py): which reports the week's token line counts and how,
+# where the comment goes and what it holds, what a dry run does not do, and how a failing gh call ends the run;
+# each mutation breaks one
+mutations:
+- name: the week starts a day early
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_token_line_sums_the_reports_of_the_seven_days_before_the_date_and_counts_one_with_no_counts_as_0
+  old: '    start = end - dt.timedelta(days=DAYS - 1)'
+  new: '    start = end - dt.timedelta(days=DAYS)'
+- name: a report after the last day is counted
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_token_line_sums_the_reports_of_the_seven_days_before_the_date_and_counts_one_with_no_counts_as_0
+  old: '        elif start <= day <= end:'
+  new: '        elif start <= day:'
+- name: a report with no token counts is left out
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_token_line_sums_the_reports_of_the_seven_days_before_the_date_and_counts_one_with_no_counts_as_0
+  old: '        elif start <= day <= end:'
+  new: '        elif start <= day <= end and report["bias_audit"]:'
+- name: the day is the report's own and not UTC's
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_token_line_sums_the_reports_of_the_seven_days_before_the_date_and_counts_one_with_no_counts_as_0
+  old: '    return when.astimezone(dt.UTC).date() if'
+  new: '    return when.date() if'
+- name: input and output tokens are read the other way round
+  file: src/mara/govdocs.py
+  caught_by: tests/test_governance_weekly.py::test_the_token_line_sums_the_reports_of_the_seven_days_before_the_date_and_counts_one_with_no_counts_as_0
+  old: '    return int(read(audit, Count.INPUT_TOKENS)), int(read(audit, Count.OUTPUT_TOKENS))'
+  new: '    return int(read(audit, Count.OUTPUT_TOKENS)), int(read(audit, Count.INPUT_TOKENS))'
+- name: the line does not say how many reports were left out
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_a_report_that_cannot_be_read_or_is_not_of_the_shape_read_is_left_out_and_counted_on_the_line
+  old: 未計入" if self.unread else "")
+  new: 未計入" if False else "")
+- name: the token line is left out of the comment
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_token_line_sums_the_reports_of_the_seven_days_before_the_date_and_counts_one_with_no_counts_as_0
+  old: '    body = table + "\n" + week(ws.root, a.date - dt.timedelta(days=1)).line() + "\n"'
+  new: '    body = table + "\n"'
+- name: the week ends on --date
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_token_line_sums_the_reports_of_the_seven_days_before_the_date_and_counts_one_with_no_counts_as_0
+  old: week(ws.root, a.date - dt.timedelta(days=1))
+  new: week(ws.root, a.date)
+- name: the comment names scripts/governance_check.py
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_comment_names_the_weekly_script_and_no_exit_code
+  old: producer="scripts/governance_weekly.py", fails_the_run=False)
+  new: fails_the_run=False)
+- name: the comment gives an exit code
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_comment_names_the_weekly_script_and_no_exit_code
+  old: producer="scripts/governance_weekly.py", fails_the_run=False)
+  new: producer="scripts/governance_weekly.py", fails_the_run=True)
+- name: only the first open tracking issue gets the comment
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_comment_is_posted_to_every_open_tracking_issue_of_the_repository
+  old: '    for n in (i["number"] for i in issues):'
+  new: '    for n in (i["number"] for i in issues[:1]):'
+- name: the comment goes to another repository
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_comment_is_posted_to_every_open_tracking_issue_of_the_repository
+  old: '"issue", "comment", str(n), "--repo", repo,'
+  new: '"issue", "comment", str(n), "--repo", "org/other",'
+- name: the comment is posted empty
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_comment_is_posted_to_every_open_tracking_issue_of_the_repository
+  old: "\"--body-file\", \"-\", body=body)\n    if issues:"
+  new: "\"--body-file\", \"-\", body=\"\")\n    if issues:"
+- name: closed tracking issues are listed too
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_comment_is_posted_to_every_open_tracking_issue_of_the_repository
+  old: '"--label", LABEL, "--state", "open",'
+  new: '"--label", LABEL, "--state", "all",'
+- name: an issue is created although one is open
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_the_comment_is_posted_to_every_open_tracking_issue_of_the_repository
+  old: "    if issues:\n        return"
+  new: "    if False:\n        return"
+- name: no issue is created when none is open
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_with_no_open_tracking_issue_one_is_created_labelled_with_the_comment
+  old: '    created = gh(exe, "issue", "create"'
+  new: "    return []\n    created = gh(exe, \"issue\", \"create\""
+- name: the created issue is not labelled governance-check
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_with_no_open_tracking_issue_one_is_created_labelled_with_the_comment
+  old: '"--repo", repo, "--label", LABEL, "--title"'
+  new: '"--repo", repo, "--label", "other", "--title"'
+- name: a dry run posts
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_a_dry_run_prints_the_comment_and_calls_no_gh
+  old: '    if a.dry_run:'
+  new: '    if False:'
+- name: a gh call that fails exits 0
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_a_gh_call_that_fails_or_answers_another_shape_exits_1_with_an_error_line
+  old: "        print(f\"ERROR: {e}\", file=sys.stderr)\n        return 1"
+  new: "        print(f\"ERROR: {e}\", file=sys.stderr)\n        return 0"
+- name: an issue number that is not an integer is read
+  file: scripts/governance_weekly.py
+  caught_by: tests/test_governance_weekly.py::test_a_gh_call_that_fails_or_answers_another_shape_exits_1_with_an_error_line
+  old: type(i.get("number")) is int
+  new: i.get("number") is not None
