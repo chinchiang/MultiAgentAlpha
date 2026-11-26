@@ -37,6 +37,7 @@ mutations:
 - name: a record that names no families is an error
   file: src/mara/evidence.py
   caught_by: 'tests/test_evidence_record.py::test_standing_reports_what_keeps_a_record_from_standing[a-record-that-names-no-families-covers-none]'
+  error: TypeError
   old: covered = set(header.families or ())
   new: covered = set(header.families)
 - name: the families missing are named in alphabetical order
@@ -57,6 +58,7 @@ mutations:
 - name: a mode no run has is written
   file: src/mara/evidence.py
   caught_by: 'tests/test_evidence_record.py::test_a_mode_no_run_has_is_refused_when_it_is_written[Live]'
+  error: Failed
   old: 'if mode not in MODES:'
   new: 'if False:'
 - name: a date that is not YYYY-MM-DD is read as a date
@@ -67,6 +69,7 @@ mutations:
 - name: a date that is not a date is an error
   file: src/mara/evidence.py
   caught_by: 'tests/test_evidence_record.py::test_a_date_that_is_not_one_reads_as_no_date[2026-13-01]'
+  error: ValueError
   old: '    except ValueError:'
   new: '    except KeyError:'
 - name: a mode that is not text is the mode
@@ -87,21 +90,25 @@ mutations:
 - name: policy P8 hears nothing of what keeps a record from standing
   file: src/mara/policy.py
   caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
+  error: Failed
   old: problems = standing(header, today)
   new: problems = []
 - name: policy P8 lets a mock record through
   file: src/mara/policy.py
   caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
+  error: Failed
   old: '        if isinstance(problem, NotLive):'
   new: '        if False and isinstance(problem, NotLive):'
 - name: policy P8 lets a stale record through
   file: src/mara/policy.py
   caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
+  error: Failed
   old: '        if isinstance(problem, Stale):'
   new: '        if False and isinstance(problem, Stale):'
 - name: policy P8 lets a record dated in the future through
   file: src/mara/policy.py
   caught_by: tests/test_policy.py::test_p8_unsupervised_reject_needs_a_recent_passing_live_aat
+  error: Failed
   old: '        if isinstance(problem, Future):'
   new: '        if False and isinstance(problem, Future):'
 - name: policy P8 lets a record with no date through
@@ -122,6 +129,7 @@ mutations:
 - name: check G-8 opens a report before it looks at its date
   file: scripts/governance_check.py
   caught_by: tests/test_governance_check.py::test_g8_and_g9_never_open_a_report_that_is_too_old_or_too_new_to_count
+  error: ParserError
   old: "        date_problem = _date_problem(d, today)\n        if isinstance(date_problem, Future):\n            # a report dated"
   new: "        read_front_matter(p)\n        date_problem = _date_problem(d, today)\n        if isinstance(date_problem, Future):\n            # a report dated"
 - name: check G-9 hears nothing of the families a report misses

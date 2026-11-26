@@ -13,6 +13,7 @@ mutations:
   - name: G-7 refuses a config that violates P7 instead of reporting it
     file: scripts/governance_check.py
     caught_by: tests/test_ml_bom.py::test_repository_bom_is_pending_but_valid_and_governance_g7_says_why
+    error: ValueError
     old: |1-
          cfg = load_config(config_path, _workspace(workspace), enforce_policies=False)  # G-7 reports the ML-BOM, P7 among it, rather than refusing it
     new: '    cfg = load_config(config_path, _workspace(workspace))  # G-7 reports the ML-BOM, P7 among it, rather than refusing it'
@@ -24,6 +25,7 @@ mutations:
   - name: load_config enforces the policies whatever it is asked
     file: src/mara/config.py
     caught_by: tests/test_governance_config.py::test_g8_and_g9_ask_live_reports_to_cover_the_production_families_and_need_not_the_policies
+    error: ValidationError
     old: 'context=None if enforce_policies else {"skip_policies": True})'
     new: 'context=None)'
   - name: G-11 needs a human_queue block the review does not
@@ -54,11 +56,13 @@ mutations:
   - name: G-8 and G-9 read the families from the raw YAML again
     file: scripts/governance_check.py
     caught_by: tests/test_governance_config.py::test_g8_and_g9_refuse_a_config_the_review_refuses_rather_than_ask_for_a_family_no_report_can_cover
+    error: Failed
     old: '    return sorted(production_families(load_config(config_path, _workspace(workspace), enforce_policies=False)))'
     new: '    return sorted({m.get("family", "?") for m in _raw_config(config_path).get("models", []) if m.get("provider") != "mock"})'
   - name: G-8 and G-9 refuse a config that violates a policy instead of reporting the reports
     file: scripts/governance_check.py
     caught_by: tests/test_governance_config.py::test_g8_and_g9_ask_live_reports_to_cover_the_production_families_and_need_not_the_policies
+    error: ValidationError
     old: '    return sorted(production_families(load_config(config_path, _workspace(workspace), enforce_policies=False)))'
     new: '    return sorted(production_families(load_config(config_path, _workspace(workspace))))'
   - name: the production families count the mock models
@@ -68,11 +72,11 @@ mutations:
     new: '        if f not in fams:'
   - name: G-8 asks the reports to cover no family
     file: scripts/governance_check.py
-    caught_by: tests/test_governance_config.py::test_g8_and_g9_refuse_a_config_the_review_refuses_rather_than_ask_for_a_family_no_report_can_cover
+    caught_by: tests/test_governance_config.py::test_g8_and_g9_ask_live_reports_to_cover_the_production_families_and_need_not_the_policies
     old: "    families = _production_families(config_path, workspace) if config_path else []\n    ev_g, pr_g"
-    new: "    families = []\n    ev_g, pr_g"
+    new: "    families = _production_families(config_path, workspace) if config_path else []\n    families = []\n    ev_g, pr_g"
   - name: G-9 asks the calibration report to cover no family
     file: scripts/governance_check.py
-    caught_by: tests/test_governance_config.py::test_g8_and_g9_refuse_a_config_the_review_refuses_rather_than_ask_for_a_family_no_report_can_cover
+    caught_by: tests/test_governance_config.py::test_g8_and_g9_ask_live_reports_to_cover_the_production_families_and_need_not_the_policies
     old: "    families = _production_families(config_path, workspace) if config_path else []\n    files = _dated_files"
-    new: "    families = []\n    files = _dated_files"
+    new: "    families = _production_families(config_path, workspace) if config_path else []\n    families = []\n    files = _dated_files"

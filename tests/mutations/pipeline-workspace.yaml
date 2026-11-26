@@ -28,16 +28,19 @@ mutations:
   - name: the workspace checked against the target is MARA_HOME's
     file: src/mara/pipeline.py
     caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
+    error: Failed
     old: '        check_outside(target, workspace=self.workspace)'
     new: '        check_outside(target, workspace=Workspace.from_env())'
   - name: the tool directory checked against the target is read again when the review starts
     file: src/mara/pipeline.py
     caught_by: tests/test_pipeline_workspace.py::test_the_tool_directory_checked_against_the_target_is_the_one_the_runner_will_use
+    error: Failed
     old: '        check_outside(target, workspace=self.workspace)'
     new: '        check_outside(target, workspace=Workspace.from_env(root=self.root))'
   - name: the calibration samples looked up in MARA_HOME
     file: src/mara/pipeline.py
     caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_looks_its_calibration_samples_up_in_the_workspace_it_is_given
+    error: InvocationError
     old: '        answer_key = calibration_answer_key(target, self.root) if calibration_sample else None'
     new: '        answer_key = calibration_answer_key(target, Workspace.from_env().root) if calibration_sample else None'
   - name: the ML-BOM signature bundle looked up in MARA_HOME
@@ -53,6 +56,7 @@ mutations:
   - name: check_outside ignores the workspace it is given
     file: src/mara/workspace.py
     caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
+    error: Failed
     old: '    anchors = {"the MARA workspace": workspace.root, "the tool directory": workspace.tools_dir,'
     new: '    anchors = {"the MARA workspace": Workspace.from_env().root, "the tool directory": workspace.tools_dir,'
   - name: the default tool runner is given the environment's workspace
@@ -63,10 +67,12 @@ mutations:
   - name: a tool runner that is given is called with the pipeline's workspace too
     file: src/mara/pipeline.py
     caught_by: tests/test_security_regressions.py::test_prerecorded_secret_scan_cannot_authorize_live_egress
+    error: TypeError
     old: "        self._run_tools = run_tools if run_tools is not None else functools.partial(run_all, workspace=self.workspace)"
     new: "        self._run_tools = functools.partial(run_tools or run_all, workspace=self.workspace)"
   - name: the workspace of the pipeline is built on MARA_HOME, not on the root it is given
     file: src/mara/pipeline.py
     caught_by: tests/test_pipeline_workspace.py::test_a_pipeline_reads_its_evidence_from_the_workspace_it_is_given_not_mara_home
+    error: Failed
     old: "        self.workspace = Workspace.from_env(root=self.root)"
     new: "        self.workspace = Workspace.from_env()"
