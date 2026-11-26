@@ -537,6 +537,34 @@ run holds it itself. The poller imports DECISION_LABELS, MARKER_RE and `queue_se
 `scripts/human_queue_issues.py` by name, so a ticket's marker and decision labels have one definition, and a rename
 there breaks the poller's import.
 
+## The credential guard (`tests/conftest.py`)
+
+The credential guard (GLOSSARY.md) is `pytest_configure`, which runs before any test module is imported, in every
+pytest process, whoever starts it (a developer, `scripts/check_local.py`, `scripts/mutate.py`, CI). It removes
+CREDENTIAL_VARIABLES from the environment, points GH_CONFIG_DIR at an empty directory (no gh login), points the AWS
+chain's config, credentials and boto config files (AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE, BOTO_CONFIG) at files
+that do not exist and sets `AWS_EC2_METADATA_DISABLED=true`, and, on POSIX, puts first on PATH the guard's gh, which
+exits 97 with `a test reached the real gh: gh <args>`; `pytest_unconfigure` removes the guard's directory. Every test
+can rely on that environment. A test that sets a variable with `monkeypatch`, puts a stand-in gh first on PATH or
+names one with `--gh` still gets its own. On Windows there is no guard's gh: a gh reached there finds no login and no
+token, but does not say a test reached it.
+
+`test_credential_guard.py` checks it with three tests. The first runs a child pytest that loads the conftest as a
+plugin (`-p tests.conftest`) over a test of its own in `tmp_path`, in an environment built as a caller holding every
+credential would: each of CREDENTIAL_VARIABLES and of the test's own lists of gh's and the AWS chain's variables set,
+GH_CONFIG_DIR, the three AWS files and AWS_CREDENTIAL_FILE pointing at a home holding a login and keys, the metadata
+lookup on, and a gh of the caller's own first on PATH that succeeds; the inner test writes what it saw to a JSON file
+the outer test reads item by item. The inner test runs `gh --version`: with the guard broken it meets the caller's gh,
+never the real one. The second runs `scripts/governance_weekly.py`'s `main` with no `--gh`. The third holds
+CREDENTIAL_VARIABLES to the key variables the configs below `config/`, `mara.credentials.VENDOR_KEY_ENV` and
+`mara.model_eval` name, and to the test's lists of gh's and the AWS chain's variables, written from gh's and botocore's
+own: a variable MARA starts to read for a model's key, or a source of credentials the chain gains, goes in both.
+
+No mutation of the guard both puts the guard's gh off PATH and gives gh a login, so no mutant runs a real gh logged in.
+The second test is never run where `tests/conftest.py` has no guard, such as a worktree of `origin/main` before the
+guard, the test file copied there alone (`docs/agents/self-review.md`): there the real gh runs as the developer.
+`scripts/red_on_base.py` brings the working tree's whole `tests/`, the guard with it.
+
 ## The weekly governance check (`scripts/governance_weekly.py`)
 
 `test_governance_weekly.py` drives `main(argv)` with MARA_HOME a directory below `tmp_path`, the root this checkout and
@@ -546,8 +574,8 @@ the `input_tokens` and `output_tokens` counts of `bias_audit`, which `mara.govdo
 hidden `--gh`: a shell script in `tmp_path` that runs a stand-in gh, a Python script the test writes, which appends each
 call's arguments and, for a `--body-file -`, its stdin to calls.jsonl beside it, answers `issue list` from open.json,
 `issue create` with an issue URL, `label create` and `issue comment` with nothing, refuses a comment when a file
-`fail-comment` is beside it, and fails loudly on any other call. A test that gives no `--gh` gets one that refuses every
-call, so no run, and no mutant of a dry run, reaches the real gh. The tests read the calls by their first two arguments
+`fail-comment` is beside it, and fails loudly on any other call. A test that gives no `--gh` meets the credential guard's
+gh (above), which refuses every call. The tests read the calls by their first two arguments
 and each option's value; a change to those argument shapes is a change to the stand-in. The shell script makes these
 tests POSIX only.
 

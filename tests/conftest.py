@@ -9,6 +9,55 @@ from mara.workspace import Workspace  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+# The credential guard (GLOSSARY.md): the variables of the credential sources no test may see. GitHub's tokens; every key
+# variable MARA reads (each api_key_env of the configs below config/, mara.credentials.VENDOR_KEY_ENV and
+# mara.model_eval's); and the AWS chain's (botocore's providers and profile variables). tests/test_credential_guard.py
+# holds the list to them.
+CREDENTIAL_VARIABLES = (
+    "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN",
+    "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAICOMPATIBLE_API_KEY",
+    "DEEPSEEK_LOCAL_KEY", "GLM_LOCAL_KEY", "NIM_LOCAL_KEY",
+    "AWS_PROFILE", "AWS_DEFAULT_PROFILE", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+    "AWS_SECURITY_TOKEN", "AWS_CREDENTIAL_FILE", "AWS_WEB_IDENTITY_TOKEN_FILE", "AWS_ROLE_ARN",
+    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    "AWS_CONTAINER_AUTHORIZATION_TOKEN", "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
+)
+GUARD_GH = '#!/bin/sh\necho "a test reached the real gh: gh $*" >&2\nexit 97\n'  # the guard's gh: it refuses every call
+GUARD_DIR = pytest.StashKey[Path]()  # the guard's directory: made by pytest_configure, removed by pytest_unconfigure
+
+
+def pytest_configure(config):
+    """The credential guard, before any test module is imported, whoever started pytest (a developer, check_local.py,
+    mutate.py, CI): remove CREDENTIAL_VARIABLES; give gh an empty config directory, so no login; point the AWS chain's
+    config, credentials and boto config files at files that do not exist and turn its instance metadata lookup off; and,
+    on POSIX, put the guard's gh first on PATH. A test that sets a variable with monkeypatch, puts a stand-in gh first
+    on PATH or names one with --gh still gets its own."""
+    import tempfile
+
+    guard_dir = Path(tempfile.mkdtemp(prefix="mara-credential-guard-"))
+    config.stash[GUARD_DIR] = guard_dir
+    for name in CREDENTIAL_VARIABLES:
+        os.environ.pop(name, None)
+    (guard_dir / "gh-config").mkdir()
+    os.environ["GH_CONFIG_DIR"] = str(guard_dir / "gh-config")
+    os.environ["AWS_CONFIG_FILE"] = str(guard_dir / "aws" / "config")
+    os.environ["AWS_SHARED_CREDENTIALS_FILE"] = str(guard_dir / "aws" / "credentials")
+    os.environ["BOTO_CONFIG"] = str(guard_dir / "boto")
+    os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+    if sys.platform != "win32":
+        (guard_dir / "bin").mkdir()
+        (guard_dir / "bin" / "gh").write_text(GUARD_GH, encoding="utf-8")
+        (guard_dir / "bin" / "gh").chmod(0o755)
+        os.environ["PATH"] = str(guard_dir / "bin") + os.pathsep + os.environ.get("PATH", "")
+
+
+def pytest_unconfigure(config):
+    import shutil
+
+    guard_dir = config.stash.get(GUARD_DIR, None)
+    if guard_dir is not None:
+        shutil.rmtree(guard_dir, ignore_errors=True)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def isolate_mara_tools_dir(tmp_path_factory):

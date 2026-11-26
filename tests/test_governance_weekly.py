@@ -27,13 +27,8 @@ def _report(ws: Path, pull: str, head: str, generated_at: object, tokens_in: int
 
 
 def _weekly(tmp_path: Path, monkeypatch, *args: str) -> int:
-    """main with --gh a stand-in that refuses every call, unless the test gives its own: no run reaches the real gh."""
+    """main for the week of 2026-11-26; with no --gh of the test's, the gh it meets is the credential guard's."""
     monkeypatch.setenv("MARA_HOME", str(tmp_path / "ws"))
-    if "--gh" not in args:
-        refusing = tmp_path / "no-gh"
-        refusing.write_text('#!/bin/sh\necho "stand-in gh: no call expected: $*" >&2\nexit 1\n', encoding="utf-8")
-        refusing.chmod(0o755)
-        args = ("--gh", str(refusing), *args)
     return governance_weekly.main(["--repo", REPO, "--config", str(CONFIG), "--date", "2026-11-26", *args])
 
 

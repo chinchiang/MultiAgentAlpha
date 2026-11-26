@@ -26,12 +26,12 @@ A change that becomes a pull request goes through these steps in order. Each end
    list loads and every pointer of `tests/SEAMS.md` names something that is there; and semgrep, which scans the files as
    they are, untracked ones included. A finding costs an edit now, and a rebuild of the commits at step 4. mypy, the
    whole suite and gitleaks wait for step 4.
-   Then run each mutation list the change adds or edits once, `scripts/mutate.py <list> --focused-only` without
-   `AWS_PROFILE` and `GEMINI_API_KEY`, one after the other and after `--only worktree` has ended (a mutation edits the
-   files the checks read), and read each `CAUGHT` line as step 4 says: where it failed, and its mark. A `caught_by` that
-   another test beats, or a name that is not the fault its `new` makes, is fixed now, before the review, and not by a
-   rebuild after step 4. The lists the change touches but does not add or edit wait for step 4. A list refused for the
-   Python it needs (`needs Python <specifier>`, exit 2) runs with an interpreter it takes, as step 4 says.
+   Then run each mutation list the change adds or edits once, `scripts/mutate.py <list> --focused-only`, one after the
+   other and after `--only worktree` has ended (a mutation edits the files the checks read), and read each `CAUGHT` line
+   as step 4 says: where it failed, and its mark. A `caught_by` that another test beats, or a name that is not the fault
+   its `new` makes, is fixed now, before the review, and not by a rebuild after step 4. The lists the change touches but
+   does not add or edit wait for step 4. A list refused for the Python it needs (`needs Python <specifier>`, exit 2)
+   runs with an interpreter it takes, as step 4 says.
    Review that tree before the first commit, so a finding costs an edit and not a rebuild: `mattpocock-skills:code-review`
    with `origin/main` as the fixed point, where the sub-agents read `git -C <main checkout> diff origin/main` (two
    dots: the skill's three-dot form reads commits only; run `git add -N <new file>` first, or the diff leaves new files
@@ -82,18 +82,19 @@ A change that becomes a pull request goes through these steps in order. Each end
    the review was not run; each mutation of the lists the change adds or edits was caught by its `caught_by` at the
    assertion its name gives in the run above; every finding of the review is fixed or answered in the body; and the
    work is committed.
-4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it; then
-   `scripts/mutate.py --base origin/main`, without `AWS_PROFILE` and `GEMINI_API_KEY`. It runs, focused and one after
-   the other, each mutation list the change (committed or not, untracked files included) touches: the list itself, the
-   file of one of its mutations, or one of its focused test files (`--lists-for origin/main` prints them and runs
-   nothing). It ends on a `summary`: each list's last line, then the marked catches, the catches with no `at:` and
-   the `LEFT` lines of all of them. Re-run one list alone with `scripts/mutate.py <list> --focused-only`. A list whose
-   `requires-python` this interpreter does not take is a `SKIP` line of the summary: run it alone with an interpreter
-   it takes (`>=3.13`: a venv of `tools/dev-requirements-py313.txt`, as CI's 3.13 job installs). A mutation
-   edits `src/`, so never run two of these at once. Done when every check `check_local.py` runs is `ok`, its osv scans
-   included when `AGENTS.md` asks for them, and every mutation of those lists is caught for the reason its name says.
-   Of every other mutation of those lists, read each marked catch and each `LEFT` line the summary gathers: a test the
-   change adds or edits can catch an old mutation before its `caught_by` does.
+4. **Run the checks, one after the other.** `scripts/check_local.py` as `AGENTS.md` gives it; then `scripts/mutate.py
+   --base origin/main`, whose tests hold no credential whatever environment it is run in (`tests/SEAMS.md`, "The
+   credential guard"). It runs, focused and one after the other, each mutation list the change (committed or not,
+   untracked files included) touches: the list itself, the file of one of its mutations, or one of its focused test
+   files (`--lists-for origin/main` prints them and runs nothing). It ends on a `summary`: each list's last line, then
+   the marked catches, the catches with no `at:` and the `LEFT` lines of all of them. Re-run one list alone with
+   `scripts/mutate.py <list> --focused-only`. A list whose `requires-python` this interpreter does not take is a `SKIP`
+   line of the summary: run it alone with an interpreter it takes (`>=3.13`: a venv of
+   `tools/dev-requirements-py313.txt`, as CI's 3.13 job installs). A mutation edits `src/`, so never run two of these at
+   once. Done when every check `check_local.py` runs is `ok`, its osv scans included when `AGENTS.md` asks for them, and
+   every mutation of those lists is caught for the reason its name says. Of every other mutation of those lists, read
+   each marked catch and each `LEFT` line the summary gathers: a test the change adds or edits can catch an old mutation
+   before its `caught_by` does.
    For the mutations the change adds or edits, read where the test that caught each failed (third paragraph of "A
    behaviour change commits its mutation list" in `CODING_STANDARDS.md`): it fails at the assertion its name gives, not
    at a `TypeError`, an import error or an earlier assertion. `mutate.py` prints it on each `CAUGHT` line, `at:` and the
