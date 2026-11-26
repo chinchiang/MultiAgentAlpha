@@ -342,6 +342,13 @@ def rollout_status(cfg: MaraConfig, root: Path | str, today: dt.date) -> Rollout
     return RolloutStatus(not problems, r.phase, days, due, tuple(problems), tuple(notes))
 
 
+def report_tokens(report: dict) -> tuple[int, int]:
+    """The input and the output tokens a report.json counts in its bias_audit, which must be a mapping when present (a
+    caller checks it); 0 for a count it does not hold or that holds no number (mara.audit.read)."""
+    audit = report.get("bias_audit", {})
+    return int(read(audit, Count.INPUT_TOKENS)), int(read(audit, Count.OUTPUT_TOKENS))
+
+
 def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None = None,
                      training: TrainingRequirement | None = None) -> dict:
     """Aggregate review outputs (report.json files) into the shadow-phase baseline the report asks for:
@@ -365,9 +372,9 @@ def baseline_metrics(report_paths: list[Path], decisions_dir: Path | str | None 
             outcomes[ConsensusResult.model_validate(c).jury_outcome] += 1
         queued += len(r.get("human_queue", []))
         blocked += int(not r.get("gate_passed", False))  # a report that does not say counts as blocked (fail closed)
-        audit = r.get("bias_audit", {})
-        tokens_in += int(read(audit, Count.INPUT_TOKENS))
-        tokens_out += int(read(audit, Count.OUTPUT_TOKENS))
+        r_in, r_out = report_tokens(r)
+        tokens_in += r_in
+        tokens_out += r_out
     decisions = {"true_positive": 0, "false_positive": 0}
     excluded: dict[str, set[str]] = {}
     if decisions_dir:

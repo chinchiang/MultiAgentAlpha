@@ -301,12 +301,16 @@ The repository a human queue's tickets are filed in (`scripts/human_queue_issues
 _Avoid_: tracker, issue repository, private repository (what it is, not what it is for)
 
 **Sync record**:
-What the Pilot poller writes in the MARA workspace each time it runs the decision sync (`pilot/sync.json`): when, against which Ticket repository, and how the sync exited. A dry run writes none.
+What the Pilot poller writes in the MARA workspace each time it runs the decision sync (`pilot/sync.json`): when, against which Ticket repository, and how the sync exited. A dry run writes none. Governance check G-11 reads it as a runner of the sync.
 _Avoid_: sync log, last sync
 
 **Pilot poller**:
 `scripts/pilot_poller.py`, run from cron on that host: it reviews each head of the Pilot repository's pull requests once, files its human queue in the Ticket repository, withdraws the tickets a later head makes moot, syncs the decisions and commits the MARA workspace. What one run does is in its docstring.
 _Avoid_: watcher, bot, CI job (no workflow runs it)
+
+**Weekly governance check**:
+`scripts/governance_weekly.py`, run from cron on the host of the Pilot poller: the governance check (G-1 to G-13) with the host's checkout of this repository as its root, the host's config and the MARA workspace, which holds the evidence of G-10, G-11 and G-13, plus the week's tokens of the poller's reviews, posted to the tracking issue of the Ticket repository. It is the record of those three items; the governance check of this repository's own CI (`.github/workflows/governance.yml`) cannot see their evidence. What one run does is in its docstring.
+_Avoid_: weekly report, private check, governance job (no workflow runs it)
 
 ## Exports
 

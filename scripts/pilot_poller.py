@@ -69,7 +69,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 from human_queue_issues import DECISION_LABELS, MARKER_RE, queue_settings  # noqa: E402
 
-from mara.workspace import Workspace, resolve  # noqa: E402
+from mara.workspace import PILOT_REVIEWS, SYNC_RECORD, Workspace, resolve  # noqa: E402
 
 TICKET_SCRIPT = ROOT / "scripts" / "human_queue_issues.py"
 LOCK = ".pilot-poller.lock"  # in the clones directory: never committed
@@ -261,7 +261,7 @@ class Poller:
     def review(self, number: int, head: str, merge_commit: str | None) -> tuple[Path, int] | None:
         """Review `head` of pull request `number`: its output directory and exit code, or None when it wrote no
         report.json."""
-        out = self.root / "pilot" / "reviews" / str(number) / head
+        out = self.root / PILOT_REVIEWS / str(number) / head
         shutil.rmtree(out, ignore_errors=True)  # a report found there is this review's
         clone = self.clones / str(number)
         if not (clone / ".git").is_dir():
@@ -309,7 +309,7 @@ class Poller:
         if pull.get("filed") != head and self.dry_run:
             print(f"would file the queue of pull request #{number} at {head}")
         elif pull.get("filed") != head:
-            queue = self.root / "pilot" / "reviews" / str(number) / head / "human_queue.json"
+            queue = self.root / PILOT_REVIEWS / str(number) / head / "human_queue.json"
             if queue.is_file() and run([sys.executable, str(TICKET_SCRIPT), "--queue", str(queue), "--repo", self.a.tickets,
                                         "--config", str(self.a.config)], self.env) != 0:
                 print(f"ERROR: filing the queue of pull request #{number} at {head} failed; the next run files it",
@@ -381,7 +381,7 @@ def poll(a: argparse.Namespace, root: Path, clones: Path) -> int:
                       "--sync-decisions"], poller.env)
         record = {"at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"), "repo": a.tickets, "exit": synced}
         (root / "pilot").mkdir(parents=True, exist_ok=True)
-        (root / "pilot" / "sync.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+        (root / SYNC_RECORD).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
         if synced != 0:
             print(f"ERROR: the decision sync exited {synced}", file=sys.stderr)
             status = 1

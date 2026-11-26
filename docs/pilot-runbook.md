@@ -1,4 +1,4 @@
-# Shadow-phase runbook: the Pilot poller (G-10, G-11)
+# Shadow-phase runbook: the Pilot poller and the weekly check (G-10, G-11, G-13)
 
 How a host runs the shadow phase's live reviews of one **Pilot repository** with the **Pilot poller**
 (`scripts/pilot_poller.py`; the terms in bold are in `GLOSSARY.md`). What the poller does in one run, which tickets it
@@ -84,13 +84,35 @@ its state, so it is never reviewed.
 
   Without `--out` it would write under `docs/`, which is published. Then `rollout.baseline_report` in
   `config/local/mara.yaml` names that report by its absolute path (`scripts/rollout_phase.py` looks for a relative one
-  below this checkout, not the workspace), and `scripts/rollout_phase.py --config config/local/mara.yaml advance --to
-  advisory` says whether the move can be made.
+  below this checkout, governance check G-10 below the workspace, so only an absolute path names one file for both),
+  and `scripts/rollout_phase.py --config config/local/mara.yaml advance --to advisory` says whether the move can be
+  made.
 
-## 6. Pausing
+## 6. The weekly check
+
+G-10, G-11 and G-13 are judged by the **Weekly governance check** (`scripts/governance_weekly.py`), not by this
+repository's own check (#22): their evidence (the baseline report, the backlog, the decision records, the **Sync
+record**, the training register) is in the workspace, so #22 keeps showing them failing. What it posts, how it counts
+the week's tokens and its exit codes are in its docstring.
+
+First a dry run, which prints the comment and posts nothing:
+
+```bash
+MARA_HOME=<workspace> .venv/bin/python scripts/governance_weekly.py --repo <owner/tickets> \
+    --config config/local/mara.yaml --dry-run
+```
+
+Then the same command without `--dry-run` from cron, once a week, in the checkout, posting to the tracking issue of the
+Ticket repository (labelled `governance-check`, created when none is open):
+
+```cron
+0 7 * * 1 cd <checkout> && GH_TOKEN="$(<mint a token>)" MARA_HOME=<workspace> .venv/bin/python scripts/governance_weekly.py --repo <owner/tickets> --config config/local/mara.yaml >> <log file>
+```
+
+## 7. Pausing
 
 Polling is paused (the cron line commented out) and the reason written on the tracking issue when:
 
 - a finding or code of the Pilot repository shows up outside the Ticket repository;
 - a policy refuses the config at load, P5 (data residency) above all;
-- a week's tokens exceed the threshold the operator sets after the first two weeks.
+- a week's tokens, on the weekly check's comment, exceed the threshold the operator sets after the first two weeks.

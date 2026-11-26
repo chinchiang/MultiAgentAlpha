@@ -5,6 +5,12 @@ configuration. A check is PASS or FAIL when it can be decided from files alone, 
 it cannot; a MANUAL row says exactly which evidence a human has to produce. Every row carries
 the evidence it looked at and the standard clauses from the report's section 25.4 table.
 
+G-10, G-11 and G-13 read their evidence from the MARA workspace (MARA_HOME, read once in main),
+which is this repository in its own CI: the baseline report, the backlog, the decision records,
+the Pilot poller's Sync record and the training register (GLOSSARY.md). The curriculum, the
+config and the workflow files are the root's. scripts/governance_weekly.py, the Weekly
+governance check, runs these checks over the workspace of the Pilot poller's host.
+
 Exit status is 1 when any check FAILS (MANUAL rows never fail the run).
 
   python scripts/governance_check.py --out docs/governance-check-<date>.md
@@ -31,7 +37,7 @@ from actions_inventory import inventory_workflow  # noqa: E402
 from mara.evidence import LIVE, MAX_AGE_DAYS, Future, Header, MissingFamilies, NotLive, Stale, standing  # noqa: E402
 from mara.tools import pins  # noqa: E402
 from mara.tools.runner import tools_dir  # noqa: E402
-from mara.workspace import Workspace  # noqa: E402
+from mara.workspace import SYNC_RECORD, Workspace  # noqa: E402
 
 PASS, FAIL, MANUAL = "PASS", "FAIL", "MANUAL"
 STATUS_ZH = {PASS: "通過", FAIL: "失敗", MANUAL: "需人工"}
@@ -552,12 +558,15 @@ def check_g9(root: Path, today: dt.date, config_path: Path | None = None, worksp
 
 
 def check_g10(root: Path, config_path: Path, today: dt.date | None = None, workspace: Workspace | None = None) -> CheckResult:
+    """The rollout phase of the config, loaded against the workspace (govdocs.rollout_status), its baseline report a
+    relative path below the workspace's root."""
     from mara.config import load_config
     from mara.govdocs import rollout_status
 
     today = today or dt.date.today()
-    cfg = load_config(config_path, _workspace(workspace))
-    st = rollout_status(cfg, root, today)
+    ws = _workspace(workspace)
+    cfg = load_config(config_path, ws)
+    st = rollout_status(cfg, ws.root, today)  # the baseline report is the workspace's
     ev = [f"`rollout.phase: {st.phase}`"]
     if st.days_in_phase is not None:
         ev.append(f"自 {cfg.rollout.started_on} 起 {st.days_in_phase} 天" + (f"（預定 {st.due} 前進入下一階段）" if st.due else ""))
@@ -588,31 +597,73 @@ def _sync_steps(root: Path) -> list[str]:
     return sorted(set(found))
 
 
-def check_g11(root: Path, config_path: Path) -> CheckResult:
-    """Tickets and decisions, as evidence rather than words: the config files GitHub issues, a workflow step runs the
-    ticket sync, and that sync has run for real - a backlog it wrote or a decision it recorded in calib/decisions/.
-    A workflow merely naming the human queue, the job staying in dry-run, used to pass."""
+REPO_NAME = re.compile(r"[^/\s]+/[^/\s]+")
+
+
+def aware_time(value: object) -> dt.datetime | None:
+    """`value` read as an ISO 8601 time with a time zone; None when it is not a string of one."""
+    try:
+        when = dt.datetime.fromisoformat(value) if isinstance(value, str) else None
+    except ValueError:
+        return None
+    return when if when is not None and when.tzinfo is not None else None
+
+
+def _sync_record(ws: Path) -> dict | str | None:
+    """The Pilot poller's Sync record below the workspace `ws` (mara.workspace.SYNC_RECORD), read for the three parts the
+    poller writes: `at` (ISO 8601 with a time zone), `repo` (owner/repo) and `exit` (an integer). The record when it is
+    of that shape; what is wrong with it when it is not; None when there is none."""
+    path = ws / SYNC_RECORD
+    if not path.is_file():
+        return None
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as e:
+        return f"無法讀取（{e}）"
+    if not isinstance(record, dict):
+        return "不是 JSON 物件"
+    at, repo, code = record.get("at"), record.get("repo"), record.get("exit")
+    if aware_time(at) is None:
+        return f"`at` {at!r} 不是帶時區的 ISO 8601 時間"
+    if not isinstance(repo, str) or not REPO_NAME.fullmatch(repo):
+        return f"`repo` {repo!r} 不是 owner/repo"
+    if not isinstance(code, int) or isinstance(code, bool):
+        return f"`exit` {code!r} 不是整數"
+    return record
+
+
+def check_g11(root: Path, config_path: Path, workspace: Workspace | None = None) -> CheckResult:
+    """Tickets and decisions, as evidence rather than words: the config files GitHub issues, the ticket sync has a
+    runner - a workflow step of the root that runs it, or the Pilot poller's Sync record in the workspace, whatever the
+    sync's exit (a dry run writes none) - and that sync has run for real - a backlog it wrote or a decision it recorded
+    in the workspace's calib/decisions/. A workflow that only names the human queue is no runner."""
     from mara.config import HumanQueueConfig
 
     hq = _block(config_path, "human_queue", HumanQueueConfig)
+    ws = _workspace(workspace).root
     have, missing = [], []
     if hq.enabled and hq.ticketing == "github_issues":
         have.append("設定以 GitHub issue 開單（`human_queue.ticketing: github_issues`）")
     else:
         missing.append("設定的 `human_queue` 要啟用並以 `ticketing: github_issues` 開單")
     steps = _sync_steps(root)
+    record = _sync_record(ws)
     if steps:
         have.append("工單同步步驟：" + "、".join(f"`{s}`" for s in steps))
-    else:
-        missing.append("workflow 要有執行 `scripts/human_queue_issues.py --sync-decisions` 的步驟")
-    decisions_dir = root / "calib" / "decisions"
-    backlog = root / hq.backlog_file
+    if isinstance(record, dict):
+        have.append(f"Pilot poller 的 Sync record `{SYNC_RECORD.as_posix()}`：{record['at']} 對 {record['repo']} 同步，"
+                    f"exit {record['exit']}")
+    if not steps and not isinstance(record, dict):
+        missing.append("workflow 要有執行 `scripts/human_queue_issues.py --sync-decisions` 的步驟，或工作區要有 Pilot poller 的 "
+                       f"Sync record `{SYNC_RECORD.as_posix()}`" + (f"（現有的這份不採用：{record}）" if record else ""))
+    decisions_dir = ws / "calib" / "decisions"
+    backlog = ws / hq.backlog_file
     decisions = [p for p in decisions_dir.glob("*.json") if p.resolve() != backlog.resolve()] if decisions_dir.is_dir() else []
     if backlog.is_file() or decisions:
         have.append(f"同步確實執行過：{'backlog 已寫入' if backlog.is_file() else ''}{'、' if backlog.is_file() and decisions else ''}"
                     f"{f'{len(decisions)} 筆裁決已回寫' if decisions else ''}")
     else:
-        missing.append(f"同步要實際執行過（不是 dry-run）：`{_shown(backlog, root)}` 或 `calib/decisions/` 的裁決紀錄。"
+        missing.append(f"同步要實際執行過（不是 dry-run）：`{_shown(backlog, ws)}` 或 `calib/decisions/` 的裁決紀錄。"
                        "CI 的 human-queue job 在儲存庫變數 `MARA_HUMAN_QUEUE_ISSUES=true` 前只 dry-run；裁決由負責人鏡像回 repo")
     if not missing:
         return CheckResult("G-11", PASS, "；".join(have))
@@ -657,13 +708,16 @@ def check_g12(root: Path, config_path: Path) -> CheckResult:
                        f"`src/mara/report/psirt_out.py` 在每次 review 產出 `out/psirt-notifications.json`")
 
 
-def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> CheckResult:
+def check_g13(root: Path, today: dt.date, config_path: Path | None = None, workspace: Workspace | None = None) -> CheckResult:
+    """Training: the root's curriculum, and in the workspace's training register a valid record for each role the config
+    requires; the workspace's decisions whose adjudicator held no valid record on the decision day are named."""
     from mara.training import ROLES, is_trained, load_register
 
     need = ("需要：每個角色（developer、security、adjudicator）至少一人在一年內完成 `training/curriculum.md` 的訓練並以 "
             "`scripts/training_register.py assess`／`add` 寫入 `training/records.yaml`；人工裁決者必須有有效的 adjudicator 紀錄，否則其裁決不進校準")
+    ws = _workspace(workspace).root
     curriculum = root / "training" / "curriculum.md"
-    register_path = root / "training" / "records.yaml"
+    register_path = ws / "training" / "records.yaml"
     from mara.config import TrainingConfig
 
     tr = _block(config_path, "training", TrainingConfig) if config_path else TrainingConfig()
@@ -693,7 +747,7 @@ def check_g13(root: Path, today: dt.date, config_path: Path | None = None) -> Ch
     # ticket but are not ground truth until a trained adjudicator rules again (docs/adr/0002-usable-decisions.md)
     from mara.decisions import load as load_decisions
 
-    waiting = [d for d in load_decisions(root / "calib" / "decisions").decisions
+    waiting = [d for d in load_decisions(ws / "calib" / "decisions").decisions
                if not is_trained(reg, d.decided_by, "adjudicator", d.day)]
     if waiting:
         ev.append(f"{len(waiting)} 筆裁決因裁決者在裁決當天沒有有效的 adjudicator 紀錄而不進校準，需由受訓者重新裁決："
@@ -710,25 +764,29 @@ def run_all(root: Path, config_path: Path, today: dt.date | None = None, workspa
         check_g1(root, today), check_g2(root, config_path, ws), check_g3(root, config_path, ws), check_g4(root, config_path, today, ws),
         check_g5(root), check_g6(root), check_g7(root, config_path, ws), check_g8(root, today, config_path, ws),
         check_g9(root, today, config_path, ws), check_g10(root, config_path, today, ws),
-        check_g11(root, config_path), check_g12(root, config_path), check_g13(root, today, config_path),
+        check_g11(root, config_path, ws), check_g12(root, config_path), check_g13(root, today, config_path, ws),
     ]
 
 
 # ----------------------------------------------------------------------------- output
 
 
-def render(results: list[CheckResult], *, root: Path, config_path: Path, date: str) -> str:
+def render(results: list[CheckResult], *, root: Path, config_path: Path, date: str,
+           producer: str = "scripts/governance_check.py", fails_the_run: bool = True) -> str:
+    """The results as markdown: a table and a summary, naming the script that produced it (`producer`) and, when a
+    failed check makes that script exit non-zero (`fails_the_run`), saying so and giving the exit code."""
     counts = {s: sum(r.status == s for r in results) for s in (PASS, FAIL, MANUAL)}
     L = [f"# 治理合規檢查（{date}）", "",
-         "依附錄 E 的 prompt 8，對報告第十部治理建議 G-1 到 G-13 做可自動判定的檢查。本檔由 `scripts/governance_check.py` 產生；"
-         "「需人工」表示無法從檔案判定，該列的證據欄寫明需要什麼證據。任一「失敗」使腳本以非零結束。", "",
+         f"依附錄 E 的 prompt 8，對報告第十部治理建議 G-1 到 G-13 做可自動判定的檢查。本檔由 `{producer}` 產生；"
+         "「需人工」表示無法從檔案判定，該列的證據欄寫明需要什麼證據。" + ("任一「失敗」使腳本以非零結束。" if fails_the_run else ""), "",
          f"- 掃描根目錄：`{root.name}/`；設定檔：`{_shown(config_path, root)}`；報告與紀錄的新鮮度門檻：{MAX_AGE_DAYS} 天。",
          "- 標準條文取自報告第 25.4 節對應總表；標 * 者的 ISO 控制項標題尚未對照正本（附錄 B）。", "",
          "| 建議 | 內容 | 狀態 | 證據 | 對應標準條文 |", "|---|---|---|---|---|"]
     for r in results:
         evidence = r.evidence.replace("|", "\\|")
         L.append(f"| {r.id} | {r.title} | **{STATUS_ZH[r.status]}** | {evidence} | {r.standards} |")
-    L += ["", f"**摘要**：通過 {counts[PASS]}、失敗 {counts[FAIL]}、需人工 {counts[MANUAL]}；結束碼 {1 if counts[FAIL] else 0}。", ""]
+    exit_code = f"；結束碼 {1 if counts[FAIL] else 0}" if fails_the_run else ""
+    L += ["", f"**摘要**：通過 {counts[PASS]}、失敗 {counts[FAIL]}、需人工 {counts[MANUAL]}{exit_code}。", ""]
     return "\n".join(L)
 
 

@@ -44,6 +44,12 @@ class Workspace:
         return cls(base, tools, (base / cache).resolve() if cache else None)
 
 
+# what the Pilot poller (scripts/pilot_poller.py) writes below the workspace that others read: its reviews, each in
+# <pull request>/<head>/, read by scripts/governance_weekly.py, and its Sync record, read by governance check G-11
+PILOT_REVIEWS = Path("pilot") / "reviews"
+SYNC_RECORD = Path("pilot") / "sync.json"
+
+
 class WorkspaceInsideTarget(ValueError):
     """A MARA trust anchor resolves inside the repository under review."""
 

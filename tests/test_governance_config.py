@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from mara import mlbom
+from mara.workspace import Workspace
 from tests.test_ml_bom import _entry, _weights
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,8 +84,8 @@ def test_g13_asks_for_the_roles_the_config_requires_or_by_default_every_role(tmp
     import datetime as dt
 
     today = dt.date(2026, 10, 1)
-    assert gc.check_g13(root, today, _config(root, training={"required_roles": ["developer"]})).status == gc.PASS
-    by_default = gc.check_g13(root, today, _config(root))
+    assert gc.check_g13(root, today, _config(root, training={"required_roles": ["developer"]}), workspace=Workspace(root)).status == gc.PASS
+    by_default = gc.check_g13(root, today, _config(root), workspace=Workspace(root))
     assert by_default.status == gc.FAIL and "security, adjudicator" in by_default.evidence
 
 
