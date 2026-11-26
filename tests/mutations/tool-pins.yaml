@@ -18,11 +18,13 @@ mutations:
   - name: a lock that is not a mapping is read as one
     file: src/mara/tools/pins.py
     caught_by: 'tests/test_tool_pins.py::test_a_missing_unreadable_or_misshapen_lock_pins_nothing[- a list\n]'
+    error: AttributeError
     old: '    return doc if isinstance(doc, dict) else {}'
     new: '    return doc or {}'
-  - name: a tool's entry that is not a mapping is kept
+  - name: a tool's entry that is not a mapping is read as one
     file: src/mara/tools/pins.py
     caught_by: 'tests/test_tool_pins.py::test_a_missing_unreadable_or_misshapen_lock_pins_nothing[tools:\n  gitleaks: 8.24.3\n]'
+    error: AttributeError
     old: '    return {name: spec for name, spec in tools.items() if isinstance(spec, dict)} if isinstance(tools, dict) else {}'
     new: '    return dict(tools) if isinstance(tools, dict) else {}'
   - name: the workbench shows an unverified install as ok

@@ -4,11 +4,13 @@ mutations:
   - name: the ballot round judges a finding without finders as found by no family
     file: src/mara/ballot_round.py
     caught_by: tests/test_finder_families.py::test_the_ballot_round_refuses_a_finding_without_finders_before_asking_any_model
+    error: Failed
     old: "    finders = finders_of(findings)\n    rounds"
     new: "    finders = {f.id: set(f.finder_families) for f in findings}\n    rounds"
   - name: the jury scores a finding without finders as found by no family
     file: src/mara/scoring/jury.py
     caught_by: tests/test_finder_families.py::test_the_jury_refuses_to_score_a_finding_without_finders
+    error: Failed
     old: "    finders = finders_of(findings)\n    by_finding"
     new: "    finders = {f.id: set(f.finder_families) for f in findings}\n    by_finding"
   - name: the finders are read from the source family, not the finder families

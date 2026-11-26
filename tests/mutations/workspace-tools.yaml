@@ -38,11 +38,13 @@ mutations:
 - name: check_outside judges the environment's tool directory
   file: src/mara/workspace.py
   caught_by: 'tests/test_workspace_anchors.py::test_check_outside_refuses_a_target_that_holds_an_anchor_of_the_workspace_it_is_given[tools_dir-tool directory]'
+  error: Failed
   old: '"the tool directory": workspace.tools_dir,'
   new: '"the tool directory": Workspace.from_env().tools_dir,'
 - name: check_outside judges the environment's trivy cache
   file: src/mara/workspace.py
   caught_by: 'tests/test_workspace_anchors.py::test_check_outside_refuses_a_target_that_holds_an_anchor_of_the_workspace_it_is_given[trivy_cache-trivy]'
+  error: Failed
   old: '"the trivy database": workspace.trivy_cache, **(extra or {})}'
   new: '"the trivy database": Workspace.from_env().trivy_cache, **(extra or {})}'
 - name: tools_dir ignores the workspace it is given
@@ -121,7 +123,7 @@ mutations:
   file: src/mara/tools/csp_eval.py
   caught_by: tests/test_tool_env.py::test_run_alls_csp_evaluator_step_uses_the_driver_of_the_workspace_given_not_of_MARA_TOOLS_DIR
   old: missing under {tools_dir(workspace=workspace)}"
-  new: missing under {tools_dir(workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env())}"
+  new: missing under {tools_dir(workspace=__import__('mara.workspace', fromlist=['Workspace']).Workspace.from_env())}"
 - name: the rules directory is below the environment's tool directory
   file: src/mara/tools/semgrep_rules.py
   caught_by: tests/test_tool_env.py::test_the_semgrep_rules_directory_is_below_the_tool_directory_of_the_workspace_given_not_of_MARA_TOOLS_DIR
@@ -130,6 +132,7 @@ mutations:
 - name: the installed rules are read from the environment's manifest
   file: src/mara/tools/semgrep_rules.py
   caught_by: tests/test_tool_env.py::test_run_alls_semgrep_scan_uses_the_rules_of_the_workspace_given_not_of_MARA_TOOLS_DIR
+  error: ValueError
   old: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=workspace) or {}'
   new: '    entry = installed_manifest_entry(RULES_DIR_NAME, workspace=__import__("mara.workspace", fromlist=["Workspace"]).Workspace.from_env()) or {}'
 - name: the page lists the tools of the environment's root, not of the root it lists
@@ -149,9 +152,10 @@ mutations:
   new: '        "trivy_db": trivy(workspace=Workspace.from_env()),'
 - name: check_paths judges the environment's workspace
   file: src/mara/invocation.py
-  caught_by: tests/test_panel.py::test_characterization_a_run_record_holds_each_model_with_its_host_and_key_name_and_the_five_roles
+  caught_by: tests/test_invocation_checks.py::test_the_paths_are_refused_when_the_workspace_they_are_checked_against_lies_inside_the_target_though_MARA_HOME_does_not
+  error: Failed
   old: '                      workspace=Workspace.from_env(root=root))'
-  new: '                      )'
+  new: '                      workspace=Workspace.from_env())'
 - name: from_env puts a relative MARA_TRIVY_CACHE_DIR below the working directory
   file: src/mara/workspace.py
   caught_by: tests/test_workspace.py::test_a_relative_MARA_TRIVY_CACHE_DIR_is_below_the_root_not_the_working_directory
@@ -195,5 +199,6 @@ mutations:
 - name: the command line does not hand the pipeline the root it admitted the invocation against
   file: src/mara/cli.py
   caught_by: tests/test_security_regressions.py::test_the_command_line_hands_the_pipeline_the_root_it_admitted_the_invocation_against
+  error: KeyError
   old: '                    root=admitted.root)'
   new: '                    )'
