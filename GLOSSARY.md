@@ -172,6 +172,10 @@ _Avoid_: needing a human (that outcome is undecided; a rejection under review is
 What the human queue does while its ticket backlog is over the limit: the agreement a finding needs to avoid a human rises, and tier C findings are left to the jury unless the config keeps them queued. Fewer findings reach a human, and those tier C ones block the gate instead. It never loosens on its own.
 _Avoid_: throttling, backpressure
 
+**Withdrawn ticket**:
+A ticket closed as "not planned" with no decision label: it asks nothing any more, as when the code it is about is gone. It is only logged; no decision comes of it, and its queue key is filed again only when every ticket of that key was withdrawn. Which tickets the Pilot poller withdraws is in its docstring.
+_Avoid_: closed ticket (a decided one is closed too), rejected ticket, cancelled
+
 **Final outcome**:
 A finding's outcome once human decisions are taken into account: the ruling of a usable decision where one exists, the jury outcome otherwise. It takes the jury outcome's values; a true-positive ruling makes it accepted, a false-positive ruling rejected.
 _Avoid_: override result
@@ -283,6 +287,26 @@ _Avoid_: evidence (see Tool evidence, evidence tier), report (a review's report)
 **Key variable**:
 The environment variable a model's API key is read from, named by `mara.credentials.key_env`: the model's `api_key_env`, else its provider's own default (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`), else none. An openai_compatible model with no `api_key_env` has none, never another vendor's. It names the variable and never reads it; the workbench shows the name and whether it is set, never the value.
 _Avoid_: credential (the workbench's word for the key variable or the AWS chain), secret, token
+
+**Rollout phase**:
+The stage of MARA's introduction the config names (`rollout.phase`): not_started, shadow, advisory or blocking, with the day it started. In the shadow phase a review runs on every pull request and its results go to the security team alone; in the advisory phase blocking findings are marked, not enforced. What each phase does to a blocked gate is the Gate's. Governance check G-10 reads it.
+_Avoid_: mode (see Provider mode), stage of the pilot, rollout step
+
+**Pilot repository**:
+The one repository whose pull requests the shadow phase reviews live, on a host that reaches the model endpoints. It is the target of those reviews, never a MARA workspace, and no ticket is filed in it: its developers do not see the shadow phase.
+_Avoid_: target (any directory a review reads), pilot project, test repository
+
+**Ticket repository**:
+The repository a human queue's tickets are filed in (`scripts/human_queue_issues.py --repo`). For the shadow phase it is a private repository open to the security team only, whose clone on the host is also the MARA workspace; never the Pilot repository.
+_Avoid_: tracker, issue repository, private repository (what it is, not what it is for)
+
+**Sync record**:
+What the Pilot poller writes in the MARA workspace each time it runs the decision sync (`pilot/sync.json`): when, against which Ticket repository, and how the sync exited. A dry run writes none.
+_Avoid_: sync log, last sync
+
+**Pilot poller**:
+`scripts/pilot_poller.py`, run from cron on that host: it reviews each head of the Pilot repository's pull requests once, files its human queue in the Ticket repository, withdraws the tickets a later head makes moot, syncs the decisions and commits the MARA workspace. What one run does is in its docstring.
+_Avoid_: watcher, bot, CI job (no workflow runs it)
 
 ## Exports
 
