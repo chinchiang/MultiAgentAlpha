@@ -1,0 +1,315 @@
+focused: [tests/test_pilot_poller.py]
+# the Pilot poller (scripts/pilot_poller.py): which pull requests and heads it reviews and how, what it files and
+# withdraws, how it settles a closed pull request and takes back a reopened one, what it syncs, records and commits,
+# what a dry run does and does not do, how one failure stays one, and the shapes it reads; each mutation breaks one
+mutations:
+  - name: drafts are reviewed
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_each_open_non_draft_pull_request_to_the_default_branch_is_reviewed_once_per_head
+    old: 'return default, [p for p in pulls if not p["draft"] and p["base"]["ref"] == default], unlisted, problems'
+    new: 'return default, [p for p in pulls if p["base"]["ref"] == default], unlisted, problems'
+  - name: pull requests to another base are reviewed
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_each_open_non_draft_pull_request_to_the_default_branch_is_reviewed_once_per_head
+    old: 'return default, [p for p in pulls if not p["draft"] and p["base"]["ref"] == default], unlisted, problems'
+    new: 'return default, [p for p in pulls if not p["draft"]], unlisted, problems'
+  - name: pull requests from forks are left out
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_pull_request_from_a_fork_is_reviewed_like_any_other
+    old: 'return default, [p for p in pulls if not p["draft"] and p["base"]["ref"] == default], unlisted, problems'
+    new: 'return default, [p for p in pulls if not p["draft"] and p["base"]["ref"] == default and "repo" not in p["head"]], unlisted, problems'
+  - name: a reviewed head is reviewed again by every run
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_each_open_non_draft_pull_request_to_the_default_branch_is_reviewed_once_per_head
+    old: '        ok, known = True, head in pull["heads"]'
+    new: '        ok, known = True, False'
+  - name: the default branch is reviewed instead of the head
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_each_open_non_draft_pull_request_to_the_default_branch_is_reviewed_once_per_head
+    old: '        git(clone, "checkout", "-q", "--detach", head)'
+    new: '        git(clone, "checkout", "-q", "--detach", "refs/pilot/base")'
+  - name: the review's base is the default branch's tip, not the merge base
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_review_is_incremental_against_the_merge_base_with_the_config_given_and_its_output_in_the_workspace
+    old: '        base = git(clone, "merge-base", head, "refs/pilot/base")'
+    new: '        base = git(clone, "rev-parse", "refs/pilot/base")'
+  - name: a head merged with a merge commit is reviewed against itself
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_pull_request_merged_with_a_merge_commit_is_reviewed_against_where_it_was_cut_from
+    old: '        if base == head and merge_commit:'
+    new: '        if False:'
+  - name: the review is not given the config
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_review_is_incremental_against_the_merge_base_with_the_config_given_and_its_output_in_the_workspace
+    old: '"review", str(clone), "--base", base, "--config", str(self.a.config),'
+    new: '"review", str(clone), "--base", base,'
+  - name: the review's output is put in the clones directory
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_review_is_incremental_against_the_merge_base_with_the_config_given_and_its_output_in_the_workspace
+    old: '        out = self.root / "pilot" / "reviews" / str(number) / head'
+    new: '        out = self.clones / "reviews" / str(number) / head'
+  - name: a workspace inside the clones is not refused
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_clones_and_workspace_that_hold_one_another_are_refused_with_exit_2_before_any_review
+    old: '    if clones.is_relative_to(root) or root.is_relative_to(clones):'
+    new: '    if clones.is_relative_to(root):'
+  - name: a review's queue is never filed
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_each_review_files_its_human_queue_in_the_ticket_repository_with_the_config_given
+    old: '        elif pull.get("filed") != head:'
+    new: '        elif False:'
+  - name: only the first head of a pull request is filed
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_new_head_withdraws_the_open_undecided_tickets_of_the_same_pull_requests_earlier_heads
+    old: '        elif pull.get("filed") != head:'
+    new: '        elif pull.get("filed") is None:'
+  - name: a filing is not given the Ticket repository
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_each_review_files_its_human_queue_in_the_ticket_repository_with_the_config_given
+    old: '"--queue", str(queue), "--repo", self.a.tickets,'
+    new: '"--queue", str(queue),'
+  - name: a filing is not given the config
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_each_review_files_its_human_queue_in_the_ticket_repository_with_the_config_given
+    old: '"--config", str(self.a.config)], self.env) != 0:'
+    new: '], self.env) != 0:'
+  - name: a review with no human queue is filed all the same
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_review_that_wrote_no_human_queue_files_nothing_and_the_run_goes_on
+    old: '            if queue.is_file() and run([sys.executable'
+    new: '            if run([sys.executable'
+  - name: a key the current head queues too is withdrawn
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_new_head_that_queues_the_same_key_keeps_its_ticket
+    old: '    return {k for h, rec in pull["heads"].items() if h != head for k in rec["keys"]} - keep'
+    new: '    return {k for h, rec in pull["heads"].items() if h != head for k in rec["keys"]}'
+  - name: every undecided ticket is withdrawn, not only the pull request's
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_new_head_withdraws_the_open_undecided_tickets_of_the_same_pull_requests_earlier_heads
+    old: '        for key in sorted(keys & undecided.keys(), key=undecided.__getitem__):'
+    new: '        for key in sorted(undecided.keys(), key=undecided.__getitem__):'
+  - name: a withdrawal is not closed as not planned
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_new_head_withdraws_the_open_undecided_tickets_of_the_same_pull_requests_earlier_heads
+    old: '"--repo", self.a.tickets, "--reason", "not planned")'
+    new: '"--repo", self.a.tickets)'
+  - name: a decided ticket of an earlier head is withdrawn too
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_new_head_withdraws_the_open_undecided_tickets_of_the_same_pull_requests_earlier_heads
+    old: '        if m and not {lab["name"] for lab in issue["labels"]} & DECISION_LABELS.keys():'
+    new: '        if m:'
+  - name: a failed filing still withdraws the earlier heads' tickets
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_the_earlier_heads_tickets_are_not_withdrawn_while_the_current_head_is_not_filed
+    old: |-
+      the next run files it",
+                            file=sys.stderr)
+                      return False
+    new: |-
+      the next run files it",
+                            file=sys.stderr)
+                      self.withdraw(number, withdrawals(pull, head))
+                      return False
+  - name: a failed filing leaves the run's exit 0
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_filing_that_fails_is_tried_again_by_the_next_run_without_reviewing_the_head_again
+    old: |-
+      the next run files it",
+                            file=sys.stderr)
+                      return False
+    new: |-
+      the next run files it",
+                            file=sys.stderr)
+                      return True
+  - name: a head whose filing failed is reviewed again
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_filing_that_fails_is_tried_again_by_the_next_run_without_reviewing_the_head_again
+    old: '        ok, known = True, head in pull["heads"]'
+    new: '        ok, known = True, head in pull["heads"] and pull.get("filed") == head'
+  - name: a review that wrote no report counts as reviewed
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_review_that_writes_no_report_leaves_its_head_unreviewed_for_the_next_run_and_the_run_exits_non_zero
+    old: '        return (out, code) if (out / "report.json").is_file() else None'
+    new: '        return (out, code)'
+  - name: a review that wrote no report leaves the run's exit 0
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_review_that_writes_no_report_leaves_its_head_unreviewed_for_the_next_run_and_the_run_exits_non_zero
+    old: |-
+      the next run tries it again",
+                            file=sys.stderr)
+                      return False
+    new: |-
+      the next run tries it again",
+                            file=sys.stderr)
+                      return True
+  - name: a review that completed with another exit than 0 is reviewed again
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_review_that_wrote_its_report_and_exited_non_zero_is_kept_and_the_run_exits_non_zero
+    old: '        return (out, code) if (out / "report.json").is_file() else None'
+    new: '        return (out, code) if code == 0 else None'
+  - name: a review that completed with another exit than 0 leaves the run's exit 0
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_review_that_wrote_its_report_and_exited_non_zero_is_kept_and_the_run_exits_non_zero
+    old: |-
+      completed with exit {code}", file=sys.stderr)
+                      ok = False
+    new: 'completed with exit {code}", file=sys.stderr)'
+  - name: a review whose human queue cannot be read is not kept
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_review_whose_human_queue_cannot_be_read_is_kept_and_its_filing_fails
+    old: '                keys, ok = [], False'
+    new: '                raise'
+  - name: a merged pull request's last head is left unreviewed
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_merged_pull_request_has_its_last_head_reviewed_and_filed_and_is_then_left_alone
+    old: 'kind = "merged" if p["merged"] else "unmerged"'
+    new: |-
+      kind = "merged" if p["merged"] else "unmerged"
+                      if kind == "merged":
+                          continue
+  - name: a settled pull request is read again by every run
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_merged_pull_request_has_its_last_head_reviewed_and_filed_and_is_then_left_alone
+    old: 'if int(n) not in listed and not state["pulls"][n].get("closed")]'
+    new: 'if int(n) not in listed]'
+  - name: a pull request closed unmerged withdraws nothing
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_pull_request_closed_unmerged_withdraws_every_undecided_ticket_of_its_heads_and_is_then_left_alone
+    old: '            self.withdraw(number, withdrawals(pull, None))'
+    new: '            pass'
+  - name: a reopened pull request's head is not filed again
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_pull_request_reopened_after_it_closed_unmerged_is_filed_again_and_withdraws_when_it_closes_again
+    old: |-
+      pull.pop("closed")
+                  pull.pop("filed", None)
+    new: 'pull.pop("closed")'
+  - name: a reopened pull request stays settled
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_pull_request_reopened_after_it_closed_unmerged_is_filed_again_and_withdraws_when_it_closes_again
+    old: |-
+      pull.pop("closed")
+                  pull.pop("filed", None)
+    new: 'pull.pop("filed", None)'
+  - name: a pull request that fails stops the others
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_pull_request_that_fails_fails_alone_and_the_others_and_the_sync_go_on
+    old: |-
+      print(f"ERROR: pull request #{number}: {e}", file=sys.stderr)
+                  ok = False
+    new: |-
+      print(f"ERROR: pull request #{number}: {e}", file=sys.stderr)
+                  ok = False
+                  status = 1
+                  break
+  - name: a listed pull request not of the shape read fails them all
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_listed_pull_request_not_of_the_shape_read_fails_alone
+    old: '            problems.append(f"pull requests of {pilot}: {problem}")'
+    new: '            raise PollError(f"pull requests of {pilot}: {problem}")'
+  - name: the decisions are never synced
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_run_syncs_the_decisions_once_and_records_the_sync_in_the_workspace
+    old: |-
+      synced = run([sys.executable, str(TICKET_SCRIPT), "--repo", a.tickets, "--config", str(a.config),
+                            "--sync-decisions"], poller.env)
+    new: 'synced = 0'
+  - name: the sync is not given the config
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_run_syncs_the_decisions_once_and_records_the_sync_in_the_workspace
+    old: '"--repo", a.tickets, "--config", str(a.config),'
+    new: '"--repo", a.tickets,'
+  - name: the Sync record names the Pilot repository
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_run_syncs_the_decisions_once_and_records_the_sync_in_the_workspace
+    old: '"repo": a.tickets, "exit": synced}'
+    new: '"repo": a.pilot, "exit": synced}'
+  - name: the Sync record's time has no time zone
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_run_syncs_the_decisions_once_and_records_the_sync_in_the_workspace
+    old: 'record = {"at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),'
+    new: 'record = {"at": dt.datetime.now().isoformat(timespec="seconds"),'
+  - name: the Sync record says 0 whatever the sync exited
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_sync_that_exits_2_is_recorded_and_the_run_exits_non_zero
+    old: '"repo": a.tickets, "exit": synced}'
+    new: '"repo": a.tickets, "exit": 0}'
+  - name: a sync that exits 2 leaves the run's exit 0
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_sync_that_exits_2_is_recorded_and_the_run_exits_non_zero
+    old: |-
+      print(f"ERROR: the decision sync exited {synced}", file=sys.stderr)
+                  status = 1
+    new: 'print(f"ERROR: the decision sync exited {synced}", file=sys.stderr)'
+  - name: a run goes on while another holds the lock
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_run_that_finds_another_run_going_exits_without_acting
+    old: '            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)'
+    new: '            pass'
+  - name: the commit takes in what else was staged in the workspace
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_the_commit_leaves_out_what_else_was_staged_in_the_workspace
+    old: '        "--", *present)'
+    new: '        )'
+  - name: the commit is not pushed
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_run_commits_and_pushes_what_it_wrote_in_the_workspace_and_nothing_else
+    old: '    git(root, "push", "-q", "origin", "HEAD")'
+    new: '    pass'
+  - name: a run that failed commits nothing
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_run_whose_sync_exits_2_still_commits_and_pushes_its_records
+    old: '            commit(root, [Path("pilot"),'
+    new: '            status or commit(root, [Path("pilot"),'
+  - name: a dry run syncs and writes the state
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_dry_run_lists_what_it_would_review_and_withdraw_and_does_none_of_it
+    old: '        return look_at_each(a, root, clones, load_state(root))[1]'
+    new: '        return poll(a, root, clones)'
+  - name: a dry run reviews
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_dry_run_lists_what_it_would_review_and_withdraw_and_does_none_of_it
+    old: '        if not known and self.dry_run:'
+    new: '        if False:'
+  - name: a dry run files
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_dry_run_lists_the_filing_and_withdrawals_of_a_head_reviewed_but_not_filed_and_of_a_closed_pull_request
+    old: '        if pull.get("filed") != head and self.dry_run:'
+    new: '        if False:'
+  - name: a dry run withdraws
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_dry_run_lists_what_it_would_review_and_withdraw_and_does_none_of_it
+    old: |-
+      if self.dry_run:
+                      print(f"would withdraw
+    new: |-
+      if False:
+                      print(f"would withdraw
+  - name: a dry run lists no withdrawal
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_dry_run_lists_what_it_would_review_and_withdraw_and_does_none_of_it
+    old: '                print(f"would withdraw ticket #{undecided[key]} (key {key}) of pull request #{number}{proviso}")'
+    new: '                pass'
+  - name: a head that is not a commit id is read
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_pull_request_not_of_the_shape_read_fails_the_run_before_any_review_and_the_sync_still_runs
+    old: '    if not isinstance(sha, str) or not COMMIT_ID.fullmatch(sha):'
+    new: '    if not isinstance(sha, str):'
+  - name: a pull request whose number is not an integer is read
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_pull_request_not_of_the_shape_read_fails_the_run_before_any_review_and_the_sync_still_runs
+    old: |-
+      number, base, head = p.get("number"), p.get("base"), p.get("head")
+          if not isinstance(number, int) or isinstance(number, bool):
+    new: |-
+      number, base, head = p.get("number"), p.get("base"), p.get("head")
+          if False:
+  - name: a ticket whose number is not an integer is read
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_ticket_not_of_the_shape_read_fails_its_pull_request_and_the_sync_still_runs
+    old: |-
+      number, labels = issue.get("number"), issue.get("labels")
+          if not isinstance(number, int) or isinstance(number, bool):
+    new: |-
+      number, labels = issue.get("number"), issue.get("labels")
+          if False:

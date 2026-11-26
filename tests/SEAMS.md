@@ -250,7 +250,7 @@ code that writes it, so it changes with that code:
   `rollout_phase` and `model_eval` put it on the parsed arguments, as their `workspace` attribute, so a subcommand's
   function reads it from there and its signature stays `(a)`; the others (`csp_ci`, `gitleaks_ci`, `osv_ci`,
   `scorecard_ci`, `semgrep_ci`, `zizmor_ci`, `trivy_ci`, `live_smoke`, `calibration_run`, `calibrate`,
-  `human_queue_issues`, `training_register`, `governance_check`) hold it in `main` and pass it down; `compare_reviews`
+  `human_queue_issues`, `training_register`, `governance_check`, `pilot_poller`) hold it in `main` and pass it down; `compare_reviews`
   builds it where it loads the one config, in its `tightened` scenario. A function a script's tests call takes it as a
   parameter: `check_pins(workspace)` of `scripts/semgrep_ci.py` and of `scripts/csp_ci.py`, `pinned_trivy(workspace)` of
   `scripts/trivy_db.py`, `anchor_paths(workspace)`, `load_model_eval(workspace)` and `training_requirement(workspace,
@@ -421,7 +421,9 @@ text without `encoding="utf-8", errors="replace"`: nothing is patched, so a new 
 without a test of its own. What it does not see is a call that builds its keywords with `**`, or one that takes `run`
 from subprocess by name; none exists. The one behaviour test runs the gh wrapper of `scripts/human_queue_issues.py` in a child whose locale
 is ASCII (`not_utf8_env`) against a stand-in for gh that is an executable script on PATH, so it is skipped on Windows;
-the other calls are held by the walk alone.
+the other calls are held by the walk alone. `scripts/pilot_poller.py` imports three names of
+`scripts/human_queue_issues.py` and runs it as a child: "The Pilot poller" below says which, and what its tests stand
+in for.
 
 ## What a test must not read from the semgrep scan
 
@@ -500,6 +502,36 @@ name, bucket, state, link, workflow, startedAt and completedAt. A check is a job
 `/job/<id>`, as the real ones do. The one test of an interrupted wait replaces the module's time.sleep with one that
 raises KeyboardInterrupt (`test_an_interrupted_wait_exits_130_as_gh_pr_checks_does_and_prints_no_traceback`), so
 `main` must keep sleeping through that name between two polls.
+
+## The Pilot poller (`scripts/pilot_poller.py`)
+
+`test_pilot_poller.py` drives `main` with four things in place of the host's:
+
+- GitHub: the hidden `--gh` names a stand-in gh, a Python script the test writes into `tmp_path`, which answers by the
+  shape of each call and fails loudly on any other: `gh api repos/<pilot>` with the repository given (default branch
+  `main` unless the test gives another answer), `gh api --method GET repos/<pilot>/pulls ...` with one page of the pull
+  requests given, `gh api repos/<pilot>/pulls/<n>` with the pull request read alone the test gives for that number
+  (closed, merged or not), `gh api --method GET repos/<tickets>/issues ... state=open ...` with one page of the
+  tickets given, and `gh issue close`. It appends each
+  call's arguments to calls.jsonl beside it, which the tests read for the withdrawals. The poller's own GitHub calls
+  all take that executable (`gh_text`, `gh_json`); the ticket script it runs finds gh on PATH, and is not run here.
+- The children: the poller's `run(argv, env)` is replaced by a fake that records each argv. It takes a call as a review
+  when `argv[1:4]` is `-m mara.cli review`, its target at `argv[4]` and its output after `--out`, and writes there a
+  report.json and a human_queue.json holding the queue keys the test gives that head (the head read with
+  `git rev-parse HEAD` in the target, so a review of the wrong checkout shows), each unless the test turns it off
+  (or writes a human_queue.json that is no human queue), and exits with the code the test gives; a call whose `argv[1]` is named
+  human_queue_issues.py is the ticket script, a sync when `--sync-decisions` is among its arguments and a filing
+  otherwise. A change to those argv shapes is a change to the fake.
+- The Pilot repository: a bare repository below `tmp_path`, its pull requests' heads pushed to `refs/pull/<n>/head`
+  as GitHub keeps them, and a head merged into main with a merge commit when a test needs one; the hidden
+  `--pilot-url` points the clones at it.
+- The MARA workspace: MARA_HOME, a clone of another bare repository below `tmp_path`, so the commit and the push are
+  real and the tests read what was pushed with `git ls-tree` and `git show` on that bare repository.
+
+The lock is the file `.pilot-poller.lock` in the clones directory, taken with fcntl.flock; the test of an overlapping
+run holds it itself. The poller imports DECISION_LABELS, MARKER_RE and `queue_settings` from
+`scripts/human_queue_issues.py` by name, so a ticket's marker and decision labels have one definition, and a rename
+there breaks the poller's import.
 
 ## The result lines `scripts/pr_checks.py` copies
 
