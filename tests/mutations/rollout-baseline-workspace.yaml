@@ -1,0 +1,30 @@
+focused: [tests/test_rollout_phase_workspace.py]
+# scripts/rollout_phase.py status and advance looking for a relative rollout.baseline_report below the MARA workspace,
+# as governance check G-10 does (#428): below this checkout instead, the checkout as a fallback, and the mock-mode
+# check of advance reading another file than the one it found; each mutation breaks one
+mutations:
+- name: status looks for a relative baseline report below this checkout
+  file: scripts/rollout_phase.py
+  caught_by: tests/test_rollout_phase_workspace.py::test_status_passes_g10_on_a_relative_baseline_report_in_the_workspace_and_fails_on_one_only_in_the_checkout
+  old: "    st = govdocs.rollout_status(cfg, a.workspace.root, a.today)  # the baseline report is the workspace's, as for G-10\n    print("
+  new: "    st = govdocs.rollout_status(cfg, ROOT, a.today)  # the baseline report is the workspace's, as for G-10\n    print("
+- name: status falls back to this checkout for a baseline report the workspace does not hold
+  file: scripts/rollout_phase.py
+  caught_by: tests/test_rollout_phase_workspace.py::test_status_passes_g10_on_a_relative_baseline_report_in_the_workspace_and_fails_on_one_only_in_the_checkout
+  old: "    st = govdocs.rollout_status(cfg, a.workspace.root, a.today)  # the baseline report is the workspace's, as for G-10\n    print("
+  new: "    st = govdocs.rollout_status(cfg, a.workspace.root if (a.workspace.root / cfg.rollout.baseline_report).exists() else ROOT, a.today)\n    print("
+- name: advance looks for a relative baseline report below this checkout
+  file: scripts/rollout_phase.py
+  caught_by: tests/test_rollout_phase_workspace.py::test_advance_finds_a_relative_baseline_report_in_the_workspace_and_misses_one_only_in_the_checkout
+  old: '        baseline = resolve(r.baseline_report, a.workspace.root) if r.baseline_report else None'
+  new: '        baseline = resolve(r.baseline_report, ROOT) if r.baseline_report else None'
+- name: advance falls back to this checkout for a baseline report the workspace does not hold
+  file: scripts/rollout_phase.py
+  caught_by: tests/test_rollout_phase_workspace.py::test_advance_finds_a_relative_baseline_report_in_the_workspace_and_misses_one_only_in_the_checkout
+  old: '        baseline = resolve(r.baseline_report, a.workspace.root) if r.baseline_report else None'
+  new: '        baseline = resolve(r.baseline_report, a.workspace.root if (a.workspace.root / r.baseline_report).exists() else ROOT) if r.baseline_report else None'
+- name: advance reads the mock-mode line from the checkout's file of that name when there is one, not the one it found
+  file: scripts/rollout_phase.py
+  caught_by: tests/test_rollout_phase_workspace.py::test_advance_reads_a_mock_baseline_report_found_in_the_workspace_as_built_from_mock_mode_reviews
+  old: '        elif "Mock mode reports are included" in baseline.read_text(encoding="utf-8"):'
+  new: '        elif "Mock mode reports are included" in (ROOT / r.baseline_report if (ROOT / r.baseline_report).exists() else baseline).read_text(encoding="utf-8"):'

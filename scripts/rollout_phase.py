@@ -2,13 +2,20 @@
 
   python3 scripts/rollout_phase.py status [--config config/mara.yaml] [--today YYYY-MM-DD]
       current phase, days in phase, due date, what governance check G-10 sees; exit 1 when it fails.
-  python3 scripts/rollout_phase.py baseline --runs out/ [out2/ ...] --out docs/rollout-baseline-<date>.md
+  python3 scripts/rollout_phase.py baseline --runs out/ [out2/ ...] --out <workspace>/pilot/rollout-baseline-<date>.md
       aggregate every report.json under the given directories into the shadow-phase baseline report
       (findings per review, tier mix, gate would-block rate, human-queue size, token cost, and the
       false-positive rate from calib/decisions when decisions exist).
   python3 scripts/rollout_phase.py advance --to advisory|blocking
       check the preconditions for the next phase (time in phase, baseline report, and for blocking a
       non-mock calibration report) and print the config change; it never edits config/mara.yaml.
+
+status and advance look for rollout.baseline_report below the MARA workspace (MARA_HOME, else the working
+directory) when it is relative, as governance check G-10 does, and read an absolute one as given.
+
+GLOSSARY.md terms: MARA workspace (MARA_HOME, read once in main), Rollout phase, Provider mode. It follows no ADR of its
+own; docs/pilot-runbook.md, section 5, is how a host runs it. Not pure: it reads the environment, the clock and files
+below the workspace and this checkout, and baseline writes its report.
 """
 
 from __future__ import annotations
@@ -31,7 +38,7 @@ from mara.decisions import TrainingRequirement  # noqa: E402
 
 def cmd_status(a: argparse.Namespace) -> int:
     cfg = load_config(a.config, a.workspace)
-    st = govdocs.rollout_status(cfg, ROOT, a.today)
+    st = govdocs.rollout_status(cfg, a.workspace.root, a.today)  # the baseline report is the workspace's, as for G-10
     print(f"phase: {st.phase}" + (f" since {cfg.rollout.started_on} ({st.days_in_phase} days)" if st.days_in_phase is not None else ""))
     if st.due:
         print(f"next phase due by: {st.due}")
@@ -79,14 +86,14 @@ def cmd_advance(a: argparse.Namespace) -> int:
         print(f"ERROR: cannot advance from {r.phase} to {a.to}; next phase is {order[min(order.index(r.phase) + 1, 3)]}", file=sys.stderr)
         return 2
     problems = []
-    st = govdocs.rollout_status(cfg, ROOT, a.today)
+    st = govdocs.rollout_status(cfg, a.workspace.root, a.today)  # its days in phase; the baseline report is checked below
     if a.to == "shadow":
         pass
     else:
         planned = r.shadow_months if r.phase == "shadow" else r.advisory_months
         if st.days_in_phase is None or st.days_in_phase < 30 * planned:
             problems.append(f"{r.phase} phase planned {planned} months; only {st.days_in_phase} days so far")
-        baseline = ROOT / r.baseline_report if r.baseline_report else None
+        baseline = resolve(r.baseline_report, a.workspace.root) if r.baseline_report else None  # read below for mock mode
         if baseline is None or not baseline.exists():
             problems.append("baseline report missing: run `rollout_phase.py baseline` and set rollout.baseline_report")
         elif "Mock mode reports are included" in baseline.read_text(encoding="utf-8"):
