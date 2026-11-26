@@ -579,6 +579,22 @@ gh (above), which refuses every call. The tests read the calls by their first tw
 and each option's value; a change to those argument shapes is a change to the stand-in. The shell script makes these
 tests POSIX only.
 
+## The rollout phase's baseline report (`scripts/rollout_phase.py`)
+
+`test_rollout_phase_workspace.py` runs the script as a child process with this interpreter, MARA_HOME a workspace below
+`tmp_path` holding `pilot/baseline.md`, the working directory another directory below `tmp_path`, and `--config` a copy
+of `config/mara.mock.yaml` with its rollout block replaced. Its report only in this checkout is LICENSE, named
+relatively, so it relies on that file being in the checkout; its mock-mode report writes a LICENSE in the workspace,
+and checks first that the checkout's does not say "Mock mode reports are included". It reads what the script prints:
+the last line of `status` (G-10: PASS or G-10: FAIL) and its `problem:` line, and each `blocked:` line of `advance`,
+word for word. It compares the last line of `status` with the status `check_g10` of `scripts/governance_check.py`
+gives for the same config and `workspace=Workspace(<that workspace>)`.
+The older tests of the script in `test_governance_templates.py` give no MARA_HOME and no working directory, so they
+run in pytest's: from this checkout with MARA_HOME unset, as in CI, the workspace is the checkout, and
+`test_governance_templates.py::test_advance_to_blocking_needs_the_live_calibration_g9_accepts` finds its baseline
+report, `docs/CHANGELOG.md`, there, so the calibration is the one precondition that blocks; with MARA_HOME set to
+another directory the report is missing too.
+
 ## The result lines `scripts/pr_checks.py` copies
 
 Two tests read the RESULTS table of `scripts/pr_checks.py` itself, not through `main`:

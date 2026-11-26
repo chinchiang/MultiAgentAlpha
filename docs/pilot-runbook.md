@@ -83,10 +83,10 @@ its state, so it is never reviewed.
   ```
 
   Without `--out` it would write under `docs/`, which is published. Then `rollout.baseline_report` in
-  `config/local/mara.yaml` names that report by its absolute path (`scripts/rollout_phase.py` looks for a relative one
-  below this checkout, governance check G-10 below the workspace, so only an absolute path names one file for both),
-  and `scripts/rollout_phase.py --config config/local/mara.yaml advance --to advisory` says whether the move can be
-  made.
+  `config/local/mara.yaml` names that report, `pilot/rollout-baseline-<date>.md` or its absolute path (where a relative
+  one is looked for: the docstring of `scripts/rollout_phase.py`). Then
+  `MARA_HOME=<workspace> .venv/bin/python scripts/rollout_phase.py --config config/local/mara.yaml advance --to advisory`
+  says whether the move can be made.
 
 ## 6. The weekly check
 
