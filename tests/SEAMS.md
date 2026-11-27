@@ -497,7 +497,14 @@ Python script the test writes into `tmp_path` (`_gh`), `--interval 0`, and `--wo
 files the test writes (none unless given, so the repository's own are never read). The stand-in answers by the shape
 of each call and fails loudly on any other: gh pr view with the next head, gh pr checks with the next poll (or "no
 checks reported" for a poll given as "none"), gh run view --job with that job's log (an expired log for a job given
-none), and gh api with the rulesets (each active unless the test names it disabled). Successive calls of a kind take the next answer, the last one ever after; it
+none), gh api with the rulesets (each active unless the test names it disabled), and, for the Reference run, gh run
+list with main's runs only when given the arguments `reference_run` passes (`--workflow mara-review --branch main
+--event push --status completed --limit 10 --json databaseId,headSha`), gh run view <run> --json jobs with two jobs, a
+mock review job first (the run's times 100 plus 2, a job with no log) and the L0 job (the run's times 100 plus 1), so a
+reader of the first job meets an expired log, and gh run download <run> -n l0-sarif -D <dir> copying that run's
+artifact (failing for a run given none). Unless a test gives its own, main has one run, 21, whose semgrep line is the
+clean line CLEAN holds, so a test whose pull request's semgrep line is that one prints REFERENCE under it and
+downloads nothing, and the tests of the Reference run read the lines under the semgrep line (`_under_semgrep`). Successive calls of a kind take the next answer, the last one ever after; it
 counts them in a file beside it, so one `_gh` serves one run.
 
 It does not read the `--json` fields a call asks for: every check it answers holds all of them. A field `main` stops
@@ -578,6 +585,14 @@ call's arguments and, for a `--body-file -`, its stdin to calls.jsonl beside it,
 gh (above), which refuses every call. The tests read the calls by their first two arguments
 and each option's value; a change to those argument shapes is a change to the stand-in. The shell script makes these
 tests POSIX only.
+
+## The semgrep comparison (`scripts/semgrep_diff.py`)
+
+`test_semgrep_diff.py` writes SARIF files of its own into `tmp_path`, each holding its results, two of them a timeout
+as semgrep records one (the rule, with the prefix of where the rules are installed, and the file in the text alone), and
+drives `main` with their paths, reading what it prints line by line; one test calls `compare(a, b)` and compares the
+Comparison it returns, field by field. They rely on `mara.tools.semgrep_rules.result_keys`, `timeouts` and
+`canonical_rule_id`, and on `mara.tools.sarif.shape_problem` refusing a result whose locations are a string.
 
 ## The rollout phase's baseline report (`scripts/rollout_phase.py`)
 
