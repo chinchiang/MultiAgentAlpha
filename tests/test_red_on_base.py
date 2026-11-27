@@ -53,13 +53,13 @@ def _repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _run(repo: Path, *args: str) -> subprocess.CompletedProcess:
+def _run(repo: Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     """The script run in `repo`, its HOME a directory that is not empty, so that a run on the base with the caller's
-    HOME would show."""
+    HOME would show, and `env` added to its environment."""
     home = repo.parent / "home"
     _write(home, ".gitconfig", "")
     return subprocess.run([sys.executable, str(SCRIPT), *args], cwd=repo, capture_output=True, encoding="utf-8",
-                          env={**os.environ, "HOME": str(home)})
+                          env={**os.environ, "HOME": str(home), **(env or {})})
 
 
 def test_a_test_of_what_the_base_lacks_is_red_with_its_failure_and_one_that_passes_on_both_is_green(tmp_path):
@@ -274,3 +274,47 @@ def test_no_worktree_is_left_behind_and_the_checkout_s_tools_are_as_they_were(tm
     assert list((repo / "scratch").iterdir()) == []
     tools = repo / ".mara-tools"
     assert tools.is_dir() and not tools.is_symlink() and (tools / "bin" / "tool").read_text() == "the tool"
+
+
+# after the tests of outcomes: a mutation of how a failure's lines are read fails those first
+KEYWORD_TESTS = '''import pkg
+
+
+def _call():
+    return pkg.f(workspace=1)
+
+
+def test_own_call():
+    assert pkg.f(workspace=1) == 1
+
+
+def test_through_a_helper():
+    assert _call() == 1
+
+
+def test_another_type_error():
+    assert pkg.f(1) == 1
+'''
+
+
+def test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one_that_reaches_such_a_call_deeper_is_red(tmp_path):
+    """The base's f takes no keyword: the test that passes one at its own call fails there, and is unreached with the
+    keyword's note; one whose helper passes it fails a frame further down, and one whose TypeError is of another
+    message, are red. The environment asks for short tracebacks, which write no line between two frames: the script's
+    own --tb wins."""
+    repo = _repo(tmp_path)
+    _write(repo, "tests/test_kw.py", KEYWORD_TESTS)
+    run = _run(repo, "tests/test_kw.py", env={"PYTEST_ADDOPTS": "--tb=short"})
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.splitlines() == [
+        "UNREACHED  tests/test_kw.py::test_own_call",
+        "    E       TypeError: f() got an unexpected keyword argument 'workspace'",
+        f"    {red_on_base.KEYWORD_NOTE}",
+        "RED        tests/test_kw.py::test_through_a_helper",
+        "    >       assert _call() == 1",
+        "    E       TypeError: f() got an unexpected keyword argument 'workspace'",
+        "RED        tests/test_kw.py::test_another_type_error",
+        "    >       assert pkg.f(1) == 1",
+        "    E       TypeError: f() takes 0 positional arguments but 1 was given",
+        "2 red, 0 green, 0 skipped, 1 unreached",
+    ]

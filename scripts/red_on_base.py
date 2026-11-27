@@ -7,15 +7,19 @@ It makes a git worktree of the merge base of --base and HEAD in a new directory 
 tests/ with the working tree's whole tests/, committed or not (so a helper or a conftest comes along without being
 named; nothing else is copied), and links the checkout's .mara-tools into it when the checkout has one: git ignores it,
 so the worktree has none, and a test that needs a tool skips without it. It runs pytest there on the test files given
-(and -k), with this interpreter, PYTHONPATH at the worktree's src/, HOME at an empty directory and the collection
-errors continued, and reads the JUnit XML pytest writes (outcomes). It prints, in that order, a line for each test,
+(and -k), with this interpreter, PYTHONPATH at the worktree's src/, HOME at an empty directory, the collection
+errors continued and the traceback --tb=auto whatever the environment or the base's config asks (outcomes reads its
+frames), and reads the JUnit XML pytest writes (outcomes). It prints, in that order, a line for each test,
 its status and its node id, the lines it gives indented below it, then the counts:
 - RED: the first `>` line and the first `E` line of its failure (or error);
 - GREEN;
 - SKIPPED: pytest's reason (an expected failure, xfail, is one, its reason often empty);
 - UNREACHED: a test file pytest could not collect on the base, or a test whose failure's first `E` line begins with a
   ModuleNotFoundError or an ImportError, with that line and UNREACHED_NOTE: what the base lacks is the module or the
-  name the test imports (what that shows, and what does instead: pr-flow step 2).
+  name the test imports (what that shows, and what does instead: pr-flow step 2); or a test whose failure's first `E`
+  line is a TypeError for an unexpected keyword argument raised in the one frame its failure holds, the test's own
+  call (or a fixture's), with that line and KEYWORD_NOTE: what the base lacks is the keyword (what then: pr-flow step
+  2). The same TypeError raised in a frame further down, in a helper or code the test's call reaches, is RED.
 Neither a skipped nor an unreached test is counted red or green. A test that runs a script the base lacks as a child
 process, and imports nothing of it, fails at one of its own assertions with `No such file or directory` inside its
 message, or on the FileNotFoundError its run raises: it is RED, as nothing here tells that failure from another.
@@ -31,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -41,6 +46,9 @@ from typing import NamedTuple
 
 UNREACHED_ERRORS = ("ModuleNotFoundError", "ImportError")  # a first `E` line naming one: the base cannot reach the test
 UNREACHED_NOTE = "shown sensitive by its mutations instead (pr-flow step 2)"
+KEYWORD_ERROR = re.compile(r"^E\s+TypeError: \S+ got an unexpected keyword argument ")  # a call the base's function refuses
+FRAME_SEPARATOR = "_ _ _"  # a line --tb=auto writes in a failure of two frames or more, after its first and before its last
+KEYWORD_NOTE = "the base's function lacks the keyword: how to see the red the test is about is in pr-flow step 2"
 STATUSES = ("RED", "GREEN", "SKIPPED", "UNREACHED")  # in the order the counts are printed
 RAN = (0, 1, 5)  # pytest's exit codes when it ran the tests: all passed, some failed, none collected
 TOOLS = ".mara-tools"  # where a test that needs a tool looks for it, below the repository it sits in
@@ -76,6 +84,9 @@ def outcomes(junit: str, files: list[str]) -> list[Outcome]:
     ran in), by the first `failure` or `error` it holds, if any:
     - UNREACHED when its first `E` line begins with a ModuleNotFoundError or an ImportError, or it is a file pytest could
       not collect, with that `E` line (`E` and the message pytest gives, for one with none) and UNREACHED_NOTE;
+    - UNREACHED when its first `E` line is a TypeError for an unexpected keyword argument and its text holds one frame
+      (no FRAME_SEPARATOR line, as --tb=auto writes it), the test's own or a fixture's, with that `E` line and
+      KEYWORD_NOTE;
     - RED otherwise, with the first `>` line and the first `E` line of its text;
     - SKIPPED, with the message pytest gives (empty for an expected failure), when it holds none but a `skipped`;
     - GREEN when it holds none of them."""
@@ -92,8 +103,12 @@ def outcomes(junit: str, files: list[str]) -> list[Outcome]:
         lines = (failed.text or "").splitlines()
         arrow, error = (next((line for line in lines if line.startswith(mark)), None) for mark in (">", "E "))
         unreached = not case.get("classname") or (error is not None and error[1:].lstrip().startswith(UNREACHED_ERRORS))
+        keyword_at_own_call = error is not None and bool(KEYWORD_ERROR.match(error)) and not any(
+            line.startswith(FRAME_SEPARATOR) for line in lines)  # one frame: the test's own
         if unreached:
             found.append(Outcome("UNREACHED", node, [error or f"E   {failed.get('message', '')}", UNREACHED_NOTE]))
+        elif keyword_at_own_call:
+            found.append(Outcome("UNREACHED", node, [error, KEYWORD_NOTE]))
         else:
             found.append(Outcome("RED", node, [line for line in (arrow, error) if line is not None]))
     return found
@@ -136,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         env = {**os.environ, "PYTHONPATH": str(tree / "src"), "HOME": str(work / "home"), "PYTHONDONTWRITEBYTECODE": "1"}
         junit = work / "junit.xml"
         ran = subprocess.run([sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-q", "--continue-on-collection-errors",
-                              f"--junitxml={junit}", *files, *(["-k", a.k] if a.k else [])],
+                              "--tb=auto", f"--junitxml={junit}", *files, *(["-k", a.k] if a.k else [])],
                              cwd=tree, env=env, capture_output=True, encoding="utf-8")
         if ran.returncode not in RAN:
             print(f"ERROR: pytest exited {ran.returncode} on the base:\n{ran.stdout}{ran.stderr}", end="", file=sys.stderr)

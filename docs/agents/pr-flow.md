@@ -13,7 +13,12 @@ A change that becomes a pull request goes through these steps in order. Each end
    the merge base with `origin/main` and prints each test's status (its docstring says how it gets there). A test it
    reports `SKIPPED` has not been shown red. A test that fails without reaching the part it is about is not red for the
    reason you meant: a `DID NOT RAISE` because an `or` with a value on its left never reads the right (`hint or name`),
-   say. Change the test until it reaches that part. A test of a module or a script the base does not have fails there
+   say. Change the test until it reaches that part. A test that passes the base's function a keyword it lacks fails at
+   its own call on a `TypeError` (`unexpected keyword argument`), which shows nothing of what it checks; the script
+   reports it `UNREACHED` (its docstring says when). To see its red, make a worktree of the base in `scratch/`
+   (`git worktree add --detach scratch/<name> origin/main`), give the function there that keyword, unused, copy the
+   test file in, run it with `PYTHONPATH=scratch/<name>/src` and this checkout's interpreter, and remove the worktree
+   (`git worktree remove --force scratch/<name>`). A test of a module or a script the base does not have fails there
    on its import or on the missing file (`ModuleNotFoundError`, `No such file or directory`), which shows nothing of
    what it checks, whatever status the script gives it. Such a test is shown sensitive by its mutations, each caught by
    it at the assertion its name gives (step 3), and the body says so.
