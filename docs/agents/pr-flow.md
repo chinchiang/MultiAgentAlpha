@@ -33,7 +33,7 @@ A change that becomes a pull request goes through these steps in order. Each end
    whole suite and gitleaks wait for step 4.
    Then run each mutation list the change adds or edits once, `scripts/mutate.py <list> --focused-only`, one after the
    other and after `--only worktree` has ended (a mutation edits the files the checks read), and read each `CAUGHT` line
-   as step 4 says: where it failed, and its mark. A `caught_by` that another test beats, or a name that is not the fault
+   as step 4 says: where it failed, and its mark. A `caught_by` that misses its mutant, or a name that is not the fault
    its `new` makes, is fixed now, before the review, and not by a rebuild after step 4; step 4 says what the end of an
    `(expected …)` mark asks. The lists the change touches but
    does not add or edit wait for step 4. A list refused for the Python it needs (`needs Python <specifier>`, exit 2)
@@ -99,11 +99,10 @@ A change that becomes a pull request goes through these steps in order. Each end
    `tools/dev-requirements-py313.txt`, as CI's 3.13 job installs). A mutation edits `src/`, so never run two of these at
    once. Done when every check `check_local.py` runs is `ok`, its osv scans included when `AGENTS.md` asks for them, and
    every mutation of those lists is caught for the reason its name says. Of every other mutation of those lists, read
-   each marked catch and each `LEFT` line the summary gathers: a test the change adds or edits can catch an old mutation
-   before its `caught_by` does. An `(expected …)` mark ends with what the `caught_by`'s alone run gave against the same
-   mutant: `caught at: <at>` or `caught` asks for the order of the tests or their setup to be fixed, the `caught_by`
-   catching the mutant alone and another test catching it first; `passes` asks for the test or the `caught_by` to be fixed, the
-   `caught_by` missing the fault; `pytest exit <n>`, for the `caught_by` to name a test pytest runs.
+   each marked catch and each `LEFT` line the summary gathers: a change of the code or of a test can make a `caught_by`
+   miss an old mutation. Of the endings of an `(expected …)` mark (**Marked catch**, `GLOSSARY.md`), `passes` asks for
+   the test or the `caught_by` to be fixed, the `caught_by` missing the fault; `pytest exit <n>`, for the `caught_by` to
+   name a test pytest runs.
    For the mutations the change adds or edits, read where the test that caught each failed (third paragraph of "A
    behaviour change commits its mutation list" in `CODING_STANDARDS.md`): it fails at the assertion its name gives, not
    at a `TypeError`, an import error or an earlier assertion. `mutate.py` prints it on each `CAUGHT` line, `at:` and the
@@ -113,8 +112,7 @@ A change that becomes a pull request goes through these steps in order. Each end
    mutation names the test meant to catch it (`caught_by`; `tests/test_mutation_lists.py` fails on one that does not),
    so that a catch by another is marked: for a mutation you add, the test you mean it for, not what a run happens to
    report. When a mutation breaks a check that several cases of a parametrized test hold, name the test without its
-   parameters: pytest stops at the first case that fails, the first of those cases in its parameters, and naming another
-   marks the catch `(expected …)`. A `LEFT <path>` line names a path git status lists after a run that it did not
+   parameters, so that its alone run runs every case. A `LEFT <path>` line names a path git status lists after a run that it did not
    before: once you know the run left it, and not someone working in the checkout meanwhile, remove a file it added
    (`git status` shows `??`) and `git restore` one it changed or deleted.
    A fix made after this step goes into the commit it belongs to (rebuild as in step 3, so the version commit stays
