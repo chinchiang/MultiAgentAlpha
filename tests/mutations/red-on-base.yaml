@@ -1,8 +1,9 @@
 focused: [tests/test_red_on_base.py]
 # scripts/red_on_base.py runs the working tree's tests on the base's code (#328): a worktree of the merge base, the
 # working tree's tests/ in it, the checkout's .mara-tools linked, pytest run with the base's src/ and an empty HOME, and
-# each test read from the JUnit XML as RED, GREEN, SKIPPED or UNREACHED. Each mutation drops one of those parts, one
-# reading of the XML, one refusal, or the removal of the worktree.
+# each test read from the JUnit XML as RED, GREEN, SKIPPED or UNREACHED, a TypeError for a keyword the base lacks at
+# the test's own call among the unreached (#435). Each mutation drops one of those parts, one reading of the XML, one
+# refusal, or the removal of the worktree.
 mutations:
   - name: the worktree is of HEAD, not of the merge base
     file: scripts/red_on_base.py
@@ -89,3 +90,28 @@ mutations:
     caught_by: tests/test_red_on_base.py::test_no_worktree_is_left_behind_and_the_checkout_s_tools_are_as_they_were
     old: '        _git(root, "worktree", "remove", "--force", str(tree))'
     new: '        pass'
+  - name: a keyword the base lacks at the test's own call is red
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one_that_reaches_such_a_call_deeper_is_red
+    old: '        elif keyword_at_own_call:'
+    new: '        elif False:'
+  - name: a keyword the base lacks a frame further down is unreached too
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one_that_reaches_such_a_call_deeper_is_red
+    old: "bool(KEYWORD_ERROR.match(error)) and not any(\n            line.startswith(FRAME_SEPARATOR) for line in lines)"
+    new: "bool(KEYWORD_ERROR.match(error)) and not any(\n            False for line in lines)"
+  - name: a TypeError of any message is unreached at the test's own call
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one_that_reaches_such_a_call_deeper_is_red
+    old: 'KEYWORD_ERROR = re.compile(r"^E\s+TypeError: \S+ got an unexpected keyword argument ")'
+    new: 'KEYWORD_ERROR = re.compile(r"^E\s+TypeError: ")'
+  - name: an unreached keyword is given the note of a missing module
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one_that_reaches_such_a_call_deeper_is_red
+    old: '            found.append(Outcome("UNREACHED", node, [error, KEYWORD_NOTE]))'
+    new: '            found.append(Outcome("UNREACHED", node, [error, UNREACHED_NOTE]))'
+  - name: the traceback is left to the environment
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one_that_reaches_such_a_call_deeper_is_red
+    old: '"--tb=auto", f"--junitxml={junit}",'
+    new: 'f"--junitxml={junit}",'
