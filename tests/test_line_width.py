@@ -1,5 +1,6 @@
-"""scripts/line_width.py: the lines a change adds to Python files are within 150 columns (CODING_STANDARDS.md), run by
-scripts/check_local.py and by CI on a pull request; the lines already there are not its business."""
+"""scripts/line_width.py: the lines a change adds to Python files, and to the Markdown files it lists, are within 150
+columns (CODING_STANDARDS.md), run by scripts/check_local.py and by CI on a pull request; the lines already there
+are not its business."""
 
 from __future__ import annotations
 
@@ -95,6 +96,35 @@ def test_a_python_file_that_is_not_utf8_alone_fails_the_check(tmp_path, capsys):
     _put(repo, "committed", "latin.py", "x = 'café'\n".encode("latin-1"))
     assert line_width.main(["--base", "main", "--repo", str(repo)]) == 1
     assert capsys.readouterr().out.splitlines() == ["latin.py: not UTF-8", "1 file(s) not UTF-8"]
+
+
+LISTED_MARKDOWN = ["AGENTS.md", "CODING_STANDARDS.md", "docs/agents/flow.md", "tests/SEAMS.md"]  # one per entry of the list
+PROSE = "w" * 151 + "\n"  # 151 columns
+TABLE = "| " + "t" * 148 + " |\n" + "  | " + "t" * 146 + " |\n"  # two table rows of 152 columns, the second indented
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_the_wide_lines_a_change_adds_to_the_listed_markdown_files_are_reported_but_not_their_table_rows(tmp_path, capsys, mode):
+    """The Markdown files the script lists are checked as a Python file is; a table row, which cannot be wrapped, is left
+    out, and so is every Markdown file the list does not name. A Python line that begins with `|` is no table row."""
+    repo = _repo(tmp_path)
+    for name in [*LISTED_MARKDOWN, "GLOSSARY.md", "docs/report.md"]:
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
+        _put(repo, mode, name, ("Prose.\n" + PROSE + TABLE).encode())
+    _put(repo, mode, "flags.py", ("x = (1\n    | " + "2" * 146 + ")\n").encode())  # 153 columns
+    assert line_width.main(["--base", "main", *MODES[mode], "--repo", str(repo)]) == 1
+    assert capsys.readouterr().out.splitlines() == ["AGENTS.md:2: 151 columns", "CODING_STANDARDS.md:2: 151 columns",
+                                                    "docs/agents/flow.md:2: 151 columns", "flags.py:2: 153 columns",
+                                                    "tests/SEAMS.md:2: 151 columns", "5 added line(s) wider than 150 columns"]
+
+
+def test_a_change_that_adds_wide_lines_only_to_table_rows_and_to_unlisted_markdown_passes(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    for name, text in (("AGENTS.md", "Prose.\n" + TABLE), ("GLOSSARY.md", PROSE), ("docs/report.md", PROSE)):
+        (repo / name).parent.mkdir(parents=True, exist_ok=True)
+        _put(repo, "committed", name, text.encode())
+    assert line_width.main(["--base", "main", "--repo", str(repo)]) == 0
+    assert capsys.readouterr().out.splitlines() == ["no added line is wider than 150 columns"]
 
 
 def test_a_wide_line_after_an_added_line_starting_with_plus_plus_is_reported(tmp_path, capsys):

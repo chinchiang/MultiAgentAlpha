@@ -257,7 +257,7 @@ jobs:
           python3 scripts/install_tools.py --only gitleaks semgrep semgrep-rules csp-evaluator
       - name: Lint
         run: ruff check src tests scripts
-      - name: Line width of the lines the pull request adds to Python files (150 columns, CODING_STANDARDS.md)
+      - name: Line width of the lines the pull request adds to Python files and listed Markdown files (150 columns, CODING_STANDARDS.md)
         # ruff checks line length in src/ only; this checks the added lines everywhere, leaving the wider ones already there
         if: github.event_name == 'pull_request'
         env:

@@ -13,8 +13,8 @@ head (the short summary of -rs lists skips only). Every check's process runs wit
 was there follows), so from a git worktree it imports this checkout's mara, not the editable install of another. The checks, as
 .github/workflows/mara-review.yml runs them:
   ruff      ruff check src tests scripts
-  lines     scripts/line_width.py: the lines the commits since the merge base with --base add to Python files are
-            within 150 columns (CI runs it on a pull request)
+  lines     scripts/line_width.py: the lines the commits since the merge base with --base add to Python files and to
+            the Markdown files it lists are within 150 columns (CI runs it on a pull request)
   chars     scripts/control_chars.py: what the commits since the merge base with --base add, their lines in every text
             file and their messages, holds no control character (CI runs it on a pull request)
   mypy     python -m mypy from .venv-typecheck: CPython 3.12 with the hash-pinned closure CI installs (the 3.12 dev
@@ -33,8 +33,9 @@ the hash-locked closures, each with its own config:
   osv-semgrep     scripts/osv_ci.py on tools/semgrep-requirements.txt, with tools/osv-semgrep.toml
 Run only when named, before the first commit of a change (docs/agents/pr-flow.md step 3), in under a minute, the group worktree:
   ruff            as above
-  lines-worktree  scripts/line_width.py --worktree: the lines the working tree adds to Python files over the merge base
-                  with --base, committed or not and its untracked files included, are within 150 columns
+  lines-worktree  scripts/line_width.py --worktree: the lines the working tree adds to Python files and to the Markdown
+                  files it lists over the merge base with --base, committed or not and its untracked files included,
+                  are within 150 columns
   chars-worktree  scripts/control_chars.py --worktree: the same lines hold no control character
   pytest-worktree tests/test_mutation_lists.py and tests/test_seams.py: every mutation list loads, no two lists make
                   the same mutant, and every pointer of tests/SEAMS.md names something that is there
