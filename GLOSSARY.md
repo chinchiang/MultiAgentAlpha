@@ -390,6 +390,10 @@ _Avoid_: verdict line (a verdict is a ballot role's ruling, or a model family's 
 The run of main a pull request's semgrep result line is read against: among main's last ten completed push runs of the pull request's workflow, newest first, the first whose job of the same name has one semgrep result line, clean and naming no timeout, since a rule that timed out drops its hits and its count. A run of a GitHub Actions workflow, not a Run of the workbench. `scripts/pr_checks.py` prints it under the pull request's semgrep result line, and its docstring says what it prints beside it.
 _Avoid_: baseline run (the baseline is the rollout's report, and `scripts/mutate.py`'s run without a mutation), main's run (any run of main)
 
+**Change run**:
+The run of a pull request's own workflow whose job holds its semgrep result line, the run beside the **Reference run**: `scripts/pr_checks.py` reads its id from that check's link, prints it `Change run <id>` under the result line, and downloads its l0-sarif to compare with the Reference run's; step 6 of `docs/agents/pr-flow.md` downloads it to compare with the local scan. A run of a GitHub Actions workflow, not a Run of the workbench, and not the **Change** itself, which is what the branch adds.
+_Avoid_: the pull request's run, the pull request's own run (a pull request triggers several workflows, each a run of its own)
+
 **Agent brief**:
 The comment that triage posts on an issue it labels `ready-for-agent`: what the agent that picks the issue up is to do, and the contract it works from, the issue's body being context. Each of its statements of how the code behaves now ends with how it was established, `run:`, `read:` or `carried:` (`docs/agents/issue-tracker.md`, "Agent briefs").
 _Avoid_: ticket (the issue is the ticket; the brief is one comment on it); a `carried:` statement is one taken from elsewhere unchecked, not a finding a **Jury** carries
