@@ -4,8 +4,8 @@ mutations:
 - name: the copies stay after the file is restored
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_mutation_a_test_catches_and_one_none_does_are_told_apart_and_the_source_is_restored
-  old: "    _drop_copies(run_dir)\n    at, error, raised ="
-  new: '    at, error, raised ='
+  old: "    _drop_copies(run_dir)\n    at, error, raised, first_diff ="
+  new: '    at, error, raised, first_diff ='
 - name: no copies are kept before a file is mutated
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_mutant_left_by_a_killed_run_is_restored_before_the_next_run

@@ -108,15 +108,17 @@ A change that becomes a pull request goes through these steps in order. Each end
    For the mutations the change adds or edits, read where the test that caught each failed (third paragraph of "A
    behaviour change commits its mutation list" in `CODING_STANDARDS.md`): it fails at the assertion its name gives, not
    at a `TypeError`, an import error or an earlier assertion. `mutate.py` prints it on each `CAUGHT` line, `at:` and the
-   source line, and `results.json` holds it as `at` and `error`, beside `raised` (its docstring says when). Open the log
-   its entry lists under `logs` only for a marked catch (`GLOSSARY.md`), one with no `at:`, or one whose line is not the
-   assertion of the mutation's name. When to write an `error:` is in the same paragraph of `CODING_STANDARDS.md`. Every
-   mutation names the test meant to catch it (`caught_by`; `tests/test_mutation_lists.py` fails on one that does not),
-   so that a catch by another is marked: for a mutation you add, the test you mean it for, not what a run happens to
-   report. When a mutation breaks a check that several cases of a parametrized test hold, name the test without its
-   parameters, so that its alone run runs every case. A `LEFT <path>` line names a path git status lists after a run that it did not
-   before: once you know the run left it, and not someone working in the checkout meanwhile, remove a file it added
-   (`git status` shows `??`) and `git restore` one it changed or deleted.
+   source line, and `results.json` holds it as `at` and `error`, beside `raised` (its docstring says when). For an
+   assertion that compares a whole output as two sequences, read the `At index <n> diff:` after `at:` (`first_diff`),
+   the first item that differs, as the same paragraph of `CODING_STANDARDS.md` says. Open the log its entry lists under
+   `logs` only for a marked catch (`GLOSSARY.md`), one with no `at:`, one whose line is not the assertion of the
+   mutation's name, or one whose first item that differs is not the item of that name. When to write an `error:` is in the same paragraph of
+   `CODING_STANDARDS.md`. Every mutation names the test meant to catch it (`caught_by`; `tests/test_mutation_lists.py`
+   fails on one that does not), so that a catch by another is marked: for a mutation you add, the test you mean it for,
+   not what a run happens to report. When a mutation breaks a check that several cases of a parametrized test hold,
+   name the test without its parameters, so that its alone run runs every case. A `LEFT <path>` line names a path git
+   status lists after a run that it did not before: once you know the run left it, and not someone working in the
+   checkout meanwhile, remove a file it added (`git status` shows `??`) and `git restore` one it changed or deleted.
    A fix made after this step goes into the commit it belongs to (rebuild as in step 3, so the version commit stays
    last) and this step runs again on the branch head; the numbers in the body are those of that run, and a fix the
    sub-agents did not see is said so in the body.

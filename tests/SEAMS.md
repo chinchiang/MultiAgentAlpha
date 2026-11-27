@@ -672,9 +672,11 @@ of where a catch failed read is pytest's own output, its failure section (the ba
 line, each frame's `path:line: ` line, the traceback's last line path:line: ExceptionName, and the Captured lines after
 it), and the regular expressions of `_failure` follow that shape. They rely too on how pytest prints a frame's path:
 relative to the directory it ran in, from `..` beside it, absolute outside it or once a test changed directory. A pytest
-that prints them otherwise reaches these tests first. The
-tests of left paths build the repository as a git repository with its files committed (`_git_repo`) and run real git
-status in it; those give no `--runs`, so the run's own directory is inside the root, as it is in this checkout.
+that prints them otherwise reaches these tests first. The test of `first_diff` relies on the E line pytest writes, at
+the `-q` the runs pass, for two sequences that differ at an index: `At index <n> diff: <left> != <right>`, indented
+after the E. The tests of left paths build the repository as a git repository with its files committed (`_git_repo`) and
+run real git status in it; those give no `--runs`, so the run's own directory is inside the root, as it is in this
+checkout.
 The tests of `--lists-for` build on `_git_repo` a repository with a list per way a change touches one, committed and tagged
 `base` (`_touching_repo`), change it the way each list's name says, and run real git (merge-base, diff, ls-files)
 through `main`; they read what it prints, one list per line. The tests of `--base` build their own repository whose
