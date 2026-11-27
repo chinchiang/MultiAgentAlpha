@@ -25,3 +25,33 @@ mutations:
     caught_by: tests/test_line_width.py::test_a_python_file_whose_name_is_beyond_ascii_is_checked_too
     old: 'return name[len(b"b/"):].decode("utf-8", "replace")'
     new: 'return name[len(b"b/"):].decode(__import__("locale").getpreferredencoding(False), "replace")'
+  - name: the listed Markdown files are not read
+    file: scripts/line_width.py
+    caught_by: tests/test_line_width.py::test_the_wide_lines_a_change_adds_to_the_listed_markdown_files_are_reported_but_not_their_table_rows
+    old: 'read_change(a, "*.py", *MARKDOWN)'
+    new: 'read_change(a, "*.py")'
+  - name: every Markdown file is read, the unlisted ones too
+    file: scripts/line_width.py
+    caught_by: tests/test_line_width.py::test_the_wide_lines_a_change_adds_to_the_listed_markdown_files_are_reported_but_not_their_table_rows
+    old: 'read_change(a, "*.py", *MARKDOWN)'
+    new: 'read_change(a, "*.py", "*.md")'
+  - name: the list names one file of docs/agents/, not all of them
+    file: scripts/line_width.py
+    caught_by: tests/test_line_width.py::test_the_wide_lines_a_change_adds_to_the_listed_markdown_files_are_reported_but_not_their_table_rows
+    old: 'MARKDOWN = ("docs/agents/*.md",'
+    new: 'MARKDOWN = ("docs/agents/pr-flow.md",'
+  - name: a table row is measured
+    file: scripts/line_width.py
+    caught_by: tests/test_line_width.py::test_the_wide_lines_a_change_adds_to_the_listed_markdown_files_are_reported_but_not_their_table_rows
+    old: 'if len(text) > LIMIT and not _table_row(path, text))'
+    new: 'if len(text) > LIMIT)'
+  - name: an indented table row is measured
+    file: scripts/line_width.py
+    caught_by: tests/test_line_width.py::test_the_wide_lines_a_change_adds_to_the_listed_markdown_files_are_reported_but_not_their_table_rows
+    old: 'text.lstrip(" ").startswith("|")'
+    new: 'text.startswith("|")'
+  - name: a Python line that begins with | is left out as a table row
+    file: scripts/line_width.py
+    caught_by: tests/test_line_width.py::test_the_wide_lines_a_change_adds_to_the_listed_markdown_files_are_reported_but_not_their_table_rows
+    old: 'return path.endswith(".md") and text'
+    new: 'return text'

@@ -95,6 +95,8 @@ narrowed instead, or dropped.
 ## Lines are wrapped by hand
 
 `ruff format` is not part of the checks. Code is wrapped by hand within 150 columns, the way the code around it is; a
-change keeps the wrapping style of the file it edits, and a new file may follow either. The width is checked: ruff
-checks src/, and `scripts/line_width.py` the lines a change adds to any Python file, so the wider lines already in
-tests/ and scripts/ stay until a change rewrites them.
+change keeps the wrapping style of the file it edits, and a new file may follow either. The Markdown files that
+`scripts/line_width.py` lists keep the lines a change adds within the same 150, their table rows aside, even where the
+file's older paragraphs are one line each. The width is checked: ruff checks src/, and `scripts/line_width.py` the
+lines a change adds to any Python file and to those Markdown files, so the wider lines already in tests/, scripts/ and
+those files stay until a change rewrites them.

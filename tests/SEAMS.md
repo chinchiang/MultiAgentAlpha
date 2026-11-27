@@ -317,6 +317,11 @@ too. `parse_args` gives `scripts/control_chars.py` alone its --file, read with n
 the files in `tmp_path`, and one runs the main of `scripts/line_width.py` and of `scripts/change_counts.py` to check that neither takes it and both
 still require --base, comparing the last line of argparse's error.
 
+`test_line_width.py`'s test of the Markdown files writes one file for each entry of the script's MARKDOWN (a file of
+`docs/agents/` standing for its glob) and two files the list does not name, written out in the test rather than read
+from the constant, so that it pins the list the owner fixed; it relies on what the script's docstring reads as a
+table row, and on the hits being printed sorted by path.
+
 Three tests run a script as check_local and CI do, as a child process. Two run `scripts/line_width.py` in a locale
 that is not UTF-8 (`_run_in_a_locale_that_is_not_utf8`):
 `test_line_width.py::test_a_change_with_text_beyond_ascii_is_read_as_utf8_whatever_the_locale` and

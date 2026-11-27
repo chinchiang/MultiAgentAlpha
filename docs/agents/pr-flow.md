@@ -27,12 +27,12 @@ A change that becomes a pull request goes through these steps in order. Each end
 3. **Make it green, review it, then commit it.** Green in the working tree, nothing committed yet: the code, its
    `tests/mutations/<name>.yaml` and `tests/SEAMS.md`, and, when the change takes a version, the version, its CHANGELOG
    row and the demo page. Run `scripts/check_local.py --only worktree` beside the tests (under a minute): ruff; the
-   width of the lines the working tree adds to Python files (`lines-worktree`) and the control characters of those it
-   adds to any text file (`chars-worktree`), over the merge base with `--base` (origin/main by default), committed or
-   not, untracked files included and those git ignores left out; `pytest-worktree`, which checks that every mutation
-   list loads and every pointer of `tests/SEAMS.md` names something that is there; and semgrep, which scans the files as
-   they are, untracked ones included. A finding costs an edit now, and a rebuild of the commits at step 4. mypy, the
-   whole suite and gitleaks wait for step 4.
+   width of the lines the working tree adds to Python files and to the Markdown files `scripts/line_width.py` lists
+   (`lines-worktree`) and the control characters of those it adds to any text file (`chars-worktree`), over the merge
+   base with `--base` (origin/main by default), committed or not, untracked files included and those git ignores left
+   out; `pytest-worktree`, which checks that every mutation list loads and every pointer of `tests/SEAMS.md` names
+   something that is there; and semgrep, which scans the files as they are, untracked ones included. A finding costs an
+   edit now, and a rebuild of the commits at step 4. mypy, the whole suite and gitleaks wait for step 4.
    Then run each mutation list the change adds or edits once, `scripts/mutate.py <list> --focused-only`, one after the
    other and after `--only worktree` has ended (a mutation edits the files the checks read), and read each `CAUGHT` line
    as step 4 says: where it failed, and its mark. A `caught_by` that misses its mutant, or a name that is not the fault
