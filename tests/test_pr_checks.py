@@ -173,7 +173,8 @@ def _main_l0(semgrep: str) -> str:
     return _step(L0, "semgrep on this repository", "python3 scripts/semgrep_ci.py --target . --report semgrep.sarif", semgrep)
 
 
-REFERENCE = f"     Reference run 21 ({'b' * 12}): {CLEAN['semgrep']}"  # the line under the semgrep line when the Reference run is CLEAN's
+CHANGE = "     Change run 1"  # the first line under the semgrep line: the Change run, the stand-in's 1
+REFERENCE = f"     Reference run 21 ({'b' * 12}): {CLEAN['semgrep']}"  # the line under it when the Reference run is CLEAN's
 JOBS = [_check(L0, job=11, workflow="mara-review"), _check(MOCK, job=12, workflow="mara-review"),
         _check(PY312, job=13, workflow="mara-review"), _check("Semgrep OSS")]
 CLEAN_RESULTS = [
@@ -181,6 +182,7 @@ CLEAN_RESULTS = [
     f"ok   control characters  [{MOCK}]  {CLEAN['control characters']}",
     f"ok   gitleaks  [{L0}]  {CLEAN['gitleaks']}",
     f"ok   semgrep  [{L0}]  {CLEAN['semgrep']}",
+    CHANGE,
     REFERENCE,
     *[f"ok   osv-scanner  [{L0}]  {line}" for line in OSV_CLEAN.values()],
 ]
@@ -229,22 +231,22 @@ def test_a_reference_run_with_the_same_semgrep_count_is_named_under_the_line_and
     gh = _gh(tmp_path, JOBS, logs=_ci())
     assert _run(gh) == 0
     assert not (gh.parent / "download.count").exists()
-    assert _under_semgrep(capsys.readouterr().out) == [REFERENCE]
+    assert _under_semgrep(capsys.readouterr().out) == [CHANGE, REFERENCE]
 
 
 def test_a_run_of_main_whose_semgrep_line_has_a_timeout_is_passed_over_for_an_older_one_without(tmp_path, capsys):
     gh = _gh(tmp_path, JOBS, logs=_ci(), main_runs={22: _main_l0(TIMED_OUT), 21: _main_l0(CLEAN["semgrep"])})
     assert _run(gh) == 0
-    assert _under_semgrep(capsys.readouterr().out) == [REFERENCE]
+    assert _under_semgrep(capsys.readouterr().out) == [CHANGE, REFERENCE]
 
 
 def test_differing_counts_print_the_hits_the_change_adds_and_drops_against_the_reference_run(tmp_path, capsys):
-    """The pull request's run is 1, the Reference run 21; the two runs' semgrep.sarif are compared by rule, file and line."""
+    """The Change run is 1, the Reference run 21; the two runs' semgrep.sarif are compared by rule, file and line."""
     kept, added, dropped = _hit("tests/test_x.py", 3), _hit("tests/test_new.py", 39), _hit("scripts/old.py", 7)
     gh = _gh(tmp_path, JOBS, logs=_ci(semgrep=MORE), artifacts={1: [kept, added, added], 21: [kept, dropped, added]})
     assert _run(gh) == 0
     assert _under_semgrep(capsys.readouterr().out) == [
-        REFERENCE, f"     + {AUDIT}  tests/test_new.py:39", f"     - {AUDIT}  scripts/old.py:7"]
+        CHANGE, REFERENCE, f"     + {AUDIT}  tests/test_new.py:39", f"     - {AUDIT}  scripts/old.py:7"]
     assert (gh.parent / "download.count").read_text() == "2"
 
 
@@ -252,41 +254,42 @@ def test_differing_counts_with_no_hit_that_differs_say_so(tmp_path, capsys):
     same = [_hit("tests/test_x.py", 3)]
     gh = _gh(tmp_path, JOBS, logs=_ci(semgrep=MORE), artifacts={1: same, 21: same})
     assert _run(gh) == 0
-    assert _under_semgrep(capsys.readouterr().out) == [REFERENCE, "     no hit differs by rule, file and line"]
+    assert _under_semgrep(capsys.readouterr().out) == [CHANGE, REFERENCE, "     no hit differs by rule, file and line"]
 
 
 def test_no_run_of_main_without_a_timeout_among_its_last_ten_is_said_and_leaves_the_exit(tmp_path, capsys):
     gh = _gh(tmp_path, JOBS, logs=_ci(), main_runs={22: _main_l0(TIMED_OUT), 23: _main_l0("not a semgrep line")})
     assert _run(gh) == 0
     assert _under_semgrep(capsys.readouterr().out) == [
-        "     Reference run: none of main's last 10 completed push runs of mara-review has a semgrep line that is clean with"
+        CHANGE, "     Reference run: none of main's last 10 completed push runs of mara-review has a semgrep line that is clean with"
         " no timeout"]
 
 
 def test_a_gh_call_for_the_reference_run_that_fails_is_said_and_leaves_the_exit(tmp_path, capsys):
     gh = _gh(tmp_path, JOBS, logs=_ci(), main_runs={21: None})
     assert _run(gh) == 0
-    assert _under_semgrep(capsys.readouterr().out) == ["     Reference run: gh run view failed: HTTP 410: the log has expired"]
+    assert _under_semgrep(capsys.readouterr().out) == [CHANGE, "     Reference run: gh run view failed: HTTP 410: the log has expired"]
 
 
 def test_a_download_that_fails_is_said_and_leaves_the_exit(tmp_path, capsys):
     gh = _gh(tmp_path, JOBS, logs=_ci(semgrep=MORE))
     assert _run(gh) == 0
     assert _under_semgrep(capsys.readouterr().out) == [
-        REFERENCE, "     Reference run 21: gh run download 1 failed: no valid artifacts found to download"]
+        CHANGE, REFERENCE, "     Reference run 21: gh run download 1 failed: no valid artifacts found to download"]
 
 
 def test_a_semgrep_sarif_that_cannot_be_read_is_said_and_leaves_the_exit(tmp_path, capsys):
     gh = _gh(tmp_path, JOBS, logs=_ci(semgrep=MORE), artifacts={1: None, 21: [_hit("tests/test_x.py", 3)]})
     assert _run(gh) == 0
-    assert _under_semgrep(capsys.readouterr().out) == [REFERENCE, "     Reference run 21: <download>/change/semgrep.sarif: holds no run"]
+    assert _under_semgrep(capsys.readouterr().out) == [CHANGE, REFERENCE, "     Reference run 21: <download>/change/semgrep.sarif: holds no run"]
 
 
-def test_a_semgrep_line_that_is_not_clean_looks_for_no_run_of_main(tmp_path, capsys):
+def test_a_semgrep_line_that_is_not_clean_prints_nothing_under_it_and_looks_for_no_run_of_main(tmp_path, capsys):
     """Whether such a line fails the run is the result lines' to say (below)."""
     gh = _gh(tmp_path, JOBS, logs=_ci(semgrep="1 untriaged finding(s)"))
     _run(gh)
     assert not (gh.parent / "run-list.count").exists()
+    assert "Change run" not in capsys.readouterr().out
 
 
 # the result lines and the skips

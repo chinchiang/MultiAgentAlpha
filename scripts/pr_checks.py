@@ -4,7 +4,7 @@
 
 It reads everything through gh: the pull request's head (gh pr view), its checks (gh pr checks), the log of each
 check that is a job (gh run view --job <id> --log), and for semgrep the runs of main (gh run list, gh run view <run>
---json jobs, the log of a job) and the l0-sarif artifact of the pull request's run and of its Reference run (gh run
+--json jobs, the log of a job) and the l0-sarif artifact of the Change run and of its Reference run (gh run
 download). While a check is pending, or none is reported yet (right after a
 push), it waits, saying so on stderr and printing nothing on stdout, and reads the checks again every 30 seconds. After
 each read of the checks it reads the head again, and if the head moved it stops (exit 1): the checks it read are no
@@ -20,12 +20,14 @@ not clean. Each result line is printed once with its job: ok when it is the clea
 step printed nothing (with the step to read), and MISS when the logs hold fewer of the tool's steps than CI runs (one
 each; four for osv-scanner).
 
-Under semgrep's result line, when it is ok, the Reference run (GLOSSARY.md): `Reference run <run> (<head>): <its
-result line>`. When its accepted count is not the pull request's, it downloads the l0-sarif artifact of both runs into a
-temporary directory and compares their semgrep.sarif (scripts/semgrep_diff.py's compare): each hit the pull request's
-holds and the Reference run's does not, `+ <rule>  <file>:<line>`, then each the other way, `-`, or that no hit
-differs. When there is no Reference run, or a gh call for it or a download fails, or a semgrep.sarif cannot be read, a
-line says so. These lines inform: none of them changes the exit.
+Under semgrep's result line, when it is ok, first the Change run (GLOSSARY.md), read from the link of the check whose log
+holds that line, `Change run <run>` (the run whose l0-sarif docs/agents/pr-flow.md step 6 compares with the local one),
+then the Reference run (GLOSSARY.md): `Reference run <run> (<head>): <its result line>`. When its accepted count is not
+the pull request's, it downloads the l0-sarif artifact of both runs into a temporary directory and compares their
+semgrep.sarif (scripts/semgrep_diff.py's compare): each hit the pull request's holds and the Reference run's does not,
+`+ <rule>  <file>:<line>`, then each the other way, `-`, or that no hit differs. When there is no Reference run, or a gh
+call for it or a download fails, or a semgrep.sarif cannot be read, a line says so. These lines inform: none of them
+changes the exit.
 
 Then the skipped tests of each job that runs pytest: how many (pytest -rs folds one reason's skips into one line,
 SKIPPED [n]), and in full every skip no missing tool explains. A reason holding "not installed" (TOOL_NOT_INSTALLED) is
@@ -39,7 +41,7 @@ Exit 0 when every check passed or was skipped, every result line is ok, every sk
 job's log was read and no workflow that did not run is required; 1 otherwise, or when the head moved; 2 when gh fails
 or cannot be started, but for the calls of the Reference run (above); 130 when interrupted.
 
-GLOSSARY.md terms: Change, Reference run, Required check, Result line. Not pure: it runs gh, reads the workflow files and
+GLOSSARY.md terms: Change, Change run, Reference run, Required check, Result line. Not pure: it runs gh, reads the workflow files and
 writes the artifacts it downloads into a temporary directory.
 """
 
@@ -231,20 +233,22 @@ def reference_lines(gh: str, jobs: list[tuple[dict, list[Step]]]) -> list[str]:
     if len(found) != 1 or not (count := semgrep_clean(found[0][1])):
         return []
     check, _ = found[0]
+    change_run = JOB_LINK.search(check["link"])[1]  # the Change run: printed first, and its l0-sarif downloaded below
+    change_line = [f"{INDENT}Change run {change_run}"]
     try:
         ref = reference_run(gh, check.get("workflow", ""), check["name"])
     except subprocess.CalledProcessError as e:
-        return [f"{INDENT}Reference run: gh {' '.join(e.cmd[1:3])} failed: {(e.stderr or '').strip()}"]
+        return change_line + [f"{INDENT}Reference run: gh {' '.join(e.cmd[1:3])} failed: {(e.stderr or '').strip()}"]
     if isinstance(ref, str):
-        return [f"{INDENT}Reference run: {ref}"]
+        return change_line + [f"{INDENT}Reference run: {ref}"]
     run, line = ref
     ref_run = str(run["databaseId"])
-    out = [f"{INDENT}Reference run {ref_run} ({run['headSha'][:12]}): {line}"]
+    out = change_line + [f"{INDENT}Reference run {ref_run} ({run['headSha'][:12]}): {line}"]
     if count[1] == SEMGREP_COUNT.match(line)[1]:
         return out
     with tempfile.TemporaryDirectory() as tmp:
         sarifs = []
-        for name, run_id in (("change", JOB_LINK.search(check["link"])[1]), ("reference", ref_run)):
+        for name, run_id in (("change", change_run), ("reference", ref_run)):
             try:
                 gh_text(gh, "run", "download", run_id, "-n", "l0-sarif", "-D", str(Path(tmp) / name))
             except subprocess.CalledProcessError as e:

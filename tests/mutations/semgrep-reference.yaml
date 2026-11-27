@@ -1,7 +1,7 @@
 focused: [tests/test_semgrep_diff.py, tests/test_pr_checks.py]
 # two semgrep SARIF files compared hit by hit (scripts/semgrep_diff.py), and the Reference run scripts/pr_checks.py
-# prints under the pull request's semgrep line, with the hits the change adds and drops when the counts differ (#436);
-# each mutation breaks one
+# prints under the pull request's semgrep line, with the hits the change adds and drops when the counts differ (#436),
+# after the Change run (#451); each mutation breaks one
 mutations:
 - name: a rule id keeps the prefix of where the rules are installed
   file: scripts/semgrep_diff.py
@@ -82,8 +82,8 @@ mutations:
 - name: a gh call for the Reference run that fails stops the run as gh failing does
   file: scripts/pr_checks.py
   caught_by: tests/test_pr_checks.py::test_a_gh_call_for_the_reference_run_that_fails_is_said_and_leaves_the_exit
-  old: "    except subprocess.CalledProcessError as e:\n        return [f\"{INDENT}Reference run: gh"
-  new: "    except subprocess.CalledProcessError as e:\n        raise\n        return [f\"{INDENT}Reference run: gh"
+  old: "    except subprocess.CalledProcessError as e:\n        return change_line + [f\"{INDENT}Reference run: gh"
+  new: "    except subprocess.CalledProcessError as e:\n        raise\n        return change_line + [f\"{INDENT}Reference run: gh"
 - name: a download that fails stops the run as gh failing does
   file: scripts/pr_checks.py
   caught_by: tests/test_pr_checks.py::test_a_download_that_fails_is_said_and_leaves_the_exit
@@ -97,6 +97,31 @@ mutations:
   error: ValueError
 - name: the accepted count is read from a semgrep line that is not clean
   file: scripts/pr_checks.py
-  caught_by: tests/test_pr_checks.py::test_a_semgrep_line_that_is_not_clean_looks_for_no_run_of_main
+  caught_by: tests/test_pr_checks.py::test_a_semgrep_line_that_is_not_clean_prints_nothing_under_it_and_looks_for_no_run_of_main
   old: '    if len(found) != 1 or not (count := semgrep_clean(found[0][1])):'
   new: '    if len(found) != 1 or not (count := re.match(r"\D*(\d+)", found[0][1])):'
+- name: the Change run is not printed
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_reference_run_with_the_same_semgrep_count_is_named_under_the_line_and_nothing_is_downloaded
+  old: '    change_line = [f"{INDENT}Change run {change_run}"]'
+  new: '    change_line = []'
+- name: the job's id is printed as the Change run's
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_reference_run_with_the_same_semgrep_count_is_named_under_the_line_and_nothing_is_downloaded
+  old: 'change_run = JOB_LINK.search(check["link"])[1]'
+  new: 'change_run = JOB_LINK.search(check["link"])[2]'
+- name: the Change run is left out when main has no Reference run
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_no_run_of_main_without_a_timeout_among_its_last_ten_is_said_and_leaves_the_exit
+  old: '        return change_line + [f"{INDENT}Reference run: {ref}"]'
+  new: '        return [f"{INDENT}Reference run: {ref}"]'
+- name: the Change run is left out when a gh call for the Reference run fails
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_gh_call_for_the_reference_run_that_fails_is_said_and_leaves_the_exit
+  old: "        return change_line + [f\"{INDENT}Reference run: gh {' '.join(e.cmd[1:3])}"
+  new: "        return [f\"{INDENT}Reference run: gh {' '.join(e.cmd[1:3])}"
+- name: a semgrep line that is not clean still names the Change run
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_semgrep_line_that_is_not_clean_prints_nothing_under_it_and_looks_for_no_run_of_main
+  old: "    if len(found) != 1 or not (count := semgrep_clean(found[0][1])):\n        return []"
+  new: "    if len(found) != 1 or not (count := semgrep_clean(found[0][1])):\n        return [f\"{INDENT}Change run {JOB_LINK.search(found[0][0]['link'])[1]}\"] if found else []"
