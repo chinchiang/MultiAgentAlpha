@@ -8,8 +8,8 @@ mutations:
   - name: raised is kept for an AssertionError
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_a_catch_that_ends_in_another_exception_than_an_assertion_error_says_where_it_was_raised
-    old: '"raised": raised if error != "AssertionError" else None,'
-    new: '"raised": raised,'
+    old: '"raised": failure.raised if failure.error != "AssertionError" else None,'
+    new: '"raised": failure.raised,'
   - name: the CAUGHT line leaves raised out
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_a_catch_that_ends_in_another_exception_than_an_assertion_error_says_where_it_was_raised

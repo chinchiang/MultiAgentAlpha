@@ -131,6 +131,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NamedTuple
 
 import yaml
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
@@ -281,15 +282,23 @@ def _in_root(path: str, root: Path) -> str | None:
     return p.as_posix()
 
 
-def _failure(out: str, root: Path) -> tuple[str | None, str | None, str | None, str | None]:
-    """(the source line pytest marks with `>` in the first failure of `out`, stripped; the name of the exception that
-    ended it, from the traceback's last line; when there is that exception, the path:line of the traceback's deepest
-    frame of the repository, `root` (_in_root); the text of its first `E` line that gives the first item that differs
-    of two sequences, from `At index` to the line's end); None for what the output does not hold."""
+class Failure(NamedTuple):
+    """What _failure reads of the first failure of a pytest run's output: None for each part the output does not hold,
+    so Failure() holds none of them (an output with no failure, or one whose failure shows none of them)."""
+
+    at: str | None = None  # the source line pytest marks with `>`, stripped
+    error: str | None = None  # the name of the exception that ended it, from the traceback's last line
+    raised: str | None = None  # when there is that exception, the path:line of its deepest frame in the repository (_in_root)
+    first_diff: str | None = None  # the text of its first `E` line from `At index <n> diff:` to the line's end
+
+
+def _failure(out: str, root: Path) -> Failure:
+    """The Failure of the first failure of `out`, its frames placed in the repository `root` (_in_root); Failure() when
+    `out` holds none."""
     lines = out.splitlines()
     start = next((i for i, line in enumerate(lines) if BANNER.match(line)), None)
     if start is None:
-        return None, None, None, None
+        return Failure()
     section = []
     for line in lines[start + 2:]:  # after the banner and the head of the first failure
         if line.startswith("=") or FAILURE_HEAD.match(line) or CAPTURED.match(line):
@@ -299,7 +308,7 @@ def _failure(out: str, root: Path) -> tuple[str | None, str | None, str | None, 
     error = next((m[1] for line in reversed(section) if (m := EXCEPTION_LINE.match(line))), None)
     frames = [f"{path}:{m[2]}" for line in section if (m := FRAME_LINE.match(line)) and (path := _in_root(m[1], root))]
     first_diff = next((m[1] for line in section if (m := FIRST_DIFF.match(line))), None)
-    return at, error, frames[-1] if error and frames else None, first_diff
+    return Failure(at=at, error=error, raised=frames[-1] if error and frames else None, first_diff=first_diff)
 
 
 def changed_paths(base: str, root: Path) -> set[str]:
@@ -463,10 +472,11 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite
     if path.read_bytes() != original:
         raise RuntimeError(f"{m['file']} was not restored")
     _drop_copies(run_dir)
-    at, error, raised, first_diff = _failure(out, root) if code == 1 else (None, None, None, None)
+    failure = _failure(out, root) if code == 1 else Failure()
     expected = m["caught_by"] if code == 1 and "caught_by" in m and where != "alone" else None  # its alone run caught nothing
     return {"mutation": m["name"], "file": m["file"], "caught": code == 1, "by": by, "where": where, "exit": code, "logs": logs,
-            "at": at, "first_diff": first_diff, "error": error, "raised": raised if error != "AssertionError" else None,
+            "at": failure.at, "first_diff": failure.first_diff, "error": failure.error,
+            "raised": failure.raised if failure.error != "AssertionError" else None,
             "expected": expected, "expected_alone": alone if expected else None, "declared_error": m.get("error")}
 
 
