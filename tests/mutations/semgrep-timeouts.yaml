@@ -14,6 +14,7 @@ mutations:
   - name: a report that is not JSON raises when read for timeouts
     file: src/mara/tools/sarif.py
     caught_by: tests/test_semgrep_ci.py::test_a_report_that_cannot_be_read_has_no_timeouts[not-json]
+    error: JSONDecodeError
     old: "    except (OSError, ValueError):\n        return []"
     new: "    except OSError:\n        return []"
   - name: no rule that timed out is named on a line of its own
