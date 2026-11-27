@@ -114,6 +114,28 @@ def test_what_the_failing_test_printed_is_not_read_as_its_exception(tmp_path, ca
     assert (result["at"], result["error"]) == ("assert limit() == 3", "AssertionError")
 
 
+def test_a_catch_at_a_list_comparison_says_the_first_item_that_differs_and_one_at_another_assertion_does_not(tmp_path, capsys):
+    """A whole-output assertion gives every catch the same `at:`; pytest's `At index <n> diff:` gives the first item
+    that differs, so a mutant that breaks an earlier item than its mutation's name gives shows."""
+    root = _repo(tmp_path)
+    (root / "src" / "window.py").write_text("def sizes():\n    return [1, 2, 3]\n", encoding="utf-8")
+    (root / "tests" / "test_window.py").write_text(
+        "from window import sizes\n\n\ndef test_sizes():\n    assert sizes() == [1, 2, 3]\n\n\n"
+        "def test_first():\n    assert sizes()[0] == 1\n", encoding="utf-8")
+    mutations = [{"name": "the second size", "file": "src/window.py", "old": "[1, 2, 3]", "new": "[1, 5, 3]",
+                  "caught_by": "tests/test_window.py::test_sizes"},
+                 {"name": "the first size", "file": "src/window.py", "old": "return [1, 2, 3]", "new": "return [0, 2, 3]",
+                  "caught_by": "tests/test_window.py::test_first"}]
+    mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                 "--focused-only"])
+    assert capsys.readouterr().out.splitlines()[:2] == [
+        "CAUGHT the second size  <- tests/test_window.py::test_sizes  at: assert sizes() == [1, 2, 3]  At index 1 diff: 5 != 2",
+        "CAUGHT the first size  <- tests/test_window.py::test_first  at: assert sizes()[0] == 1"]
+    (run,) = (tmp_path / "runs").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [r["first_diff"] for r in results] == ["At index 1 diff: 5 != 2", None]
+
+
 def test_a_mutation_caught_by_an_error_of_the_code_under_test_is_marked_with_the_error(tmp_path, capsys):
     """Still a catch: whether a KeyError is the fault the name says is for the reader of the line to judge."""
     root = _repo(tmp_path)

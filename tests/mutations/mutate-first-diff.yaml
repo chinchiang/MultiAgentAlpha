@@ -1,0 +1,25 @@
+focused: [tests/test_mutate.py]
+# a catch at a comparison of two sequences says the first item that differs, pytest's `At index <n> diff:` line, in
+# results.json (first_diff) and on its CAUGHT line, and a catch at another assertion does not (scripts/mutate.py, #449);
+# each mutation breaks one of those
+mutations:
+- name: the first item that differs is not read
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_at_a_list_comparison_says_the_first_item_that_differs_and_one_at_another_assertion_does_not
+  old: '    first_diff = next((m[1] for line in section if (m := FIRST_DIFF.match(line))), None)'
+  new: '    first_diff = None'
+- name: the first item that differs keeps the E and the spaces before At index
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_at_a_list_comparison_says_the_first_item_that_differs_and_one_at_another_assertion_does_not
+  old: 'next((m[1] for line in section if (m := FIRST_DIFF.match(line))), None)'
+  new: 'next((m[0] for line in section if (m := FIRST_DIFF.match(line))), None)'
+- name: any E line is read as the first item that differs
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_at_a_list_comparison_says_the_first_item_that_differs_and_one_at_another_assertion_does_not
+  old: 'FIRST_DIFF = re.compile(r"^E\s+(At index \d+ diff: .*)$")'
+  new: 'FIRST_DIFF = re.compile(r"^E\s+(.*)$")'
+- name: the first item that differs is not printed on the CAUGHT line
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_at_a_list_comparison_says_the_first_item_that_differs_and_one_at_another_assertion_does_not
+  old: '+ (f"  {r[''first_diff'']}" if r["first_diff"] else "")'
+  new: '+ ""'

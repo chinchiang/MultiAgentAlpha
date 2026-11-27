@@ -85,12 +85,14 @@ earlier assertion of the same test and proves nothing about the line it targets:
 does not exist, not always.
 
 A review reads where the test that caught a new mutation fails and, for a marked catch (`GLOSSARY.md`), its mark;
-`scripts/mutate.py`'s docstring says where a run prints them and which log holds the failure in full. A mutation names
-an `error:` only once a run has shown that exception raised at the place its name gives, which the catch's `raised:`
-says: a file the mutant no longer writes, read by the test as a `FileNotFoundError`; a refusal it drops, met at the
-test's `pytest.raises` as pytest's `Failed` (DID NOT RAISE). One raised elsewhere, such as a `TypeError` in code the
-mutation did not change, would hide a mutant breaking more than its name says, and is not written: the mutation is
-narrowed instead, or dropped.
+`scripts/mutate.py`'s docstring says where a run prints them and which log holds the failure in full. Where an assertion
+compares a whole output as two sequences, every mutation it catches fails at the same line, and where it fails is the
+first item that differs (`first_diff`): the item the mutation's name gives, not an earlier one. A mutation names an
+`error:` only once a run has shown that exception raised at the place its name gives, which the catch's `raised:` says:
+a file the mutant no longer writes, read by the test as a `FileNotFoundError`; a refusal it drops, met at the test's
+`pytest.raises` as pytest's `Failed` (DID NOT RAISE). One raised elsewhere, such as a `TypeError` in code the mutation
+did not change, would hide a mutant breaking more than its name says, and is not written: the mutation is narrowed
+instead, or dropped.
 
 ## Lines are wrapped by hand
 
