@@ -304,6 +304,12 @@ mutations:
     new: |-
       number, base, head = p.get("number"), p.get("base"), p.get("head")
           if False:
+  - name: a pull request with no base branch is read
+    file: scripts/pilot_poller.py
+    caught_by: tests/test_pilot_poller.py::test_a_pull_request_not_of_the_shape_read_fails_the_run_before_any_review_and_the_sync_still_runs
+    error: KeyError
+    old: '    if not isinstance(base, dict) or not isinstance(base.get("ref"), str):'
+    new: '    if False:'
   - name: a ticket whose number is not an integer is read
     file: scripts/pilot_poller.py
     caught_by: tests/test_pilot_poller.py::test_a_ticket_not_of_the_shape_read_fails_its_pull_request_and_the_sync_still_runs
