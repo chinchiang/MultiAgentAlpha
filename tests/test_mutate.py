@@ -277,7 +277,8 @@ def test_a_catch_by_the_whole_suite_says_where_from_its_log_and_a_failure_with_n
 
 
 def test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch(tmp_path, capsys):
-    """A test file named alone matches any of its tests, and a test named without its parameters each of them."""
+    """A test file named alone, run alone, runs each of its tests, and a test named without its parameters each of them;
+    a case that does not exist, or another test, catches nothing alone, and the focused tests then catch the mutant."""
     root = _repo(tmp_path)
     (root / "tests" / "test_window.py").write_text(
         "import pytest\nfrom window import limit\n\n\n@pytest.mark.parametrize('n', [3])\ndef test_limit(n):\n    assert limit() == n\n",
@@ -292,10 +293,11 @@ def test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_stil
                         "--focused-only"])
     (run,) = (tmp_path / "runs").iterdir()
     results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [(r["where"], r["logs"]) for r in results[:3]] == [
+        ("alone", [f"{slug}.alone.log"]) for slug in ("its_file", "its_test", "its_parameters")], \
+        "a catch by its own caught_by is its alone run's, and the focused tests do not run"
     assert [r["expected"] for r in results] == [None, None, None, "tests/test_window.py::test_limit[4]", "tests/test_door.py::test_width"]
-    assert [(r["expected_alone"], r["logs"]) for r in results[:3]] == [(None, [f"{slug}.focused.log"]) for slug in
-                                                                       ("its_file", "its_test", "its_parameters")], \
-        "a catch by its own caught_by has no alone run"
+    assert [r["expected_alone"] for r in results] == [None, None, None, {"exit": 4}, {"exit": 0}]
     caught = "  <- tests/test_window.py::test_limit[3]  at: assert limit() == n"
     assert capsys.readouterr().out.splitlines()[:5] == [
         f"CAUGHT its file{caught}", f"CAUGHT its test{caught}", f"CAUGHT its parameters{caught}",
@@ -304,11 +306,10 @@ def test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_stil
     assert code == 0
 
 
-# after the test of what a caught_by names, which catches first a mutation of how a catch is matched with its caught_by
-def test_a_catch_by_an_earlier_test_runs_its_caught_by_alone_against_the_same_mutant_and_says_what_that_gave(tmp_path, capsys):
-    """test_three runs first and catches every mutant; run alone against the same mutant, test_under_five catches the
-    one of 5 at its assertion and passes on the one of 4, test_not_seven catches the one of 7 with no traceback, so no
-    at:. A catch by its own caught_by, which runs nothing more, is the test's above."""
+def test_a_mutation_s_caught_by_runs_first_alone_so_an_earlier_test_of_its_file_does_not_catch_it_first(tmp_path, capsys):
+    """test_three, first in the file, fails on every mutant. test_under_five, run alone first, catches the one of 5 and
+    test_not_seven the one of 7 (with no traceback, so no at:), and the focused tests never run for them;
+    test_under_five passes on the one of 4, which the focused tests then catch, marked with what the alone run gave."""
     root = _repo(tmp_path)
     (root / "tests" / "test_window.py").write_text(
         "import pytest\nfrom window import limit\n\n\ndef test_three():\n    assert limit() == 3\n\n\n"
@@ -323,19 +324,37 @@ def test_a_catch_by_an_earlier_test_runs_its_caught_by_alone_against_the_same_mu
                         "--focused-only"])
     assert code == 0
     assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
-    caught = "  <- tests/test_window.py::test_three  at: assert limit() == 3"
     assert capsys.readouterr().out.splitlines()[:3] == [
-        f"CAUGHT five{caught}  (expected {alone}, alone: caught at: assert limit() < 5)",
-        f"CAUGHT four{caught}  (expected {alone}, alone: passes)",
-        f"CAUGHT seven{caught}  (expected tests/test_window.py::test_not_seven, alone: caught)"]
+        f"CAUGHT five  <- {alone}  at: assert limit() < 5",
+        f"CAUGHT four  <- tests/test_window.py::test_three  at: assert limit() == 3  (expected {alone}, alone: passes)",
+        "CAUGHT seven  <- tests/test_window.py::test_not_seven"]
     (run,) = (tmp_path / "runs").iterdir()
     results = json.loads((run / "results.json").read_text(encoding="utf-8"))
-    assert [r["expected_alone"] for r in results] == [
-        {"exit": 1, "at": "assert limit() < 5", "error": "AssertionError"}, {"exit": 0, "at": None, "error": None},
-        {"exit": 1, "at": None, "error": None}]
-    assert [r["logs"] for r in results] == [["five.focused.log", "five.alone.log"], ["four.focused.log", "four.alone.log"],
-                                            ["seven.focused.log", "seven.alone.log"]]
+    assert [(r["where"], r["expected"], r["expected_alone"]) for r in results] == [
+        ("alone", None, None), ("focused", alone, {"exit": 0}), ("alone", None, None)]
+    assert [r["logs"] for r in results] == [["five.alone.log"], ["four.alone.log", "four.focused.log"], ["seven.alone.log"]]
     assert "assert 5 < 5" in (run / "five.alone.log").read_text(encoding="utf-8"), "the alone run's output is kept"
+
+
+def test_a_caught_by_that_fails_alone_without_a_mutation_stops_the_run_before_any_mutation(tmp_path, capsys):
+    """test_uses_setup passes after test_setup, as the focused tests run them, and fails alone: its alone run would
+    catch every mutant, so the run stops as it does for a baseline that fails. A caught_by pytest cannot run (a case
+    that does not exist) is the mark's to say, not the baseline's."""
+    root = _repo(tmp_path)
+    (root / "tests" / "test_window.py").write_text(
+        "from window import limit\n\nSTATE = {}\n\n\ndef test_setup():\n    STATE['ready'] = limit() == 3\n\n\n"
+        "def test_uses_setup():\n    assert STATE.get('ready')\n", encoding="utf-8")
+    mutations = [{"name": "a comment", "file": "src/window.py", "old": "# the window", "new": "# a window",
+                  "caught_by": "tests/test_window.py::test_uses_setup"}]
+    code = mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                        "--focused-only"])
+    assert code == 2
+    (run,) = (tmp_path / "runs").iterdir()
+    assert capsys.readouterr().err.splitlines()[-1] == (
+        "ERROR: the caught_by tests/test_window.py::test_uses_setup fails run alone without a mutation "
+        f"(tests/test_window.py::test_uses_setup); {run / 'baseline.alone.log'}")
+    assert not (run / "results.json").exists(), "no mutation ran"
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
 
 
 def _git_repo(tmp_path: Path) -> Path:

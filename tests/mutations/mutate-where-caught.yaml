@@ -40,26 +40,11 @@ mutations:
   caught_by: tests/test_mutate.py::test_a_caught_by_naming_a_test_that_does_not_exist_is_refused_before_any_file_is_touched
   old: text, re.M) for part in parts)
   new: text, re.M) for part in parts[-1:])
-- name: a test file named alone names none of its tests
+- name: a catch by the alone run is marked
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
-  old: test == caught_by or test.startswith(caught_by + "::") or
-  new: test == caught_by or
-- name: a test named without its parameters names none of them
-  file: scripts/mutate.py
-  caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
-  old: ' or ("[" not in caught_by and test.split("[")[0] == caught_by)'
-  new: ''
-- name: a caught_by with parameters names the test with any
-  file: scripts/mutate.py
-  caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
-  old: ("[" not in caught_by and test.split("[")[0] == caught_by)
-  new: (test.split("[")[0] == caught_by.split("[")[0])
-- name: a catch by the test caught_by names is marked
-  file: scripts/mutate.py
-  caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
-  old: and not is_named_by(by, m["caught_by"])
-  new: and is_named_by(by, m["caught_by"])
+  old: ' and where != "alone" else None'
+  new: ' else None'
 - name: a path left before a mutation is named again after it
   file: scripts/mutate.py
   caught_by: tests/test_mutate.py::test_a_path_a_mutation_leaves_in_the_repository_is_named_with_the_mutation
