@@ -1,0 +1,102 @@
+focused: [tests/test_semgrep_diff.py, tests/test_pr_checks.py]
+# two semgrep SARIF files compared hit by hit (scripts/semgrep_diff.py), and the Reference run scripts/pr_checks.py
+# prints under the pull request's semgrep line, with the hits the change adds and drops when the counts differ (#436);
+# each mutation breaks one
+mutations:
+- name: a rule id keeps the prefix of where the rules are installed
+  file: scripts/semgrep_diff.py
+  caught_by: tests/test_semgrep_diff.py::test_a_rule_named_with_the_prefix_of_where_the_rules_are_installed_is_the_same_rule
+  old: '    return Counter((canonical_rule_id(rule), uri, line) for rule, uri, line in result_keys(doc))'
+  new: '    return Counter((rule, uri, line) for rule, uri, line in result_keys(doc))'
+- name: a hit a file holds twice counts once
+  file: scripts/semgrep_diff.py
+  caught_by: tests/test_semgrep_diff.py::test_a_hit_one_file_holds_and_the_other_does_not_is_named_once_on_its_side
+  old: 'sorted((ha - hb).elements())'
+  new: 'sorted(set(ha) - set(hb))'
+- name: a hit only the second file holds is not printed
+  file: scripts/semgrep_diff.py
+  caught_by: tests/test_semgrep_diff.py::test_a_hit_one_file_holds_and_the_other_does_not_is_named_once_on_its_side
+  old: '    out = [f"only in {b}: {rule}  {uri}:{line}" for rule, uri, line in c.only_b]'
+  new: '    out = []'
+- name: the timeouts of the second file are not read
+  file: scripts/semgrep_diff.py
+  caught_by: tests/test_semgrep_diff.py::test_each_timeout_of_either_file_is_named_with_its_rule_and_file
+  old: 'timeouts(a), timeouts(b))'
+  new: 'timeouts(a), [])'
+- name: a file that cannot be read is not refused
+  file: scripts/semgrep_diff.py
+  caught_by: tests/test_semgrep_diff.py::test_a_file_that_is_not_json_not_shaped_as_sarif_with_no_run_or_missing_exits_2_naming_it
+  old: '    except (OSError, ValueError) as e:'
+  new: '    except ValueError as e:'
+  error: FileNotFoundError
+- name: a file that holds no run is read as one with no hit
+  file: scripts/semgrep_diff.py
+  caught_by: tests/test_semgrep_diff.py::test_a_file_that_is_not_json_not_shaped_as_sarif_with_no_run_or_missing_exits_2_naming_it
+  old: '    if not doc.get("runs"):'
+  new: '    if False:'
+- name: a refused file exits 1
+  file: scripts/semgrep_diff.py
+  caught_by: tests/test_semgrep_diff.py::test_a_file_that_is_not_json_not_shaped_as_sarif_with_no_run_or_missing_exits_2_naming_it
+  old: "        print(f\"ERROR: {e}\", file=sys.stderr)\n        return 2"
+  new: "        print(f\"ERROR: {e}\", file=sys.stderr)\n        return 1"
+- name: the runs of main are listed for another workflow than the one of the pull request's semgrep line
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_reference_run_with_the_same_semgrep_count_is_named_under_the_line_and_nothing_is_downloaded
+  old: '        ref = reference_run(gh, check.get("workflow", ""), check["name"])'
+  new: '        ref = reference_run(gh, "MARA review", check["name"])'
+- name: more than main's last ten completed push runs are read
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_reference_run_with_the_same_semgrep_count_is_named_under_the_line_and_nothing_is_downloaded
+  old: 'REFERENCE_RUNS = 10  #'
+  new: 'REFERENCE_RUNS = 20  #'
+- name: a run of main is read from its first job, not the one of the pull request's semgrep line
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_reference_run_with_the_same_semgrep_count_is_named_under_the_line_and_nothing_is_downloaded
+  old: '        for found in (j for j in jobs if j["name"] == job):'
+  new: '        for found in jobs[:1]:'
+- name: the reference lines are printed after every result line, not under the semgrep line
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_reference_run_with_the_same_semgrep_count_is_named_under_the_line_and_nothing_is_downloaded
+  old: '        semgrep_at = next((i + 1 for i, line in enumerate(results) if line.startswith("ok   semgrep  ")), len(results))'
+  new: '        semgrep_at = len(results)'
+- name: the artifacts are downloaded when the counts are the same
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_reference_run_with_the_same_semgrep_count_is_named_under_the_line_and_nothing_is_downloaded
+  old: '    if count[1] == SEMGREP_COUNT.match(line)[1]:'
+  new: '    if False:'
+- name: a run of main whose semgrep line names a timeout is the Reference run
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_run_of_main_whose_semgrep_line_has_a_timeout_is_passed_over_for_an_older_one_without
+  old: ' and not SEMGREP_TIMEOUT.search(lines[0]):'
+  new: ':'
+- name: the hits are not compared when the counts differ
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_differing_counts_print_the_hits_the_change_adds_and_drops_against_the_reference_run
+  old: '    if count[1] == SEMGREP_COUNT.match(line)[1]:'
+  new: '    if True:'
+- name: the hits the change adds are printed as dropped, and the other way
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_differing_counts_print_the_hits_the_change_adds_and_drops_against_the_reference_run
+  old: '            c = semgrep_diff.compare(sarifs[1], sarifs[0])'
+  new: '            c = semgrep_diff.compare(sarifs[0], sarifs[1])'
+- name: a gh call for the Reference run that fails stops the run as gh failing does
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_gh_call_for_the_reference_run_that_fails_is_said_and_leaves_the_exit
+  old: "    except subprocess.CalledProcessError as e:\n        return [f\"{INDENT}Reference run: gh"
+  new: "    except subprocess.CalledProcessError as e:\n        raise\n        return [f\"{INDENT}Reference run: gh"
+- name: a download that fails stops the run as gh failing does
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_download_that_fails_is_said_and_leaves_the_exit
+  old: "            except subprocess.CalledProcessError as e:\n                return out + [f\"{INDENT}Reference run {ref_run}: gh run download"
+  new: "            except subprocess.CalledProcessError as e:\n                raise\n                return out + [f\"{INDENT}Reference run {ref_run}: gh run download"
+- name: a semgrep.sarif that cannot be read stops the run with a traceback
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_semgrep_sarif_that_cannot_be_read_is_said_and_leaves_the_exit
+  old: "        except ValueError as e:\n            return out + [f\"{INDENT}Reference run {ref_run}: "
+  new: "        except ValueError as e:\n            raise\n            return out + [f\"{INDENT}Reference run {ref_run}: "
+  error: ValueError
+- name: the accepted count is read from a semgrep line that is not clean
+  file: scripts/pr_checks.py
+  caught_by: tests/test_pr_checks.py::test_a_semgrep_line_that_is_not_clean_looks_for_no_run_of_main
+  old: '    if len(found) != 1 or not (count := semgrep_clean(found[0][1])):'
+  new: '    if len(found) != 1 or not (count := re.match(r"\D*(\d+)", found[0][1])):'

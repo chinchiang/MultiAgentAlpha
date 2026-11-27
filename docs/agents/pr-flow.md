@@ -135,11 +135,11 @@ A change that becomes a pull request goes through these steps in order. Each end
    `LOG`, a failed check's job, and for a required check that did not run, why it did not. When it stops because the
    head moved, run it again. Exit 2 is gh failing: read its error.
    When semgrep's accepted count differs from `main`'s or from your local run, find out why before the body states a
-   number. A rule that timed out on a file drops that rule's findings there: `semgrep_ci.py`'s clean line ends with how
-   many timeouts there were and on which files, and a line above it names each timeout's rule and file. When no timeout
-   explains the difference, download the job's SARIF (`gh run download <run> -n l0-sarif`) and compare its
-   `semgrep.sarif`, the scan of this repository with its accepted findings, finding by finding (rule, file, line) with
-   the other: `fixture-semgrep.sarif` beside it is the scan of the seeded fixture.
+   number. Against `main`, read the lines `pr_checks.py` prints under the semgrep line, the **Reference run**
+   (`GLOSSARY.md`) and the hits either scan holds that the other does not (the script's docstring says when).
+   Against your local run, compare `out/check-local/<time>/semgrep.sarif` with the job's (`gh run download <run> -n
+   l0-sarif`) by `scripts/semgrep_diff.py`, which names each timeout of either: a rule that timed out on a file drops
+   that rule's hits there.
 7. **Give the owner the merge command**, with the full 40-character head SHA, and do not run it. `git fetch` once more
    and check that `origin/main` has not moved since step 6; if it has, rebase and push again, because the branch
    would no longer be up to date and CI runs again. The ruleset R1 `update` rule keeps the state `BLOCKED` even when the

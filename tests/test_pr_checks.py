@@ -16,7 +16,7 @@ import pr_checks  # noqa: E402
 
 FAKE_GH = '''
 """A stand-in gh: answers the calls pr_checks makes from the files beside it; any other call fails loudly."""
-import json, sys
+import json, shutil, sys
 from pathlib import Path
 here = Path(__file__).parent
 args = sys.argv[1:]
@@ -42,6 +42,22 @@ elif args[:3] == ["run", "view", "--job"] and args[4:] == ["--log"]:
     if not log.exists():
         sys.exit("HTTP 410: the log has expired")
     print(log.read_text(), end="")
+elif args[:2] == ["run", "list"]:
+    if args[2:] != ["--workflow", "mara-review", "--branch", "main", "--event", "push", "--status", "completed",
+                    "--limit", "10", "--json", "databaseId,headSha"]:
+        sys.exit(f"stand-in gh: no answer for {args}")
+    nth("run-list", [None])
+    print(json.dumps([{"databaseId": run, "headSha": "b" * 40} for run in json.loads((here / "main_runs.json").read_text())]))
+elif args[:2] == ["run", "view"] and args[3:] == ["--json", "jobs"]:
+    run = int(args[2])
+    print(json.dumps({"jobs": [{"databaseId": run * 100 + 2, "name": "tests + mock review"},
+                               {"databaseId": run * 100 + 1, "name": "L0 deterministic tools"}]}))
+elif args[:2] == ["run", "download"] and args[3:6] == ["-n", "l0-sarif", "-D"] and len(args) == 7:
+    nth("download", [None])
+    artifact = here / "artifacts" / args[2]
+    if not artifact.exists():
+        sys.exit("no valid artifacts found to download")
+    shutil.copytree(artifact, args[6])
 elif args == ["api", "repos/{owner}/{repo}/rulesets"]:
     disabled = json.loads((here / "disabled.json").read_text())
     print(json.dumps([{"id": i, "name": name, "enforcement": "disabled" if name in disabled else "active"}
@@ -63,13 +79,18 @@ def _check(name: str, bucket: str = "pass", seconds: int = 9, job: int | None = 
 
 def _gh(tmp_path: Path, *polls: list[dict] | str, heads: list[str] | None = None, logs: dict[int, str] | None = None,
         rulesets: dict[str, list[str]] | None = None, disabled: tuple[str, ...] = (),
-        workflows: dict[str, str] | None = None) -> Path:
+        workflows: dict[str, str] | None = None, main_runs: dict[int, str | None] | None = None,
+        artifacts: dict[int, list[dict] | None] | None = None) -> Path:
     """A directory holding the stand-in gh and its answers; the path of the gh.
 
     `polls` are the answers to successive gh pr checks calls, the last one repeated ("none": gh says no check is
     reported yet), and `heads` those to gh pr view. `logs` maps a job's id to its log (a job without one has an expired
     log); `rulesets` maps each ruleset's name to the checks it requires, `disabled` names those not enforced;
-    `workflows` are the workflow files of the repository (none unless given)."""
+    `workflows` are the workflow files of the repository (none unless given). `main_runs` maps each of main's push runs,
+    newest first, to the log of its L0 job, whose id is the run's times 100 plus 1 (None: an expired log; one run, 21,
+    whose semgrep line is CLEAN's, unless given); `artifacts` maps a run (the pull request's is 1, as _check's links
+    give) to the results of the semgrep.sarif of its l0-sarif (None: a SARIF with no run; a run without one has no
+    artifact)."""
     d = tmp_path / "gh"
     (d / "logs").mkdir(parents=True)
     (d / "workflows").mkdir()
@@ -77,8 +98,14 @@ def _gh(tmp_path: Path, *polls: list[dict] | str, heads: list[str] | None = None
     (d / "polls.json").write_text(json.dumps(list(polls)))
     (d / "rulesets.json").write_text(json.dumps(rulesets or {"R1": []}))
     (d / "disabled.json").write_text(json.dumps(list(disabled)))
-    for job, log in (logs or {}).items():
+    main_runs = {21: _main_l0(CLEAN["semgrep"])} if main_runs is None else main_runs
+    (d / "main_runs.json").write_text(json.dumps(list(main_runs)))
+    for job, log in {**(logs or {}), **{run * 100 + 1: log for run, log in main_runs.items() if log is not None}}.items():
         (d / "logs" / f"{job}.log").write_text(log)
+    for run, results in (artifacts or {}).items():
+        (d / "artifacts" / str(run)).mkdir(parents=True)
+        runs = [] if results is None else [{"results": results}]
+        (d / "artifacts" / str(run) / "semgrep.sarif").write_text(json.dumps({"version": "2.1.0", "runs": runs}))
     for name, text in (workflows or {}).items():
         (d / "workflows" / name).write_text(text)
     gh = d / "gh"
@@ -141,6 +168,12 @@ def _ci(*, semgrep: str | None = CLEAN["semgrep"], width: tuple[str, ...] = (CLE
     return {11: l0, 12: mock, 13: tests}
 
 
+def _main_l0(semgrep: str) -> str:
+    """The log of the L0 job of a run of main, its semgrep step ending on `semgrep`."""
+    return _step(L0, "semgrep on this repository", "python3 scripts/semgrep_ci.py --target . --report semgrep.sarif", semgrep)
+
+
+REFERENCE = f"     Reference run 21 ({'b' * 12}): {CLEAN['semgrep']}"  # the line under the semgrep line when the Reference run is CLEAN's
 JOBS = [_check(L0, job=11, workflow="mara-review"), _check(MOCK, job=12, workflow="mara-review"),
         _check(PY312, job=13, workflow="mara-review"), _check("Semgrep OSS")]
 CLEAN_RESULTS = [
@@ -148,6 +181,7 @@ CLEAN_RESULTS = [
     f"ok   control characters  [{MOCK}]  {CLEAN['control characters']}",
     f"ok   gitleaks  [{L0}]  {CLEAN['gitleaks']}",
     f"ok   semgrep  [{L0}]  {CLEAN['semgrep']}",
+    REFERENCE,
     *[f"ok   osv-scanner  [{L0}]  {line}" for line in OSV_CLEAN.values()],
 ]
 CLEAN_SKIPS = [f"skips  [{MOCK}]  0", f"skips  [{PY312}]  2, each a tool not installed"]
@@ -169,6 +203,90 @@ def test_a_failed_check_exits_1(tmp_path, capsys):
     """The jobs' logs are clean, so the failed check is what the exit says."""
     assert _run(_gh(tmp_path, [*JOBS[:3], _check("Trivy", bucket="fail", seconds=60)], logs=_ci())) == 1
     assert "fail     Trivy  1m0s" in capsys.readouterr().out.splitlines()
+
+
+# the Reference run, under the semgrep line
+
+
+AUDIT = "python.lang.security.audit.dangerous-subprocess-use-audit"
+TIMED_OUT = "clean: 164 accepted finding(s), 0 untriaged; 1 timeout(s) (tests/test_m.py)"
+MORE = "clean: 166 accepted finding(s), 0 untriaged"
+
+
+def _hit(uri: str, line: int, rule: str = AUDIT) -> dict:
+    return {"ruleId": rule, "locations": [{"physicalLocation": {"artifactLocation": {"uri": uri}, "region": {"startLine": line}}}]}
+
+
+def _under_semgrep(out: str) -> list[str]:
+    """The indented lines under the semgrep result line."""
+    lines = out.splitlines()
+    i = lines.index(next(line for line in lines if line.startswith("ok   semgrep  ")))
+    below = lines[i + 1:]
+    return below[:next((n for n, line in enumerate(below) if not line.startswith("     ")), len(below))]
+
+
+def test_a_reference_run_with_the_same_semgrep_count_is_named_under_the_line_and_nothing_is_downloaded(tmp_path, capsys):
+    gh = _gh(tmp_path, JOBS, logs=_ci())
+    assert _run(gh) == 0
+    assert not (gh.parent / "download.count").exists()
+    assert _under_semgrep(capsys.readouterr().out) == [REFERENCE]
+
+
+def test_a_run_of_main_whose_semgrep_line_has_a_timeout_is_passed_over_for_an_older_one_without(tmp_path, capsys):
+    gh = _gh(tmp_path, JOBS, logs=_ci(), main_runs={22: _main_l0(TIMED_OUT), 21: _main_l0(CLEAN["semgrep"])})
+    assert _run(gh) == 0
+    assert _under_semgrep(capsys.readouterr().out) == [REFERENCE]
+
+
+def test_differing_counts_print_the_hits_the_change_adds_and_drops_against_the_reference_run(tmp_path, capsys):
+    """The pull request's run is 1, the Reference run 21; the two runs' semgrep.sarif are compared by rule, file and line."""
+    kept, added, dropped = _hit("tests/test_x.py", 3), _hit("tests/test_new.py", 39), _hit("scripts/old.py", 7)
+    gh = _gh(tmp_path, JOBS, logs=_ci(semgrep=MORE), artifacts={1: [kept, added, added], 21: [kept, dropped, added]})
+    assert _run(gh) == 0
+    assert _under_semgrep(capsys.readouterr().out) == [
+        REFERENCE, f"     + {AUDIT}  tests/test_new.py:39", f"     - {AUDIT}  scripts/old.py:7"]
+    assert (gh.parent / "download.count").read_text() == "2"
+
+
+def test_differing_counts_with_no_hit_that_differs_say_so(tmp_path, capsys):
+    same = [_hit("tests/test_x.py", 3)]
+    gh = _gh(tmp_path, JOBS, logs=_ci(semgrep=MORE), artifacts={1: same, 21: same})
+    assert _run(gh) == 0
+    assert _under_semgrep(capsys.readouterr().out) == [REFERENCE, "     no hit differs by rule, file and line"]
+
+
+def test_no_run_of_main_without_a_timeout_among_its_last_ten_is_said_and_leaves_the_exit(tmp_path, capsys):
+    gh = _gh(tmp_path, JOBS, logs=_ci(), main_runs={22: _main_l0(TIMED_OUT), 23: _main_l0("not a semgrep line")})
+    assert _run(gh) == 0
+    assert _under_semgrep(capsys.readouterr().out) == [
+        "     Reference run: none of main's last 10 completed push runs of mara-review has a semgrep line that is clean with"
+        " no timeout"]
+
+
+def test_a_gh_call_for_the_reference_run_that_fails_is_said_and_leaves_the_exit(tmp_path, capsys):
+    gh = _gh(tmp_path, JOBS, logs=_ci(), main_runs={21: None})
+    assert _run(gh) == 0
+    assert _under_semgrep(capsys.readouterr().out) == ["     Reference run: gh run view failed: HTTP 410: the log has expired"]
+
+
+def test_a_download_that_fails_is_said_and_leaves_the_exit(tmp_path, capsys):
+    gh = _gh(tmp_path, JOBS, logs=_ci(semgrep=MORE))
+    assert _run(gh) == 0
+    assert _under_semgrep(capsys.readouterr().out) == [
+        REFERENCE, "     Reference run 21: gh run download 1 failed: no valid artifacts found to download"]
+
+
+def test_a_semgrep_sarif_that_cannot_be_read_is_said_and_leaves_the_exit(tmp_path, capsys):
+    gh = _gh(tmp_path, JOBS, logs=_ci(semgrep=MORE), artifacts={1: None, 21: [_hit("tests/test_x.py", 3)]})
+    assert _run(gh) == 0
+    assert _under_semgrep(capsys.readouterr().out) == [REFERENCE, "     Reference run 21: <download>/change/semgrep.sarif: holds no run"]
+
+
+def test_a_semgrep_line_that_is_not_clean_looks_for_no_run_of_main(tmp_path, capsys):
+    """Whether such a line fails the run is the result lines' to say (below)."""
+    gh = _gh(tmp_path, JOBS, logs=_ci(semgrep="1 untriaged finding(s)"))
+    _run(gh)
+    assert not (gh.parent / "run-list.count").exists()
 
 
 # the result lines and the skips

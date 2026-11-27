@@ -158,3 +158,4 @@ mutations:
   caught_by: tests/test_pr_checks.py::test_a_gh_that_cannot_be_started_exits_2_and_names_the_call
   old: "    except OSError as e:\n        raise subprocess.CalledProcessError(127"
   new: "    except KeyError as e:\n        raise subprocess.CalledProcessError(127"
+  error: FileNotFoundError
