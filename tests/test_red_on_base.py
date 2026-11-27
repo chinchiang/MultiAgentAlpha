@@ -64,14 +64,14 @@ def _run(repo: Path, *args: str, env: dict[str, str] | None = None) -> subproces
 
 def test_a_test_of_what_the_base_lacks_is_red_with_its_failure_and_one_that_passes_on_both_is_green(tmp_path):
     repo = _repo(tmp_path)
-    _write(repo, "tests/test_pkg.py", BASE_TESTS + "\n\ndef test_g():\n    assert pkg.g() == 2\n")
+    _write(repo, "tests/test_pkg.py", BASE_TESTS + '\n\ndef test_g():\n    assert hasattr(pkg, "g")\n')
     run = _run(repo, "tests/test_pkg.py")
     assert run.returncode == 0, run.stderr
     assert run.stdout.splitlines() == [
         "GREEN      tests/test_pkg.py::test_f",
         "RED        tests/test_pkg.py::test_g",
-        "    >       assert pkg.g() == 2",
-        "    E       AttributeError: module 'pkg' has no attribute 'g'",
+        '    >       assert hasattr(pkg, "g")',
+        "    E       AssertionError: assert False",
         "1 red, 1 green, 0 skipped, 0 unreached",
     ]
 
@@ -316,5 +316,47 @@ def test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one
         "RED        tests/test_kw.py::test_another_type_error",
         "    >       assert pkg.f(1) == 1",
         "    E       TypeError: f() takes 0 positional arguments but 1 was given",
+        "2 red, 0 green, 0 skipped, 1 unreached",
+    ]
+
+
+ATTRIBUTE_TESTS = '''import pkg
+
+
+def _g():
+    return pkg.g()
+
+
+def test_own_read():
+    assert pkg.g() == 2
+
+
+def test_through_a_helper():
+    assert _g() == 2
+
+
+def test_another_attribute_error():
+    assert pkg.f().g == 2
+'''
+
+
+def test_a_test_that_reads_a_name_the_base_s_module_lacks_is_unreached_naming_it_and_one_that_reads_it_deeper_is_red(tmp_path):
+    """The base's pkg has no g: the test that reads it at its own call fails there, and is unreached with a note naming
+    the module and the name; one whose helper reads it fails a frame further down, and one whose AttributeError is of
+    an int, not of a module, are red."""
+    repo = _repo(tmp_path)
+    _write(repo, "tests/test_attribute.py", ATTRIBUTE_TESTS)
+    run = _run(repo, "tests/test_attribute.py")
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.splitlines() == [
+        "UNREACHED  tests/test_attribute.py::test_own_read",
+        "    E       AttributeError: module 'pkg' has no attribute 'g'",
+        "    the base's module pkg lacks g: how to see the red the test is about is in pr-flow step 2",
+        "RED        tests/test_attribute.py::test_through_a_helper",
+        "    >       assert _g() == 2",
+        "    E       AttributeError: module 'pkg' has no attribute 'g'",
+        "RED        tests/test_attribute.py::test_another_attribute_error",
+        "    >       assert pkg.f().g == 2",
+        "    E       AttributeError: 'int' object has no attribute 'g'",
         "2 red, 0 green, 0 skipped, 1 unreached",
     ]
