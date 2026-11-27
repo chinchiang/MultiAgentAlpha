@@ -47,6 +47,12 @@ how it was established, in parentheses, in one of three forms:
 Two sources share one parenthesis, parted by `;`: `(run: …; read: …)`. A marker on a section's heading line covers
 every statement of that section: `**Current behavior** (run: each case reproduced in a throwaway repository on <head>)`.
 
+### A rule the brief asks for
+
+A brief that asks for a rule or a procedure to be written down names the one document that states it, and those, if
+any, that point at it (`CODING_STANDARDS.md`, "One concept, one wording"), so that the agent does not meet it with a
+restatement.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_

@@ -36,6 +36,11 @@ apart. Once both are back, empty `standards/` and `spec/` of what a sub-agent co
 then the rest. The two directories stay, empty, and so do the reports and `spec.md` after the merge: the handoff or a
 retrospective points at them, and a later session reads them to know where step 3 stands.
 
+When a sub-agent ends on an error and gives no report (the API of the model it runs on refuses an expired login, say),
+check and empty its directory as for one that reports, before it starts again. Once the cause is gone (the owner logs in
+again), start it again with the same prompt: the report written to `standards-report.md` or `spec-report.md` is the new
+start's, and the pull request's body says the first start failed and why.
+
 When the way the change does its work is replaced after a review (not a fix of a finding, another approach), review it
 again. Add the decisions to `spec.md` and say there what the second review verifies; keep the first review's reports,
 and write the new ones as `standards-report-2.md` and `spec-report-2.md`. Each prompt names its axis's first report, and
