@@ -1,0 +1,35 @@
+focused: [tests/test_mutate.py]
+# a catch marked (expected <caught_by>, alone: …) runs its caught_by alone against the same mutant, its alone run, and
+# says what that gave at the end of the mark (scripts/mutate.py, #434): which test runs alone, against which source,
+# the log it keeps, where its at: is read from, and how its exit is told; each mutation breaks one
+mutations:
+- name: the test that caught the mutant runs alone, not its caught_by
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
+  old: '            alone_code, _, alone_out = _pytest(root, [expected])'
+  new: '            alone_code, _, alone_out = _pytest(root, [by])'
+- name: the caught_by runs alone against the original, not the mutant
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_an_earlier_test_runs_its_caught_by_alone_against_the_same_mutant_and_says_what_that_gave
+  old: '            alone_code, _, alone_out = _pytest(root, [expected])'
+  new: '            path.write_bytes(original); alone_code, _, alone_out = _pytest(root, [expected])'
+- name: the alone run's log is not listed
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_an_earlier_test_runs_its_caught_by_alone_against_the_same_mutant_and_says_what_that_gave
+  old: '            logs.append(f"{slug}.alone.log")'
+  new: '            pass'
+- name: the alone run's at is read from the run that caught the mutant
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_an_earlier_test_runs_its_caught_by_alone_against_the_same_mutant_and_says_what_that_gave
+  old: '            alone_at, alone_error, _ = _failure(alone_out, root) if alone_code == 1 else (None, None, None)'
+  new: '            alone_at, alone_error, _ = _failure(out, root) if alone_code == 1 else (None, None, None)'
+- name: an alone run pytest could not run is said to pass
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_still_a_catch
+  old: 'else "passes" if alone["exit"] == 0 else'
+  new: 'else "passes" if alone["exit"] != 1 else'
+- name: an alone run that fails with no at is said to pass
+  file: scripts/mutate.py
+  caught_by: tests/test_mutate.py::test_a_catch_by_an_earlier_test_runs_its_caught_by_alone_against_the_same_mutant_and_says_what_that_gave
+  old: 'if alone["at"] else "caught")'
+  new: 'if alone["at"] else "passes")'

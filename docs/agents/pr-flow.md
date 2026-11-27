@@ -34,7 +34,8 @@ A change that becomes a pull request goes through these steps in order. Each end
    Then run each mutation list the change adds or edits once, `scripts/mutate.py <list> --focused-only`, one after the
    other and after `--only worktree` has ended (a mutation edits the files the checks read), and read each `CAUGHT` line
    as step 4 says: where it failed, and its mark. A `caught_by` that another test beats, or a name that is not the fault
-   its `new` makes, is fixed now, before the review, and not by a rebuild after step 4. The lists the change touches but
+   its `new` makes, is fixed now, before the review, and not by a rebuild after step 4; step 4 says what the end of an
+   `(expected …)` mark asks. The lists the change touches but
    does not add or edit wait for step 4. A list refused for the Python it needs (`needs Python <specifier>`, exit 2)
    runs with an interpreter it takes, as step 4 says.
    Review that tree before the first commit, so a finding costs an edit and not a rebuild: `mattpocock-skills:code-review`
@@ -99,7 +100,10 @@ A change that becomes a pull request goes through these steps in order. Each end
    once. Done when every check `check_local.py` runs is `ok`, its osv scans included when `AGENTS.md` asks for them, and
    every mutation of those lists is caught for the reason its name says. Of every other mutation of those lists, read
    each marked catch and each `LEFT` line the summary gathers: a test the change adds or edits can catch an old mutation
-   before its `caught_by` does.
+   before its `caught_by` does. An `(expected …)` mark ends with what the `caught_by`'s alone run gave against the same
+   mutant: `caught at: <at>` or `caught` asks for the order of the tests or their setup to be fixed, the `caught_by`
+   catching the mutant alone and another test catching it first; `passes` asks for the test or the `caught_by` to be fixed, the
+   `caught_by` missing the fault; `pytest exit <n>`, for the `caught_by` to name a test pytest runs.
    For the mutations the change adds or edits, read where the test that caught each failed (third paragraph of "A
    behaviour change commits its mutation list" in `CODING_STANDARDS.md`): it fails at the assertion its name gives, not
    at a `TypeError`, an import error or an earlier assertion. `mutate.py` prints it on each `CAUGHT` line, `at:` and the

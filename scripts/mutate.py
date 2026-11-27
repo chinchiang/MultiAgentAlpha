@@ -56,9 +56,12 @@ with the exception that ended the failure, read from its traceback's last line, 
 names (`error: FileNotFoundError`, above), or, when it names none, when it is not an AssertionError: `(KeyError)`, and
 `(KeyError, not FileNotFoundError)` or `(no exception, not FileNotFoundError)` when it names one. A failure with no such
 line, as an ExceptionGroup's, has no exception, and no `at:` either; with no `error` named, it has no mark. A catch is
-marked with `(expected <caught_by>)` when a test other than the one its `caught_by` names caught it (a test file named
-alone names each of its tests; a test named without its parameters, each of them). A marked catch is still a catch:
-whether it is the fault the name says is for the reader to judge.
+marked with `(expected <caught_by>, alone: …)` when a test other than the one its `caught_by` names caught it (a test
+file named alone names each of its tests; a test named without its parameters, each of them). With the mutant still in
+place, the `caught_by` then runs alone, as pytest takes it (its alone run), and the mark ends with what that gave:
+`caught at: <at>` when it fails there, `caught` when it fails with no `at:` in its output, `passes` when it passes, and
+`pytest exit <n>` for any other exit; what each asks is in docs/agents/pr-flow.md, step 4. A marked catch is still a
+catch: whether it is the fault the name says is for the reader to judge.
 It reads git status (untracked files one by one) before the runs without a mutation, after them, and after each run
 with one; every path it lists that it did not list before, outside the run's own directory, is a left path, printed
 after the last mutation as `LEFT <path>  (<the mutation, or baseline>)`, and neither removed nor counted against the
@@ -67,11 +70,13 @@ run, it says so and looks no more.
 Each run writes out/mutations/<UTC time>/results.json (one entry per mutation: caught, by which test, by the focused
 tests or the whole suite, pytest's exit code, the logs it wrote, at and error (null when the output holds none, as for a
 failure with pytrace=False, or for a mutation not caught), raised (null as well, and for an AssertionError), expected
-(the caught_by a catch did not match, else null), declared_error (the mutation's `error`, else null) and left (the paths
+(the caught_by a catch did not match, else null), expected_alone (for such a catch, the exit, at and error of the
+alone run, else null), declared_error (the mutation's `error`, else null) and left (the paths
 it left, null when git status was not read)), the output of the runs without a mutation (baseline.focused.log,
 baseline.suite.log), the output of the focused tests with each mutation in <slug>.focused.log, the output of each run of
-the whole suite with a mutation in <slug>.suite.log (<slug> is the mutation's name with whitespace, / \\ : * ? " < > |
-turned into _, at most 80 characters), a copy of the list and its pid; a later run never overwrites an earlier one.
+the whole suite with a mutation in <slug>.suite.log, that of an alone run in <slug>.alone.log (<slug> is the
+mutation's name with whitespace, / \\ : * ? " < > | turned into _, at most 80 characters), a copy of the list and its
+pid; a later run never overwrites an earlier one.
 Before it mutates a file, a run keeps the file and its mutant under original/ and mutant/ in its directory, and removes
 them once the file is restored. A run killed in between (SIGKILL, SIGTERM, the end of a session) never restores it, so
 every run first looks for such copies: a file still holding the mutant is restored from original/, one holding the
@@ -409,8 +414,9 @@ def is_named_by(test: str, caught_by: str) -> bool:
 
 
 def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite: bool = True) -> dict:
-    """Apply `m`, find whether a test catches it, restore the file; its result. The file and its mutant are kept in
-    `run_dir` while it is mutated (restore_left)."""
+    """Apply `m`, find whether a test catches it, and, when a test other than its caught_by did, run the caught_by alone
+    against the same mutant (the alone run); restore the file; its result. The file and its mutant are kept in `run_dir`
+    while it is mutated (restore_left)."""
     path = root / m["file"]
     original = path.read_bytes()
     text = original.decode("utf-8")
@@ -434,6 +440,14 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite
             code, by, out = _pytest(root, [])
             (run_dir / f"{slug}.suite.log").write_text(out, encoding="utf-8")
             logs.append(f"{slug}.suite.log")
+        expected = m["caught_by"] if code == 1 and "caught_by" in m and not is_named_by(by, m["caught_by"]) else None
+        alone = None
+        if expected:  # the alone run: the caught_by alone, against the same mutant
+            alone_code, _, alone_out = _pytest(root, [expected])
+            (run_dir / f"{slug}.alone.log").write_text(alone_out, encoding="utf-8")
+            logs.append(f"{slug}.alone.log")
+            alone_at, alone_error, _ = _failure(alone_out, root) if alone_code == 1 else (None, None, None)
+            alone = {"exit": alone_code, "at": alone_at, "error": alone_error}
     finally:
         path.write_bytes(original)
         _clear_bytecode(root)
@@ -441,10 +455,21 @@ def check(m: dict, focused: list[str], root: Path, run_dir: Path, *, whole_suite
         raise RuntimeError(f"{m['file']} was not restored")
     _drop_copies(run_dir)
     at, error, raised = _failure(out, root) if code == 1 else (None, None, None)
-    expected = m["caught_by"] if code == 1 and "caught_by" in m and not is_named_by(by, m["caught_by"]) else None
     return {"mutation": m["name"], "file": m["file"], "caught": code == 1, "by": by, "where": where, "exit": code, "logs": logs,
             "at": at, "error": error, "raised": raised if error != "AssertionError" else None, "expected": expected,
-            "declared_error": m.get("error")}
+            "expected_alone": alone, "declared_error": m.get("error")}
+
+
+def expected_mark(r: dict) -> str:
+    """The mark a catch's line carries for a test other than its caught_by having caught it (`r` is check's result):
+    `expected <caught_by>, alone: ` and what its alone run gave, `caught at: <at>` (`caught` when its output holds no
+    `at:`), `passes`, or `pytest exit <n>`; empty when `expected` is None."""
+    if not r["expected"]:
+        return ""
+    alone = r["expected_alone"]
+    gave = ((f"caught at: {alone['at']}" if alone["at"] else "caught") if alone["exit"] == 1
+            else "passes" if alone["exit"] == 0 else f"pytest exit {alone['exit']}")
+    return f"expected {r['expected']}, alone: {gave}"
 
 
 def error_mark(r: dict) -> str:
@@ -510,7 +535,7 @@ def run_mutation_list(path: Path, focused: list[str], mutations: list[dict], roo
             line = (("CAUGHT " if r["caught"] else "MISSED ") + r["mutation"] + (f"  <- {r['by']}" if r["by"] else f"  ({r['where']})")
                     + (f"  at: {r['at']}" if r["at"] else "") + (f"  raised: {r['raised']}" if r["raised"] else "")
                     + (f"  ({mark})" if (mark := error_mark(r)) else "")
-                    + (f"  (expected {r['expected']})" if r["expected"] else ""))
+                    + (f"  ({expected_text})" if (expected_text := expected_mark(r)) else ""))
             print(line, flush=True)
             if r["caught"] and (mark or r["expected"]):
                 marked.append(line)
