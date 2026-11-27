@@ -293,12 +293,49 @@ def test_a_catch_by_another_test_than_the_one_caught_by_names_is_marked_and_stil
     (run,) = (tmp_path / "runs").iterdir()
     results = json.loads((run / "results.json").read_text(encoding="utf-8"))
     assert [r["expected"] for r in results] == [None, None, None, "tests/test_window.py::test_limit[4]", "tests/test_door.py::test_width"]
+    assert [(r["expected_alone"], r["logs"]) for r in results[:3]] == [(None, [f"{slug}.focused.log"]) for slug in
+                                                                       ("its_file", "its_test", "its_parameters")], \
+        "a catch by its own caught_by has no alone run"
     caught = "  <- tests/test_window.py::test_limit[3]  at: assert limit() == n"
     assert capsys.readouterr().out.splitlines()[:5] == [
         f"CAUGHT its file{caught}", f"CAUGHT its test{caught}", f"CAUGHT its parameters{caught}",
-        f"CAUGHT other parameters{caught}  (expected tests/test_window.py::test_limit[4])",
-        f"CAUGHT another test{caught}  (expected tests/test_door.py::test_width)"]
+        f"CAUGHT other parameters{caught}  (expected tests/test_window.py::test_limit[4], alone: pytest exit 4)",
+        f"CAUGHT another test{caught}  (expected tests/test_door.py::test_width, alone: passes)"]
     assert code == 0
+
+
+# after the test of what a caught_by names, which catches first a mutation of how a catch is matched with its caught_by
+def test_a_catch_by_an_earlier_test_runs_its_caught_by_alone_against_the_same_mutant_and_says_what_that_gave(tmp_path, capsys):
+    """test_three runs first and catches every mutant; run alone against the same mutant, test_under_five catches the
+    one of 5 at its assertion and passes on the one of 4, test_not_seven catches the one of 7 with no traceback, so no
+    at:. A catch by its own caught_by, which runs nothing more, is the test's above."""
+    root = _repo(tmp_path)
+    (root / "tests" / "test_window.py").write_text(
+        "import pytest\nfrom window import limit\n\n\ndef test_three():\n    assert limit() == 3\n\n\n"
+        "def test_under_five():\n    assert limit() < 5\n\n\n"
+        "def test_not_seven():\n    if limit() == 7:\n        pytest.fail('seven', pytrace=False)\n", encoding="utf-8")
+    alone = "tests/test_window.py::test_under_five"
+    mutations = [{"name": "five", "file": "src/window.py", "old": "return 3", "new": "return 5", "caught_by": alone},
+                 {"name": "four", "file": "src/window.py", "old": "return 3", "new": "return 4", "caught_by": alone},
+                 {"name": "seven", "file": "src/window.py", "old": "return 3", "new": "return 7",
+                  "caught_by": "tests/test_window.py::test_not_seven"}]
+    code = mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                        "--focused-only"])
+    assert code == 0
+    assert (root / "src" / "window.py").read_text(encoding="utf-8") == SOURCE
+    caught = "  <- tests/test_window.py::test_three  at: assert limit() == 3"
+    assert capsys.readouterr().out.splitlines()[:3] == [
+        f"CAUGHT five{caught}  (expected {alone}, alone: caught at: assert limit() < 5)",
+        f"CAUGHT four{caught}  (expected {alone}, alone: passes)",
+        f"CAUGHT seven{caught}  (expected tests/test_window.py::test_not_seven, alone: caught)"]
+    (run,) = (tmp_path / "runs").iterdir()
+    results = json.loads((run / "results.json").read_text(encoding="utf-8"))
+    assert [r["expected_alone"] for r in results] == [
+        {"exit": 1, "at": "assert limit() < 5", "error": "AssertionError"}, {"exit": 0, "at": None, "error": None},
+        {"exit": 1, "at": None, "error": None}]
+    assert [r["logs"] for r in results] == [["five.focused.log", "five.alone.log"], ["four.focused.log", "four.alone.log"],
+                                            ["seven.focused.log", "seven.alone.log"]]
+    assert "assert 5 < 5" in (run / "five.alone.log").read_text(encoding="utf-8"), "the alone run's output is kept"
 
 
 def _git_repo(tmp_path: Path) -> Path:
@@ -766,7 +803,7 @@ def _base_repo(tmp_path: Path) -> Path:
     (root / "tests" / "test_wall.py").write_text("from wall import WALL\n\n\ndef test_wall():\n    assert WALL == 1\n",
                                                  encoding="utf-8")
     lists = {"a-window": ("tests/test_window.py",
-                          [("a wider window", "src/window.py", "return 3", "return 5", "tests/test_door.py::test_door"),
+                          [("a wider window", "src/window.py", "return 3", "return 5", "tests/test_wall.py::test_wall"),
                            ("a narrower window", "src/window.py", "return 3", "return 2", "tests/test_window.py::test_not_two")]),
              "b-door": ("tests/test_door.py", [("another door", "src/door.py", "DOOR = 1", "DOOR = 2", "tests/test_door.py::test_door")]),
              "c-wall": ("tests/test_wall.py", [("another wall", "src/wall.py", "WALL = 1", "WALL = 2", "tests/test_wall.py::test_wall")])}
@@ -801,7 +838,7 @@ def test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_
     a, b = (f"tests/mutations/{name}.yaml" for name in ("a-window", "b-door"))
     assert summary[1].startswith(f"{a}: 2 of 2 caught; ") and summary[2].startswith(f"{b}: 0 of 1 caught; ")
     assert summary[3] == "marked:" and summary[4].startswith(f"{a}: CAUGHT a wider window  <- tests/test_window.py::test_limit")
-    assert summary[4].endswith("  (expected tests/test_door.py::test_door)")
+    assert summary[4].endswith("  (expected tests/test_wall.py::test_wall, alone: passes)")
     assert summary[5:7] == ["caught with no at:",
                             f"{a}: CAUGHT a narrower window  <- tests/test_window.py::test_not_two"]
     assert summary[7:] == ["left:", f"{b}: LEFT stray.txt  (baseline)"]

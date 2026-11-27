@@ -675,6 +675,12 @@ The tests of `--lists-for` build on `_git_repo` a repository with a list per way
 through `main`; they read what it prints, one list per line. The tests of `--base` build their own repository whose
 lists load (`_base_repo`: a catch whose `caught_by` names another test, one with no traceback, a miss, a test that
 leaves a file), run real pytest and git through `main`, and read the lines after `summary`, by position.
+The end of an `(expected …)` mark is what the alone run gave, the `caught_by` run alone against the same mutant. The test
+of the alone run (`test_a_catch_by_an_earlier_test_runs_its_caught_by_alone_against_the_same_mutant_and_says_what_that_gave`)
+relies on it being a pytest run of its own whose output is kept in a log listed under `logs`, and reads the at: of a
+failure with no traceback as none, as for any catch. The test of what a `caught_by` names reads the end pytest's exit
+for a parameter that does not exist gives (4), and that a catch by its own `caught_by` has no alone run. The `caught_by` of `_base_repo`'s marked catch is a test that writes no
+file, so its alone run leaves no path and the `--base` summary's left path stays the baseline's.
 The tests of `requires-python` run under whatever interpreter runs the suite, so they give the specifiers `<3`, which
 none takes, and `>=3`, which every one does, and read the version the refusal names from the start of sys.version.
 The tests of `--realign` build on `_git_repo` a repository with a list under `tests/mutations/` written by hand
