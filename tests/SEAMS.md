@@ -717,11 +717,13 @@ directory's prefix and depth. Its refusals compare the start of stderr's line wo
 test file under the working tree's tests/`, `ERROR: git merge-base <base> HEAD: `, `ERROR: pytest exited 4 on the
 base:`). It imports `scripts/red_on_base.py` as a module (`import red_on_base`) and calls its outcomes on JUnit XML as
 pytest wrote it, relying on outcomes returning, in the order of the XML, triples (status, node id, lines), and on its
-UNREACHED_NOTE and KEYWORD_NOTE. The case of a keyword the base's f lacks relies on how the pytest the script runs
+UNREACHED_NOTE and KEYWORD_NOTE. The case of a name the base's pkg lacks compares the note it prints word for word,
+pkg and g in it. The cases of a keyword the base's f lacks and of that name rely on how the pytest the script runs
 writes a failure into the XML with the `--tb=auto` the script passes: the first frame and the last written long, a line
 of `_ _ _` after the first and before the last, so a failure of two frames or more holds one, which is how a TypeError
-raised at the test's own call is told from one raised in a helper. It runs the script with PYTEST_ADDOPTS asking for
-short tracebacks, which write no such line, so that a run that left the traceback to the environment would show.
+or an AttributeError raised at the test's own call is told from one raised in a helper. The keyword's case runs the
+script with PYTEST_ADDOPTS asking for short tracebacks, which write no such line, so that a run that left the traceback
+to the environment would show.
 
 ## Tool triage (`src/mara/tool_triage.py`)
 

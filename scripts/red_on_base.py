@@ -19,7 +19,10 @@ its status and its node id, the lines it gives indented below it, then the count
   name the test imports (what that shows, and what does instead: pr-flow step 2); or a test whose failure's first `E`
   line is a TypeError for an unexpected keyword argument raised in the one frame its failure holds, the test's own
   call (or a fixture's), with that line and KEYWORD_NOTE: what the base lacks is the keyword (what then: pr-flow step
-  2). The same TypeError raised in a frame further down, in a helper or code the test's call reaches, is RED.
+  2); or a test whose failure's first `E` line is an AttributeError for a name a module lacks, raised in that one frame,
+  with that line and ATTRIBUTE_NOTE naming the module and the name (what then: pr-flow step 2). The same TypeError or
+  AttributeError raised in a frame further down, in a helper or code the test's call reaches, is RED, and so is an
+  AttributeError whose message does not begin `module '<m>'`.
 Neither a skipped nor an unreached test is counted red or green. A test that runs a script the base lacks as a child
 process, and imports nothing of it, fails at one of its own assertions with `No such file or directory` inside its
 message, or on the FileNotFoundError its run raises: it is RED, as nothing here tells that failure from another.
@@ -49,6 +52,8 @@ UNREACHED_NOTE = "shown sensitive by its mutations instead (pr-flow step 2)"
 KEYWORD_ERROR = re.compile(r"^E\s+TypeError: \S+ got an unexpected keyword argument ")  # a call the base's function refuses
 FRAME_SEPARATOR = "_ _ _"  # a line --tb=auto writes in a failure of two frames or more, after its first and before its last
 KEYWORD_NOTE = "the base's function lacks the keyword: how to see the red the test is about is in pr-flow step 2"
+MODULE_ATTRIBUTE_ERROR = re.compile(r"^E\s+AttributeError: module '([^']+)' has no attribute '([^']+)'")  # a name the module lacks
+ATTRIBUTE_NOTE = "the base's module {} lacks {}: how to see the red the test is about is in pr-flow step 2"
 STATUSES = ("RED", "GREEN", "SKIPPED", "UNREACHED")  # in the order the counts are printed
 RAN = (0, 1, 5)  # pytest's exit codes when it ran the tests: all passed, some failed, none collected
 TOOLS = ".mara-tools"  # where a test that needs a tool looks for it, below the repository it sits in
@@ -87,6 +92,8 @@ def outcomes(junit: str, files: list[str]) -> list[Outcome]:
     - UNREACHED when its first `E` line is a TypeError for an unexpected keyword argument and its text holds one frame
       (no FRAME_SEPARATOR line, as --tb=auto writes it), the test's own or a fixture's, with that `E` line and
       KEYWORD_NOTE;
+    - UNREACHED when its first `E` line is an AttributeError for a name a module lacks and its text holds one frame, with
+      that `E` line and ATTRIBUTE_NOTE naming the module and the name;
     - RED otherwise, with the first `>` line and the first `E` line of its text;
     - SKIPPED, with the message pytest gives (empty for an expected failure), when it holds none but a `skipped`;
     - GREEN when it holds none of them."""
@@ -103,12 +110,15 @@ def outcomes(junit: str, files: list[str]) -> list[Outcome]:
         lines = (failed.text or "").splitlines()
         arrow, error = (next((line for line in lines if line.startswith(mark)), None) for mark in (">", "E "))
         unreached = not case.get("classname") or (error is not None and error[1:].lstrip().startswith(UNREACHED_ERRORS))
-        keyword_at_own_call = error is not None and bool(KEYWORD_ERROR.match(error)) and not any(
-            line.startswith(FRAME_SEPARATOR) for line in lines)  # one frame: the test's own
+        one_frame = not any(line.startswith(FRAME_SEPARATOR) for line in lines)  # the test's own (or a fixture's)
+        keyword_at_own_call = error is not None and bool(KEYWORD_ERROR.match(error)) and one_frame
+        missing_attribute = MODULE_ATTRIBUTE_ERROR.match(error) if error is not None and one_frame else None  # a Match, or None
         if unreached:
             found.append(Outcome("UNREACHED", node, [error or f"E   {failed.get('message', '')}", UNREACHED_NOTE]))
         elif keyword_at_own_call:
             found.append(Outcome("UNREACHED", node, [error, KEYWORD_NOTE]))
+        elif missing_attribute:
+            found.append(Outcome("UNREACHED", node, [error, ATTRIBUTE_NOTE.format(*missing_attribute.groups())]))
         else:
             found.append(Outcome("RED", node, [line for line in (arrow, error) if line is not None]))
     return found

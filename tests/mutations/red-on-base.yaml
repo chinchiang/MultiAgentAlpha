@@ -2,8 +2,8 @@ focused: [tests/test_red_on_base.py]
 # scripts/red_on_base.py runs the working tree's tests on the base's code (#328): a worktree of the merge base, the
 # working tree's tests/ in it, the checkout's .mara-tools linked, pytest run with the base's src/ and an empty HOME, and
 # each test read from the JUnit XML as RED, GREEN, SKIPPED or UNREACHED, a TypeError for a keyword the base lacks at
-# the test's own call among the unreached (#435). Each mutation drops one of those parts, one reading of the XML, one
-# refusal, or the removal of the worktree.
+# the test's own call among the unreached (#435), and an AttributeError for a name the base's module lacks there
+# (#443). Each mutation drops one of those parts, one reading of the XML, one refusal, or the removal of the worktree.
 mutations:
   - name: the worktree is of HEAD, not of the merge base
     file: scripts/red_on_base.py
@@ -98,8 +98,8 @@ mutations:
   - name: a keyword the base lacks a frame further down is unreached too
     file: scripts/red_on_base.py
     caught_by: tests/test_red_on_base.py::test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one_that_reaches_such_a_call_deeper_is_red
-    old: "bool(KEYWORD_ERROR.match(error)) and not any(\n            line.startswith(FRAME_SEPARATOR) for line in lines)"
-    new: "bool(KEYWORD_ERROR.match(error)) and not any(\n            False for line in lines)"
+    old: 'bool(KEYWORD_ERROR.match(error)) and one_frame'
+    new: 'bool(KEYWORD_ERROR.match(error))'
   - name: a TypeError of any message is unreached at the test's own call
     file: scripts/red_on_base.py
     caught_by: tests/test_red_on_base.py::test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one_that_reaches_such_a_call_deeper_is_red
@@ -115,3 +115,23 @@ mutations:
     caught_by: tests/test_red_on_base.py::test_a_test_that_calls_the_base_with_a_keyword_it_lacks_is_unreached_and_one_that_reaches_such_a_call_deeper_is_red
     old: '"--tb=auto", f"--junitxml={junit}",'
     new: 'f"--junitxml={junit}",'
+  - name: a name the base's module lacks at the test's own call is red
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_reads_a_name_the_base_s_module_lacks_is_unreached_naming_it_and_one_that_reads_it_deeper_is_red
+    old: '        elif missing_attribute:'
+    new: '        elif False:'
+  - name: a name the base's module lacks a frame further down is unreached too
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_reads_a_name_the_base_s_module_lacks_is_unreached_naming_it_and_one_that_reads_it_deeper_is_red
+    old: 'if error is not None and one_frame else None'
+    new: 'if error is not None else None'
+  - name: an AttributeError of an object, not of a module, is unreached at the test's own call
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_reads_a_name_the_base_s_module_lacks_is_unreached_naming_it_and_one_that_reads_it_deeper_is_red
+    old: 'AttributeError: module ''([^'']+)'' has no attribute'
+    new: 'AttributeError: (?:module )?''([^'']+)''.* has no attribute'
+  - name: an unreached name is given the keyword's note, which names neither the module nor the name
+    file: scripts/red_on_base.py
+    caught_by: tests/test_red_on_base.py::test_a_test_that_reads_a_name_the_base_s_module_lacks_is_unreached_naming_it_and_one_that_reads_it_deeper_is_red
+    old: '[error, ATTRIBUTE_NOTE.format(*missing_attribute.groups())]'
+    new: '[error, KEYWORD_NOTE]'
