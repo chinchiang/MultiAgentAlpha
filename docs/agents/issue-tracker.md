@@ -53,6 +53,19 @@ A brief that asks for a rule or a procedure to be written down names the one doc
 any, that point at it (`CODING_STANDARDS.md`, "One concept, one wording"), so that the agent does not meet it with a
 restatement.
 
+## A rule a document already states
+
+A question of triage, or a fact a handoff passes on, is often one a document of this repository already answers.
+
+- Before a question goes into the notes triage posts (the triage skill's `## Triage Notes`, under "What we still need
+  from you"), look for that document. When one answers it, the notes quote its rule with a `read:` marker ("How each
+  statement was established", above), which dates the quote by its commit, and ask only what the rule leaves open
+  (#453's asked one that `docs/CHANGELOG.md`, "版本規則", answers). A question that asks the owner to set a written rule
+  aside says so, and names the rule and where it is written.
+- A handoff is held to `CODING_STANDARDS.md`, "One concept, one wording", as any document is: it names the document
+  that states a rule it relies on, and quotes none, for the session that reads it takes a restatement, dated by no
+  commit, for the rule itself.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
