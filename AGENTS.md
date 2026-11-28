@@ -11,6 +11,7 @@
 - Commit messages, pull request bodies, handoffs, architecture reports and other files a later step needs go in
   `scratch/`, not `/tmp` (which is emptied). It is excluded from git by `.git/info/exclude`; on a fresh clone add
   `/scratch/` there first.
+- Before writing a handoff: read `docs/agents/issue-tracker.md`, "A rule a document already states".
 
 ## Agent skills
 
