@@ -177,6 +177,44 @@ def test_a_catch_that_ends_in_the_error_its_mutation_names_is_not_marked_and_one
                                                                     ("AssertionError", "KeyError"), (None, "KeyError"), (None, "KeyError")]
 
 
+def test_a_run_of_one_list_ends_on_the_line_of_totals_its_marks_included(tmp_path, capsys):
+    """The line --base ends on, for the one list: a catch marked for another error than its mutation names is counted."""
+    root = _repo(tmp_path)
+    (root / "src" / "window.py").write_text('SIZES = {"window": 3}\n\n\ndef limit():\n    return SIZES["window"]\n', encoding="utf-8")
+    made = [("the door's size", 'SIZES["window"]', 'SIZES["door"]', "KeyError"),
+            ("the wall's sizes", '{"window": 3}', '{"wall": 3}', "FileNotFoundError")]
+    mutations = [{"name": n, "file": "src/window.py", "old": o, "new": w, "error": e} for n, o, w, e in made]
+    assert mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                        "--focused-only"]) == 0
+    (run,) = (tmp_path / "runs").iterdir()
+    out = capsys.readouterr().out.splitlines()
+    assert out[-1] == "1 lists, 0 skipped, 2 of 2 caught, 1 marked, 0 with no at:, 0 left"
+    assert out[-2] == f"2 of 2 caught; {run / 'results.json'}", "after the list's own last line"
+
+
+def test_a_run_of_one_list_with_a_miss_and_no_mark_ends_on_its_totals_all_the_same(tmp_path, capsys):
+    root = _repo(tmp_path)
+    mutations = [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 4"},
+                 {"name": "another comment", "file": "src/window.py", "old": "# the window", "new": "# a window"}]
+    assert mutate.main([str(_list(tmp_path, mutations, ["tests/test_window.py"])), "--root", str(root), "--runs", str(tmp_path / "runs"),
+                        "--focused-only"]) == 1
+    assert capsys.readouterr().out.splitlines()[-1] == "1 lists, 0 skipped, 1 of 2 caught, 0 marked, 0 with no at:, 0 left"
+
+
+def test_a_run_of_one_list_whose_baseline_fails_ends_on_totals_of_none_and_a_refused_one_prints_no_totals(tmp_path, capsys):
+    """As --base counts a list whose baseline failed: among the lists, adding no mutation. A run refused before its
+    baseline (an --only name the list lacks) prints nothing on stdout."""
+    root = _repo(tmp_path)
+    (root / "tests" / "test_window.py").write_text("from window import limit\n\n\ndef test_limit():\n    assert limit() == 4\n",
+                                                   encoding="utf-8")
+    path = _list(tmp_path, [{"name": "a wider window", "file": "src/window.py", "old": "return 3", "new": "return 5"}],
+                 ["tests/test_window.py"])
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs")]) == 2
+    assert capsys.readouterr().out.splitlines() == ["1 lists, 0 skipped, 0 of 0 caught, 0 marked, 0 with no at:, 0 left"]
+    assert mutate.main([str(path), "--root", str(root), "--runs", str(tmp_path / "runs"), "--only", "a narrower window"]) == 2
+    assert capsys.readouterr().out == ""
+
+
 SIZES_SOURCE = 'SIZES = {"window": 3}\n\n\ndef size(name):\n    return SIZES[name]\n\n\ndef limit():\n    return size("window")\n'
 SIZES_TEST = ("import pytest\nfrom window import limit\n\n\ndef test_limit():\n    if limit() == 2:\n        pytest.fail('two', pytrace=False)\n"
               "    assert limit() == 3\n")

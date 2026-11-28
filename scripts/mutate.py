@@ -70,6 +70,11 @@ with one; every path it lists that it did not list before, outside the run's own
 after the last mutation as `LEFT <path>  (<the mutation, or baseline>)`, and neither removed nor counted against the
 run. In a root that is not a git repository it says so on stderr, and does not look; once git status fails during a
 run, it says so and looks no more.
+A run of one list ends on `<caught> of <total> caught; <results.json>`, then on the line of totals, `<k> lists, <s>
+skipped, <caught> of <total> caught, <m> marked, <u> with no at:, <l> left` (totals): the lists run (here 1) and those
+skipped (0), the mutations caught and run, and the marked catches, the catches with no `at:` and the LEFT lines. A list
+whose baseline failed prints its ERROR on stderr and the line of totals alone, counted among the lists and adding no
+mutation (`1 lists, 0 skipped, 0 of 0 caught, ...`). A run refused before its baseline prints neither.
 Each run writes out/mutations/<UTC time>/results.json (one entry per mutation: caught, by which test, where (its alone
 run `alone`, the focused tests `focused` or the whole suite `suite`), pytest's exit code, the logs it wrote, at,
 first_diff and error (null when the output holds none, as for a failure with pytrace=False, or for a mutation not
@@ -90,17 +95,16 @@ With --lists-for BASE it runs nothing and prints, one per line, each list of tes
 touches (lists_for): the change (GLOSSARY.md) is every path the working tree changes, adds or deletes over the merge
 base of BASE and HEAD, committed or not, and each untracked file git does not ignore (changed_paths); a list is touched
 when the change holds the list itself, the file of one of its mutations or one of its focused test files.
-With --base BASE it runs each of those lists, one after the other, as --focused-only runs one (run_mutation_list: its own run
-directory, results.json and lines, after a `== <list>` line), every one loaded first, so a list that does not load, or
-names no focused tests, stops the run before any mutation is applied. A list whose requires-python this interpreter does
-not take is not run. Then it prints `summary`: each list's last line after its name (`SKIP <list>: needs Python
-<specifier>, this is <version>` for one not run), and, across all of them, the marked catches, the catches with no `at:`
-and the LEFT lines, each after its list, then, last of every summary, the line of totals: `<k> lists, <s> skipped,
-<caught> of <total> caught, <m> marked, <u> with no at:, <l> left`, the lists run, those skipped, the mutations caught
-and run over the lists run, and the lines of those three, a list whose baseline failed counted among the lists and
-adding no mutation (run_base). It exits 0 when every list caught all, 1 when a mutation was missed or an error, 2 when a
-list was refused (none runs) or a baseline failed (the other lists still run), whatever the lists it skipped; a change
-that touches no list is said so, exit 0.
+With --base BASE it runs each of those lists, one after the other, as --focused-only runs one (run_mutation_list: its
+own run directory, results.json and lines, the line of totals aside, after a `== <list>` line), every one loaded first,
+so a list that does not load, or names no focused tests, stops the run before any mutation is applied. A list whose
+requires-python this interpreter does not take is not run. Then it prints `summary`: each list's last line after its
+name (`SKIP <list>: needs Python <specifier>, this is <version>` for one not run), and, across all of them, the marked
+catches, the catches with no `at:` and the LEFT lines, each after its list, then, last of every summary, the line of
+totals over the lists run, as a run of one list ends on it (above), `<s>` the lists not run for their Python (run_base).
+It exits 0 when every list caught all, 1 when a mutation was missed or an error, 2 when a list was refused (none runs)
+or a baseline failed (the other lists still run), whatever the lists it skipped; a change that touches no list is said
+so, exit 0.
 With --realign it runs no mutation. It first restores what a killed run left (restore_left, as every run does), then,
 for each stale mutation (GLOSSARY.md; stale) of the list, or of those --only names, it searches every file git tracks,
 or that is untracked and not ignored, apart from tests/mutations/. When the `old` occurs exactly once in exactly one
@@ -575,6 +579,14 @@ def run_mutation_list(path: Path, focused: list[str], mutations: list[dict], roo
     return MutationListRun(0 if caught == len(results) else 1, last, marked, unplaced, left_lines, caught=caught, total=len(results))
 
 
+def totals(list_runs: list[MutationListRun], skipped: int) -> str:
+    """The line of totals a run ends on (the module's docstring), over `list_runs`, the lists run, and `skipped` lists
+    not run."""
+    return (f"{len(list_runs)} lists, {skipped} skipped, {sum(run.caught for run in list_runs)} of"
+            f" {sum(run.total for run in list_runs)} caught, {sum(len(run.marked) for run in list_runs)} marked,"
+            f" {sum(len(run.unplaced) for run in list_runs)} with no at:, {sum(len(run.left) for run in list_runs)} left")
+
+
 def run_base(base: str, root: Path, runs: Path) -> int:
     """Restore what a killed run left (restore_left), then run, focused and one after the other, each list
     lists_for(base, root) names, every one loaded before any runs; a list whose requires-python this interpreter does
@@ -624,9 +636,7 @@ def run_base(base: str, root: Path, runs: Path) -> int:
         lines = [f"{name}: {line}" for name, run in ran for line in part(run)]
         if lines:
             print(title, *lines, sep="\n")
-    print(f"{len(ran)} lists, {len(done) - len(ran)} skipped, {sum(run.caught for _, run in ran)} of {sum(run.total for _, run in ran)}"
-          f" caught, {sum(len(run.marked) for _, run in ran)} marked, {sum(len(run.unplaced) for _, run in ran)} with no at:,"
-          f" {sum(len(run.left) for _, run in ran)} left")
+    print(totals([run for _, run in ran], len(done) - len(ran)))
     codes = {run.code for _, run in ran}
     return 2 if 2 in codes else 1 if 1 in codes else 0
 
@@ -841,7 +851,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: no mutation named {', '.join(unknown)}", file=sys.stderr)
             return 2
         mutations = [m for m in mutations if m["name"] in a.only]
-    return run_mutation_list(a.mutations, focused, mutations, root, runs, whole_suite=not a.focused_only).code
+    run = run_mutation_list(a.mutations, focused, mutations, root, runs, whole_suite=not a.focused_only)
+    print(totals([run], 0))
+    return run.code
 
 
 if __name__ == "__main__":

@@ -36,11 +36,11 @@ A change that becomes a pull request goes through these steps in order. Each end
    edit now, and a rebuild of the commits at step 4. mypy, the whole suite and gitleaks wait for step 4.
    Then run each mutation list the change adds or edits once, `scripts/mutate.py <list> --focused-only`, one after the
    other and after `--only worktree` has ended (a mutation edits the files the checks read), and read each `CAUGHT` line
-   as step 4 says: where it failed, and its mark. A `caught_by` that misses its mutant, or a name that is not the fault
-   its `new` makes, is fixed now, before the review, and not by a rebuild after step 4; step 4 says what the end of an
-   `(expected …)` mark asks. The lists the change touches but
-   does not add or edit wait for step 4. A list refused for the Python it needs (`needs Python <specifier>`, exit 2)
-   runs with an interpreter it takes, as step 4 says.
+   as step 4 says: where it failed, and its mark. The run ends on the line of totals `scripts/mutate.py`'s docstring
+   gives, its marks counted there. A `caught_by` that misses its mutant, or a name that is not the fault its `new`
+   makes, is fixed now, before the review, and not by a rebuild after step 4; step 4 says what the end of an `(expected
+   …)` mark asks. The lists the change touches but does not add or edit wait for step 4. A list refused for the Python
+   it needs (`needs Python <specifier>`, exit 2) runs with an interpreter it takes, as step 4 says.
    Review that tree before the first commit, so a finding costs an edit and not a rebuild: `mattpocock-skills:code-review`
    with `origin/main` as the fixed point, where the sub-agents read `git -C <main checkout> diff origin/main` (two
    dots: the skill's three-dot form reads commits only; run `git add -N <new file>` first, or the diff leaves new files
