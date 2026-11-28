@@ -95,9 +95,11 @@ A change that becomes a pull request goes through these steps in order. Each end
    credential guard"). It runs, focused and one after the other, each mutation list the change (committed or not,
    untracked files included) touches: the list itself, the file of one of its mutations, or one of its focused test
    files (`--lists-for origin/main` prints them and runs nothing). It ends on a `summary`: each list's last line, then
-   the marked catches, the catches with no `at:` and the `LEFT` lines of all of them. Re-run one list alone with
-   `scripts/mutate.py <list> --focused-only`. A list whose `requires-python` this interpreter does not take is a `SKIP`
-   line of the summary: run it alone with an interpreter it takes (`>=3.13`: a venv of
+   the marked catches, the catches with no `at:` and the `LEFT` lines of all of them, then the line of totals its
+   docstring gives: the run's numbers the body states as this step's, beside the counts of the change's tests and
+   mutations `scripts/change_counts.py` gives (step 3).
+   Re-run one list alone with `scripts/mutate.py <list> --focused-only`. A list whose `requires-python` this interpreter
+   does not take is a `SKIP` line of the summary: run it alone with an interpreter it takes (`>=3.13`: a venv of
    `tools/dev-requirements-py313.txt`, as CI's 3.13 job installs). A mutation edits `src/`, so never run two of these at
    once. Done when every check `check_local.py` runs is `ok`, its osv scans included when `AGENTS.md` asks for them, and
    every mutation of those lists is caught for the reason its name says. Of every other mutation of those lists, read

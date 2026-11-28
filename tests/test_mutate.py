@@ -862,7 +862,8 @@ def _base_repo(tmp_path: Path) -> Path:
 
 def test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks(tmp_path, capsys):
     """The lists are those --lists-for names; each runs as it does alone with --focused-only, and the summary gives each
-    list's result line, then the marked catches, the catches with no `at:` and the left paths of all of them."""
+    list's result line, then the marked catches, the catches with no `at:` and the left paths of all of them, then
+    their totals."""
     root = _base_repo(tmp_path)
     (root / "src" / "window.py").write_text(SOURCE + "# a change\n", encoding="utf-8")
     (root / "tests" / "test_door.py").write_text(
@@ -882,7 +883,8 @@ def test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_
     assert summary[4].endswith("  (expected tests/test_wall.py::test_wall, alone: passes)")
     assert summary[5:7] == ["caught with no at:",
                             f"{a}: CAUGHT a narrower window  <- tests/test_window.py::test_not_two"]
-    assert summary[7:] == ["left:", f"{b}: LEFT stray.txt  (baseline)"]
+    assert summary[7:] == ["left:", f"{b}: LEFT stray.txt  (baseline)",
+                           "2 lists, 0 skipped, 2 of 3 caught, 1 marked, 1 with no at:, 1 left"]
     assert code == 1, "b-door.yaml missed its mutation"
 
 
@@ -904,7 +906,8 @@ def test_base_reprints_where_a_marked_catch_was_raised(tmp_path, capsys):
     out = capsys.readouterr().out
     summary = out[out.index("\nsummary\n") + 1:].splitlines()
     assert summary[2:] == ["marked:", "tests/mutations/sizes.yaml: CAUGHT a plural size  <- tests/test_window.py::test_limit  "
-                                      "at: if limit() == 2:  raised: src/window.py:5  (KeyError)"]
+                                      "at: if limit() == 2:  raised: src/window.py:5  (KeyError)",
+                           "1 lists, 0 skipped, 1 of 1 caught, 1 marked, 0 with no at:, 0 left"]
 
 
 def test_base_refuses_a_list_that_does_not_load_before_any_file_is_touched(tmp_path, capsys):
@@ -933,6 +936,7 @@ def test_base_goes_on_past_a_list_whose_baseline_fails_and_exits_2(tmp_path, cap
     summary = capsys.readouterr().out.split("\nsummary\n")[1].splitlines()
     assert summary[0].startswith("tests/mutations/b-door.yaml: ERROR: the focused tests exit 1 without a mutation")
     assert summary[1].startswith("tests/mutations/c-wall.yaml: 1 of 1 caught; ")
+    assert summary[2:] == ["2 lists, 0 skipped, 1 of 1 caught, 0 marked, 0 with no at:, 0 left"], "b-door.yaml ran none"
 
 
 def test_base_skips_a_list_this_python_does_not_satisfy_says_so_in_the_summary_and_the_skip_fails_nothing(tmp_path, capsys):
@@ -946,7 +950,8 @@ def test_base_skips_a_list_this_python_does_not_satisfy_says_so_in_the_summary_a
     assert len(list((root / "out" / "mutations").iterdir())) == 1, "the skipped list made no run directory"
     summary = out.split("\nsummary\n")[1].splitlines()
     assert summary[0] == f"SKIP tests/mutations/b-door.yaml: needs Python <3, this is {sys.version.split()[0]}"
-    assert summary[1].startswith("tests/mutations/c-wall.yaml: 1 of 1 caught; ") and len(summary) == 2
+    assert summary[1].startswith("tests/mutations/c-wall.yaml: 1 of 1 caught; ")
+    assert summary[2:] == ["1 lists, 1 skipped, 1 of 1 caught, 0 marked, 0 with no at:, 0 left"]
     assert code == 0, "b-door.yaml, which misses its mutation, did not run, and a skip fails nothing"
 
 
@@ -962,7 +967,8 @@ def test_base_gathers_a_catch_marked_for_another_error_than_its_mutation_names_a
     summary = capsys.readouterr().out.split("\nsummary\n")[1].splitlines()
     assert summary[0].startswith("tests/mutations/c-wall.yaml: 2 of 2 caught; ")
     assert summary[1:] == ["marked:", "tests/mutations/c-wall.yaml: CAUGHT a wider wall  <- tests/test_wall.py::test_wall  "
-                                      "at: assert WALL['w'] == 1  (AssertionError, not KeyError)"]
+                                      "at: assert WALL['w'] == 1  (AssertionError, not KeyError)",
+                           "1 lists, 0 skipped, 2 of 2 caught, 1 marked, 0 with no at:, 0 left"]
 
 
 def test_base_takes_no_list_and_neither_lists_for_nor_only_nor_focused_only(tmp_path, capsys):

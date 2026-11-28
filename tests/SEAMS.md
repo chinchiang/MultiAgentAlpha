@@ -682,7 +682,8 @@ The tests of `--lists-for` build on `_git_repo` a repository with a list per way
 `base` (`_touching_repo`), change it the way each list's name says, and run real git (merge-base, diff, ls-files)
 through `main`; they read what it prints, one list per line. The tests of `--base` build their own repository whose
 lists load (`_base_repo`: a catch whose `caught_by` names another test, one with no traceback, a miss, a test that
-leaves a file), run real pytest and git through `main`, and read the lines after `summary`, by position.
+leaves a file), run real pytest and git through `main`, and read the lines after `summary`, by position, the line of
+totals last, compared word for word.
 A mutation with a `caught_by` runs it alone first, against the mutant (the alone run). The test of the alone run
 (`test_a_mutation_s_caught_by_runs_first_alone_so_an_earlier_test_of_its_file_does_not_catch_it_first`) gives a file
 whose first test fails on every mutant, so a catch by that test shows the alone run caught nothing and the focused
