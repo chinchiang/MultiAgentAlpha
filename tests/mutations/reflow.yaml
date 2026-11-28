@@ -1,0 +1,214 @@
+focused: [tests/test_reflow.py]
+# scripts/reflow.py rewraps the one paragraph of a Markdown file that holds a phrase, greedily at a width (#459). Each
+# mutation breaks one rule its docstring states: what bounds the paragraph, a list item's hanging indent, the width, the
+# words a unit holds, a refusal, or the file written.
+mutations:
+- name: a line of another indent is taken into the paragraph
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_line_of_another_indent_bounds_the_paragraph
+  old: 'bool(ITEM.match(lines[k])) == item and _text_indent(lines[k]) == indent)'
+  new: 'bool(ITEM.match(lines[k])) == item)'
+- name: a blank line does not bound the paragraph
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_ragged_paragraph_is_rewrapped_greedily_at_the_width_and_the_lines_around_it_are_left
+  old: '    return in_fence or not line.strip() or any('
+  new: '    return in_fence or any('
+- name: a fence does not bound the paragraph
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_block_right_after_the_paragraph_bounds_it
+  old: '    return in_fence or not line.strip() or any('
+  new: '    return not line.strip() or any('
+- name: no heading, table row, block quote, HTML line, thematic break, setext underline or line of dashes bounds the paragraph
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_block_right_after_the_paragraph_bounds_it
+  old: 'any(pattern.match(line) for pattern, _ in NO_PARAGRAPH)'
+  new: 'any(pattern.match(line) for pattern, _ in ())'
+- name: an HTML line, a thematic break and a setext underline do not bound the paragraph
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_an_html_line_a_thematic_break_and_a_setext_underline_bound_the_paragraph
+  old: 'any(pattern.match(line) for pattern, _ in NO_PARAGRAPH)'
+  new: 'any(pattern.match(line) for pattern, _ in NO_PARAGRAPH[:3])'
+- name: a line that starts with a hash is a heading
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_line_that_starts_with_an_issue_number_is_no_heading
+  old: 'HEADING = re.compile(r"^ *#{1,6}( |$)")'
+  new: 'HEADING = re.compile(r"^ *#")'
+- name: an item's marker is followed by one space only
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_an_item_whose_marker_is_followed_by_several_spaces_keeps_them_and_takes_its_continuation
+  old: 'ITEM = re.compile(r"^( *)([-*+]|\d+[.)])( +|$)")'
+  new: 'ITEM = re.compile(r"^( *)([-*+]|\d+[.)])( |$)")'
+- name: a continuation line does not reach up to its item
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_continuation_line_finds_its_item_above_it
+  old: '            start -= 1  # the item whose continuation this is'
+  new: '            pass'
+- name: an item above whose text is at another indent is reached up to
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_continuation_line_of_another_indent_than_its_item_s_text_does_not_join_it
+  old: '        if continues(start - 1, item=True):'
+  new: '        if start > 0 and ITEM.match(lines[start - 1]):'
+- name: an item's other lines repeat its marker
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_list_item_s_paragraph_takes_a_hanging_indent_and_a_nested_item_after_it_is_left
+  old: 'filled = _fill(lines[start][:indent], " " * indent, joined, width)'
+  new: 'filled = _fill(lines[start][:indent], lines[start][:indent], joined, width)'
+- name: an indented paragraph's other lines lose the indent
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_an_indented_paragraph_keeps_its_indent
+  old: 'filled = _fill(lines[start][:indent], " " * indent, joined, width)'
+  new: 'filled = _fill(lines[start][:indent], "", joined, width)'
+- name: a line may run one character past the width
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_line_holds_the_width_and_no_more
+  old: 'if row and len(" ".join([*row, unit])) > (first_width if len(rows) == 1 else rest_width):'
+  new: 'if row and len(" ".join([*row, unit])) > (first_width if len(rows) == 1 else rest_width) + 1:'
+- name: two words parted by more than one space may be parted by a line break
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_run_of_spaces_is_no_place_to_break_so_a_second_run_changes_nothing
+  old: 'if len(gap) > 1 or _held('
+  new: 'if _held('
+- name: a run of spaces becomes one
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_run_of_spaces_between_two_words_on_one_line_is_kept
+  old: '            units[-1] += gap + word'
+  new: '            units[-1] += " " + word'
+- name: a word that would start a block may start a line
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_no_line_starts_with_a_word_markdown_would_read_as_a_block
+  old: '    return (bool(BLOCK_WORD.match(word)) or'
+  new: '    return (False or'
+- name: a fence's mark may start a line
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_word_that_would_start_a_block_stays_on_the_line_of_the_word_before_it
+  old: '|[>|<]|```|~~~|[-=*_]+$")'
+  new: '|[>|<]|[-=*_]+$")'
+- name: a thematic break or a setext underline may start a line
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_word_that_would_start_a_block_stays_on_the_line_of_the_word_before_it
+  old: '|[>|<]|```|~~~|[-=*_]+$")'
+  new: '|[>|<]|```|~~~")'
+- name: a word ending in a backslash may end a line
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_a_word_ending_in_a_backslash_keeps_the_next_word_on_its_line_so_a_second_run_changes_nothing
+  old: 'before.endswith("\\") or'
+  new: 'False or'
+- name: two East Asian words a space parts may be parted by a line break
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_east_asian_words_a_space_parts_stay_on_one_line_so_a_second_run_changes_nothing
+  old: '(_wide(before[-1]) and _wide(word[0]))'
+  new: 'False'
+- name: words first in the paragraph that would start a block may stand alone on its first line
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_words_first_in_the_paragraph_that_would_start_a_block_keep_the_next_word_that_would_not_on_their_line
+  old: '(before_is_first and all(BLOCK_WORD.match(w) for w in before.split()))'
+  new: 'False'
+- name: the paragraph's first word that would start a block holds every word after it
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_words_first_in_the_paragraph_that_would_start_a_block_keep_the_next_word_that_would_not_on_their_line
+  old: 'all(BLOCK_WORD.match(w) for w in before.split())'
+  new: 'BLOCK_WORD.match(before)'
+- name: only the paragraph's first word that would start a block holds the next word
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_words_first_in_the_paragraph_that_would_start_a_block_keep_the_next_word_that_would_not_on_their_line
+  old: 'all(BLOCK_WORD.match(w) for w in before.split())'
+  new: '" " not in before and BLOCK_WORD.match(before)'
+- name: a phrase on two lines takes the first
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '    if len(hits) > 1:'
+  new: '    if False:'
+- name: a line in a code fence is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '    if in_fence[at]:'
+  new: '    if False:'
+- name: a table row is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '        if pattern.match(lines[at]):'
+  new: '        if pattern.match(lines[at]) and why != "a table row":'
+- name: a heading is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '        if pattern.match(lines[at]):'
+  new: '        if pattern.match(lines[at]) and why != "a heading":'
+- name: a block quote is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '        if pattern.match(lines[at]):'
+  new: '        if pattern.match(lines[at]) and why != "a block quote":'
+- name: an HTML line is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '        if pattern.match(lines[at]):'
+  new: '        if pattern.match(lines[at]) and why != "an HTML line":'
+- name: a thematic break is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '        if pattern.match(lines[at]):'
+  new: '        if pattern.match(lines[at]) and why != "a thematic break":'
+- name: a setext underline is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '        if pattern.match(lines[at]):'
+  new: '        if pattern.match(lines[at]) and why != "a setext underline":'
+- name: a line of dashes is called a thematic break
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  old: '        if pattern.match(lines[at]):'
+  new: '        if pattern.match(lines[at]) and why != "a thematic break or a setext underline":'
+- name: a setext heading's text is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '    if end + 1 < len(lines) and (DASHES.match(lines[end + 1]) or EQUALS.match(lines[end + 1])):'
+  new: '    if False:'
+- name: a list item's marker alone is joined to the next word
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '    if item and not item[3]:'
+  new: '    if False:'
+- name: a paragraph indented as a code block is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '    if indent >= CODE_INDENT and not item:'
+  new: '    if False:'
+- name: a hard line break is joined
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '        if HARD_BREAK.search(lines[n]):'
+  new: '        if False:'
+- name: two lines of East Asian text are joined by a space
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_what_cannot_be_rewrapped_safely_is_refused
+  error: Failed
+  old: '    return unicodedata.east_asian_width(char) in ("W", "F")'
+  new: '    return False'
+- name: a file that is not Markdown is rewrapped
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_the_command_line_refuses_with_exit_2_and_leaves_the_file
+  old: '    if a.file.suffix != ".md":'
+  new: '    if False:'
+- name: a file that is not there ends in a traceback
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_the_command_line_refuses_a_file_that_is_not_there
+  error: FileNotFoundError
+  old: '    if not a.file.is_file():'
+  new: '    if False:'
+- name: the file is not written
+  file: scripts/reflow.py
+  caught_by: tests/test_reflow.py::test_the_command_line_rewraps_the_file_in_place_and_says_which_lines
+  old: '        a.file.write_text(new, encoding="utf-8")'
+  new: '        pass'
