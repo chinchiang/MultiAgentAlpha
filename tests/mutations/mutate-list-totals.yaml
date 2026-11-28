@@ -1,0 +1,25 @@
+focused: [tests/test_mutate.py]
+# scripts/mutate.py <list>, a run of one list, ends on the line of totals --base ends on, for that one list (#466); a list
+# whose baseline failed counts among the lists and adds no mutation, and a run refused before its baseline prints none.
+# Each mutation drops that line, miscounts it, or prints it where none is due.
+mutations:
+  - name: a run of one list prints no totals line
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_run_of_one_list_ends_on_the_line_of_totals_its_marks_included
+    old: '    print(totals([run], 0))'
+    new: '    totals([run], 0)'
+  - name: a run of one list counts itself skipped
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_run_of_one_list_with_a_miss_and_no_mark_ends_on_its_totals_all_the_same
+    old: '    print(totals([run], 0))'
+    new: '    print(totals([run], 1))'
+  - name: a run of one list whose baseline failed prints no totals line
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_run_of_one_list_whose_baseline_fails_ends_on_totals_of_none_and_a_refused_one_prints_no_totals
+    old: '    print(totals([run], 0))'
+    new: '    print(totals([run], 0)) if run.code != 2 else None'
+  - name: a run refused for an --only name prints a line of totals
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_a_run_of_one_list_whose_baseline_fails_ends_on_totals_of_none_and_a_refused_one_prints_no_totals
+    old: "            return 2\n        mutations = [m for m in mutations if m[\"name\"] in a.only]"
+    new: "            print(totals([], 0))\n            return 2\n        mutations = [m for m in mutations if m[\"name\"] in a.only]"

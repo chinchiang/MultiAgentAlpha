@@ -693,7 +693,10 @@ The tests of `--lists-for` build on `_git_repo` a repository with a list per way
 through `main`; they read what it prints, one list per line. The tests of `--base` build their own repository whose
 lists load (`_base_repo`: a catch whose `caught_by` names another test, one with no traceback, a miss, a test that
 leaves a file), run real pytest and git through `main`, and read the lines after `summary`, by position, the line of
-totals last, compared word for word.
+totals last, compared word for word. The three tests of a run of one list's totals (`test_a_run_of_one_list_` and the
+rest of their names) read the last lines of its stdout, the line of totals last, word for word, and that a run refused
+before its baseline prints nothing there; the other tests of a run of one list read its first lines, or look for a line
+in it.
 A mutation with a `caught_by` runs it alone first, against the mutant (the alone run). The test of the alone run
 (`test_a_mutation_s_caught_by_runs_first_alone_so_an_earlier_test_of_its_file_does_not_catch_it_first`) gives a file
 whose first test fails on every mutant, so a catch by that test shows the alone run caught nothing and the focused

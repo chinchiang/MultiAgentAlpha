@@ -74,13 +74,13 @@ mutations:
   - name: the summary prints no totals line
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks
-    old: '    print(f"{len(ran)} lists, {len(done) - len(ran)} skipped,'
-    new: '    (f"{len(ran)} lists, {len(done) - len(ran)} skipped,'
+    old: '    print(totals([run for _, run in ran], len(done) - len(ran)))'
+    new: '    totals([run for _, run in ran], len(done) - len(ran))'
   - name: a skipped list is counted among the lists run
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_skips_a_list_this_python_does_not_satisfy_says_so_in_the_summary_and_the_skip_fails_nothing
-    old: '{len(ran)} lists, {len(done) - len(ran)} skipped'
-    new: '{len(done)} lists, 0 skipped'
+    old: '    print(totals([run for _, run in ran], len(done) - len(ran)))'
+    new: '    print(totals([run for _, run in ran] + [MutationListRun(0, "") for _ in range(len(done) - len(ran))], 0))'
   - name: a list whose baseline failed adds its mutations as run
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_goes_on_past_a_list_whose_baseline_fails_and_exits_2
@@ -89,10 +89,10 @@ mutations:
   - name: the totals count the last list's catches alone
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks
-    old: '{sum(run.caught for _, run in ran)} of'
-    new: '{ran[-1][1].caught} of'
+    old: '{sum(run.caught for run in list_runs)} of'
+    new: '{list_runs[-1].caught} of'
   - name: the totals count the catches with no at as the marked ones
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_reprints_where_a_marked_catch_was_raised
-    old: '{sum(len(run.marked) for _, run in ran)} marked'
-    new: '{sum(len(run.unplaced) for _, run in ran)} marked'
+    old: '{sum(len(run.marked) for run in list_runs)} marked'
+    new: '{sum(len(run.unplaced) for run in list_runs)} marked'
