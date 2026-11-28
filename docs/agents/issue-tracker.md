@@ -65,6 +65,10 @@ A question of triage, or a fact a handoff passes on, is often one a document of 
 - A handoff is held to `CODING_STANDARDS.md`, "One concept, one wording", as any document is: it names the document
   that states a rule it relies on, and quotes none, for the session that reads it takes a restatement, dated by no
   commit, for the rule itself.
+- A handoff gives the state of a review by pointing at its directory, as `docs/agents/self-review.md`, "Starting them",
+  has it, and restates none of its files. It names each of the review's sub-agents still running, and the report written
+  on its return (`standards-report.md`, `spec-report.md`, or a later review's): without it, the session that takes the
+  handoff up cannot tell whose files the review's directories hold.
 
 ## Pull requests as a triage surface
 

@@ -41,6 +41,11 @@ check and empty its directory as for one that reports, before it starts again. O
 again), start it again with the same prompt: the report written to `standards-report.md` or `spec-report.md` is the new
 start's, and the pull request's body says the first start failed and why.
 
+A sub-agent may still be at work while its axis has no report of the review under way: one a session started keeps
+running after that session's conversation is cleared, and the session after it lists it among its running sub-agents (a
+handoff names them: `docs/agents/issue-tracker.md`, "A rule a document already states"). While any of the review's
+sub-agents runs, leave `standards/` and `spec/` as they are, files and all; empty them only after.
+
 When the way the change does its work is replaced after a review (not a fix of a finding, another approach), review it
 again. Add the decisions to `spec.md` and say there what the second review verifies; keep the first review's reports,
 and write the new ones as `standards-report-2.md` and `spec-report-2.md`. Each prompt names its axis's first report, and
