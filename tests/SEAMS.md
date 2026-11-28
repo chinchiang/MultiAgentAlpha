@@ -306,6 +306,14 @@ outside would show nothing until it ended. A test sees that by replacing stdout 
 not yet flushed (`test_a_result_line_is_flushed_before_the_next_check_starts`, which reads it from inside the next check's set-up
 function, and `test_everything_main_prints_is_flushed_when_it_returns`); `capsys` cannot, for it never buffers.
 
+## The paragraph rewrapper (`scripts/reflow.py`)
+
+`test_reflow.py` imports `scripts/reflow.py` as a module (`import reflow`) and calls its reflow on text, comparing the
+`text` of the Reflowed it returns with the text it expects, character for character, and the words of its Refused, word
+for word; it relies on reflow taking the text, the phrase and the width, and raising Refused for what it refuses. The
+tests of the command line run `reflow.main` on a file in `tmp_path`, given its command line as a list, and read stdout
+and stderr with `capsys`, word for word.
+
 ## The two change checks (`scripts/line_width.py`, `scripts/control_chars.py`)
 
 `test_line_width.py` and `test_control_chars.py` drive each script through `main`, given its command line as a list,

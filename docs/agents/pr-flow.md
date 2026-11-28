@@ -26,8 +26,9 @@ A change that becomes a pull request goes through these steps in order. Each end
    it at the assertion its name gives (step 3), and the body says so.
 3. **Make it green, review it, then commit it.** Green in the working tree, nothing committed yet: the code, its
    `tests/mutations/<name>.yaml` and `tests/SEAMS.md`, and, when the change takes a version, the version, its CHANGELOG
-   row and the demo page. Run `scripts/check_local.py --only worktree` beside the tests (under a minute): ruff; the
-   width of the lines the working tree adds to Python files and to the Markdown files `scripts/line_width.py` lists
+   row and the demo page. Rewrap a paragraph of Markdown an edit left ragged with `scripts/reflow.py` (its docstring
+   says how). Run `scripts/check_local.py --only worktree` beside the tests (under a minute): ruff; the width of the
+   lines the working tree adds to Python files and to the Markdown files `scripts/line_width.py` lists
    (`lines-worktree`) and the control characters of those it adds to any text file (`chars-worktree`), over the merge
    base with `--base` (origin/main by default), committed or not, untracked files included and those git ignores left
    out; `pytest-worktree`, which checks that every mutation list loads and every pointer of `tests/SEAMS.md` names
