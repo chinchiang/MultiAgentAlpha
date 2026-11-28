@@ -1,8 +1,9 @@
 focused: [tests/test_mutate.py]
 # scripts/mutate.py --base BASE runs, focused, every list lists_for names and sums them up (#339): run_base restores
 # what a killed run left, loads every list first, runs each through run_mutation_list (the run a list given alone makes), and
-# prints a summary; run_mutation_list gathers each list's marked catches, its catches with no `at:` and its LEFT lines. Each
-# mutation drops one of those, or one refusal of main's.
+# prints a summary; run_mutation_list gathers each list's marked catches, its catches with no `at:` and its LEFT lines, and
+# the summary ends on their totals (#458). Each mutation drops one of those, miscounts one of the totals, or drops one
+# refusal of main's.
 mutations:
   - name: run_base restores nothing a killed run left
     file: scripts/mutate.py
@@ -52,8 +53,8 @@ mutations:
   - name: the left paths are not gathered
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks
-    old: "return MutationListRun(0 if caught == len(results) else 1, last, marked, unplaced, left_lines)"
-    new: "return MutationListRun(0 if caught == len(results) else 1, last, marked, unplaced, [])"
+    old: "return MutationListRun(0 if caught == len(results) else 1, last, marked, unplaced, left_lines, "
+    new: "return MutationListRun(0 if caught == len(results) else 1, last, marked, unplaced, [], "
   - name: a list that missed a mutation leaves the run's exit at 0
     file: scripts/mutate.py
     caught_by: tests/test_mutate.py::test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks
@@ -70,3 +71,28 @@ mutations:
     error: Failed
     old: "a.lists_for is not None or a.only or a.focused_only):"
     new: "a.lists_for is not None or a.focused_only):"
+  - name: the summary prints no totals line
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks
+    old: '    print(f"{len(ran)} lists, {len(done) - len(ran)} skipped,'
+    new: '    (f"{len(ran)} lists, {len(done) - len(ran)} skipped,'
+  - name: a skipped list is counted among the lists run
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_base_skips_a_list_this_python_does_not_satisfy_says_so_in_the_summary_and_the_skip_fails_nothing
+    old: '{len(ran)} lists, {len(done) - len(ran)} skipped'
+    new: '{len(done)} lists, 0 skipped'
+  - name: a list whose baseline failed adds its mutations as run
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_base_goes_on_past_a_list_whose_baseline_fails_and_exits_2
+    old: '        return MutationListRun(2, f"ERROR: {why}")'
+    new: '        return MutationListRun(2, f"ERROR: {why}", total=len(mutations))'
+  - name: the totals count the last list's catches alone
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_base_runs_each_list_the_change_touches_focused_and_sums_up_their_lines_and_marks
+    old: '{sum(run.caught for _, run in ran)} of'
+    new: '{ran[-1][1].caught} of'
+  - name: the totals count the catches with no at as the marked ones
+    file: scripts/mutate.py
+    caught_by: tests/test_mutate.py::test_base_reprints_where_a_marked_catch_was_raised
+    old: '{sum(len(run.marked) for _, run in ran)} marked'
+    new: '{sum(len(run.unplaced) for _, run in ran)} marked'
