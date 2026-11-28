@@ -1,0 +1,25 @@
+focused: [tests/test_seams.py]
+# a dotted name of tests/SEAMS.md whose first part is a script of scripts/ points into that script (tests/test_seams.py's
+# problem, #460): found when the script defines the rest, both a script and a module of src/mara are candidates when they
+# share a name, and a span naming neither reported with both places; each mutation breaks one of those
+mutations:
+- name: a script of scripts/ is no candidate
+  file: tests/test_seams.py
+  caught_by: tests/test_seams.py::test_a_dotted_name_of_a_script_points_into_that_script_and_one_it_does_not_define_is_found
+  old: 'for p in _modules(head) + _scripts(head)]'
+  new: 'for p in _modules(head)]'
+- name: a dotted name whose first part is both a script and a module of src/mara is looked up in the module alone
+  file: tests/test_seams.py
+  caught_by: tests/test_seams.py::test_a_dotted_name_of_a_script_points_into_that_script_and_one_it_does_not_define_is_found
+  old: 'for p in _modules(head) + _scripts(head)]'
+  new: 'for p in (_modules(head) or _scripts(head))]'
+- name: a script is looked for under src/ instead of scripts/
+  file: tests/test_seams.py
+  caught_by: tests/test_seams.py::test_a_dotted_name_of_a_script_points_into_that_script_and_one_it_does_not_define_is_found
+  old: 'SCRIPTS = ROOT / "scripts"'
+  new: 'SCRIPTS = ROOT / "src"'
+- name: a span naming nothing is reported with src/mara alone
+  file: tests/test_seams.py
+  caught_by: tests/test_seams.py::test_a_dotted_name_of_a_script_points_into_that_script_and_one_it_does_not_define_is_found
+  old: 'return f"{span}: names no module or class of src/mara, nor a script of scripts/"'
+  new: 'return f"{span}: names no module or class of src/mara"'

@@ -5,9 +5,11 @@ A change that moves, renames or re-signs one of these breaks the tests named bes
 code they no longer reach.
 
 `tests/test_seams.py` reads every code span here as a pointer: a test file, a `src/` or `tests/` path ending `.py` or
-`.md`, and a dotted or capitalised name must each point at something there (a name defined in src/mara, imports
-followed). A method a class inherits from outside src/mara, such as the `shutdown` and `server_close` the workbench's
-server takes from socketserver, is defined nowhere in it: write it bare, not after its class.
+`.md`, and a dotted or capitalised name must each point at something there (a name defined in src/mara, its imports into
+src/ followed; or, for a dotted name whose first part is a script's name, a name defined in that script of scripts/, or
+imported into it, one part deep). A method a class inherits from outside src/mara, such as the `shutdown` and
+`server_close` the workbench's server takes from socketserver, is defined nowhere in it: write it bare, not after its
+class.
 
 ## Patch a name where it is looked up
 

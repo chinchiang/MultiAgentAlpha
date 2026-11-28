@@ -1,5 +1,5 @@
-"""tests/SEAMS.md points at code that is there: every test file and path it names exists, and every dotted name and class
-it names is defined in src/mara (tests.source_names.defines, following imports)."""
+"""tests/SEAMS.md points at code that is there: every code span that is a pointer names something defined, by the rule
+the first paragraphs of tests/SEAMS.md state (read with tests.source_names.defines)."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from tests.source_names import defines
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
+SCRIPTS = ROOT / "scripts"
 SEAMS = ROOT / "tests" / "SEAMS.md"
 SOURCES = sorted((SRC / "mara").rglob("*.py"))
 SPAN = re.compile(r"`([^`\n]+)`")  # a code span of SEAMS.md
@@ -27,15 +28,20 @@ def _modules(name: str) -> list[Path]:
     return [p for p in SOURCES if (p.stem == name) or (p.name == "__init__.py" and p.parent.name == name)]
 
 
+def _scripts(name: str) -> list[Path]:
+    """The script of scripts/ called `name`, if there is one."""
+    return [p for p in (SCRIPTS / f"{name}.py",) if p.is_file()]
+
+
 def _classes(name: str) -> list[Path]:
     return [p for p in SOURCES if any(isinstance(n, ast.ClassDef) and n.name == name for n in ast.parse(p.read_text(encoding="utf-8")).body)]
 
 
 def problem(span: str) -> str:
     """Why a code span of SEAMS.md points at nothing, empty when it points at something or is not a pointer: a test file
-    (`test_x.py`, `test_x.py::test_y`), a repository path, a dotted name whose first part is `mara`, a module of src/mara
-    or a class of it, or a class alone. A call's arguments are dropped; other spans (a bare lowercase name, code with
-    spaces) are not pointers."""
+    (`test_x.py`, `test_x.py::test_y`), a repository path, a dotted name whose first part is `mara`, a module of
+    src/mara, a script of scripts/ or a class of src/mara, or a class alone. A call's arguments are dropped; other spans
+    (a bare lowercase name, code with spaces) are not pointers."""
     pointer = span.split("(")[0] if span.endswith(")") else span
     if m := TEST_FILE.match(pointer):
         file, test = ROOT / "tests" / m[1], m[2]
@@ -55,9 +61,9 @@ def problem(span: str) -> str:
                 name = ".".join(rest[k:])
                 return "" if not name or defines(module, name, follow_imports=True) else f"{span}: {module.relative_to(ROOT)} defines no {name}"
         return f"{span}: no module of src/mara"
-    candidates = [(p, ".".join(rest)) for p in _modules(head)] or [(p, pointer) for p in _classes(head)]
+    candidates = [(p, ".".join(rest)) for p in _modules(head) + _scripts(head)] or [(p, pointer) for p in _classes(head)]
     if not candidates:
-        return f"{span}: names no module or class of src/mara"
+        return f"{span}: names no module or class of src/mara, nor a script of scripts/"
     if any(not name or defines(p, name, follow_imports=True) for p, name in candidates):
         return ""
     return f"{span}: " + ", ".join(str(p.relative_to(ROOT)) for p, _ in candidates) + f" defines no {candidates[0][1]}"
@@ -96,6 +102,19 @@ def test_a_pointer_at_nothing_is_found_and_one_at_something_is_not():
                  "ballot_round.gone", "pipe.run(target)", "GoneProvider", "test_gone.py", "test_seams.py::test_gone",
                  "tests/gone.py"):
         assert problem(gone), gone
+
+
+def test_a_dotted_name_of_a_script_points_into_that_script_and_one_it_does_not_define_is_found():
+    """A script of scripts/ is a module for a dotted name; a name both a script and a module of src/mara counts when
+    either defines it; a name a script imports from another script is there, where a test would patch it, as a name a
+    module of src/mara imports from outside src/ is."""
+    for there in ("line_width.LIMIT", "mutate.run_base", "pr_checks.reference_lines(gh, jobs)", "model_eval.cmd_check",
+                  "model_eval.CSE_BENCHMARKS", "line_width.read_change"):
+        assert problem(there) == "", there
+    assert problem("line_width.gone") == "line_width.gone: scripts/line_width.py defines no gone"
+    assert problem("line_width.read_change.x") == "line_width.read_change.x: scripts/line_width.py defines no read_change.x"
+    assert problem("model_eval.gone") == "model_eval.gone: src/mara/model_eval.py, scripts/model_eval.py defines no gone"
+    assert problem("nowhere.thing") == "nowhere.thing: names no module or class of src/mara, nor a script of scripts/"
 
 
 def test_a_failure_names_the_line_and_says_how_to_fix_it_once():
